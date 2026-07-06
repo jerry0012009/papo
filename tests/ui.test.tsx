@@ -125,6 +125,9 @@ describe("App", () => {
     expect(screen.getByText("我醒来时自己又想到妈妈复查这件事。")).toBeInTheDocument();
     expect(screen.getByLabelText("Papo 的身体信号")).toBeInTheDocument();
     expect(screen.getByText("小脑袋")).toBeInTheDocument();
+    expect(screen.getByText("我被你养成的样子")).toBeInTheDocument();
+    expect(screen.getByText("你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先联想旧片段再回应")).toBeInTheDocument();
+    expect(screen.queryByText(/preferDepth|quietTendency|深入倾向|安静倾向/)).not.toBeInTheDocument();
     expect(screen.queryByText("依恋度")).not.toBeInTheDocument();
     expect(screen.queryByText("唤醒度")).not.toBeInTheDocument();
     expect(screen.queryByText("Papo 新说")).not.toBeInTheDocument();
@@ -323,6 +326,14 @@ function profileFixture() {
         text: "我正在学习注意。",
         weight: 62,
         tags: ["注意"]
+      },
+      {
+        id: "m-raised",
+        createdAt: new Date().toISOString(),
+        kind: "creature_self_memory",
+        text: "你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先联想旧片段再回应。",
+        weight: 74,
+        tags: ["被你养成", "更愿意多想", "妈妈复查"]
       },
       {
         id: "m2",

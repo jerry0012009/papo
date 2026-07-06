@@ -98,6 +98,7 @@ Demo entry copy should guide a person through Papo's life loop rather than sound
 Multi-creature contrast should feel like two Papos being raised differently, not two labeled configurations. Avoid user-facing names such as "深想型/安静型" or "演示主线"; use small creature names and explain the difference as feedback-shaped behavior.
 User-facing empty, error, and status copy is part of the creature experience too. Avoid "材料", "模拟信息流", and "录音分段" on user surfaces; say Papo is receiving, hearing, or holding "这一小段" instead.
 Feedback controls on user-facing memory and episode surfaces should sound like the user is raising Papo, not pressing admin actions. Prefer "再想一会儿", "先安静点", "帮我记住", and first-person learning echoes such as "我会..." while keeping raw feedback kinds in code/API/Brain diagnostics.
+Home should surface stable raising shape in creature language, such as what Papo has learned to do more or less often, without exposing raw policy names or numbers.
 Home presence, active emergence, body signals, and dialogue context should default to Papo speaking from inside the experience. Use first-person "我..." phrasing for what Papo noticed, remembered, learned, or is ready to do; reserve third-person observer language for Brain diagnostics or explicit user navigation labels.
 Curious results should read like Papo choosing what to hold or let pass. Selected and ignored lines should use "我竖起耳朵" and "我先放过..." rather than report-style phrases such as "Papo 放过了".
 Memory candidates and consolidation reasons may later become user-visible long-term memories, so they must be written as shared-moment language from the start. Avoid "episode", "用户反馈这段", "我和用户", or "forget feedback" in candidate text, long-term memory text, and `consolidatedBecause`.
@@ -227,6 +228,7 @@ Done:
   - Feedback can now advance the interaction instead of only issuing a receipt: rules choose acknowledge/follow-up/quiet/memory-note behavior, and substantive feedback can attach a new memory candidate or strengthen a promoted memory.
   - Feedback records keep rule-owned state and policy deltas for Brain diagnostics, while user-facing feedback impact describes how Papo's future behavior changed.
   - Feedback now updates creature self-memory, so Papo can remember being raised toward "more thinking", "quieter", "more careful", or "more willing to remember" instead of only changing numeric policy.
+  - Home now shows a first-person "我被你养成的样子" surface from feedback-shaped self-memory or policy-derived behavior, while raw policy names remain in Brain diagnostics.
   - Feedback impact on Home is translated into behavior language such as "it will pause longer next time" instead of numeric `+8` state or policy deltas; Brain keeps numeric deltas.
   - Forget feedback is staged: it first downranks memory weight to zero, then a repeated forget purges the zero-weight target.
   - Feedback follow-up text is target-aware: "continue", "remember", "not_now", and the two forget stages speak about the specific remembered topic rather than returning a generic receipt.

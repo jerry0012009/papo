@@ -831,6 +831,7 @@ function HomeView(props: {
       {props.lastFeedback ? <FeedbackImpactCard feedback={props.lastFeedback} /> : null}
 
       <BodySignals state={props.profile.state} />
+      <RaisedShape profile={props.profile} />
 
       {props.lastResult ? (
         <section className="panel">
@@ -1703,6 +1704,39 @@ function BodySignals({ state }: { state: CreatureState }) {
       ))}
     </section>
   );
+}
+
+function RaisedShape({ profile }: { profile: CreatureProfile }) {
+  const lines = raisedShapeLines(profile);
+  if (!lines.length) return null;
+  return (
+    <section className="raising-shape">
+      <strong>我被你养成的样子</strong>
+      <div>
+        {lines.map((line) => (
+          <span key={line}>{line}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function raisedShapeLines(profile: CreatureProfile) {
+  const selfMemoryLines = profile.longTermMemories
+    .filter((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("被你养成") && memory.weight > 0)
+    .sort((a, b) => b.weight - a.weight)
+    .map((memory) => normalizeMemoryText(memory.text))
+    .slice(0, 2);
+  if (selfMemoryLines.length) return selfMemoryLines;
+
+  const lines: string[] = [];
+  const policy = profile.policyProfile;
+  if (policy.preferDepth >= 55) lines.push("你把我养得更愿意多停一下，再把旧片段连起来。");
+  if (policy.quietTendency >= 50) lines.push("你把我养得更会先安静陪着，不急着追问。");
+  if (policy.privacySensitivity >= 65) lines.push("你把我养得更小心边界，保存前会多等你的意思。");
+  if (policy.recallTendency >= 58 && lines.length < 2) lines.push("你把我养得更容易从旧记忆里想起相近的小事。");
+  if (!lines.length) lines.push("我还在慢慢学你的偏好，等你教我哪些要多想，哪些先放下。");
+  return lines.slice(0, 2);
 }
 
 function mindSignalText(state: CreatureState) {
