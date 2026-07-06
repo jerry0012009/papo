@@ -274,7 +274,7 @@ export function App() {
     await run(async () => {
       const { profile: next, feedback } = await sendFeedback(profile.userId, kind, targetId, { content, modality });
       setProfile(next);
-      setLearningNote(feedback.learningNote);
+      setLearningNote(feedback.replyText ?? feedback.learningNote);
       setLastFeedback(feedback);
       setLastResult((current) => (current ? { ...current, profile: next } : current));
     });

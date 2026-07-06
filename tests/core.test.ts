@@ -99,6 +99,11 @@ describe("creature core", () => {
     expect(profile.feedbackHistory[0].kind).toBe("continue");
     expect(feedback.inputText).toContain("多想一点");
     expect(feedback.learningNote).toContain("你还补充说");
+    expect(feedback.responseAction).toBe("ask_follow_up");
+    expect(feedback.followUpText).toContain("最希望我以后先注意");
+    expect(feedback.replyText).toContain(feedback.followUpText);
+    expect(feedback.memoryCandidateIds?.length).toBeGreaterThan(0);
+    expect(profile.memoryCandidates[0].candidateText).toContain("用户反馈这段时补充");
     expect(feedback.stateDeltas?.some((item) => item.key === "curiosity" && item.delta > 0)).toBe(true);
     expect(feedback.policyDeltas?.some((item) => item.key === "preferDepth" && item.delta > 0)).toBe(true);
   });

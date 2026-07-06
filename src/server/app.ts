@@ -233,7 +233,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         observedAt: feedback.at,
         at: feedback.at
       });
-      appendPapoMessage(profile, { channel: "feedback", text: feedback.learningNote, sourceId: feedback.id });
+      appendPapoMessage(profile, { channel: "feedback", text: feedback.replyText ?? feedback.learningNote, sourceId: feedback.id });
       await store.saveProfile(profile);
       res.json({ profile, feedback });
     } catch (error) {

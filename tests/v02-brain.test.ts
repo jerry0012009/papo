@@ -191,17 +191,22 @@ describe("creature brain v0.2", () => {
       generateJson: async <T,>() =>
         ({
           learningNote: "我学到：妈妈复查这件事你希望我多停一下，之后遇到相似担心时，我会先陪你把它放稳。",
+          followUpText: "我还想轻轻问一句：下次我先帮你盯住准备资料，还是先陪你把担心说完？",
           trace: ["llm: feedback narration"]
         }) as T
     };
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "我有点担心自己又把妈妈复查这件事拖到睡前。");
-    const feedback = applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id });
+    const feedback = applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id, content: "我主要是怕又拖到最后。" });
     const stateAfterRules = structuredClone(profile.state);
+    const actionAfterRules = feedback.responseAction;
 
     await enrichFeedbackNarration(profile, feedback, provider);
 
     expect(feedback.learningNote).toContain("妈妈复查");
+    expect(feedback.followUpText).toContain("准备资料");
+    expect(feedback.replyText).toContain("准备资料");
+    expect(feedback.responseAction).toBe(actionAfterRules);
     expect(profile.state).toEqual(stateAfterRules);
   });
 

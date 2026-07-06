@@ -12,6 +12,7 @@ export type ActionKind =
   | "draft_question_list";
 
 export type FeedbackKind = "understood" | "continue" | "not_now" | "remember" | "forget";
+export type FeedbackResponseAction = "acknowledge" | "ask_follow_up" | "quiet" | "note_memory";
 export type SegmentKind = "text" | "image_summary" | "audio_transcript";
 export type ProviderKind = "mimo" | "openrouter" | "generic" | "fallback";
 export type ConversationChannel = "wake" | "button" | "curious" | "feedback" | "emergence";
@@ -225,6 +226,10 @@ export interface FeedbackRecord {
   inputModality?: SegmentKind | "button";
   effect: string;
   learningNote: string;
+  responseAction?: FeedbackResponseAction;
+  followUpText?: string;
+  replyText?: string;
+  memoryCandidateIds?: string[];
   stateDeltas?: Array<{
     key: keyof Omit<CreatureState, "mood">;
     before: number;

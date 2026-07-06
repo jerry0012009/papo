@@ -1,9 +1,11 @@
 import { z } from "zod";
+import { composeFeedbackReplyText } from "./feedback";
 import type { ModelProvider } from "./provider";
 import type { CreatureProfile, EmergenceRecord, FeedbackRecord, LongTermMemory } from "./types";
 
 const feedbackNarrationSchema = z.object({
   learningNote: z.string().min(8).max(260),
+  followUpText: z.string().min(4).max(180).optional(),
   trace: z.array(z.string().min(1).max(120)).max(5).optional()
 });
 
@@ -27,16 +29,26 @@ export async function enrichFeedbackNarration(
 
 约束：
 - 只改写 learningNote，不要改变状态、policy、记忆或动作。
+- 如果 ruleFollowUpText 存在，可以改写 followUpText；不要新增规则没有给出的追问或行动。
 - 不要提数据库、字段、开发过程、投资人、harness、GitHub、nginx。
 - 语气要像一个弱小但认真学习的陪伴生物，不要像客服或产品说明。
 - 必须以“我学到”开头。
-- 120 字以内。
+- learningNote 120 字以内，followUpText 80 字以内。
 
 返回严格 JSON：
-{"learningNote":"...","trace":["..."]}
+{"learningNote":"...","followUpText":"...","trace":["..."]}
 
 feedback:
-${JSON.stringify({ kind: feedback.kind, inputText: feedback.inputText, inputModality: feedback.inputModality, effect: feedback.effect, ruleLearningNote: feedback.learningNote })}
+${JSON.stringify({
+  kind: feedback.kind,
+  inputText: feedback.inputText,
+  inputModality: feedback.inputModality,
+  effect: feedback.effect,
+  responseAction: feedback.responseAction,
+  ruleLearningNote: feedback.learningNote,
+  ruleFollowUpText: feedback.followUpText,
+  memoryCandidateIds: feedback.memoryCandidateIds
+})}
 
 target_episode_or_memory:
 ${JSON.stringify(
@@ -55,7 +67,12 @@ ${JSON.stringify(profile.state)}
     if (!parsed.success || !isSafeCreatureText(parsed.data.learningNote) || !parsed.data.learningNote.startsWith("我学到")) {
       return feedback;
     }
+    if (parsed.data.followUpText && (!feedback.followUpText || !isSafeCreatureText(parsed.data.followUpText))) {
+      return feedback;
+    }
     feedback.learningNote = parsed.data.learningNote;
+    if (parsed.data.followUpText && feedback.followUpText) feedback.followUpText = parsed.data.followUpText;
+    feedback.replyText = composeFeedbackReplyText(feedback);
     return feedback;
   } catch {
     return feedback;
