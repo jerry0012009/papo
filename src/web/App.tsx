@@ -60,6 +60,13 @@ interface SpeechRecognitionEventLike {
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
+interface DemoSummary {
+  attention: string;
+  feedback: string;
+  contrast: string;
+  emergence: string;
+}
+
 const feedbacks: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }> = [
   { kind: "understood", label: "理解对了", icon: Check },
   { kind: "continue", label: "继续想", icon: Lightbulb },
@@ -112,6 +119,7 @@ export function App() {
   const [wakeMessage, setWakeMessage] = useState<string>();
   const [wakeThought, setWakeThought] = useState<string>();
   const [demoNote, setDemoNote] = useState<string>();
+  const [demoSummary, setDemoSummary] = useState<DemoSummary>();
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -316,7 +324,51 @@ export function App() {
   function loadDemoCurious() {
     setSegments(demoCuriousSegments.map((segment, index) => makeSegment(`demo-${index + 1}`, segment.kind, segment.label, segment.content)));
     setDemoNote("我已经放入 8 段生活化信息流：背景、日历、隐私、语音和重复片段。下一步点“开始观察”。");
+    setDemoSummary(undefined);
     setTab("curious");
+  }
+
+  async function runGuidedDemo() {
+    await run(async () => {
+      const main = await createProfile("Papo 演示主线");
+      const curiousResult = await curiousCapture(
+        main.userId,
+        demoCuriousSegments.map((segment, index) => makeSegment(`guided-${index + 1}`, segment.kind, segment.label, segment.content))
+      );
+      const targetEpisode = curiousResult.episodes[0];
+      let learned = "";
+      if (targetEpisode) {
+        await sendFeedback(main.userId, "remember", targetEpisode.id);
+        learned = (await sendFeedback(main.userId, "continue", targetEpisode.id)).feedback.learningNote;
+      }
+      const emerged = await activeEmergence(main.userId);
+
+      const input = "我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要。";
+      const deep = await createProfile("Papo 深想型");
+      const quiet = await createProfile("Papo 安静型");
+      const deepFirst = await buttonCapture(deep.userId, input);
+      const quietFirst = await buttonCapture(quiet.userId, input);
+      for (let index = 0; index < 3; index += 1) {
+        await sendFeedback(deep.userId, "continue", deepFirst.episodes[0]?.id);
+        await sendFeedback(quiet.userId, "not_now", quietFirst.episodes[0]?.id);
+      }
+      const deepResult = await buttonCapture(deep.userId, input);
+      const quietResult = await buttonCapture(quiet.userId, input);
+
+      setProfiles(await listProfiles());
+      setProfile(emerged.profile);
+      setLastResult({ ...curiousResult, profile: emerged.profile });
+      setLearningNote(learned);
+      setEmergence(emerged.emergence.text);
+      setDemoSummary({
+        attention: `它看了 ${curiousResult.curiousSession?.totalSegments ?? demoCuriousSegments.length} 段，只认真注意到 ${curiousResult.events.length} 段。`,
+        feedback: learned || "它已经收到“记住”和“继续想”的反馈，并更新了状态与策略。",
+        contrast: `同一句输入下，深想型选择 ${deepResult.events[0] ? actionText(deepResult.events[0].actionDecision.action) : "无动作"}，安静型选择 ${quietResult.events[0] ? actionText(quietResult.events[0].actionDecision.action) : "无动作"}。`,
+        emergence: emerged.emergence.text
+      });
+      setDemoNote("完整演示已准备好：主线小动物、A/B 养成对比和主动浮现都已生成。");
+      setTab("demo");
+    });
   }
 
   async function runDemoContrast() {
@@ -418,7 +470,17 @@ export function App() {
       {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onEditMemory={editLongTermMemory} /> : null}
       {tab === "brain" ? <BrainView profile={profile} /> : null}
       {tab === "profile" ? <ProfileView profiles={profiles} activeId={profile.userId} onSelect={selectProfile} onAdd={addProfile} /> : null}
-      {tab === "demo" ? <DemoView onLoadCurious={loadDemoCurious} onRunContrast={runDemoContrast} onEmerge={askEmergence} note={demoNote} busy={busy} /> : null}
+      {tab === "demo" ? (
+        <DemoView
+          onRunGuided={runGuidedDemo}
+          onLoadCurious={loadDemoCurious}
+          onRunContrast={runDemoContrast}
+          onEmerge={askEmergence}
+          note={demoNote}
+          summary={demoSummary}
+          busy={busy}
+        />
+      ) : null}
 
       <nav className="nav">
         <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => setTab("home")} />
@@ -777,10 +839,12 @@ function ProfileView(props: {
 }
 
 function DemoView(props: {
+  onRunGuided: () => void;
   onLoadCurious: () => void;
   onRunContrast: () => void;
   onEmerge: () => void;
   note?: string;
+  summary?: DemoSummary;
   busy: boolean;
 }) {
   return (
@@ -789,6 +853,18 @@ function DemoView(props: {
         <PanelTitle icon={Wand2} title="演示模式" />
         <p className="response">用生活化素材演示三件事：它会从信息流里注意，它会被反馈养成，它会主动想起旧片段。</p>
         {props.note ? <section className="learning-note">{props.note}</section> : null}
+        {props.summary ? (
+          <section className="demo-checklist">
+            <p><Check size={16} /> {props.summary.attention}</p>
+            <p><Check size={16} /> {props.summary.feedback}</p>
+            <p><Check size={16} /> {props.summary.contrast}</p>
+            <p><Check size={16} /> {props.summary.emergence}</p>
+          </section>
+        ) : null}
+        <button className="primary" onClick={props.onRunGuided} disabled={props.busy}>
+          <Wand2 size={18} />
+          一键准备 4 分钟演示
+        </button>
         <button onClick={props.onLoadCurious} disabled={props.busy}>
           <Sparkles size={18} />
           场景 1：填入 8 段信息流

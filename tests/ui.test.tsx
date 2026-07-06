@@ -61,6 +61,7 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "演示" }));
     expect(screen.getByText("演示模式")).toBeInTheDocument();
+    expect(screen.getByText("一键准备 4 分钟演示")).toBeInTheDocument();
     expect(screen.getByText("场景 1：填入 8 段信息流")).toBeInTheDocument();
   });
 });

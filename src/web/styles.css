@@ -407,6 +407,21 @@ meter {
   line-height: 1.55;
 }
 
+.demo-checklist {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  background: #e9f3eb;
+  padding: 12px;
+}
+
+.demo-checklist p {
+  display: flex;
+  gap: 8px;
+  margin: 0;
+  line-height: 1.5;
+}
+
 .episode-card h3 {
   font-size: 1rem;
   line-height: 1.45;

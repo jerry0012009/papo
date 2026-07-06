@@ -164,6 +164,7 @@ Done:
   - After a long enough absence, wake can create a rhythm emergence from a real non-self long-term memory, so opening the app can feel like it quietly remembered something.
   - Demo Mode uses life-context examples rather than Papo development text as interaction material.
   - Demo Mode includes Curious stream loading, A/B feedback conditioning, and active emergence.
+  - Demo Mode now has a guided 4-minute run that creates a fresh main creature, runs the 8-part Curious script, applies remember/continue feedback, creates A/B conditioned creatures, and surfaces a real emergence summary without exposing a public reset endpoint.
   - Experimental voice companionship in Curious Mode: browser speech recognition can listen up to 3 minutes and split transcripts every 30 seconds into `audio_transcript` segments.
 
 Verified:
@@ -186,6 +187,7 @@ Verified:
 - Feedback returns a visible learning note.
 - Active emergence reads as inner resurfacing rather than a template reminder.
 - Wake rhythm records an app-open presence event, applies rule-owned time-based state recovery, and can resurface a real user memory after absence.
+- Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`
@@ -199,7 +201,6 @@ Next:
 2. Replace browser-only speech recognition with a robust transcription backend for audio chunks where needed.
 3. Add real image upload with model-created image summaries.
 4. Add stronger browser visual QA with mobile screenshots.
-5. Add a guided 4-minute investor demo seed/reset flow.
 
 Demo material rule:
 
