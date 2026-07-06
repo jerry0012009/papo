@@ -735,9 +735,23 @@ function MemoryView(props: {
 function BrainView({ profile }: { profile: CreatureProfile }) {
   const latestEpisode = profile.episodes[0];
   const latestEmergence = profile.emergenceHistory?.[0];
+  const semanticRuns = profile.semanticBrainHistory ?? [];
   return (
     <section className="stack">
       <StateGrid state={profile.state} />
+      <div className="panel">
+        <PanelTitle icon={Brain} title="语义脑诊断" />
+        {semanticRuns.length ? (
+          semanticRuns.slice(0, 5).map((run) => (
+            <article className="change-row" key={run.id}>
+              <p>{semanticStatusText(run.status)}：{run.message}</p>
+              <span>{run.providerName} · {run.source} · {new Date(run.at).toLocaleString("zh-CN")}</span>
+            </article>
+          ))
+        ) : (
+          <p className="muted">还没有语义脑运行记录。</p>
+        )}
+      </div>
       <div className="panel">
         <PanelTitle icon={Brain} title="反馈策略" />
         <div className="state-grid">
@@ -1047,6 +1061,17 @@ function actionText(action: AttentionEvent["suggestedAction"]) {
     draft_question_list: "问题清单"
   };
   return map[action];
+}
+
+function semanticStatusText(status: NonNullable<CreatureProfile["semanticBrainHistory"]>[number]["status"]) {
+  const map = {
+    skipped: "规则兜底",
+    applied: "LLM 已参与",
+    empty: "LLM 空输出",
+    invalid: "LLM 输出无效",
+    failed: "LLM 调用失败"
+  };
+  return map[status];
 }
 
 function policyLabel(key: string) {

@@ -221,6 +221,17 @@ export interface WakeEvent {
   ruleTrace: string[];
 }
 
+export interface SemanticBrainRecord {
+  id: string;
+  at: string;
+  source: AttentionSource;
+  providerKind: ProviderKind;
+  providerName: string;
+  status: "skipped" | "applied" | "empty" | "invalid" | "failed";
+  message: string;
+  ruleTrace: string[];
+}
+
 export interface CreatureProfile {
   userId: string;
   creatureName: string;
@@ -235,6 +246,7 @@ export interface CreatureProfile {
   memoryCandidates: MemoryCandidate[];
   emergenceHistory: EmergenceRecord[];
   wakeHistory: WakeEvent[];
+  semanticBrainHistory: SemanticBrainRecord[];
 }
 
 export interface EmergenceRecord {

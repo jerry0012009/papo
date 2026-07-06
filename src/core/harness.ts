@@ -2,8 +2,9 @@ import { z } from "zod";
 import { guardActionDecision } from "./action";
 import { createMemoryResonanceEmergence } from "./emergence";
 import { handleButtonCapture, handleCuriousStream } from "./attention";
+import { makeId } from "./ids";
 import type { ModelProvider } from "./provider";
-import type { CaptureResult, CreatureProfile, StreamSegment } from "./types";
+import type { CaptureResult, CreatureProfile, SemanticBrainRecord, StreamSegment } from "./types";
 
 const actionSchema = z.enum(["observe", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list"]);
 
@@ -36,6 +37,9 @@ const brainSuggestionSchema = z.object({
 );
 
 type BrainSuggestion = z.infer<typeof brainSuggestionSchema>;
+type SemanticBrainAskResult =
+  | { status: "applied"; suggestion: BrainSuggestion; message: string }
+  | { status: "empty" | "invalid"; message: string };
 
 export async function runButtonHarness(
   profile: CreatureProfile,
@@ -72,23 +76,29 @@ async function enrichWithSemanticBrain(
   if (!provider.usesRealModel || !result.events.length) {
     recordMemoryResonance(profile, result);
     result.harnessTrace = [...trace, "semantic: fallback/rules only"];
+    recordSemanticBrainRun(profile, provider, source, "skipped", provider.usesRealModel ? "no attention events to enrich" : "fallback provider; rules handled the loop");
     return result;
   }
 
   try {
-    const suggestion = await askSemanticBrain(profile, result, provider, source);
-    if (!suggestion) {
+    const semantic = await askSemanticBrain(profile, result, provider, source);
+    if (semantic.status !== "applied") {
       recordMemoryResonance(profile, result);
-      result.harnessTrace = [...trace, "semantic: empty model result"];
+      result.harnessTrace = [...trace, `semantic: ${semantic.message}`];
+      recordSemanticBrainRun(profile, provider, source, semantic.status, semantic.message);
       return result;
     }
 
+    const suggestion = semantic.suggestion;
     applySuggestion(profile, result, suggestion);
     result.harnessTrace = [...trace, "semantic: llm interpretation applied", ...(suggestion.trace ?? [])];
+    recordSemanticBrainRun(profile, provider, source, "applied", semantic.message);
     return result;
   } catch (error) {
+    const message = `model failed (${error instanceof Error ? error.message : "unknown"})`;
     recordMemoryResonance(profile, result);
-    result.harnessTrace = [...trace, `semantic: model failed (${error instanceof Error ? error.message : "unknown"})`];
+    result.harnessTrace = [...trace, `semantic: ${message}`];
+    recordSemanticBrainRun(profile, provider, source, "failed", message);
     return result;
   }
 }
@@ -98,10 +108,17 @@ async function askSemanticBrain(
   result: CaptureResult,
   provider: ModelProvider,
   source: "button" | "curious_stream"
-) {
+): Promise<SemanticBrainAskResult> {
   const suggestion = await provider.generateJson<unknown>(buildPrompt(profile, result, source));
+  if (!suggestion) return { status: "empty", message: "empty model result" };
   const parsed = brainSuggestionSchema.safeParse(suggestion);
-  return parsed.success ? parsed.data : undefined;
+  if (!parsed.success) {
+    return {
+      status: "invalid",
+      message: `invalid model JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`
+    };
+  }
+  return { status: "applied", suggestion: parsed.data, message: "llm interpretation applied" };
 }
 
 function applySuggestion(profile: CreatureProfile, result: CaptureResult, suggestion: BrainSuggestion) {
@@ -156,6 +173,26 @@ function recordMemoryResonance(profile: CreatureProfile, result: CaptureResult) 
   for (const event of result.events) {
     if (event.relatedMemoryIds.length) createMemoryResonanceEmergence(profile, event);
   }
+}
+
+function recordSemanticBrainRun(
+  profile: CreatureProfile,
+  provider: ModelProvider,
+  source: SemanticBrainRecord["source"],
+  status: SemanticBrainRecord["status"],
+  message: string
+) {
+  profile.semanticBrainHistory.unshift({
+    id: makeId("semantic"),
+    at: new Date().toISOString(),
+    source,
+    providerKind: provider.kind,
+    providerName: provider.name,
+    status,
+    message,
+    ruleTrace: [`provider=${provider.kind}`, `source=${source}`, `status=${status}`]
+  });
+  profile.semanticBrainHistory = profile.semanticBrainHistory.slice(0, 30);
 }
 
 function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "button" | "curious_stream") {

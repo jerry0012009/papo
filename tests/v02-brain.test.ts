@@ -100,7 +100,7 @@ describe("creature brain v0.2", () => {
     expect(bEmergence.driveSource).toBe("safety");
   });
 
-  it("invalid LLM JSON falls back without breaking the life loop", async () => {
+  it("invalid LLM JSON falls back and is visible in diagnostics", async () => {
     const provider: ModelProvider = {
       kind: "generic",
       name: "bad json model",
@@ -114,8 +114,10 @@ describe("creature brain v0.2", () => {
     const result = await runButtonHarness(profile, "小动物要记得自己如何被用户养成。", provider);
 
     expect(result.events).toHaveLength(1);
-    expect(result.harnessTrace?.join(" ")).toContain("empty model result");
+    expect(result.harnessTrace?.join(" ")).toContain("invalid model JSON");
     expect(result.events[0].semanticSource).toBe("rules");
+    expect(profile.semanticBrainHistory[0].status).toBe("invalid");
+    expect(profile.semanticBrainHistory[0].providerName).toBe("bad json model");
   });
 
   it("LLM can explain curious selection while rules still cap events to 1-3", async () => {
@@ -155,6 +157,7 @@ describe("creature brain v0.2", () => {
     expect(result.events.length).toBeLessThanOrEqual(3);
     expect(result.events[0].semanticSource).toBe("llm");
     expect(result.harnessTrace?.join(" ")).toContain("llm interpretation applied");
+    expect(profile.semanticBrainHistory[0].status).toBe("applied");
   });
 
   it("LLM can narrate feedback learning without mutating rule-owned state", async () => {

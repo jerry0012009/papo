@@ -155,11 +155,12 @@ Done:
   - Feedback policy profile: depth, proactivity, privacy sensitivity, save threshold, ask threshold, recall tendency, quiet tendency.
   - Episode-level memory candidates with write policy before long-term promotion.
   - Drive-based, rhythm, and memory-resonance emergence records.
-  - Brain page shows policy, recent decision, recent emergence, and memory candidates.
+  - Brain page shows semantic brain diagnostics, policy, recent decision, recent emergence, and memory candidates.
 - Goal 3 experience layer:
   - Main UI uses creature experience language for attention and episodes.
   - Feedback immediately surfaces a user-facing "I learned" note.
   - Real-model providers can now rewrite feedback learning notes and active emergence messages while rules keep ownership of state, policy, actions, and memory ids.
+  - Semantic brain runs are persisted as diagnostics: fallback/skipped, applied, empty, invalid JSON, and failed model calls are visible in Brain page.
   - App open/reopen creates a wake event: Papo reacts to time passing, recovers energy by rule, and shows a small "醒来时" presence note on Home.
   - After a long enough absence, wake can create a rhythm emergence from a real non-self long-term memory, so opening the app can feel like it quietly remembered something.
   - Demo Mode uses life-context examples rather than Papo development text as interaction material.
@@ -180,6 +181,7 @@ Verified:
 - Curious Mode selects 1-3 salient segments from an 8-part stream and audits ignored segments.
 - Feedback changes later policy and action style, so different users diverge.
 - LLM invalid JSON falls back without breaking the life loop.
+- LLM invalid JSON is recorded in `semanticBrainHistory` and surfaced in Brain page diagnostics.
 - LLM action suggestions go through rule guardrails.
 - LLM feedback narration cannot mutate rule-owned state.
 - LLM emergence narration must stay anchored to an existing long-term memory or it is rejected.
@@ -197,10 +199,9 @@ Verified:
 
 Next:
 
-1. Improve real Mimo/OpenRouter connectivity diagnostics and surface model errors in Brain page.
-2. Replace browser-only speech recognition with a robust transcription backend for audio chunks where needed.
-3. Add real image upload with model-created image summaries.
-4. Add stronger browser visual QA with mobile screenshots.
+1. Replace browser-only speech recognition with a robust transcription backend for audio chunks where needed.
+2. Add real image upload with model-created image summaries.
+3. Add stronger browser visual QA with mobile screenshots.
 
 Demo material rule:
 

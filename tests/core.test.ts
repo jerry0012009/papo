@@ -135,6 +135,7 @@ describe("creature core", () => {
     expect(provider.kind).toBe("fallback");
     expect(result.events[0].semanticSource).toBe("rules");
     expect(result.harnessTrace?.join(" ")).toContain("fallback");
+    expect(profile.semanticBrainHistory[0].status).toBe("skipped");
   });
 
   it("LLM suggestions enrich wording but guardrails block unsafe long-term save", async () => {

@@ -58,6 +58,7 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "脑态" }));
     expect(screen.getByText("最近变化")).toBeInTheDocument();
+    expect(screen.getByText("语义脑诊断")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "演示" }));
     expect(screen.getByText("演示模式")).toBeInTheDocument();
@@ -117,6 +118,18 @@ function profileFixture() {
     },
     memoryCandidates: [],
     emergenceHistory: [],
-    wakeHistory: []
+    wakeHistory: [],
+    semanticBrainHistory: [
+      {
+        id: "semantic1",
+        at: new Date().toISOString(),
+        source: "button",
+        providerKind: "fallback",
+        providerName: "Fallback demo brain",
+        status: "skipped",
+        message: "fallback provider; rules handled the loop",
+        ruleTrace: ["provider=fallback", "source=button", "status=skipped"]
+      }
+    ]
   };
 }
