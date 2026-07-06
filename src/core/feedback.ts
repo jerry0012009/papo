@@ -1,7 +1,7 @@
 import { makeId } from "./ids";
 import { updatePolicyFromFeedback } from "./drive";
 import { createLearningNote } from "./experience";
-import { adjustMemoryWeight, createMemoryCandidateFromEpisode, forgetMemory, promoteEpisode } from "./memory";
+import { adjustMemoryWeight, createMemoryCandidateFromEpisode, forgetMemory, normalizeSharedMemoryText, promoteEpisode } from "./memory";
 import { applyStateDelta, deltaForFeedback } from "./state";
 import { extractTags, summarizeText } from "./text";
 import type { CreatureProfile, CreatureState, FeedbackKind, FeedbackPolicyProfile, FeedbackRecord, LongTermMemory, SegmentKind } from "./types";
@@ -69,6 +69,14 @@ export function applyFeedback(
   }
   if (input.kind === "not_now") adjustMemoryWeight(profile, input.targetId, -8);
   if (input.kind === "forget" && forgetResult?.changed && !forgetResult.purged) createSafetyMemoryFromForget(profile, targetEpisode, targetLongTerm, now);
+  upsertFeedbackSelfMemory(profile, {
+    kind: input.kind,
+    tags,
+    targetEpisode,
+    targetLongTerm,
+    inputText,
+    now
+  });
 
   const replyContext: FeedbackReplyContext = { tags, targetEpisode, targetLongTerm, forgetResult };
   record.responseAction = selectFeedbackResponseAction(input.kind, inputText, replyContext);
@@ -193,4 +201,88 @@ function createSafetyMemoryFromForget(
     tags: episode?.tags ?? memory?.tags ?? [],
     consolidatedBecause: "你用放下这一下教我先小心边界。"
   });
+}
+
+function upsertFeedbackSelfMemory(
+  profile: CreatureProfile,
+  input: {
+    kind: FeedbackKind;
+    tags: string[];
+    targetEpisode?: CreatureProfile["episodes"][number];
+    targetLongTerm?: LongTermMemory;
+    inputText?: string;
+    now: string;
+  }
+) {
+  const trait = selfMemoryTrait(input.kind);
+  const topic = selfMemoryTopic(input);
+  const extra = input.inputText && !hasPrivacyRisk(input.inputText) ? ` 你还用自己的话教我：${summarizeText(input.inputText, 80)}。` : "";
+  const text = normalizeSharedMemoryText(`${trait.text(topic)}${extra}`);
+  const tags = unique(["被你养成", trait.tag, ...input.tags, ...extractTags(topic)]);
+  const sourceEpisodeId = input.targetEpisode?.id ?? input.targetLongTerm?.sourceEpisodeId;
+  const existing = profile.longTermMemories.find((memory) => memory.kind === "creature_self_memory" && memory.tags.includes(trait.tag));
+
+  if (existing) {
+    existing.text = text;
+    existing.weight = Math.min(100, existing.weight + 10);
+    existing.tags = unique([...existing.tags, ...tags]);
+    existing.lastReferencedAt = input.now;
+    existing.sourceEpisodeId ??= sourceEpisodeId;
+    existing.consolidatedBecause = "你反复用反馈教我，我更认识自己该怎么靠近你。";
+    return;
+  }
+
+  profile.longTermMemories.unshift({
+    id: makeId("ltm"),
+    createdAt: input.now,
+    kind: "creature_self_memory",
+    text,
+    sourceEpisodeId,
+    weight: 64,
+    tags,
+    consolidatedBecause: "你刚才的反馈让我更认识自己该怎么靠近你。"
+  });
+}
+
+function selfMemoryTrait(kind: FeedbackKind) {
+  switch (kind) {
+    case "understood":
+      return {
+        tag: "被确认",
+        text: (topic: string) => `你告诉我这次懂对了，我更敢相信这种听法。以后遇到${topic}，我会先照着这次的理解靠近。`
+      };
+    case "continue":
+      return {
+        tag: "更愿意多想",
+        text: (topic: string) => `你教我不要浅浅带过。以后遇到${topic}，我会多停一下，先联想旧片段再回应。`
+      };
+    case "not_now":
+      return {
+        tag: "更安静",
+        text: (topic: string) => `你教我不是每次注意到都要插话。以后遇到${topic}，我会先轻声陪着，不急着追问。`
+      };
+    case "remember":
+      return {
+        tag: "更愿意记稳",
+        text: (topic: string) => `你教我被确认的小片段值得记稳。以后遇到${topic}，我会更愿意把它和旧记忆连起来。`
+      };
+    case "forget":
+      return {
+        tag: "更小心边界",
+        text: (topic: string) => `你教我这类内容要先小心边界。以后遇到${topic}，我会先问你，再决定要不要记。`
+      };
+  }
+}
+
+function selfMemoryTopic(input: {
+  tags: string[];
+  targetEpisode?: CreatureProfile["episodes"][number];
+  targetLongTerm?: LongTermMemory;
+  inputText?: string;
+}) {
+  const tag = input.tags.find((item) => usefulFeedbackTag(item));
+  if (tag) return `「${summarizeText(tag, 18)}」`;
+  const text = input.targetEpisode?.inputSummary ?? input.targetEpisode?.noticed ?? input.targetLongTerm?.text ?? input.inputText;
+  if (text) return `「${summarizeText(text, 22)}」`;
+  return "这类小片段";
 }

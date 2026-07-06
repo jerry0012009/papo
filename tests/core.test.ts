@@ -121,6 +121,10 @@ describe("creature core", () => {
     expect(feedback.memoryCandidateIds?.length).toBeGreaterThan(0);
     expect(profile.memoryCandidates[0].candidateText).toContain("你后来教我补上这一点");
     expect(profile.memoryCandidates[0].candidateText).not.toContain("用户反馈这段");
+    expect(profile.longTermMemories[0].kind).toBe("creature_self_memory");
+    expect(profile.longTermMemories[0].text).toContain("你教我不要浅浅带过");
+    expect(profile.longTermMemories[0].text).toContain("你还用自己的话教我");
+    expect(profile.longTermMemories[0].tags).toContain("更愿意多想");
     expect(feedback.stateDeltas?.some((item) => item.key === "curiosity" && item.delta > 0)).toBe(true);
     expect(feedback.policyDeltas?.some((item) => item.key === "preferDepth" && item.delta > 0)).toBe(true);
   });
@@ -183,9 +187,11 @@ describe("creature core", () => {
 
     expect(profile.longTermMemories.find((memory) => memory.id === targetId)?.weight).toBe(0);
     expect(firstForget.followUpText).toContain("放轻到最低");
-    expect(profile.longTermMemories[0].text).toContain("你让我放下类似内容");
-    expect(profile.longTermMemories[0].consolidatedBecause).toContain("小心边界");
-    expect(profile.longTermMemories[0].consolidatedBecause).not.toContain("forget feedback");
+    const safetyMemory = profile.longTermMemories.find((memory) => memory.kind === "safety_rule");
+    expect(safetyMemory?.text).toContain("你让我放下类似内容");
+    expect(safetyMemory?.consolidatedBecause).toContain("小心边界");
+    expect(safetyMemory?.consolidatedBecause).not.toContain("forget feedback");
+    expect(profile.longTermMemories.some((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("更小心边界"))).toBe(true);
     const secondForget = applyFeedback(profile, { kind: "forget", targetId });
     expect(profile.longTermMemories.find((memory) => memory.id === targetId)).toBeUndefined();
     expect(secondForget.followUpText).toContain("从一直记着的地方拿掉");

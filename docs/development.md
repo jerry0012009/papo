@@ -85,6 +85,7 @@ Episode memories keep provenance back to their source segment/batch/time/locatio
 Feedback is also conversation input: button taps, typed feedback, and audio-transcribed feedback are recorded in the same timeline before Papo's learning response, then rule-owned state/policy/memory changes apply.
 Feedback responses have a rule-owned `responseAction`: Papo may simply acknowledge, ask one light follow-up, quiet itself, or attach the feedback content to memory. LLM narration may rewrite the learning/follow-up text, but not the action, deltas, or memory writes.
 Feedback impact shown to users should describe future behavior changes, not raw state or policy deltas. Numeric deltas remain Brain diagnostics.
+Feedback should also shape Papo's self-memory: repeated or meaningful teaching creates/upserts `creature_self_memory` about how Papo has learned to approach the user. Quiet/caution self-memories influence restraint but should not act as ordinary recall triggers.
 Forget is two-stage for memories: first feedback lowers the target weight to zero and teaches caution; a later forget on the zero-weight target purges it.
 Active emergence treats zero-weight memories as unavailable: a memory that has been forgotten but not yet purged cannot be resurfaced as Papo's inner thought.
 Active emergence must not treat seed self-memory as a shared old experience. A memory produced from a real episode may support emergence even if its kind is `creature_self_memory`; if no positive-weight shared memory exists, Papo may express readiness or inner state, but it must not pretend to remember an old moment.
@@ -225,6 +226,7 @@ Done:
   - Feedback is integrated into the conversation timeline: buttons, typed notes, and audio-transcribed notes become user feedback inputs before Papo replies with a learning note.
   - Feedback can now advance the interaction instead of only issuing a receipt: rules choose acknowledge/follow-up/quiet/memory-note behavior, and substantive feedback can attach a new memory candidate or strengthen a promoted memory.
   - Feedback records keep rule-owned state and policy deltas for Brain diagnostics, while user-facing feedback impact describes how Papo's future behavior changed.
+  - Feedback now updates creature self-memory, so Papo can remember being raised toward "more thinking", "quieter", "more careful", or "more willing to remember" instead of only changing numeric policy.
   - Feedback impact on Home is translated into behavior language such as "it will pause longer next time" instead of numeric `+8` state or policy deltas; Brain keeps numeric deltas.
   - Forget feedback is staged: it first downranks memory weight to zero, then a repeated forget purges the zero-weight target.
   - Feedback follow-up text is target-aware: "continue", "remember", "not_now", and the two forget stages speak about the specific remembered topic rather than returning a generic receipt.
@@ -272,7 +274,7 @@ Done:
 
 Verified:
 
-- `npm test`: 39 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
+- `npm test`: 40 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.

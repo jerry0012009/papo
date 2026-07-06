@@ -4,6 +4,7 @@ import type { AttentionEvent, CreatureProfile, EpisodeMemory, LongTermMemory, Me
 
 export function findRelatedMemories(profile: CreatureProfile, tags: string[], limit = 3): LongTermMemory[] {
   return [...profile.longTermMemories]
+    .filter((memory) => memory.weight > 0 && !isQuietingSelfMemory(memory))
     .map((memory) => ({
       memory,
       overlap: keywordOverlap(tags, memory.tags),
@@ -13,6 +14,10 @@ export function findRelatedMemories(profile: CreatureProfile, tags: string[], li
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
     .map((item) => item.memory);
+}
+
+function isQuietingSelfMemory(memory: LongTermMemory) {
+  return memory.kind === "creature_self_memory" && memory.tags.some((tag) => tag === "更安静" || tag === "更小心边界");
 }
 
 export function createEpisodeFromEvent(

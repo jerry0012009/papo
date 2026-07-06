@@ -61,6 +61,10 @@ describe("creature brain v0.2", () => {
 
     expect(a.policyProfile.recallTendency).toBeGreaterThan(b.policyProfile.recallTendency);
     expect(a.policyProfile.quietTendency).toBeLessThan(b.policyProfile.quietTendency);
+    expect(a.longTermMemories.some((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("更愿意多想"))).toBe(true);
+    expect(b.longTermMemories.some((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("更安静"))).toBe(true);
+    expect(a.longTermMemories.find((memory) => memory.tags.includes("更愿意多想"))?.text).toContain("多停一下");
+    expect(b.longTermMemories.find((memory) => memory.tags.includes("更安静"))?.text).toContain("不急着追问");
     expect(aNext.events[0].actionDecision.action).not.toBe("quiet");
     expect(["observe", "quiet", "ask"]).toContain(bNext.events[0].actionDecision.action);
 
@@ -92,9 +96,10 @@ describe("creature brain v0.2", () => {
 
     applyFeedback(profile, { kind: "remember", targetId: result.episodes[0].id });
 
-    expect(profile.longTermMemories.some((memory) => memory.sourceEpisodeId === result.episodes[0].id)).toBe(true);
-    expect(profile.longTermMemories[0].text).toContain("当时我回应你");
-    expect(profile.longTermMemories[0].consolidatedBecause).not.toContain("episode");
+    const promoted = profile.longTermMemories.find((memory) => memory.sourceEpisodeId === result.episodes[0].id && memory.text.includes("当时我回应你"));
+    expect(promoted).toBeTruthy();
+    expect(promoted?.text).toContain("当时我回应你");
+    expect(promoted?.consolidatedBecause).not.toContain("episode");
   });
 
   it("continue creates open question or future-review candidates", () => {
