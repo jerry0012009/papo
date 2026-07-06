@@ -568,7 +568,7 @@ export function App() {
   if (!profile) {
     return (
       <main className="shell loading">
-        <div className="creature idle" />
+        <ShibaAvatar idle />
         <p>{busy ? "Papo 正在醒来" : error ?? "无法载入小动物"}</p>
       </main>
     );
@@ -676,13 +676,15 @@ function HomeView(props: {
   return (
     <section className="stack">
       <div className="hero">
-        <div className={`creature mood-${props.profile.state.mood}`} aria-label="小动物头像">
-          <span />
-        </div>
+        <ShibaAvatar state={props.profile.state} />
         <div className="hero-copy">
           <p className="eyebrow">当前心情</p>
           <h2>{moodText(props.profile.state.mood)}</h2>
           <p>{stateSentence(props.profile.state)}</p>
+          <div className="dog-state-cues">
+            <span>{dogMotionText(props.profile.state)}</span>
+            <span>{dogSenseText(props.profile.state)}</span>
+          </div>
         </div>
       </div>
 
@@ -751,6 +753,43 @@ function HomeView(props: {
         <EpisodeCard episode={props.selectedEpisode} onFeedback={props.onFeedback} compact={false} />
       ) : null}
     </section>
+  );
+}
+
+function ShibaAvatar({ state, idle = false }: { state?: CreatureState; idle?: boolean }) {
+  const mood = state?.mood ?? "calm";
+  const className = [
+    "shiba",
+    `shiba-${mood}`,
+    idle ? "idle" : "",
+    state && state.curiosity > 72 ? "is-alert" : "",
+    state && state.attachment > 68 ? "is-attached" : "",
+    state && state.energy < 35 ? "is-tired" : "",
+    state && state.safety > 74 ? "is-careful" : ""
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  return (
+    <div className={className} aria-label="Papo 是一只卡通柴犬">
+      <div className="shiba-tail" />
+      <div className="shiba-body">
+        <span className="shiba-chest" />
+        <span className="shiba-paw left" />
+        <span className="shiba-paw right" />
+      </div>
+      <div className="shiba-head">
+        <span className="shiba-ear left" />
+        <span className="shiba-ear right" />
+        <span className="shiba-brow left" />
+        <span className="shiba-brow right" />
+        <span className="shiba-eye left" />
+        <span className="shiba-eye right" />
+        <span className="shiba-muzzle" />
+        <span className="shiba-nose" />
+        <span className="shiba-mouth" />
+      </div>
+    </div>
   );
 }
 
@@ -1286,6 +1325,21 @@ function stateSentence(state: CreatureState) {
   if (state.curiosity > 72) return "它更容易从信息流里挑出新主题。";
   if (state.attachment > 68) return "它更愿意把当前片段和你们的旧经历连起来。";
   return "它正在用稳定的注意力观察当前片段。";
+}
+
+function dogMotionText(state: CreatureState) {
+  if (state.energy < 35) return "尾巴慢下来，眼睛有点困";
+  if (state.curiosity > 72) return "耳朵竖起来，尾巴轻快地摆";
+  if (state.attachment > 68) return "身体往前靠，像想贴近你";
+  if (state.safety > 74) return "耳朵谨慎地转着，先闻一闻";
+  return "呼吸很稳，安静看着这一刻";
+}
+
+function dogSenseText(state: CreatureState) {
+  if (state.arousal > 64) return "现在对新动静很敏感";
+  if (state.confidence > 62) return "表达更确定一点";
+  if (state.safety > 74) return "会先保护隐私和边界";
+  return "会先观察，再决定要不要靠近";
 }
 
 function actionText(action: AttentionEvent["suggestedAction"]) {

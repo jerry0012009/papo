@@ -39,7 +39,9 @@ describe("App", () => {
     render(<App />);
 
     await waitFor(() => expect(screen.getByText("Papo")).toBeInTheDocument());
+    expect(screen.getByLabelText("Papo 是一只卡通柴犬")).toBeInTheDocument();
     expect(screen.getByText("当前心情")).toBeInTheDocument();
+    expect(screen.getByText("会先观察，再决定要不要靠近")).toBeInTheDocument();
     expect(screen.getByText("醒来时")).toBeInTheDocument();
     expect(screen.getByText("我醒来时自己又想到妈妈复查这件事。")).toBeInTheDocument();
     expect(screen.getByText("Papo 新说")).toBeInTheDocument();

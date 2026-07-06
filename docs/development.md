@@ -183,6 +183,7 @@ Done:
   - Papo conversation timeline: multimodal inputs plus wake notes, attention responses, feedback learning, and active emergence are persisted into `conversation`, with a Home notification and a dedicated dialogue history page.
   - Curious Mode continuous recording: MediaRecorder records up to 3 minutes, requests audio chunks every 30 seconds, sends chunks to `/api/audio-transcript`, and keeps browser speech recognition only as a local fallback transcript source.
   - Multimodal 30-second batches: text, photo summaries, and audio transcripts carry `batchId` and `observedAt`; photo uploads also carry available browser geolocation so later memories can include time/place.
+  - Papo is now rendered as a cute cartoon Shiba Inu: ears, curled tail, breathing, blinking, tired/alert/attached/careful motion states are bound to `CreatureState`.
 
 Verified:
 
@@ -208,6 +209,7 @@ Verified:
 - Papo utterances are visible as a latest-message notification and as persisted dialogue history.
 - Curious Mode can create `audio_transcript` segments from real 30-second audio chunks without storing raw audio.
 - Curious Mode can preserve photo upload time/place and batch text/photo/audio as one stream before attention selection.
+- Home renders Papo as an animated Shiba Inu whose visible posture changes with mood, energy, curiosity, attachment, and safety.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
@@ -218,10 +220,9 @@ Verified:
 
 Next:
 
-1. Add richer cartoon Shiba Inu visual states and animations so Papo visibly behaves like a small dog, not just a data panel.
-2. Add stronger browser visual QA with mobile screenshots.
-3. Add optional local notification permission flow for important Papo utterances after the in-app timeline is stable.
-4. Tune OpenRouter audio model defaults after testing real account model availability.
+1. Add stronger browser visual QA with mobile screenshots for the Shiba Inu avatar, conversation timeline, and Curious recording flow.
+2. Add optional local notification permission flow for important Papo utterances after the in-app timeline is stable.
+3. Tune OpenRouter audio model defaults after testing real account model availability.
 
 Demo material rule:
 
@@ -247,3 +248,4 @@ Demo material rule:
 - Papo messages are persisted and visible in conversation history.
 - Curious Mode can segment live recording into audio transcripts.
 - Curious Mode records multimodal input metadata: 30-second batch id, observed time, and photo location when permitted.
+- Papo's visible Shiba Inu avatar reflects state and remains readable on mobile.
