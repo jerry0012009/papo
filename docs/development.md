@@ -100,6 +100,7 @@ Feedback controls on user-facing memory and episode surfaces should sound like t
 Home presence, active emergence, body signals, and dialogue context should default to Papo speaking from inside the experience. Use first-person "我..." phrasing for what Papo noticed, remembered, learned, or is ready to do; reserve third-person observer language for Brain diagnostics or explicit user navigation labels.
 Curious results should read like Papo choosing what to hold or let pass. Selected and ignored lines should use "我竖起耳朵" and "我先放过..." rather than report-style phrases such as "Papo 放过了".
 Memory candidates and consolidation reasons may later become user-visible long-term memories, so they must be written as shared-moment language from the start. Avoid "episode", "用户反馈这段", "我和用户", or "forget feedback" in candidate text, long-term memory text, and `consolidatedBecause`.
+Long-term memory candidates should remember a shared moment, not only an extracted fact. When Papo responded or chose a stance, the candidate should include a short "当时我回应你..." thread so future emergence can recall what Papo did with the moment.
 
 Harness stages:
 
@@ -267,6 +268,7 @@ Done:
   - Rule/fallback creature responses now use action-oriented shared-moment language instead of analysis-template wording such as "我先试着理解" or "这个片段可能是".
   - Memory candidate text, promoted long-term memory text, and consolidation reasons now use shared-moment language instead of internal phrases such as "这条 episode", "用户反馈这段", "我和用户", or "forget feedback".
   - Memory page rendering now treats persisted memory text as raw material, not final copy: legacy/model phrases such as "用户确认", "episode", "candidate", or "长期保存" are translated away before the user sees Papo's subjective memory surface.
+  - Long-term memory candidates now keep Papo's own response as part of the shared moment, and LLM-written candidate text is normalized before it can become a long-term memory.
 
 Verified:
 

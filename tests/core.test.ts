@@ -64,6 +64,7 @@ describe("creature core", () => {
     expect(result.response).toContain("我在，听见了");
     expect(result.episodes[0].creatureResponse).toContain("我在，听见了");
     expect(result.memoryCandidates?.[0].candidateText).toContain("你曾经对我说");
+    expect(result.memoryCandidates?.[0].candidateText).toContain("当时我回应你");
     expect(result.episodes[0].creatureExperience?.earReason).not.toContain("显著性");
     expect(result.episodes[0].creatureExperience?.earReason).not.toContain("用户主动交给我");
   });
@@ -378,6 +379,8 @@ describe("creature core", () => {
     expect(result.episodes[0].possibleIntent).toContain("主动回应");
     expect(result.episodes[0].creatureExperience?.earReason).toContain("主动回应");
     expect(result.memoryCandidates?.[0].candidateText).toContain("小小的共同经历");
+    expect(result.memoryCandidates?.[0].candidateText).toContain("你曾经轻轻叫我说句话");
+    expect(result.memoryCandidates?.[0].candidateText).not.toMatch(/用户|Papo|episode|candidate/);
   });
 });
 

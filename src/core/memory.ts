@@ -177,8 +177,40 @@ function classifyLongTermKind(episode: EpisodeMemory): LongTermMemory["kind"] {
 }
 
 function buildLongTermText(episode: EpisodeMemory): string {
-  if (episode.noticed.length > 8) return episode.noticed;
-  return `我和你一起经历过这件事：${episode.inputSummary}`;
+  const scene = episode.noticed.length > 8 ? episode.noticed : `我和你一起经历过这件事：${episode.inputSummary}`;
+  const response = sharedResponseText(episode.creatureResponse, scene);
+  if (!response) return normalizeSharedMemoryText(scene);
+  return normalizeSharedMemoryText(`${scene} 当时我回应你：${response}`);
+}
+
+export function normalizeSharedMemoryText(text: string) {
+  return text
+    .trim()
+    .replace(/我和用户/g, "我和你")
+    .replace(/用户主动/g, "你主动")
+    .replace(/用户确认/g, "你确认")
+    .replace(/用户反馈/g, "你后来教我")
+    .replace(/用户/g, "你")
+    .replace(/Papo/g, "我")
+    .replace(/这条\s*episode/gi, "这一小段")
+    .replace(/episode/gi, "小片段")
+    .replace(/memory candidate/gi, "还没完全记稳的想法")
+    .replace(/candidate/gi, "还没完全记稳的想法")
+    .replace(/当前工作区/g, "现在这一刻")
+    .replace(/长期保存/g, "一直记着")
+    .replace(/长期记忆/g, "一直记着的事")
+    .replace(/短期记忆/g, "刚刚记下的事")
+    .replace(/隐私风险/g, "需要先小心的边界")
+    .replace(/我\s+(说|回应|听|记|想|叫)/g, "我$1")
+    .replace(/(\p{Script=Han})\s+(\p{Script=Han})/gu, "$1$2")
+    .replace(/[。！？.!?]+$/, "");
+}
+
+function sharedResponseText(response: string, scene: string) {
+  const text = normalizeSharedMemoryText(response);
+  if (text.length < 6) return "";
+  if (scene.includes(text) || text.includes(scene)) return "";
+  return summarizeText(text, 120);
 }
 
 function countSimilarEpisodes(profile: CreatureProfile, tags: string[]) {

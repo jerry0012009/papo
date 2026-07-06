@@ -4,6 +4,7 @@ import { createMemoryResonanceEmergence } from "./emergence";
 import { handleButtonCapture, handleCuriousStream } from "./attention";
 import { createCuriousCreatureReport } from "./experience";
 import { makeId } from "./ids";
+import { normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
 import type { CaptureResult, CreatureProfile, SemanticBrainRecord, StreamSegment } from "./types";
 
@@ -182,7 +183,7 @@ function applyFallbackInteractionUnderstanding(
     actionFeeling: "我选择先回应你，让这次互动往前走一步。",
     saveFeeling: "这会先成为一条轻量情景记忆，等你的反馈决定要不要长久留下。"
   };
-  updateMemoryCandidate(result, episode.id, `你曾经对我说：${event.triggerContent.trim()}`, ["回应", "共同经历"]);
+  updateMemoryCandidate(result, episode.id, `你曾经对我说：${event.triggerContent.trim()}。当时我回应你：${reply}`, ["回应", "共同经历"]);
 }
 
 function looksLikeDirectCall(text: string) {
@@ -335,7 +336,7 @@ function trimSentence(text: string) {
 function updateMemoryCandidate(result: CaptureResult, sourceEpisodeId: string, text?: string, tags?: string[]) {
   const candidate = result.memoryCandidates?.find((item) => item.sourceEpisodeId === sourceEpisodeId);
   if (!candidate) return;
-  if (text?.trim()) candidate.candidateText = text.trim();
+  if (text?.trim()) candidate.candidateText = normalizeSharedMemoryText(text);
   if (tags?.length) candidate.tags = tags;
 }
 
