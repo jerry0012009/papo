@@ -57,6 +57,7 @@ describe("App", () => {
           episodes: [],
           response: "我先试着理解：你刚才说的这件事会进入我们的对话和注意流。",
           memoryCandidates: [],
+          harnessTrace: ["sense: button", "semantic: fallback/rules only"],
           provider: "fallback"
         });
       }
@@ -97,6 +98,9 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "说给 Papo" }));
     expect(await screen.findByText("刚刚医生确认复查时间改到周六上午。")).toBeInTheDocument();
     expect(screen.queryByText("认真注意后")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "首页" }));
+    expect(screen.queryByText(/sense: button/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/semantic: fallback/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "陪我" }));
     expect(screen.getByText("Curious Mode")).toBeInTheDocument();
@@ -136,6 +140,7 @@ describe("App", () => {
     expect(screen.getByText("演示模式")).toBeInTheDocument();
     expect(screen.getByText("一键准备 4 分钟演示")).toBeInTheDocument();
     expect(screen.getByText("场景 1：填入 8 段信息流")).toBeInTheDocument();
+    expect(screen.queryByText("后续任务")).not.toBeInTheDocument();
   });
 });
 

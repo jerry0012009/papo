@@ -88,6 +88,7 @@ Forget is two-stage for memories: first feedback lowers the target weight to zer
 Active emergence treats zero-weight memories as unavailable: a memory that has been forgotten but not yet purged cannot be resurfaced as Papo's inner thought.
 Unread dialogue state is a perception layer for new Papo utterances, not an action planner: rules decide persisted `papo` messages, while the UI only shows a small unread dot on the dialogue entry. Wake notes are presence state and do not create unread notifications.
 Internal channel names, memory kinds, batch ids, and numeric weights are developer facts. User-facing dialogue and memory pages should default to natural creature language; raw `channel`, `kind`, `batchId`, and `weight` belong in details or Brain views.
+Harness traces and implementation backlog belong to Brain/development docs, not the Home or Demo experience. The user-facing path should show what Papo noticed, remembered, learned, or wondered, not pipeline step names such as `sense` or `semantic`.
 
 Harness stages:
 
@@ -213,6 +214,7 @@ Done:
   - Conversation bubbles no longer show system-channel labels such as "认真注意后"; Papo replies are shown as Papo speaking, with light context only for user/world inputs.
   - Memory page no longer defaults to database labels such as `future_review`, batch ids, or numeric weights. It shows "Papo remembers..." language, keeps time/location as part of the shared moment, and puts raw details behind expandable diagnostics.
   - Active emergence on Home now shows Papo's resurfaced thought plus why it surfaced and which drive brought it back, while technical trace remains in Brain.
+  - Home and Demo no longer expose harness trace lines or development backlog cards; technical diagnostics stay in Brain/developer surfaces.
   - Direct text input now lives in the dialogue page composer, then routes through the Button Capture harness and returns to the same conversation timeline; the old standalone Button Capture page was removed from the user-facing navigation.
   - Direct calls such as asking Papo to speak now map to a first-class `respond` action, so the harness can choose to answer before it asks, saves, recalls, or stays quiet.
   - Semantic brain output now includes structured interaction understanding and can update the episode response plus memory candidate text before rule-owned persistence completes.

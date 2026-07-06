@@ -774,9 +774,6 @@ function HomeView(props: {
               ))}
             </div>
           ) : null}
-          {props.lastResult.harnessTrace?.length ? (
-            <div className="trace-line">{props.lastResult.harnessTrace.join(" -> ")}</div>
-          ) : null}
           <div className="event-list">
             {props.lastResult.events.map((event) => (
               <AttentionCard key={event.id} event={event} />
@@ -1306,10 +1303,6 @@ function DemoView(props: {
           <Lightbulb size={18} />
           场景 3：让它现在想一想
         </button>
-      </div>
-      <div className="panel">
-        <PanelTitle icon={Brain} title="后续任务" />
-        <p className="response">Curious Mode 后续会加入持续录音：最多 3 分钟，每 30 秒自动切成一段 audio transcript，再作为注意素材进入同一套 session audit。</p>
       </div>
     </section>
   );

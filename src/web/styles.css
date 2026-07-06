@@ -457,13 +457,6 @@ meter {
   line-height: 1.6;
 }
 
-.trace-line {
-  color: #69756c;
-  font-size: 0.76rem;
-  line-height: 1.45;
-  overflow-wrap: anywhere;
-}
-
 .event-list {
   display: grid;
   gap: 10px;
