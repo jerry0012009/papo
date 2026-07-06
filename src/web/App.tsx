@@ -584,7 +584,7 @@ export function App() {
 
   function loadDemoCurious() {
     setSegments(demoCuriousSegments.map((segment, index) => makeSegment(`demo-${index + 1}`, segment.kind, segment.label, segment.content)));
-    setDemoNote("我已经放入 8 段生活化信息流：背景、日历、隐私、语音和重复片段。下一步点“开始观察”。");
+    setDemoNote("我把 8 段日常小片段放到 Papo 面前了：有背景、有日历、有隐私味道、有声音，也有重复。现在可以让它自己挑出真正想看的地方。");
     setDemoSummary(undefined);
     setTab("curious");
   }
@@ -633,7 +633,7 @@ export function App() {
         contrast,
         emergence: emerged.emergence.text
       });
-      setDemoNote("完整演示已准备好：主线小动物、两只 Papo 的性格差异和主动浮现都已生成。");
+      setDemoNote("这只 Papo 已经走完一圈：先注意生活片段，再被你反馈养成，然后自己想起一条旧记忆。");
       setTab("demo");
     });
   }
@@ -663,7 +663,7 @@ export function App() {
       setProfile(aResult.profile);
       setLastResult(aResult);
       setLearningNote(contrast);
-      setDemoNote(`已创建两个小动物：${aProfile.creatureName} 和 ${bProfile.creatureName}。${contrast}`);
+      setDemoNote(`${aProfile.creatureName} 和 ${bProfile.creatureName} 刚被不同反馈养了一小会儿。${contrast}`);
       setTab("home");
     });
   }
@@ -1441,8 +1441,8 @@ function DemoView(props: {
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={Wand2} title="演示模式" />
-        <p className="response">用生活里的小片段演示三件事：它会竖起耳朵，它会被反馈养成，它会主动想起旧片段。</p>
+        <PanelTitle icon={Wand2} title="带 Papo 走一圈" />
+        <p className="response">用几段日常小事看它怎么竖起耳朵、怎么被反馈养成、又怎么自己想起旧片段。</p>
         {props.note ? <section className="learning-note">{props.note}</section> : null}
         {props.summary ? (
           <section className="demo-checklist">
@@ -1454,19 +1454,19 @@ function DemoView(props: {
         ) : null}
         <button className="primary" onClick={props.onRunGuided} disabled={props.busy}>
           <Wand2 size={18} />
-          一键准备 4 分钟演示
+          带它完整走一圈
         </button>
         <button onClick={props.onLoadCurious} disabled={props.busy}>
           <Sparkles size={18} />
-          场景 1：准备 8 段生活片段
+          先给它 8 段生活
         </button>
         <button onClick={props.onRunContrast} disabled={props.busy}>
           <UserRound size={18} />
-          场景 2：看两只 Papo 长出不同性格
+          看两只 Papo 被养成不同样子
         </button>
         <button onClick={props.onEmerge} disabled={props.busy}>
           <Lightbulb size={18} />
-          场景 3：让它现在想一想
+          问问它现在想到什么
         </button>
       </div>
     </section>

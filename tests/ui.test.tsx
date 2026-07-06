@@ -215,10 +215,13 @@ describe("App", () => {
     expect(screen.getAllByText("fallback").length).toBeGreaterThan(0);
 
     await userEvent.click(screen.getByRole("button", { name: "演示" }));
-    expect(screen.getByText("演示模式")).toBeInTheDocument();
-    expect(screen.getByText("一键准备 4 分钟演示")).toBeInTheDocument();
-    expect(screen.getByText("场景 1：准备 8 段生活片段")).toBeInTheDocument();
-    expect(screen.getByText("场景 2：看两只 Papo 长出不同性格")).toBeInTheDocument();
+    expect(screen.getByText("带 Papo 走一圈")).toBeInTheDocument();
+    expect(screen.getByText("带它完整走一圈")).toBeInTheDocument();
+    expect(screen.getByText("先给它 8 段生活")).toBeInTheDocument();
+    expect(screen.getByText("看两只 Papo 被养成不同样子")).toBeInTheDocument();
+    expect(screen.getByText("问问它现在想到什么")).toBeInTheDocument();
+    expect(screen.queryByText("演示模式")).not.toBeInTheDocument();
+    expect(screen.queryByText(/场景 1|场景 2|场景 3|一键准备/)).not.toBeInTheDocument();
     expect(screen.queryByText("场景 2：生成 A/B 养成对比")).not.toBeInTheDocument();
     expect(screen.queryByText("后续任务")).not.toBeInTheDocument();
   });

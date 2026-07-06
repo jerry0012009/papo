@@ -93,6 +93,7 @@ Internal channel names, memory kinds, batch ids, and numeric weights are develop
 The memory page is Papo's subjective remembering surface. It should use first-person creature language for what Papo is holding, how familiar the memory feels, why it kept the moment, and how the user can help it remember accurately or let go. Hiding technical fields is necessary but not sufficient UX.
 Harness traces and implementation backlog belong to Brain/development docs, not the Home or Demo experience. The user-facing path should show what Papo noticed, remembered, learned, or wondered, not pipeline step names such as `sense` or `semantic`.
 User-facing pages should not label the companionship flow as `Curious Mode` or expose `image_summary` / `audio_transcript`; use "陪我看一小段世界", "照片", "录音转写", "小片段", and "这一小段" language instead. Keep the raw type names in code, API contracts, tests, and Brain diagnostics only.
+Demo entry copy should guide a person through Papo's life loop rather than sound like a script runner. Prefer "带 Papo 走一圈", "先给它生活片段", and "问问它想到什么" over "一键", "场景 1/2/3", or setup-task language on user-facing surfaces.
 
 Harness stages:
 
@@ -249,6 +250,7 @@ Done:
   - The memory page now uses first-person creature memory language across titles, search, memory type/familiarity copy, retention reason, and edit/forget controls, instead of third-person management copy.
   - User-facing multimodal input type controls now use icon segmented buttons for text/photo/audio instead of raw select dropdowns, keeping `image_summary` and `audio_transcript` as internal API terms only.
   - Episode source provenance on user pages no longer exposes raw `batch` or `segment` ids; those implementation identifiers belong in Brain/developer diagnostics.
+  - Demo entry copy now frames the guided run as taking Papo through a life loop, not preparing numbered scenes or running a script.
 
 Verified:
 
@@ -306,6 +308,7 @@ Verified:
 - Tests protect active emergence and wake resurfacing from template-reminder phrases such as "不是提醒", "内在倾向", and "下一次你给我信息流".
 - UI and visual smoke protect the memory page's first-person creature voice and ensure raw memory diagnostics stay out of the default surface.
 - UI and visual smoke protect the companionship path from raw source ids and type dropdowns on user-facing pages.
+- UI smoke protects the demo entry from "一键准备" and numbered-scene copy.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`
