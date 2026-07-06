@@ -691,9 +691,7 @@ meter {
 
 .papo-notice {
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 12px;
-  align-items: center;
+  gap: 10px;
   background: #e9f3eb;
 }
 
@@ -712,6 +710,31 @@ meter {
   gap: 10px;
 }
 
+.chat-batch {
+  display: grid;
+  gap: 8px;
+  width: min(96%, 590px);
+  justify-self: end;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(31, 36, 33, 0.08);
+  background: rgba(255, 250, 240, 0.62);
+}
+
+.chat-batch-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  color: #465248;
+  font-size: 0.82rem;
+}
+
+.chat-batch-head span {
+  color: #69756c;
+  font-size: 0.76rem;
+}
+
 .chat-bubble {
   width: min(92%, 560px);
   border-radius: 8px;
@@ -728,6 +751,10 @@ meter {
 .chat-bubble.world {
   justify-self: end;
   background: #fffaf0;
+}
+
+.chat-batch .chat-bubble {
+  width: 100%;
 }
 
 .chat-bubble div {

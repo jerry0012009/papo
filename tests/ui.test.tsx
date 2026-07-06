@@ -79,6 +79,8 @@ describe("App", () => {
     expect(screen.getByText("对话和注意流")).toBeInTheDocument();
     expect(screen.getByText("1 条注意素材")).toBeInTheDocument();
     expect(screen.getByText("1 条 Papo 回应")).toBeInTheDocument();
+    expect(screen.getByText("30秒共同片段")).toBeInTheDocument();
+    expect(screen.getByText("manual-1 · 1 条素材")).toBeInTheDocument();
     expect(screen.getByText(/进入30秒注意批次/)).toBeInTheDocument();
     expect(screen.getByText(/Papo 输出/)).toBeInTheDocument();
     expect(screen.getByText("你给 Papo 看了照片")).toBeInTheDocument();

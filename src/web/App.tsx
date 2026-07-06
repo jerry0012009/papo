@@ -74,6 +74,11 @@ interface DemoSummary {
   emergence: string;
 }
 
+type ConversationMessage = CreatureProfile["conversation"][number];
+type ConversationSection =
+  | { kind: "batch"; id: string; batchId: string; messages: ConversationMessage[] }
+  | { kind: "single"; id: string; message: ConversationMessage };
+
 const feedbacks: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }> = [
   { kind: "understood", label: "理解对了", icon: Check },
   { kind: "continue", label: "继续想", icon: Lightbulb },
@@ -952,6 +957,7 @@ function CuriousView(props: {
 
 function ChatView({ profile }: { profile: CreatureProfile }) {
   const messages = [...(profile.conversation ?? [])].slice(0, 50).reverse();
+  const sections = groupConversationSections(messages);
   const inputCount = messages.filter((message) => message.role !== "papo").length;
   const papoCount = messages.filter((message) => message.role === "papo").length;
   return (
@@ -964,22 +970,23 @@ function ChatView({ profile }: { profile: CreatureProfile }) {
         </div>
         {messages.length ? (
           <div className="chat-list">
-            {messages.map((message) => (
-              <article className={`chat-bubble ${message.role}`} key={message.id}>
-                <div>
-                  <strong>{messageTitle(message)}</strong>
-                  <span>{messageFlowText(message)} · {new Date(message.at).toLocaleString("zh-CN")}</span>
-                </div>
-                <p>{message.text}</p>
-                {message.batchId || message.observedAt || message.location ? (
-                  <small>
-                    {[message.batchId ? `批次 ${message.batchId}` : "", message.observedAt ? `观察 ${new Date(message.observedAt).toLocaleString("zh-CN")}` : "", message.location ? locationText(message.location) : ""]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </small>
-                ) : null}
-              </article>
-            ))}
+            {sections.map((section) =>
+              section.kind === "batch" ? (
+                <section className="chat-batch" key={section.id}>
+                  <div className="chat-batch-head">
+                    <strong>30秒共同片段</strong>
+                    <span>
+                      {section.batchId} · {section.messages.length} 条素材
+                    </span>
+                  </div>
+                  {section.messages.map((message) => (
+                    <ChatBubble message={message} key={message.id} />
+                  ))}
+                </section>
+              ) : (
+                <ChatBubble message={section.message} key={section.id} />
+              )
+            )}
           </div>
         ) : (
           <p className="muted">还没有对话。等你给 Papo 文字、照片或声音，它的注意和回应会在这里连成一条时间线。</p>
@@ -987,6 +994,48 @@ function ChatView({ profile }: { profile: CreatureProfile }) {
       </div>
     </section>
   );
+}
+
+function ChatBubble({ message }: { message: ConversationMessage }) {
+  return (
+    <article className={`chat-bubble ${message.role}`}>
+      <div>
+        <strong>{messageTitle(message)}</strong>
+        <span>
+          {messageFlowText(message)} · {new Date(message.at).toLocaleString("zh-CN")}
+        </span>
+      </div>
+      <p>{message.text}</p>
+      {message.batchId || message.observedAt || message.location ? (
+        <small>
+          {[
+            message.batchId ? `批次 ${message.batchId}` : "",
+            message.observedAt ? `观察 ${new Date(message.observedAt).toLocaleString("zh-CN")}` : "",
+            message.location ? locationText(message.location) : ""
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </small>
+      ) : null}
+    </article>
+  );
+}
+
+function groupConversationSections(messages: ConversationMessage[]): ConversationSection[] {
+  return messages.reduce<ConversationSection[]>((sections, message) => {
+    if (message.role !== "papo" && message.batchId) {
+      const previous = sections[sections.length - 1];
+      if (previous?.kind === "batch" && previous.batchId === message.batchId) {
+        previous.messages.push(message);
+        return sections;
+      }
+      sections.push({ kind: "batch", id: `batch-${message.batchId}-${message.id}`, batchId: message.batchId, messages: [message] });
+      return sections;
+    }
+
+    sections.push({ kind: "single", id: message.id, message });
+    return sections;
+  }, []);
 }
 
 function MemoryView(props: {

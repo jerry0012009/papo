@@ -74,6 +74,7 @@ Guardrails always run after LLM suggestions. LLM output cannot directly mutate s
 LLM narration cannot change state, policy, action, memory ids, or persistence. Emergence narration is accepted only when it stays anchored to a real memory already selected by rules.
 Visual and audio models are treated as `sense` adapters only: they may create `image_summary` and `audio_transcript` text, but they do not choose memories, actions, or state changes. Those generated segments remain user-editable before entering Curious Mode.
 Attention is a conversation phase, not a separate product mode: user/world multimodal inputs enter the conversation timeline first, then the harness decides what Papo attends to, remembers, says, or ignores.
+The user-facing conversation unit should often be a short shared moment, not a single database row: text, photo summaries, and audio transcripts with the same 30-second `batchId` are presented together before Papo's attention response.
 Local notifications are a perception layer for new Papo utterances, not an action planner: rules decide which persisted `papo` conversation message is newest, the browser permission gate decides whether to notify, and no LLM output can bypass that gate.
 
 Harness stages:
@@ -186,6 +187,7 @@ Done:
   - Multimodal 30-second batches: text, photo summaries, and audio transcripts carry `batchId` and `observedAt`; photo uploads also carry available browser geolocation so later memories can include time/place.
   - Papo is now rendered as a cute cartoon Shiba Inu: ears, curled tail, breathing, blinking, tired/alert/attached/careful motion states are bound to `CreatureState`.
   - Conversation and attention are unified in the UI: the dialogue page shows user/world inputs as attention material and Papo utterances as outputs in one timeline.
+  - Dialogue inputs with the same 30-second batch are grouped as one shared moment, so multimodal fragments feel like one thing Papo experienced with the user.
   - Optional browser notifications can be enabled for newly persisted Papo utterances; historical messages and user/world inputs do not trigger "Papo new said" notifications.
 
 Verified:
@@ -215,6 +217,7 @@ Verified:
 - Home renders Papo as an animated Shiba Inu whose visible posture changes with mood, energy, curiosity, attachment, and safety.
 - The Home "Papo new said" surface only selects `role=papo` messages even when newer user/world inputs exist.
 - The dialogue page presents one attention/conversation timeline with counts for attention material and Papo responses.
+- The dialogue page groups same-batch multimodal inputs into a "30-second shared moment" before Papo's response.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
@@ -227,7 +230,7 @@ Next:
 
 1. Add stronger browser visual QA with mobile screenshots for the Shiba Inu avatar, conversation timeline, notification prompt, and Curious recording flow.
 2. Tune OpenRouter audio model defaults after testing real account model availability.
-3. Explore richer conversation grouping by 30-second batch so photo/text/audio fragments feel like one shared moment.
+3. Add stronger episode-to-conversation links so a memory card can show the exact shared moment that created it.
 
 Demo material rule:
 
@@ -255,3 +258,4 @@ Demo material rule:
 - Curious Mode records multimodal input metadata: 30-second batch id, observed time, and photo location when permitted.
 - Papo's visible Shiba Inu avatar reflects state and remains readable on mobile.
 - Conversation timeline treats attention as part of dialogue, and browser notifications only fire for new Papo utterances after explicit permission.
+- Same-batch multimodal inputs are visible as one shared moment in the conversation timeline.
