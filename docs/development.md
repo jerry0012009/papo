@@ -84,6 +84,7 @@ The user-facing conversation unit should often be a short shared moment, not a s
 Episode memories keep provenance back to their source segment/batch/time/location when available, so a memory card can show the shared moment that gave birth to it.
 Feedback is also conversation input: button taps, typed feedback, and audio-transcribed feedback are recorded in the same timeline before Papo's learning response, then rule-owned state/policy/memory changes apply.
 Feedback responses have a rule-owned `responseAction`: Papo may simply acknowledge, ask one light follow-up, quiet itself, or attach the feedback content to memory. LLM narration may rewrite the learning/follow-up text, but not the action, deltas, or memory writes.
+Feedback impact shown to users should describe future behavior changes, not raw state or policy deltas. Numeric deltas remain Brain diagnostics.
 Forget is two-stage for memories: first feedback lowers the target weight to zero and teaches caution; a later forget on the zero-weight target purges it.
 Active emergence treats zero-weight memories as unavailable: a memory that has been forgotten but not yet purged cannot be resurfaced as Papo's inner thought.
 Active emergence must not treat seed self-memory as a shared old experience. A memory produced from a real episode may support emergence even if its kind is `creature_self_memory`; if no positive-weight shared memory exists, Papo may express readiness or inner state, but it must not pretend to remember an old moment.
@@ -211,7 +212,8 @@ Done:
   - Episode memories preserve source segment/batch/time/location metadata and memory cards can show the exact shared moment that created them.
   - Feedback is integrated into the conversation timeline: buttons, typed notes, and audio-transcribed notes become user feedback inputs before Papo replies with a learning note.
   - Feedback can now advance the interaction instead of only issuing a receipt: rules choose acknowledge/follow-up/quiet/memory-note behavior, and substantive feedback can attach a new memory candidate or strengthen a promoted memory.
-  - Feedback records expose rule-owned state and policy deltas so users can see how they are raising Papo.
+  - Feedback records keep rule-owned state and policy deltas for Brain diagnostics, while user-facing feedback impact describes how Papo's future behavior changed.
+  - Feedback impact on Home is translated into behavior language such as "it will pause longer next time" instead of numeric `+8` state or policy deltas; Brain keeps numeric deltas.
   - Forget feedback is staged: it first downranks memory weight to zero, then a repeated forget purges the zero-weight target.
   - New non-wake Papo utterances show a small unread dot on the dialogue tab; entering the dialogue clears it. Wake notes stay in the wake surface and conversation history only.
   - Conversation bubbles no longer show system-channel labels such as "认真注意后"; Papo replies are shown as Papo speaking, with light context only for user/world inputs.
@@ -272,7 +274,8 @@ Verified:
 - Episode cards can trace a memory back to the source shared moment, including batch, observed time, location, and matching conversation input when present.
 - Feedback text and audio transcript content are persisted as conversation input, and Papo's learning response follows it in the same timeline.
 - Feedback with substantive text can produce a rule-owned follow-up or memory note, and the persisted Papo reply includes that continuation.
-- Feedback responses include visible state/policy deltas, and forget feedback requires a second click to purge a zero-weight memory.
+- Feedback records include state/policy deltas in diagnostics, user-facing feedback explains behavioral change, and forget feedback requires a second click to purge a zero-weight memory.
+- User-facing feedback impact explains how Papo will behave differently next time and does not show raw `+8` state/policy tuning.
 - The Home "single input" path opens the dialogue composer, and a submitted text message appears in the same attention/conversation timeline as Papo's response.
 - A direct "say something to me" input selects `respond`, produces a Papo reply, and creates a memory candidate for that small shared moment.
 - Real online model smoke passed through the OpenAI-compatible generic provider with `gpt-5.5`: semantic brain status `applied`, action `respond`, LLM-written reply, and LLM-written memory candidate.

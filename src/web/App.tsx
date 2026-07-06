@@ -1613,21 +1613,15 @@ function EmergenceCard({ emergence }: { emergence: EmergenceSurface }) {
 function FeedbackImpactCard({ feedback }: { feedback: FeedbackRecord }) {
   const stateDeltas = feedback.stateDeltas ?? [];
   const policyDeltas = feedback.policyDeltas ?? [];
-  if (!stateDeltas.length && !policyDeltas.length) return null;
+  const changes = feedbackChangeLines(stateDeltas, policyDeltas);
+  if (!changes.length) return null;
   return (
     <section className="feedback-impact">
       <strong>这次养成变化</strong>
       {feedback.inputText ? <p>你还补充了：{feedback.inputText}</p> : null}
       <div>
-        {stateDeltas.map((item) => (
-          <span key={`state-${item.key}`}>
-            {stateDriveLabel(item.key)} {deltaText(item.delta)}
-          </span>
-        ))}
-        {policyDeltas.map((item) => (
-          <span key={`policy-${item.key}`}>
-            {policyLabel(item.key)} {deltaText(item.delta)}
-          </span>
+        {changes.map((line) => (
+          <span key={line}>{line}</span>
         ))}
       </div>
     </section>
@@ -1693,20 +1687,33 @@ function boundarySignalText(state: CreatureState) {
   return "边界稳定，可以认真靠近";
 }
 
-function stateDriveLabel(key: keyof Omit<CreatureState, "mood">) {
-  const map = {
-    curiosity: "好奇心",
-    attachment: "依恋度",
-    energy: "精力",
-    arousal: "唤醒度",
-    safety: "安全感",
-    confidence: "表达自信"
-  };
-  return map[key];
-}
+function feedbackChangeLines(
+  stateDeltas: NonNullable<FeedbackRecord["stateDeltas"]>,
+  policyDeltas: NonNullable<FeedbackRecord["policyDeltas"]>
+) {
+  const lines: string[] = [];
+  const state = new Map(stateDeltas.map((item) => [item.key, item.delta]));
+  const policy = new Map(policyDeltas.map((item) => [item.key, item.delta]));
 
-function deltaText(delta: number) {
-  return `${delta > 0 ? "+" : ""}${delta}`;
+  if ((state.get("curiosity") ?? 0) > 0 || (policy.get("preferDepth") ?? 0) > 0) {
+    lines.push("下次遇到相似的小片段，它会多停一下，愿意展开一点。");
+  }
+  if ((policy.get("recallTendency") ?? 0) > 0 || (state.get("attachment") ?? 0) > 0) {
+    lines.push("它会更容易把这段和你们以前的小事连起来。");
+  }
+  if ((policy.get("quietTendency") ?? 0) > 0 || (state.get("arousal") ?? 0) < 0) {
+    lines.push("它学会收小一点声音，不是每次竖起耳朵都打扰你。");
+  }
+  if ((policy.get("privacySensitivity") ?? 0) > 0 || (state.get("safety") ?? 0) > 0) {
+    lines.push("它会更小心守住边界，保存前多等你的意思。");
+  }
+  if ((state.get("confidence") ?? 0) > 0) {
+    lines.push("它会更敢把自己的理解轻轻说出来。");
+  }
+  if ((state.get("energy") ?? 0) < 0) {
+    lines.push("它刚认真用过一点力，接下来会先抱住重点。");
+  }
+  return lines.length ? [...new Set(lines)] : ["它已经把你的反馈放进后面的回应方式里。"];
 }
 
 function attentionStrengthText(strength: number) {

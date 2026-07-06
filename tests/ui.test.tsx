@@ -49,7 +49,10 @@ describe("App", () => {
             inputModality: "text",
             effect: "用户让我继续想，所以我以后会更愿意展开关联和推理。",
             learningNote: "我学到：这个主题你希望我不要浅浅带过。你还补充说：这里请多想一点。",
-            stateDeltas: [{ key: "curiosity", before: 66, after: 74, delta: 8 }],
+            stateDeltas: [
+              { key: "curiosity", before: 66, after: 74, delta: 8 },
+              { key: "energy", before: 72, after: 68, delta: -4 }
+            ],
             policyDeltas: [{ key: "preferDepth", before: 45, after: 53, delta: 8 }]
           }
         });
@@ -107,8 +110,10 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "继续想" }));
     expect(await screen.findByText("这次养成变化")).toBeInTheDocument();
     expect(screen.getByText("你还补充了：这里请多想一点")).toBeInTheDocument();
-    expect(screen.getByText("好奇心 +8")).toBeInTheDocument();
-    expect(screen.getByText("深入倾向 +8")).toBeInTheDocument();
+    expect(screen.getByText("下次遇到相似的小片段，它会多停一下，愿意展开一点。")).toBeInTheDocument();
+    expect(screen.getByText("它刚认真用过一点力，接下来会先抱住重点。")).toBeInTheDocument();
+    expect(screen.queryByText("好奇心 +8")).not.toBeInTheDocument();
+    expect(screen.queryByText("深入倾向 +8")).not.toBeInTheDocument();
     expect(screen.queryByText("Papo 新说")).not.toBeInTheDocument();
     expect(screen.queryByText("桌面提醒")).not.toBeInTheDocument();
     expect(screen.getByLabelText("有未读 Papo 回复")).toBeInTheDocument();
