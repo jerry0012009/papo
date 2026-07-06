@@ -117,7 +117,8 @@ describe("creature core", () => {
     expect(feedback.followUpText).toContain("最希望我以后先注意");
     expect(feedback.replyText).toContain(feedback.followUpText);
     expect(feedback.memoryCandidateIds?.length).toBeGreaterThan(0);
-    expect(profile.memoryCandidates[0].candidateText).toContain("用户反馈这段时补充");
+    expect(profile.memoryCandidates[0].candidateText).toContain("你后来教我补上这一点");
+    expect(profile.memoryCandidates[0].candidateText).not.toContain("用户反馈这段");
     expect(feedback.stateDeltas?.some((item) => item.key === "curiosity" && item.delta > 0)).toBe(true);
     expect(feedback.policyDeltas?.some((item) => item.key === "preferDepth" && item.delta > 0)).toBe(true);
   });
@@ -179,6 +180,9 @@ describe("creature core", () => {
     applyFeedback(profile, { kind: "forget", targetId });
 
     expect(profile.longTermMemories.find((memory) => memory.id === targetId)?.weight).toBe(0);
+    expect(profile.longTermMemories[0].text).toContain("你让我放下类似内容");
+    expect(profile.longTermMemories[0].consolidatedBecause).toContain("小心边界");
+    expect(profile.longTermMemories[0].consolidatedBecause).not.toContain("forget feedback");
     applyFeedback(profile, { kind: "forget", targetId });
     expect(profile.longTermMemories.find((memory) => memory.id === targetId)).toBeUndefined();
     expect(profile.state.safety).toBeGreaterThan(58);

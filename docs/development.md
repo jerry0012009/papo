@@ -99,6 +99,7 @@ User-facing empty, error, and status copy is part of the creature experience too
 Feedback controls on user-facing memory and episode surfaces should sound like the user is raising Papo, not pressing admin actions. Prefer "再想一会儿", "先安静点", "帮我记住", and first-person learning echoes such as "我会..." while keeping raw feedback kinds in code/API/Brain diagnostics.
 Home presence, active emergence, body signals, and dialogue context should default to Papo speaking from inside the experience. Use first-person "我..." phrasing for what Papo noticed, remembered, learned, or is ready to do; reserve third-person observer language for Brain diagnostics or explicit user navigation labels.
 Curious results should read like Papo choosing what to hold or let pass. Selected and ignored lines should use "我竖起耳朵" and "我先放过..." rather than report-style phrases such as "Papo 放过了".
+Memory candidates and consolidation reasons may later become user-visible long-term memories, so they must be written as shared-moment language from the start. Avoid "episode", "用户反馈这段", "我和用户", or "forget feedback" in candidate text, long-term memory text, and `consolidatedBecause`.
 
 Harness stages:
 
@@ -263,6 +264,7 @@ Done:
   - Home presence, body signals, active emergence labels, and dialogue feedback context now use first-person creature voice instead of observer phrases such as "它已经接住" or "你在教它".
   - Curious result, Episode detail, memory feeling, and Demo entry copy now avoid report-style observer phrases such as "Papo 放过了", "它刚才怎么理解", and "它以后可能".
   - Rule/fallback creature responses now use action-oriented shared-moment language instead of analysis-template wording such as "我先试着理解" or "这个片段可能是".
+  - Memory candidate text, promoted long-term memory text, and consolidation reasons now use shared-moment language instead of internal phrases such as "这条 episode", "用户反馈这段", "我和用户", or "forget feedback".
 
 Verified:
 
@@ -327,6 +329,7 @@ Verified:
 - UI smoke protects Home and dialogue context from third-person observer phrases when Papo should be speaking from inside the experience.
 - UI smoke protects Curious ignored-result and memory feeling copy from report-style observer phrases.
 - Core tests protect rule/fallback creature responses from analysis-template wording.
+- Core tests protect memory candidates and consolidation reasons from internal developer wording.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`

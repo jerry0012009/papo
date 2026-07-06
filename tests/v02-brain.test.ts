@@ -86,11 +86,13 @@ describe("creature brain v0.2", () => {
     const result = handleButtonCapture(profile, "用户更重视我解释为什么注意，而不是只总结。");
 
     expect(result.memoryCandidates?.[0].status).toBe("candidate");
+    expect(result.memoryCandidates?.[0].whyConsolidate).not.toContain("episode");
     expect(profile.longTermMemories.some((memory) => memory.sourceEpisodeId === result.episodes[0].id)).toBe(false);
 
     applyFeedback(profile, { kind: "remember", targetId: result.episodes[0].id });
 
     expect(profile.longTermMemories.some((memory) => memory.sourceEpisodeId === result.episodes[0].id)).toBe(true);
+    expect(profile.longTermMemories[0].consolidatedBecause).not.toContain("episode");
   });
 
   it("continue creates open question or future-review candidates", () => {

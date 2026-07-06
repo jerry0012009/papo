@@ -73,8 +73,8 @@ export function createMemoryCandidateFromEpisode(
     confidence,
     sourceEpisodeId: episode.id,
     whyConsolidate: repeatedThemeCount >= 3
-      ? "同一主题已经多次出现，海马体建议形成长期主题。"
-      : "这条 episode 有足够的注意强度，先形成待巩固候选。",
+      ? "这件事已经多次回到我这里，我想把它抱成一个长期主题。"
+      : "我刚才确实认真停了一下，先把这段留成可以被你确认的小记忆。",
     writePolicy,
     privacyReason: privacyHigh ? "包含隐私或密钥线索，默认不自动长期保存。" : undefined,
     decayPolicy: input.feedback === "continue" ? "stable" : "decay_without_feedback",
@@ -178,7 +178,7 @@ function classifyLongTermKind(episode: EpisodeMemory): LongTermMemory["kind"] {
 
 function buildLongTermText(episode: EpisodeMemory): string {
   if (episode.noticed.length > 8) return episode.noticed;
-  return `我和用户经历过这件事：${episode.inputSummary}`;
+  return `我和你一起经历过这件事：${episode.inputSummary}`;
 }
 
 function countSimilarEpisodes(profile: CreatureProfile, tags: string[]) {

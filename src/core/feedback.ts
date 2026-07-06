@@ -43,7 +43,7 @@ export function applyFeedback(
   if (input.kind === "remember" && input.targetId) {
     const memory = promoteEpisode(profile, input.targetId, now);
     if (memory && inputText && !hasPrivacyRisk(inputText)) {
-      memory.text = `${memory.text} 用户确认时补充：${summarizeText(inputText, 120)}`;
+      memory.text = `${memory.text} 你确认时还补充：${summarizeText(inputText, 120)}`;
       memory.tags = unique([...memory.tags, ...extractTags(inputText)]);
     }
   }
@@ -54,7 +54,7 @@ export function applyFeedback(
     if (targetEpisode) {
       const candidate = createMemoryCandidateFromEpisode(profile, targetEpisode, { feedback: "continue", now });
       if (inputText && !hasPrivacyRisk(inputText)) {
-        candidate.candidateText = `用户反馈这段时补充：${summarizeText(inputText, 140)}。这应该和原来的片段一起理解。`;
+        candidate.candidateText = `你后来教我补上这一点：${summarizeText(inputText, 140)}。我会把它和原来的小片段放在一起理解。`;
         candidate.tags = unique([...candidate.tags, ...extractTags(inputText)]);
       }
       record.memoryCandidateIds?.push(candidate.id);
@@ -151,9 +151,9 @@ function createSafetyMemoryFromForget(
     id: makeId("ltm"),
     createdAt: now,
     kind: "safety_rule",
-    text: `用户让我忘掉类似内容。以后遇到相关主题时，我应该先问，不要直接保存：${text.slice(0, 80)}`,
+    text: `你让我放下类似内容。以后遇到相关主题时，我应该先问，不要自己抢着保存：${text.slice(0, 80)}`,
     weight: 70,
     tags: episode?.tags ?? memory?.tags ?? [],
-    consolidatedBecause: "forget feedback 转化为隐私/克制规则。"
+    consolidatedBecause: "你用放下这一下教我先小心边界。"
   });
 }
