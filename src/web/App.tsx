@@ -397,11 +397,11 @@ export function App() {
     try {
       stream = await navigator.mediaDevices?.getUserMedia?.({ audio: true });
     } catch {
-      setError("没有拿到麦克风权限。可以继续用文字模拟一段信息流。");
+      setError("我还听不到麦克风。你可以先写一小段给 Papo，或者手动加一段录音。");
       return;
     }
     if (!stream) {
-      setError("没有可用的麦克风输入。可以继续用文字模拟一段信息流。");
+      setError("我还没有听到可用的麦克风声音。你可以先写一小段给 Papo，或者手动加一段录音。");
       return;
     }
 
@@ -422,7 +422,7 @@ export function App() {
           if (event.data.size > 0) recordedChunksRef.current.push(event.data);
         };
         recorder.onerror = () => {
-          setError("录音分段中断。已经得到的片段会继续保留。");
+          setError("这次听到一半断开了。已经整理出来的小片段会继续留在这里。");
         };
         mediaRecorderRef.current = recorder;
         recorder.start();
@@ -431,7 +431,7 @@ export function App() {
           stopMediaCapture();
           setListening(false);
           listeningStartedAtRef.current = undefined;
-          setError("当前浏览器无法启动录音分段。可以继续用文字或手动上传录音。");
+          setError("这个浏览器暂时没法让 Papo 连续听。你可以先写给它，或者手动加一段录音。");
           return;
         }
       }
@@ -1876,7 +1876,7 @@ function stateSentence(profile: CreatureProfile) {
   if (latest?.role === "papo" && latest.channel === "emergence") return "那条旧记忆刚从里面冒出来，它会带着这个方向继续听下一段。";
   if (latest?.role === "papo" && latest.channel === "curious") return "它刚从一小段世界里挑出自己在意的地方，还没有把所有东西都吞下去。";
   if (latest?.role === "papo" && latest.channel === "button") return "刚才那句话让它竖起耳朵，正在判断要回应、记住，还是先轻轻问一句。";
-  if (latest?.role === "user" || latest?.role === "world") return "它已经接到这段材料，下一步会把文字、照片或声音放在同一个小情景里理解。";
+  if (latest?.role === "user" || latest?.role === "world") return "它已经接住这一小段，正在把文字、照片或声音放进同一个小情景里听。";
   if (latestChange?.reason.includes("button capture")) return "刚才那句话让它竖起耳朵，身体还留着一点被你叫住后的反应。";
   if (latestChange?.reason.includes("feedback")) return "它刚被你养成了一点，之后遇到相似片段会更接近你的意思。";
   if (latestChange?.reason.includes("wake")) return "这次重新见到你以后，它先稳住自己，再把耳朵留给新的小片段。";

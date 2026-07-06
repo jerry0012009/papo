@@ -105,7 +105,8 @@ describe("App", () => {
     expect(screen.queryByText("当前心情")).not.toBeInTheDocument();
     expect(screen.queryByText(/触发了醒来节律|重新计算/)).not.toBeInTheDocument();
     expect(screen.getByText("刚收到你递来的一小段")).toBeInTheDocument();
-    expect(screen.getByText("它已经接到这段材料，下一步会把文字、照片或声音放在同一个小情景里理解。")).toBeInTheDocument();
+    expect(screen.getByText("它已经接住这一小段，正在把文字、照片或声音放进同一个小情景里听。")).toBeInTheDocument();
+    expect(screen.queryByText(/材料|模拟一段信息流|录音分段/)).not.toBeInTheDocument();
     expect(screen.getByText("Papo 抬头看了你一眼")).toBeInTheDocument();
     expect(screen.getByText("我醒来时自己又想到妈妈复查这件事。")).toBeInTheDocument();
     expect(screen.getByLabelText("Papo 的身体信号")).toBeInTheDocument();
