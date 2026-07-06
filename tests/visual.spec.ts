@@ -59,7 +59,7 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
 
   await page.getByRole("button", { name: "演示" }).click();
   await expect(page.getByText("带 Papo 走一圈")).toBeVisible();
-  await expect(page.getByRole("button", { name: "带它完整走一圈" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "带 Papo 完整走一圈" })).toBeVisible();
   await expect(page.getByText(/场景 1|一键准备/)).toHaveCount(0);
 });
 

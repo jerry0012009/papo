@@ -93,11 +93,12 @@ Internal channel names, memory kinds, batch ids, and numeric weights are develop
 The memory page is Papo's subjective remembering surface. It should use first-person creature language for what Papo is holding, how familiar the memory feels, why it kept the moment, and how the user can help it remember accurately or let go. Hiding technical fields is necessary but not sufficient UX.
 Harness traces and implementation backlog belong to Brain/development docs, not the Home or Demo experience. The user-facing path should show what Papo noticed, remembered, learned, or wondered, not pipeline step names such as `sense` or `semantic`.
 User-facing pages should not label the companionship flow as `Curious Mode` or expose `image_summary` / `audio_transcript`; use "陪我看一小段世界", "照片", "录音转写", "小片段", and "这一小段" language instead. Keep the raw type names in code, API contracts, tests, and Brain diagnostics only.
-Demo entry copy should guide a person through Papo's life loop rather than sound like a script runner. Prefer "带 Papo 走一圈", "先给它生活片段", and "问问它想到什么" over "一键", "场景 1/2/3", or setup-task language on user-facing surfaces.
+Demo entry copy should guide a person through Papo's life loop rather than sound like a script runner. Prefer "带 Papo 走一圈", "先递 8 段生活", and "问问 Papo 想到什么" over "一键", "场景 1/2/3", or setup-task language on user-facing surfaces.
 Multi-creature contrast should feel like two Papos being raised differently, not two labeled configurations. Avoid user-facing names such as "深想型/安静型" or "演示主线"; use small creature names and explain the difference as feedback-shaped behavior.
 User-facing empty, error, and status copy is part of the creature experience too. Avoid "材料", "模拟信息流", and "录音分段" on user surfaces; say Papo is receiving, hearing, or holding "这一小段" instead.
 Feedback controls on user-facing memory and episode surfaces should sound like the user is raising Papo, not pressing admin actions. Prefer "再想一会儿", "先安静点", "帮我记住", and first-person learning echoes such as "我会..." while keeping raw feedback kinds in code/API/Brain diagnostics.
 Home presence, active emergence, body signals, and dialogue context should default to Papo speaking from inside the experience. Use first-person "我..." phrasing for what Papo noticed, remembered, learned, or is ready to do; reserve third-person observer language for Brain diagnostics or explicit user navigation labels.
+Curious results should read like Papo choosing what to hold or let pass. Selected and ignored lines should use "我竖起耳朵" and "我先放过..." rather than report-style phrases such as "Papo 放过了".
 
 Harness stages:
 
@@ -259,6 +260,7 @@ Done:
   - Home and listening error/status copy no longer uses "材料", "模拟信息流", or "录音分段"; those are replaced with Papo receiving or hearing a small shared fragment.
   - Feedback controls and feedback impact now read as Papo being raised in first person: buttons use "再想一会儿/先安静点/帮我记住", typed or voice feedback is framed as something Papo hears, and visible impact lines say "我会..." instead of third-person product summaries.
   - Home presence, body signals, active emergence labels, and dialogue feedback context now use first-person creature voice instead of observer phrases such as "它已经接住" or "你在教它".
+  - Curious result, Episode detail, memory feeling, and Demo entry copy now avoid report-style observer phrases such as "Papo 放过了", "它刚才怎么理解", and "它以后可能".
 
 Verified:
 
@@ -321,6 +323,7 @@ Verified:
 - UI smoke protects Home status copy from "材料", "模拟一段信息流", and "录音分段" wording.
 - UI smoke protects feedback surfaces from third-person product-summary language after the user teaches Papo.
 - UI smoke protects Home and dialogue context from third-person observer phrases when Papo should be speaking from inside the experience.
+- UI smoke protects Curious ignored-result and memory feeling copy from report-style observer phrases.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`

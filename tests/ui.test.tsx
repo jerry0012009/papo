@@ -83,6 +83,19 @@ describe("App", () => {
           events: [],
           episodes: [],
           response: "我把你刚说的话和照片放在同一小段里听了。",
+          curiousSession: {
+            totalSegments: 2,
+            selected: [],
+            ignored: [
+              {
+                segmentId: "chat-background",
+                label: "背景小事",
+                whyIgnored: "这段更像背景声，我先不抢着记住。",
+                score: { privacyRisk: 0, redundancyPenalty: 0 }
+              }
+            ],
+            stateInfluence: "我先听这一小段里真正重要的部分。"
+          },
           memoryCandidates: [],
           harnessTrace: ["sense: curious_stream", "semantic: fallback/rules only"],
           provider: "fallback"
@@ -154,7 +167,8 @@ describe("App", () => {
     expect(screen.queryByText("认真注意后")).not.toBeInTheDocument();
 
     await userEvent.upload(screen.getByLabelText("加照片"), new File(["fake"], "复查照片.png", { type: "image/png" }));
-    expect(await screen.findByText("准备一起交给 Papo 的这一小段")).toBeInTheDocument();
+    expect(await screen.findByText("准备一起给我听的这一小段")).toBeInTheDocument();
+    expect(screen.queryByText("准备一起交给 Papo 的这一小段")).not.toBeInTheDocument();
     expect(screen.getByDisplayValue("复查照片.png")).toBeInTheDocument();
     expect(screen.getByDisplayValue("照片里是周五复查的日历备注，写着提前准备病历。")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "照片" }).length).toBeGreaterThan(0);
@@ -170,6 +184,10 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "首页" }));
     expect(screen.queryByText(/sense: button/)).not.toBeInTheDocument();
     expect(screen.queryByText(/semantic: fallback/)).not.toBeInTheDocument();
+    expect(screen.getByText("刚才我竖起耳朵的地方")).toBeInTheDocument();
+    expect(screen.getByText("我先放过了 背景小事：这段更像背景声，我先不抢着记住。")).toBeInTheDocument();
+    expect(screen.queryByText("刚才 Papo 竖起耳朵的地方")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Papo 放过了/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "陪我" }));
     expect(screen.getByText("陪我看一小段世界")).toBeInTheDocument();
@@ -209,7 +227,8 @@ describe("App", () => {
     expect(screen.getByText("刚一起过的小片段")).toBeInTheDocument();
     expect(screen.getByText("这件以后会回来的小事，我先叼在身边：妈妈周五复查，需要提前准备病历")).toBeInTheDocument();
     expect(screen.getByText("我对自己留下一点小理解：我正在学习注意")).toBeInTheDocument();
-    expect(screen.getByText((_, element) => element?.textContent === "我记得比较清楚。它以后可能会轻轻拽我一下。")).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent === "我记得比较清楚。以后这件事可能会轻轻拽我一下。")).toBeInTheDocument();
+    expect(screen.queryByText((_, element) => element?.textContent === "我记得比较清楚。它以后可能会轻轻拽我一下。")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "帮我记准" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "帮我先放下" })).toBeInTheDocument();
     expect(screen.queryByText("future_review · 权重 80")).not.toBeInTheDocument();
@@ -230,10 +249,13 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "演示" }));
     expect(screen.getByText("带 Papo 走一圈")).toBeInTheDocument();
-    expect(screen.getByText("带它完整走一圈")).toBeInTheDocument();
-    expect(screen.getByText("先给它 8 段生活")).toBeInTheDocument();
+    expect(screen.getByText("带 Papo 完整走一圈")).toBeInTheDocument();
+    expect(screen.queryByText("带它完整走一圈")).not.toBeInTheDocument();
+    expect(screen.getByText("先递 8 段生活")).toBeInTheDocument();
     expect(screen.getByText("看两只 Papo 被养成不同样子")).toBeInTheDocument();
-    expect(screen.getByText("问问它现在想到什么")).toBeInTheDocument();
+    expect(screen.getByText("问问 Papo 想到什么")).toBeInTheDocument();
+    expect(screen.queryByText("先给它 8 段生活")).not.toBeInTheDocument();
+    expect(screen.queryByText("问问它现在想到什么")).not.toBeInTheDocument();
     expect(screen.queryByText("演示模式")).not.toBeInTheDocument();
     expect(screen.queryByText(/场景 1|场景 2|场景 3|一键准备/)).not.toBeInTheDocument();
     expect(screen.queryByText("场景 2：生成 A/B 养成对比")).not.toBeInTheDocument();

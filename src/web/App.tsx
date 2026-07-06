@@ -281,7 +281,7 @@ export function App() {
           location
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "照片已经变成一段可改准的小片段，会和这半分钟里的话一起交给 Papo。" : "照片先放进这一小段，对话提交时会一起交给 Papo。");
+      setDemoNote(result.semanticSource === "llm" ? "照片已经变成一段可改准的小片段，会和这半分钟里的话一起给我听。" : "照片先放进这一小段，对话提交时会一起给我听。");
       setTab("chat");
     });
   }
@@ -298,7 +298,7 @@ export function App() {
           batchId: current[0]?.batchId ?? currentBatchId()
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "录音已经变成一段可改准的小片段，会和这半分钟里的话一起交给 Papo。" : "录音先放进这一小段，对话提交时会一起交给 Papo。");
+      setDemoNote(result.semanticSource === "llm" ? "录音已经变成一段可改准的小片段，会和这半分钟里的话一起给我听。" : "录音先放进这一小段，对话提交时会一起给我听。");
       setTab("chat");
     });
   }
@@ -318,7 +318,7 @@ export function App() {
           location
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "Papo 已经把照片看成一段可改准的小片段，并记下可用的时间和地点。" : "照片已经进入这一小段，你可以先改准再交给 Papo。");
+      setDemoNote(result.semanticSource === "llm" ? "我已经把照片看成一段可改准的小片段，并记下可用的时间和地点。" : "照片已经进入这一小段，你可以先改准再给我看。");
       setTab("curious");
     });
   }
@@ -335,7 +335,7 @@ export function App() {
           batchId: currentBatchId()
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "Papo 已经把录音听成一段可改准的小片段。" : "录音已经进入这一小段，你可以先改准再交给 Papo。");
+      setDemoNote(result.semanticSource === "llm" ? "我已经把录音听成一段可改准的小片段。" : "录音已经进入这一小段，你可以先改准再给我听。");
       setTab("curious");
     });
   }
@@ -700,7 +700,7 @@ export function App() {
           <h1>{profile.creatureName}</h1>
           <p className="eyebrow">正在陪你攒小片段</p>
         </div>
-        <button className="icon-button" onClick={askEmergence} disabled={busy} aria-label="它现在在想什么">
+        <button className="icon-button" onClick={askEmergence} disabled={busy} aria-label="问问 Papo 现在想到什么">
           <Sparkles size={19} />
         </button>
       </header>
@@ -834,14 +834,14 @@ function HomeView(props: {
 
       {props.lastResult ? (
         <section className="panel">
-          <PanelTitle icon={Eye} title="刚才 Papo 竖起耳朵的地方" />
+          <PanelTitle icon={Eye} title="刚才我竖起耳朵的地方" />
           <p className="response">{props.lastResult.response}</p>
           {props.lastResult.curiousSession ? (
             <div className="session-audit">
               <p>{props.lastResult.curiousSession.creatureReport}</p>
               {props.lastResult.curiousSession.ignored.slice(0, 4).map((item) => (
                 <small key={item.segmentId}>
-                  Papo 放过了 {item.label}：{item.whyIgnored}
+                  我先放过了 {item.label}：{item.whyIgnored}
                 </small>
               ))}
             </div>
@@ -1085,7 +1085,7 @@ function ChatView(props: {
           </div>
           {props.stagedSegments.length ? (
             <section className="staged-moment">
-              <strong>准备一起交给 Papo 的这一小段</strong>
+              <strong>准备一起给我听的这一小段</strong>
               {props.stagedSegments.map((segment, index) => (
                 <article className="staged-segment" key={segment.id}>
                   <div className="segment-row">
@@ -1442,7 +1442,7 @@ function DemoView(props: {
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={Wand2} title="带 Papo 走一圈" />
-        <p className="response">用几段日常小事看它怎么竖起耳朵、怎么被反馈养成、又怎么自己想起旧片段。</p>
+        <p className="response">用几段日常小事，让 Papo 先竖起耳朵，再被你养成，最后自己想起旧片段。</p>
         {props.note ? <section className="learning-note">{props.note}</section> : null}
         {props.summary ? (
           <section className="demo-checklist">
@@ -1454,11 +1454,11 @@ function DemoView(props: {
         ) : null}
         <button className="primary" onClick={props.onRunGuided} disabled={props.busy}>
           <Wand2 size={18} />
-          带它完整走一圈
+          带 Papo 完整走一圈
         </button>
         <button onClick={props.onLoadCurious} disabled={props.busy}>
           <Sparkles size={18} />
-          先给它 8 段生活
+          先递 8 段生活
         </button>
         <button onClick={props.onRunContrast} disabled={props.busy}>
           <UserRound size={18} />
@@ -1466,7 +1466,7 @@ function DemoView(props: {
         </button>
         <button onClick={props.onEmerge} disabled={props.busy}>
           <Lightbulb size={18} />
-          问问它现在想到什么
+          问问 Papo 想到什么
         </button>
       </div>
     </section>
@@ -1483,7 +1483,7 @@ function AttentionCard({ event }: { event: AttentionEvent }) {
       <p>{event.noticed}</p>
       <small>{event.creatureExperience.earReason}</small>
       <details className="brain-details">
-        <summary>它刚才怎么理解</summary>
+        <summary>我刚才怎么理解</summary>
         <p>{event.creatureExperience.rememberedScene ?? "这次还没有强烈拉起旧片段。"}</p>
         <p>{event.creatureExperience.actionFeeling}</p>
         <p>{event.creatureExperience.saveFeeling}</p>
@@ -1579,7 +1579,7 @@ function EpisodeCard(props: {
 
 function EpisodeSourceMoment({ episode, messages, compact }: { episode: EpisodeMemory; messages: ConversationMessage[]; compact: boolean }) {
   if (!messages.length && !episode.sourceBatchId && !episode.sourceObservedAt && !episode.sourceLocation) return null;
-  const title = episode.sourceBatchId ? "来自半分钟里的一小段" : "来自当时你给它的片段";
+  const title = episode.sourceBatchId ? "来自半分钟里的一小段" : "来自当时你给我的片段";
   const momentParts = [
     episode.sourceObservedAt ? `那时 ${new Date(episode.sourceObservedAt).toLocaleString("zh-CN")}` : "",
     episode.sourceLocation ? locationText(episode.sourceLocation) : ""
@@ -1783,12 +1783,12 @@ function memoryFamiliarityText(weight: number) {
 function memoryKindText(kind: CreatureProfile["longTermMemories"][number]["kind"]) {
   const map = {
     user_preference: "我会按这个方式靠近你",
-    long_theme: "它像总会回来的旧气味",
+    long_theme: "这件事像总会回来的旧气味",
     creature_self_memory: "这是我认识自己的小脚印",
     safety_rule: "我会先把这条边界抱紧",
-    future_review: "它以后可能会轻轻拽我一下",
+    future_review: "以后这件事可能会轻轻拽我一下",
     relationship: "这是我们之间的一小块暖地方",
-    habit: "它像一个反复出现的小习惯",
+    habit: "这像一个反复出现的小习惯",
     open_question: "这件事我还想再歪头想想"
   };
   return map[kind];
