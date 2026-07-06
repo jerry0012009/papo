@@ -15,6 +15,9 @@ export interface ModelProvider {
 }
 
 export interface ProviderDiagnostics {
+  textProvider?: ProviderKind;
+  visionProvider?: ProviderKind;
+  audioProvider?: ProviderKind;
   textModel?: string;
   visionModel?: string;
   audioModel?: string;
@@ -27,14 +30,15 @@ export function createModelProvider(env: NodeJS.ProcessEnv = process.env): Model
   const merged = { ...config, ...dotenv, ...env };
   const preferred = merged.PAPO_PROVIDER;
 
-  if (preferred === "openrouter" && merged.OPENROUTER_API_KEY) return openRouterProvider(merged);
-  if (preferred === "mimo" && (merged.MIMO_ENDPOINT || merged.MIMO_API_KEY)) return mimoProvider(merged);
-  if (preferred === "generic" && (merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY)) return genericProvider(merged);
+  let primary: ModelProvider | undefined;
+  if (preferred === "openrouter" && merged.OPENROUTER_API_KEY) primary = openRouterProvider(merged);
+  if (!primary && preferred === "mimo" && (merged.MIMO_ENDPOINT || merged.MIMO_API_KEY)) primary = mimoProvider(merged);
+  if (!primary && preferred === "generic" && (merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY)) primary = genericProvider(merged);
 
-  if (merged.OPENROUTER_API_KEY) return openRouterProvider(merged);
-  if (merged.MIMO_ENDPOINT || merged.MIMO_API_KEY) return mimoProvider(merged);
-  if (merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY) return genericProvider(merged);
-  return staticProvider("fallback", "Fallback demo brain", true);
+  if (!primary && merged.OPENROUTER_API_KEY) primary = openRouterProvider(merged);
+  if (!primary && (merged.MIMO_ENDPOINT || merged.MIMO_API_KEY)) primary = mimoProvider(merged);
+  if (!primary && (merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY)) primary = genericProvider(merged);
+  return withModalityOverrides(primary ?? staticProvider("fallback", "Fallback demo brain", true), merged);
 }
 
 function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
@@ -163,7 +167,7 @@ function staticProvider(kind: ProviderKind, name: string, available: boolean): M
     name,
     available,
     usesRealModel: false,
-    diagnostics: { audioRoute: "fallback" },
+    diagnostics: { textProvider: kind, visionProvider: kind, audioProvider: kind, audioRoute: "fallback" },
     async generate(prompt: string) {
       const firstLine = prompt.split("\n").find(Boolean) ?? prompt;
       return `fallback:${firstLine.slice(0, 160)}`;
@@ -200,6 +204,9 @@ function openAiCompatibleProvider(input: {
     available: true,
     usesRealModel: true,
     diagnostics: {
+      textProvider: input.kind,
+      visionProvider: input.kind,
+      audioProvider: input.kind,
       textModel: input.model,
       visionModel: input.visionModel ?? input.model,
       audioModel: input.audioModel ?? input.model,
@@ -225,6 +232,31 @@ function openAiCompatibleProvider(input: {
       return payload.content;
     }
   };
+}
+
+function withModalityOverrides(primary: ModelProvider, merged: NodeJS.ProcessEnv): ModelProvider {
+  const audio = audioOverrideProvider(primary, merged);
+  if (!audio) return primary;
+  return {
+    ...primary,
+    name: `${primary.name} + ${audio.name} audio`,
+    diagnostics: {
+      ...primary.diagnostics,
+      audioProvider: audio.kind,
+      audioModel: audio.diagnostics?.audioModel,
+      audioRoute: audio.diagnostics?.audioRoute
+    },
+    transcribeAudio: (dataUrl, prompt) => audio.transcribeAudio(dataUrl, prompt)
+  };
+}
+
+function audioOverrideProvider(primary: ModelProvider, merged: NodeJS.ProcessEnv) {
+  const requested = merged.PAPO_AUDIO_PROVIDER;
+  if (requested === "primary") return undefined;
+  if (primary.kind === "generic") return undefined;
+  if (requested && requested !== "generic") return undefined;
+  if (!(merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY)) return undefined;
+  return genericProvider(merged);
 }
 
 async function callChatCompletions(

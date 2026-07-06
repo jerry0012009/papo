@@ -141,6 +141,7 @@ OpenRouter multimodal routing:
 - Default text model is `openai/gpt-5.5` for the semantic brain. Cheaper models may be set explicitly per deployment, but the demo should not silently present fallback output as evidence of lifeform quality.
 - Default OpenRouter vision/audio model ids prefer `google/gemini-3.1-flash-lite`, which the OpenRouter model list reports as supporting image, file, audio, and video input at low sensing cost. Deployments can override them per account capability.
 - Generic/OpenAI-compatible audio sensing uses the `/audio/transcriptions` route with a transcription model such as `gpt-4o-mini-transcribe`; do not send audio through chat completions unless the provider route is known to accept audio content blocks.
+- Provider routing can be mixed by modality: keep OpenRouter or Mimo as the semantic brain while setting `PAPO_AUDIO_PROVIDER=generic` so 30-second audio chunks use the verified generic transcription route. Set `PAPO_AUDIO_PROVIDER=primary` only after the primary provider's audio route is verified.
 - Model call timeouts are configurable with `PAPO_MODEL_TIMEOUT_MS`, `PAPO_VISION_TIMEOUT_MS`, and `PAPO_AUDIO_TIMEOUT_MS`; default semantic/vision/audio limits are 45 seconds so real Curious Mode prompts do not silently degrade to fallback after a short wait.
 - Provider failures return editable fallback segments so the life loop stays demonstrable without raw model success.
 Fallback provider is a degradation path only. It must be visible in health/provider diagnostics and should never be treated as proof that Papo truly understood the user.
@@ -231,6 +232,7 @@ Done:
   - Direct-call keyword handling was moved out of the primary action selector and into fallback repair only; successful LLM runs own the proposed interaction/action path.
   - Provider defaults now prefer OpenRouter `openai/gpt-5.5` when configured, with `.env` support for local/production deployment and visible fallback diagnostics.
   - Provider diagnostics now expose non-secret model ids and the audio sensing route. Generic audio sensing uses `/audio/transcriptions`, so 30-second recording chunks can reach a real transcription model instead of failing through chat `input_audio`.
+  - Provider diagnostics now also expose per-modality provider routing (`textProvider`, `visionProvider`, `audioProvider`). If OpenRouter is the semantic brain but generic credentials exist, audio sensing automatically routes through generic transcription unless `PAPO_AUDIO_PROVIDER=primary` is set.
   - Initial creature state has small deterministic per-user variation, and Home state copy is driven by recent wake/conversation/feedback state changes instead of only a static mood label.
   - Short wake gaps now use living presence language instead of "not a new experience" system-log wording.
   - Active emergence no longer uses seed self-memory as a fake shared memory. User-generated memories can still support emergence even when they are about Papo itself; with no real shared memory, it says it will wait for a real shared moment instead of claiming it remembered one.
@@ -243,7 +245,7 @@ Done:
 
 Verified:
 
-- `npm test`: 35 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
+- `npm test`: 39 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -287,6 +289,7 @@ Verified:
 - Real online Curious smoke passed through the OpenAI-compatible generic provider with `gpt-5.5`: semantic brain status `applied`, source `llm`, rule-owned event count stayed fixed, and LLM rewrote selected/ignored reasons into creature-facing narration.
 - Real online feedback narration smoke passed through the OpenAI-compatible generic provider with `gpt-5.5`: LLM rewrote learning/follow-up text while rule-owned `responseAction`, state, and memory candidate ids stayed fixed.
 - Real online audio sensing smoke passed through the OpenAI-compatible generic provider using `gpt-4o-mini-transcribe` on `/audio/transcriptions`: a short WAV was accepted and returned a no-speech transcript instead of falling back.
+- Mixed provider routing is covered: OpenRouter can remain the semantic/text provider while audio sensing is delegated to generic `/audio/transcriptions`, preventing OpenRouter audio 403 from breaking continuous listening.
 - OpenRouter account/model availability was checked against `/api/v1/models`: `google/gemini-3.5-flash` and `google/gemini-3.1-flash-lite` report audio input support, but real audio requests from the current account returned provider-side 403, so OpenRouter audio is not yet counted as a verified sensing path.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Guided Demo Mode's two-creature section displays how feedback changed their behavior and personality on the same input without exposing policy numbers.
@@ -300,7 +303,7 @@ Verified:
 
 Next:
 
-1. Resolve OpenRouter audio runtime 403 by account/model routing or a different verified OpenRouter audio model; until then, use generic `/audio/transcriptions` for real audio sensing.
+1. Resolve OpenRouter audio runtime 403 for primary-provider audio mode; until then, mixed routing keeps real audio sensing on generic `/audio/transcriptions`.
 2. Consider a small generated Shiba sprite sheet later if SVG statefulness becomes limiting.
 
 Demo material rule:

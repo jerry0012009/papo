@@ -245,6 +245,51 @@ describe("creature core", () => {
     }
   });
 
+  it("keeps OpenRouter as semantic brain while routing audio sensing through generic transcription", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ text: "这是一段真实转写。" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+    try {
+      const provider = createModelProvider({
+        PAPO_PROVIDER: "openrouter",
+        OPENROUTER_API_KEY: "openrouter-key",
+        OPENROUTER_MODEL: "openai/gpt-5.5",
+        OPENROUTER_AUDIO_MODEL: "google/gemini-3.1-flash-lite",
+        OPENAI_API_KEY: "generic-key",
+        OPENAI_BASE_URL: "https://model.example.test/v1"
+      });
+
+      const result = await provider.transcribeAudio(`data:audio/wav;base64,${Buffer.from("fake wav").toString("base64")}`, "转写这段声音。");
+
+      expect(provider.kind).toBe("openrouter");
+      expect(provider.diagnostics?.textProvider).toBe("openrouter");
+      expect(provider.diagnostics?.audioProvider).toBe("generic");
+      expect(provider.diagnostics?.audioRoute).toBe("audio_transcriptions");
+      expect(provider.diagnostics?.audioModel).toBe("gpt-4o-mini-transcribe");
+      expect(result).toBe("这是一段真实转写。");
+      expect(fetchSpy.mock.calls[0][0]).toBe("https://model.example.test/v1/audio/transcriptions");
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it("can keep audio on the primary provider when explicitly requested", () => {
+    const provider = createModelProvider({
+      PAPO_PROVIDER: "openrouter",
+      PAPO_AUDIO_PROVIDER: "primary",
+      OPENROUTER_API_KEY: "openrouter-key",
+      OPENROUTER_AUDIO_MODEL: "google/gemini-3.1-flash-lite",
+      OPENAI_API_KEY: "generic-key"
+    });
+
+    expect(provider.kind).toBe("openrouter");
+    expect(provider.diagnostics?.audioProvider).toBe("openrouter");
+    expect(provider.diagnostics?.audioRoute).toBe("chat_completions");
+  });
+
   it("LLM suggestions enrich wording but guardrails block unsafe long-term save", async () => {
     const provider: ModelProvider = {
       kind: "generic",

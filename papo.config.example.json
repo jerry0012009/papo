@@ -1,5 +1,6 @@
 {
   "PAPO_PROVIDER": "openrouter",
+  "PAPO_AUDIO_PROVIDER": "generic",
   "MIMO_ENDPOINT": "http://localhost:11434/v1/chat/completions",
   "MIMO_MODEL": "mimo",
   "MIMO_VISION_MODEL": "mimo",

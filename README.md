@@ -76,6 +76,7 @@ Provider 配置来源：
 
 环境变量会覆盖本地配置文件。可从 `papo.config.example.json` 复制配置结构。
 `PAPO_PROVIDER` 可显式指定 `openrouter`、`mimo` 或 `generic`；未指定时按下面顺序自动选择。
+`PAPO_AUDIO_PROVIDER=generic` can route only audio sensing through the generic transcription endpoint while keeping OpenRouter or Mimo as the semantic brain. Set `PAPO_AUDIO_PROVIDER=primary` to force audio through the primary provider.
 Generic/OpenAI-compatible audio transcription should use `OPENAI_AUDIO_TRANSCRIPTION_MODEL` or `OPENAI_TRANSCRIPTION_MODEL`; if unset, Papo defaults to `gpt-4o-mini-transcribe`.
 
 Provider 选择优先级：

@@ -9,6 +9,9 @@ export interface ProviderInfo {
   available: boolean;
   usesRealModel: boolean;
   diagnostics?: {
+    textProvider?: string;
+    visionProvider?: string;
+    audioProvider?: string;
     textModel?: string;
     visionModel?: string;
     audioModel?: string;
