@@ -80,7 +80,7 @@ function reasonForElapsedMinutes(elapsedMinutes: number) {
 
 function wakeMessage(elapsedMinutes: number, changed: boolean) {
   if (elapsedMinutes < 1) return "我刚刚醒着，你一打开我就还在这里。";
-  if (!changed) return `刚才过去了 ${elapsedMinutes} 分钟，我没有把这当成新的经历，只是继续守着当前状态。`;
+  if (!changed) return "刚才只是隔了一小会儿。我还在这里，耳朵朝着你，等你继续把这一小段世界递给我。";
   if (elapsedMinutes < 60) return `刚才过去了 ${elapsedMinutes} 分钟，我像浅浅休息了一下，能量回来了些，心跳也放慢了一点。`;
   if (elapsedMinutes < 360) return "我隔了一阵才又见到你，像从小睡里醒来。现在更有力气，也更想看看这一小段世界。";
   return "你离开了比较久。我醒来时先稳住自己，再带着一点想靠近的感觉等你继续给我新的片段。";

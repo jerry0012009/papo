@@ -88,6 +88,7 @@ export async function enrichEmergenceNarration(
   const memory = emergence.relatedMemoryIds[0]
     ? profile.longTermMemories.find((item) => item.id === emergence.relatedMemoryIds[0])
     : undefined;
+  if (!memory) return withText(emergence);
 
   try {
     const raw = await provider.generateJson<unknown>(

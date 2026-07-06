@@ -1224,7 +1224,7 @@ function MemoryView(props: {
             ) : (
               <p>{memoryCreatureLine(memory)}</p>
             )}
-            <span>{memoryFamiliarityText(memory.weight)} · {memoryKindText(memory.kind)}</span>
+            <span>{memoryFeelingText(memory)}</span>
             {memory.consolidatedBecause ? <small>{memoryKeptBecauseText(memory.consolidatedBecause)}</small> : null}
             <div className="memory-actions">
               <button
@@ -1724,6 +1724,13 @@ function memoryKindText(kind: CreatureProfile["longTermMemories"][number]["kind"
     open_question: "这是我还没想完的问题"
   };
   return map[kind];
+}
+
+function memoryFeelingText(memory: CreatureProfile["longTermMemories"][number]) {
+  const familiarity = memoryFamiliarityText(memory.weight);
+  const kindText = memoryKindText(memory.kind);
+  if (memory.weight <= 0) return `${familiarity}，现在我先不把它带回来。`;
+  return `${familiarity}，${kindText}。`;
 }
 
 function memoryCreatureLine(memory: CreatureProfile["longTermMemories"][number]) {

@@ -37,7 +37,6 @@ export function createMemoryResonanceEmergence(
 
 export function createDriveBasedEmergence(profile: CreatureProfile, now = new Date().toISOString()): EmergenceRecord {
   const safetyMemory = topMemory(profile, "safety_rule");
-  const selfMemory = topMemory(profile, "creature_self_memory");
   const futureMemory = topMemory(profile, "future_review") ?? topMemory(profile, "open_question");
   const generalMemory = topMemory(profile);
 
@@ -58,7 +57,7 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
       profile,
       now,
       kind: "drive_based",
-      memory: futureMemory ?? selfMemory ?? generalMemory,
+      memory: futureMemory ?? generalMemory,
       whyNow: "我的好奇心或深入倾向升高，所以浮现一个还没想完的问题。",
       driveSource: "curiosity",
       messagePrefix: "我有点想继续想"
@@ -70,7 +69,7 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
       profile,
       now,
       kind: "drive_based",
-      memory: selfMemory ?? generalMemory,
+      memory: generalMemory,
       whyNow: "我的依恋度或回忆倾向较高，所以把和你共同养成我的记忆带回来。",
       driveSource: "attachment",
       messagePrefix: "我想靠近我们之前反复提过的主题"
@@ -81,7 +80,7 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
 }
 
 export function createRhythmEmergence(profile: CreatureProfile, now = new Date().toISOString()): EmergenceRecord {
-  const stale = availableMemories(profile)
+  const stale = sharedMemories(profile)
     .sort((a, b) => (a.lastReferencedAt ?? a.createdAt).localeCompare(b.lastReferencedAt ?? b.createdAt))[0];
   return buildRecord({
     profile,
@@ -103,8 +102,21 @@ function buildRecord(input: {
   driveSource: string;
   messagePrefix: string;
 }): EmergenceRecord {
-  if (input.memory) input.memory.lastReferencedAt = input.now;
-  const memoryText = input.memory ? summarizeText(input.memory.text, 100) : "我还没有足够稳定的长期记忆";
+  if (!input.memory) {
+    return {
+      id: makeId("emergence"),
+      at: input.now,
+      kind: input.kind,
+      whyNow: `${input.whyNow} 但我还没有和你攒出足够稳定的共同记忆，所以这次不假装想起旧事。`,
+      relatedMemoryIds: [],
+      driveSource: input.driveSource,
+      message: `${input.messagePrefix}，但我还没有和你攒出足够稳定的共同记忆，所以这次先不假装想起旧事。我会把耳朵留给下一段你递给我的世界，等真的有一小段值得留下时再把它带回来。`,
+      ruleTrace: [`kind=${input.kind}`, `drive=${input.driveSource}`, "memory=none", "shared_memory=none"]
+    };
+  }
+
+  input.memory.lastReferencedAt = input.now;
+  const memoryText = summarizeText(input.memory.text, 100);
   return {
     id: makeId("emergence"),
     at: input.now,
@@ -118,11 +130,15 @@ function buildRecord(input: {
 }
 
 function topMemory(profile: CreatureProfile, kind?: LongTermMemory["kind"]) {
-  return availableMemories(profile)
+  return sharedMemories(profile)
     .filter((memory) => !kind || memory.kind === kind)
     .sort((a, b) => b.weight - a.weight)[0];
 }
 
 function availableMemories(profile: CreatureProfile) {
   return [...profile.longTermMemories].filter((memory) => memory.weight > 0);
+}
+
+function sharedMemories(profile: CreatureProfile) {
+  return availableMemories(profile).filter((memory) => memory.kind !== "creature_self_memory" || Boolean(memory.sourceEpisodeId));
 }

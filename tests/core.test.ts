@@ -136,6 +136,17 @@ describe("creature core", () => {
     expect(profile.emergenceHistory[0].relatedMemoryIds).toEqual(["ltm_family_review"]);
   });
 
+  it("short wake gaps sound like presence instead of a no-op system log", () => {
+    const profile = createCreatureProfile({ now: "2026-07-06T07:55:00.000Z" });
+
+    const wake = wakeCreature(profile, "2026-07-06T08:00:00.000Z");
+
+    expect(wake.elapsedMinutes).toBe(5);
+    expect(wake.message).toContain("我还在这里");
+    expect(wake.message).not.toContain("没有把这当成新的经历");
+    expect(wake.message).not.toContain("当前状态");
+  });
+
   it("remember promotes an episode to long-term memory", () => {
     const profile = createCreatureProfile();
     handleButtonCapture(profile, "用户更喜欢我解释自己为什么注意到某件事。");
@@ -158,12 +169,25 @@ describe("creature core", () => {
     expect(profile.state.safety).toBeGreaterThan(58);
   });
 
-  it("active emergence references existing memory", () => {
+  it("active emergence waits instead of faking recall without shared memory", () => {
     const profile = createCreatureProfile();
     const emergence = createActiveEmergence(profile);
 
-    expect(emergence.memoryId).toBe(profile.longTermMemories[0].id);
-    expect(emergence.text).toContain("记忆");
+    expect(emergence.relatedMemoryIds).toEqual([]);
+    expect(emergence.memoryId).toBeUndefined();
+    expect(emergence.text).toContain("不假装想起旧事");
+    expect(emergence.text).not.toContain("所以我想起了");
+  });
+
+  it("active emergence references existing shared memory", () => {
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "妈妈周五复查这件事需要我提前准备病历。");
+    applyFeedback(profile, { kind: "remember", targetId: result.episodes[0].id });
+
+    const emergence = createActiveEmergence(profile);
+
+    expect(emergence.memoryId).toBe(profile.longTermMemories.find((memory) => memory.sourceEpisodeId)?.id);
+    expect(emergence.text).toContain("我想起了");
   });
 
   it("active emergence does not resurface a memory after forget downranks it to zero", () => {
