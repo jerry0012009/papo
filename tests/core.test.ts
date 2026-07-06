@@ -166,6 +166,17 @@ describe("creature core", () => {
     expect(emergence.text).toContain("记忆");
   });
 
+  it("active emergence does not resurface a memory after forget downranks it to zero", () => {
+    const profile = createCreatureProfile();
+    const forgottenId = profile.longTermMemories[0].id;
+
+    applyFeedback(profile, { kind: "forget", targetId: forgottenId });
+    const emergence = createActiveEmergence(profile);
+
+    expect(emergence.relatedMemoryIds).not.toContain(forgottenId);
+    expect(emergence.memoryId).not.toBe(forgottenId);
+  });
+
   it("fallback provider can run the whole harness", async () => {
     const provider = createModelProvider({});
     const profile = createCreatureProfile();

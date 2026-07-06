@@ -85,6 +85,7 @@ Episode memories keep provenance back to their source segment/batch/time/locatio
 Feedback is also conversation input: button taps, typed feedback, and audio-transcribed feedback are recorded in the same timeline before Papo's learning response, then rule-owned state/policy/memory changes apply.
 Feedback responses have a rule-owned `responseAction`: Papo may simply acknowledge, ask one light follow-up, quiet itself, or attach the feedback content to memory. LLM narration may rewrite the learning/follow-up text, but not the action, deltas, or memory writes.
 Forget is two-stage for memories: first feedback lowers the target weight to zero and teaches caution; a later forget on the zero-weight target purges it.
+Active emergence treats zero-weight memories as unavailable: a memory that has been forgotten but not yet purged cannot be resurfaced as Papo's inner thought.
 Unread dialogue state is a perception layer for new Papo utterances, not an action planner: rules decide persisted `papo` messages, while the UI only shows a small unread dot on the dialogue entry. Wake notes are presence state and do not create unread notifications.
 Internal channel names, memory kinds, batch ids, and numeric weights are developer facts. User-facing dialogue and memory pages should default to natural creature language; raw `channel`, `kind`, `batchId`, and `weight` belong in details or Brain views.
 
@@ -210,6 +211,7 @@ Done:
   - New non-wake Papo utterances show a small unread dot on the dialogue tab; entering the dialogue clears it. Wake notes stay in the wake surface and conversation history only.
   - Conversation bubbles no longer show system-channel labels such as "认真注意后"; Papo replies are shown as Papo speaking, with light context only for user/world inputs.
   - Memory page no longer defaults to database labels such as `future_review`, batch ids, or numeric weights. It shows "Papo remembers..." language, keeps time/location as part of the shared moment, and puts raw details behind expandable diagnostics.
+  - Active emergence on Home now shows Papo's resurfaced thought plus why it surfaced and which drive brought it back, while technical trace remains in Brain.
   - Direct text input now lives in the dialogue page composer, then routes through the Button Capture harness and returns to the same conversation timeline; the old standalone Button Capture page was removed from the user-facing navigation.
   - Direct calls such as asking Papo to speak now map to a first-class `respond` action, so the harness can choose to answer before it asks, saves, recalls, or stays quiet.
   - Semantic brain output now includes structured interaction understanding and can update the episode response plus memory candidate text before rule-owned persistence completes.
@@ -220,7 +222,7 @@ Done:
 
 Verified:
 
-- `npm test`: 31 tests passing across core, v0.2 brain behavior, Goal 3 experience, API, and UI.
+- `npm test`: 32 tests passing across core, v0.2 brain behavior, Goal 3 experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -240,6 +242,7 @@ Verified:
 - Active emergence reads as inner resurfacing rather than a template reminder.
 - Wake rhythm records an app-open presence event, applies rule-owned time-based state recovery, and can resurface a real user memory after absence.
 - Papo utterances are visible in persisted dialogue history, and new non-wake replies mark the dialogue tab unread.
+- Active emergence ignores zero-weight forgotten memories; it may use a derived safety rule, but it will not resurface the forgotten target itself.
 - Curious Mode can create `audio_transcript` segments from real 30-second audio chunks without storing raw audio.
 - Curious Mode can preserve photo upload time/place and batch text/photo/audio as one stream before attention selection.
 - Home renders Papo as an animated Shiba Inu SVG whose visible posture changes with mood, energy, curiosity, attachment, and safety.

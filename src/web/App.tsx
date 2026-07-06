@@ -73,6 +73,14 @@ interface DemoSummary {
   emergence: string;
 }
 
+interface EmergenceSurface {
+  text: string;
+  memoryId?: string;
+  whyNow?: string;
+  driveSource?: string;
+  ruleTrace?: string[];
+}
+
 type ConversationMessage = CreatureProfile["conversation"][number];
 type ConversationSection =
   | { kind: "batch"; id: string; batchId: string; messages: ConversationMessage[] }
@@ -124,7 +132,7 @@ export function App() {
     starterSegments.map((segment, index) => makeSegment(`segment-${index + 1}`, segment.kind, segment.label, segment.content))
   );
   const [lastResult, setLastResult] = useState<CaptureResult>();
-  const [emergence, setEmergence] = useState<string>();
+  const [emergence, setEmergence] = useState<EmergenceSurface>();
   const [learningNote, setLearningNote] = useState<string>();
   const [lastFeedback, setLastFeedback] = useState<FeedbackRecord>();
   const [wakeMessage, setWakeMessage] = useState<string>();
@@ -308,7 +316,7 @@ export function App() {
     await run(async () => {
       const result = await activeEmergence(profile.userId);
       setProfile(result.profile);
-      setEmergence(result.emergence.text);
+      setEmergence(result.emergence);
       setTab("home");
     });
   }
@@ -549,7 +557,7 @@ export function App() {
       setProfile(emerged.profile);
       setLastResult({ ...curiousResult, profile: emerged.profile });
       setLearningNote(learned);
-      setEmergence(emerged.emergence.text);
+      setEmergence(emerged.emergence);
       setDemoSummary({
         attention: `它看了 ${curiousResult.curiousSession?.totalSegments ?? demoCuriousSegments.length} 段，只认真注意到 ${curiousResult.events.length} 段。`,
         feedback: learned || "它已经收到“记住”和“继续想”的反馈，并更新了状态与策略。",
@@ -689,7 +697,7 @@ function HomeView(props: {
   profile: CreatureProfile;
   lastResult?: CaptureResult;
   selectedEpisode?: EpisodeMemory;
-  emergence?: string;
+  emergence?: EmergenceSurface;
   learningNote?: string;
   lastFeedback?: FeedbackRecord;
   wakeMessage?: string;
@@ -733,7 +741,7 @@ function HomeView(props: {
           {props.wakeThought ? <p>{props.wakeThought}</p> : null}
         </section>
       ) : null}
-      {props.emergence ? <section className="memory-surface active">{props.emergence}</section> : null}
+      {props.emergence ? <EmergenceCard emergence={props.emergence} /> : null}
       {props.learningNote ? <section className="learning-note">{props.learningNote}</section> : null}
       {props.lastFeedback ? <FeedbackImpactCard feedback={props.lastFeedback} /> : null}
 
@@ -1472,6 +1480,17 @@ function noticedText(text: string) {
     .replace(/^我听到[:：]?\s*/, "");
 }
 
+function EmergenceCard({ emergence }: { emergence: EmergenceSurface }) {
+  return (
+    <section className="memory-surface active">
+      <strong>Papo 自己想起一点</strong>
+      <p>{emergence.text}</p>
+      {emergence.whyNow ? <small>为什么这时想起：{emergence.whyNow}</small> : null}
+      {emergence.driveSource ? <span>{emergenceDriveText(emergence.driveSource)}</span> : null}
+    </section>
+  );
+}
+
 function FeedbackImpactCard({ feedback }: { feedback: FeedbackRecord }) {
   const stateDeltas = feedback.stateDeltas ?? [];
   const policyDeltas = feedback.policyDeltas ?? [];
@@ -1537,6 +1556,18 @@ function stateDriveLabel(key: keyof Omit<CreatureState, "mood">) {
 
 function deltaText(delta: number) {
   return `${delta > 0 ? "+" : ""}${delta}`;
+}
+
+function emergenceDriveText(drive: string) {
+  const map: Record<string, string> = {
+    safety: "因为它现在更谨慎",
+    curiosity: "因为它还想继续想",
+    attachment: "因为它想靠近旧片段",
+    rhythm: "因为节律把旧记忆带回来",
+    wake_rhythm: "因为醒来时碰到旧记忆",
+    memory_resonance: "因为新片段碰到旧记忆"
+  };
+  return map[drive] ?? "因为当前状态把这段带了回来";
 }
 
 function memoryFamiliarityText(weight: number) {

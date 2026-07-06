@@ -81,7 +81,7 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
 }
 
 export function createRhythmEmergence(profile: CreatureProfile, now = new Date().toISOString()): EmergenceRecord {
-  const stale = [...profile.longTermMemories]
+  const stale = availableMemories(profile)
     .sort((a, b) => (a.lastReferencedAt ?? a.createdAt).localeCompare(b.lastReferencedAt ?? b.createdAt))[0];
   return buildRecord({
     profile,
@@ -118,7 +118,11 @@ function buildRecord(input: {
 }
 
 function topMemory(profile: CreatureProfile, kind?: LongTermMemory["kind"]) {
-  return [...profile.longTermMemories]
+  return availableMemories(profile)
     .filter((memory) => !kind || memory.kind === kind)
     .sort((a, b) => b.weight - a.weight)[0];
+}
+
+function availableMemories(profile: CreatureProfile) {
+  return [...profile.longTermMemories].filter((memory) => memory.weight > 0);
 }
