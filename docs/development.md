@@ -226,6 +226,7 @@ Done:
   - Feedback records keep rule-owned state and policy deltas for Brain diagnostics, while user-facing feedback impact describes how Papo's future behavior changed.
   - Feedback impact on Home is translated into behavior language such as "it will pause longer next time" instead of numeric `+8` state or policy deltas; Brain keeps numeric deltas.
   - Forget feedback is staged: it first downranks memory weight to zero, then a repeated forget purges the zero-weight target.
+  - Feedback follow-up text is target-aware: "continue", "remember", "not_now", and the two forget stages speak about the specific remembered topic rather than returning a generic receipt.
   - New non-wake Papo utterances show a small unread dot on the dialogue tab; entering the dialogue clears it. Wake notes stay in the wake surface and conversation history only.
   - Conversation bubbles no longer show system-channel labels such as "认真注意后"; Papo replies are shown as Papo speaking, with light context only for user/world inputs.
   - Memory page no longer defaults to database labels such as `future_review`, batch ids, or numeric weights. It shows Papo's own memory language and keeps time/location as part of the shared moment; raw details belong in Brain/developer diagnostics instead.

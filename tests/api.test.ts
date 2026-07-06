@@ -74,11 +74,11 @@ describe("api", () => {
         expect(response.body.feedback.inputText).toContain("确实要记住");
         expect(response.body.feedback.inputModality).toBe("audio_transcript");
         expect(response.body.feedback.responseAction).toBe("note_memory");
-        expect(response.body.feedback.replyText).toContain("我会把你补充的这点");
+        expect(response.body.feedback.replyText).toContain("我会把你刚补的这点贴到");
         expect(response.body.feedback.policyDeltas.length).toBeGreaterThan(0);
         expect(response.body.profile.conversation[0].channel).toBe("feedback");
         expect(response.body.profile.conversation[0].role).toBe("papo");
-        expect(response.body.profile.conversation[0].text).toContain("我会把你补充的这点");
+        expect(response.body.profile.conversation[0].text).toContain("我会把你刚补的这点贴到");
         expect(response.body.profile.conversation[1].role).toBe("user");
         expect(response.body.profile.conversation[1].text).toContain("帮我记住");
         expect(response.body.profile.conversation[1].text).toContain("这件事确实要记住");

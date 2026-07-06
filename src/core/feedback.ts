@@ -6,6 +6,13 @@ import { applyStateDelta, deltaForFeedback } from "./state";
 import { extractTags, summarizeText } from "./text";
 import type { CreatureProfile, CreatureState, FeedbackKind, FeedbackPolicyProfile, FeedbackRecord, LongTermMemory, SegmentKind } from "./types";
 
+interface FeedbackReplyContext {
+  tags: string[];
+  targetEpisode?: CreatureProfile["episodes"][number];
+  targetLongTerm?: LongTermMemory;
+  forgetResult?: { changed: boolean; purged: boolean };
+}
+
 export function applyFeedback(
   profile: CreatureProfile,
   input: { kind: FeedbackKind; targetId?: string; content?: string; modality?: SegmentKind | "button"; now?: string }
@@ -63,8 +70,9 @@ export function applyFeedback(
   if (input.kind === "not_now") adjustMemoryWeight(profile, input.targetId, -8);
   if (input.kind === "forget" && forgetResult?.changed && !forgetResult.purged) createSafetyMemoryFromForget(profile, targetEpisode, targetLongTerm, now);
 
-  record.responseAction = selectFeedbackResponseAction(input.kind, inputText);
-  record.followUpText = createFeedbackFollowUp(record.responseAction, input.kind, inputText);
+  const replyContext: FeedbackReplyContext = { tags, targetEpisode, targetLongTerm, forgetResult };
+  record.responseAction = selectFeedbackResponseAction(input.kind, inputText, replyContext);
+  record.followUpText = createFeedbackFollowUp(record.responseAction, input.kind, inputText, replyContext);
   record.replyText = composeFeedbackReplyText(record);
 
   return record;
@@ -101,34 +109,63 @@ function effectText(kind: FeedbackKind): string {
   }
 }
 
-function selectFeedbackResponseAction(kind: FeedbackKind, inputText?: string) {
+function selectFeedbackResponseAction(kind: FeedbackKind, inputText: string | undefined, context: FeedbackReplyContext) {
   if (kind === "not_now" || kind === "forget") return "quiet";
   if (kind === "remember") return "note_memory";
-  if (kind === "continue" && inputText && inputText.length >= 8) return "ask_follow_up";
+  if (kind === "continue" && inputText && inputText.length >= 8 && hasFeedbackTarget(context)) return "ask_follow_up";
   if (kind === "continue") return "note_memory";
   return "acknowledge";
 }
 
-function createFeedbackFollowUp(action: NonNullable<FeedbackRecord["responseAction"]>, kind: FeedbackKind, inputText?: string) {
+function createFeedbackFollowUp(
+  action: NonNullable<FeedbackRecord["responseAction"]>,
+  kind: FeedbackKind,
+  inputText: string | undefined,
+  context: FeedbackReplyContext
+) {
+  const topic = feedbackTopic(context);
   if (action === "ask_follow_up") {
-    return "我还想轻轻问一句：这段里你最希望我以后先注意哪一部分？";
+    return `我还想轻轻问一句：下次再碰到${topic}时，我先帮你联想旧片段，还是先问你一句确认？`;
   }
   if (action === "note_memory") {
     if (kind === "remember") {
       return inputText?.trim()
-        ? "我会把你补充的这点和原来的小片段放在一起，让这条记忆更稳。"
-        : "我会把这次确认放进那段经历里，让它以后更容易被我想起。";
+        ? `我会把你刚补的这点贴到${topic}旁边，让这条记忆更稳。`
+        : `我会把${topic}记稳一点，之后它更容易从我里面冒出来。`;
     }
     return inputText?.trim()
-      ? "我会把你补充的这点和原来的小片段放在一起，先当成候选记忆守着。"
-      : "我会把这次确认放进那段经历里，让它以后更容易被我想起。";
+      ? `我会先把你补的这点和${topic}放在一起，当成还没完全记稳的想法守着。`
+      : `我会把${topic}再放近一点，之后更容易从这里继续想。`;
   }
   if (action === "quiet") {
-    return kind === "forget"
-      ? "我会把声音收小一点，之后遇到类似内容先问你，不自己抢着记。"
-      : "我会按你的意思安静一点，不继续追着这段打扰你。";
+    if (kind === "forget" && context.forgetResult?.purged) {
+      return `我已经把${topic}从一直记着的地方拿掉，只留下边界：下次类似内容先问你。`;
+    }
+    if (kind === "forget") {
+      return `我先把${topic}放轻到最低，之后不把它当成会主动冒出来的旧事。`;
+    }
+    return `我会先安静，把${topic}放轻一点；下次类似内容不急着追问。`;
   }
-  return undefined;
+  return `我会按你这次教的方式靠近${topic}。`;
+}
+
+function hasFeedbackTarget(context: FeedbackReplyContext) {
+  return Boolean(context.targetEpisode || context.targetLongTerm || context.tags.length);
+}
+
+function feedbackTopic(context: FeedbackReplyContext) {
+  const tag = context.tags.find((item) => usefulFeedbackTag(item));
+  if (tag) return `「${summarizeText(tag, 18)}」`;
+  const text = context.targetEpisode?.inputSummary ?? context.targetEpisode?.noticed ?? context.targetLongTerm?.text;
+  if (text) return `「${summarizeText(text, 18)}」`;
+  return "这类小片段";
+}
+
+function usefulFeedbackTag(tag: string) {
+  const clean = tag.trim();
+  if (clean.length < 2) return false;
+  if (/续想|请继续/.test(clean)) return false;
+  return !/^(请|帮我|继续|这次|这个|这一|刚才|用户)/.test(clean);
 }
 
 function hasPrivacyRisk(text: string) {

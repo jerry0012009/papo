@@ -114,7 +114,8 @@ describe("creature core", () => {
     expect(feedback.inputText).toContain("多想一点");
     expect(feedback.learningNote).toContain("你还补充说");
     expect(feedback.responseAction).toBe("ask_follow_up");
-    expect(feedback.followUpText).toContain("最希望我以后先注意");
+    expect(feedback.followUpText).toContain("下次再碰到");
+    expect(feedback.followUpText).toMatch(/小动物|注意/);
     expect(feedback.replyText).toContain(feedback.followUpText);
     expect(feedback.memoryCandidateIds?.length).toBeGreaterThan(0);
     expect(profile.memoryCandidates[0].candidateText).toContain("你后来教我补上这一点");
@@ -177,14 +178,16 @@ describe("creature core", () => {
     const profile = createCreatureProfile();
     const targetId = profile.longTermMemories[0].id;
 
-    applyFeedback(profile, { kind: "forget", targetId });
+    const firstForget = applyFeedback(profile, { kind: "forget", targetId });
 
     expect(profile.longTermMemories.find((memory) => memory.id === targetId)?.weight).toBe(0);
+    expect(firstForget.followUpText).toContain("放轻到最低");
     expect(profile.longTermMemories[0].text).toContain("你让我放下类似内容");
     expect(profile.longTermMemories[0].consolidatedBecause).toContain("小心边界");
     expect(profile.longTermMemories[0].consolidatedBecause).not.toContain("forget feedback");
-    applyFeedback(profile, { kind: "forget", targetId });
+    const secondForget = applyFeedback(profile, { kind: "forget", targetId });
     expect(profile.longTermMemories.find((memory) => memory.id === targetId)).toBeUndefined();
+    expect(secondForget.followUpText).toContain("从一直记着的地方拿掉");
     expect(profile.state.safety).toBeGreaterThan(58);
   });
 
