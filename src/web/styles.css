@@ -389,6 +389,7 @@ select {
 .episode-card,
 .attention-card,
 .state-item,
+.body-signals span,
 .wake-note,
 .memory-surface {
   border: 1px solid rgba(31, 36, 33, 0.1);
@@ -428,6 +429,24 @@ select {
 
 .state-item {
   padding: 10px;
+}
+
+.body-signals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.body-signals span {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  color: #4d5a51;
+}
+
+.body-signals strong {
+  color: #1f2421;
+  font-size: 0.86rem;
 }
 
 .state-item div {

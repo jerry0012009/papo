@@ -230,6 +230,7 @@ Done:
   - Active emergence no longer uses seed self-memory as a fake shared memory. User-generated memories can still support emergence even when they are about Papo itself; with no real shared memory, it says it will wait for a real shared moment instead of claiming it remembered one.
   - Memory cards now combine familiarity and memory type into Papo's own subjective sentence, so the default memory page reads less like a database record.
   - Home presence copy no longer labels Papo as "current mood" or explains state as calculation. It now prioritizes the latest conversation, feedback, emergence, or wake context before falling back to body-state cues.
+  - Home no longer shows raw state meters by default. It translates state into visible body signals such as ears, tail, little head, and boundaries, while Brain keeps numeric meters.
   - User-facing attention and episode cards no longer expose score contributions, numeric confidence, weight, or decision trace details. Those remain in Brain diagnostics while the default cards show Papo's attention strength, caution, memory, action, and save feeling in creature language.
   - Dialogue and shared-moment pages no longer call the user path an "attention flow" or "attention material"; they use "和 Papo 的小日常", "你递来的小片段", and "这一小段" so the interaction reads as a shared experience instead of pipeline input.
 
@@ -262,6 +263,7 @@ Verified:
 - Curious Mode can preserve photo upload time/place and batch text/photo/audio as one stream before attention selection.
 - Home renders Papo as an animated Shiba Inu SVG whose visible posture changes with mood, energy, curiosity, attachment, and safety.
 - Home presence copy is context-first and does not expose "current mood" or state-calculation wording.
+- Home shows state as creature body signals rather than raw meters; numeric state remains in Brain diagnostics.
 - User-facing memory/attention pages do not expose `memory_resonance`, `decisionTrace`, numeric `weight`, or numeric `confidence`; Brain keeps technical diagnostics.
 - User-facing dialogue pages do not show "attention flow", "attention material", or "small material" wording; they present shared moments as small life fragments handed to Papo.
 - The Home "Papo new said" surface only selects `role=papo` messages even when newer user/world inputs exist.

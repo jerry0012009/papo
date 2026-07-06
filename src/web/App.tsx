@@ -821,7 +821,7 @@ function HomeView(props: {
 
       {props.wakeMessage ? (
         <section className="wake-note">
-          <span>Papo 刚动了一下</span>
+          <span>Papo 抬头看了你一眼</span>
           <p>{props.wakeMessage}</p>
           {props.wakeThought ? <p>{props.wakeThought}</p> : null}
         </section>
@@ -830,7 +830,7 @@ function HomeView(props: {
       {props.learningNote ? <section className="learning-note">{props.learningNote}</section> : null}
       {props.lastFeedback ? <FeedbackImpactCard feedback={props.lastFeedback} /> : null}
 
-      <StateGrid state={props.profile.state} />
+      <BodySignals state={props.profile.state} />
 
       {props.lastResult ? (
         <section className="panel">
@@ -1659,6 +1659,38 @@ function StateGrid({ state }: { state: CreatureState }) {
       ))}
     </section>
   );
+}
+
+function BodySignals({ state }: { state: CreatureState }) {
+  const signals = [
+    ["耳朵", dogSenseText(state)],
+    ["尾巴", dogMotionText(state)],
+    ["小脑袋", mindSignalText(state)],
+    ["边界", boundarySignalText(state)]
+  ];
+  return (
+    <section className="body-signals" aria-label="Papo 的身体信号">
+      {signals.map(([label, text]) => (
+        <span key={label}>
+          <strong>{label}</strong>
+          {text}
+        </span>
+      ))}
+    </section>
+  );
+}
+
+function mindSignalText(state: CreatureState) {
+  if (state.curiosity > 72) return "会先找最让它在意的一小段";
+  if (state.confidence > 62) return "更敢把自己的理解说出来";
+  if (state.energy < 35) return "会先抱住重点，少说一点";
+  return "先听，再决定要不要回应";
+}
+
+function boundarySignalText(state: CreatureState) {
+  if (state.safety > 74) return "会更小心处理隐私和保存";
+  if (state.arousal > 64) return "对突然出现的动静更敏感";
+  return "边界稳定，可以认真靠近";
 }
 
 function stateDriveLabel(key: keyof Omit<CreatureState, "mood">) {
