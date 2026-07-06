@@ -74,11 +74,12 @@ Provider 配置来源：
 - `.papo/provider.json`
 
 环境变量会覆盖本地配置文件。可从 `papo.config.example.json` 复制配置结构。
+`PAPO_PROVIDER` 可显式指定 `openrouter`、`mimo` 或 `generic`；未指定时按下面顺序自动选择。
 
 Provider 选择优先级：
 
-1. `MIMO_ENDPOINT` / `MIMO_API_KEY`
-2. `OPENROUTER_API_KEY`
+1. `OPENROUTER_API_KEY`
+2. `MIMO_ENDPOINT` / `MIMO_API_KEY`
 3. `OPENAI_API_KEY` / `GENERIC_MODEL_API_KEY`
 4. fallback demo brain
 

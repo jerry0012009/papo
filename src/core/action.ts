@@ -34,7 +34,7 @@ export function selectAction(input: ActionSelectionInput): ActionDecision {
 
   if (input.profile.state.energy < 28 && action !== "quiet") {
     blockedActions.push({ action, reason: "energy 低，不能展开太多行动" });
-    action = input.attentionStrength > 70 ? "observe" : "quiet";
+    action = action === "respond" && input.attentionStrength > 55 ? "respond" : input.attentionStrength > 70 ? "observe" : "quiet";
     safetyNotes.push("精力低时保留情景，不强行展开。");
   }
 
@@ -108,6 +108,8 @@ function baselineAction(input: ActionSelectionInput): ActionKind {
 
 function explainAction(action: ActionKind, input: ActionSelectionInput) {
   switch (action) {
+    case "respond":
+      return "用户在直接呼唤我或要求我说话，当前最自然的行动是回应，而不是只分析或保存。";
     case "ask":
       return "这段需要用户确认，尤其是隐私、情绪或保存意图还不够明确。";
     case "save_episode":

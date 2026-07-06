@@ -15,44 +15,62 @@ export interface ModelProvider {
 
 export function createModelProvider(env: NodeJS.ProcessEnv = process.env): ModelProvider {
   const config = loadLocalProviderConfig(env.PAPO_CONFIG_PATH);
-  const merged = { ...config, ...env };
+  const dotenv = shouldLoadLocalEnv(env) ? loadLocalProviderEnv(env.PAPO_ENV_PATH) : {};
+  const merged = { ...config, ...dotenv, ...env };
+  const preferred = merged.PAPO_PROVIDER;
 
-  if (merged.MIMO_ENDPOINT || merged.MIMO_API_KEY) {
-    return openAiCompatibleProvider({
-      kind: "mimo",
-      name: "Local Mimo",
-      endpoint: merged.MIMO_ENDPOINT ?? "http://localhost:11434/v1/chat/completions",
-      apiKey: merged.MIMO_API_KEY,
-      model: merged.MIMO_MODEL ?? "mimo",
-      visionModel: merged.MIMO_VISION_MODEL ?? merged.MIMO_MODEL ?? "mimo",
-      audioModel: merged.MIMO_AUDIO_MODEL ?? merged.MIMO_MODEL ?? "mimo"
-    });
-  }
-  if (merged.OPENROUTER_API_KEY) {
-    return openAiCompatibleProvider({
-      kind: "openrouter",
-      name: "OpenRouter",
-      endpoint: "https://openrouter.ai/api/v1/chat/completions",
-      apiKey: merged.OPENROUTER_API_KEY,
-      model: merged.OPENROUTER_MODEL ?? "openai/gpt-4.1-mini",
-      visionModel: merged.OPENROUTER_VISION_MODEL ?? "google/gemini-2.0-flash-001",
-      audioModel: merged.OPENROUTER_AUDIO_MODEL ?? merged.OPENROUTER_VISION_MODEL ?? "google/gemini-2.0-flash-001"
-    });
-  }
-  if (merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY) {
-    return openAiCompatibleProvider({
-      kind: "generic",
-      name: "Generic model API",
-      endpoint: merged.OPENAI_BASE_URL
-        ? `${merged.OPENAI_BASE_URL.replace(/\/$/, "")}/chat/completions`
-        : "https://api.openai.com/v1/chat/completions",
-      apiKey: merged.OPENAI_API_KEY ?? merged.GENERIC_MODEL_API_KEY,
-      model: merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-4.1-mini",
-      visionModel: merged.OPENAI_VISION_MODEL ?? merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-4.1-mini",
-      audioModel: merged.OPENAI_AUDIO_MODEL ?? merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-4.1-mini"
-    });
-  }
+  if (preferred === "openrouter" && merged.OPENROUTER_API_KEY) return openRouterProvider(merged);
+  if (preferred === "mimo" && (merged.MIMO_ENDPOINT || merged.MIMO_API_KEY)) return mimoProvider(merged);
+  if (preferred === "generic" && (merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY)) return genericProvider(merged);
+
+  if (merged.OPENROUTER_API_KEY) return openRouterProvider(merged);
+  if (merged.MIMO_ENDPOINT || merged.MIMO_API_KEY) return mimoProvider(merged);
+  if (merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY) return genericProvider(merged);
   return staticProvider("fallback", "Fallback demo brain", true);
+}
+
+function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
+  return openAiCompatibleProvider({
+    kind: "openrouter",
+    name: "OpenRouter",
+    endpoint: "https://openrouter.ai/api/v1/chat/completions",
+    apiKey: merged.OPENROUTER_API_KEY,
+    model: merged.OPENROUTER_MODEL ?? "openai/gpt-5.5",
+    visionModel: merged.OPENROUTER_VISION_MODEL ?? "google/gemini-2.0-flash-001",
+    audioModel: merged.OPENROUTER_AUDIO_MODEL ?? merged.OPENROUTER_VISION_MODEL ?? "google/gemini-2.0-flash-001"
+  });
+}
+
+function mimoProvider(merged: NodeJS.ProcessEnv): ModelProvider {
+  return openAiCompatibleProvider({
+    kind: "mimo",
+    name: "Local Mimo",
+    endpoint: merged.MIMO_ENDPOINT ?? "http://localhost:11434/v1/chat/completions",
+    apiKey: merged.MIMO_API_KEY,
+    model: merged.MIMO_MODEL ?? "mimo",
+    visionModel: merged.MIMO_VISION_MODEL ?? merged.MIMO_MODEL ?? "mimo",
+    audioModel: merged.MIMO_AUDIO_MODEL ?? merged.MIMO_MODEL ?? "mimo"
+  });
+}
+
+function genericProvider(merged: NodeJS.ProcessEnv): ModelProvider {
+    return openAiCompatibleProvider({
+    kind: "generic",
+    name: "Generic model API",
+    endpoint: merged.OPENAI_BASE_URL
+      ? `${merged.OPENAI_BASE_URL.replace(/\/$/, "")}/chat/completions`
+      : "https://api.openai.com/v1/chat/completions",
+    apiKey: merged.OPENAI_API_KEY ?? merged.GENERIC_MODEL_API_KEY,
+    model: merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-5.5",
+    visionModel: merged.OPENAI_VISION_MODEL ?? merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-5.5",
+    audioModel: merged.OPENAI_AUDIO_MODEL ?? merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-5.5"
+  });
+}
+
+function shouldLoadLocalEnv(env: NodeJS.ProcessEnv) {
+  if (env.PAPO_ENV_PATH) return true;
+  if (env.NODE_ENV === "test") return false;
+  return Object.keys(env).length > 0;
 }
 
 function loadLocalProviderConfig(configPath?: string): NodeJS.ProcessEnv {
@@ -72,6 +90,33 @@ function loadLocalProviderConfig(configPath?: string): NodeJS.ProcessEnv {
     }
   }
   return {};
+}
+
+function loadLocalProviderEnv(envPath?: string): NodeJS.ProcessEnv {
+  const candidates = [envPath, path.join(process.cwd(), ".env")].filter(Boolean) as string[];
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) continue;
+    try {
+      return parseEnvFile(readFileSync(candidate, "utf8"));
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function parseEnvFile(content: string): NodeJS.ProcessEnv {
+  const parsed: NodeJS.ProcessEnv = {};
+  for (const line of content.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const separator = trimmed.indexOf("=");
+    if (separator <= 0) continue;
+    const key = trimmed.slice(0, separator).trim();
+    const raw = trimmed.slice(separator + 1).trim();
+    parsed[key] = raw.replace(/^['"]|['"]$/g, "");
+  }
+  return parsed;
 }
 
 function staticProvider(kind: ProviderKind, name: string, available: boolean): ModelProvider {
@@ -147,7 +192,7 @@ async function callChatCompletions(
       },
       body: JSON.stringify({
         model: input.model,
-        temperature: 0.35,
+        temperature: temperatureForModel(input.model, 0.35),
         response_format: json ? { type: "json_object" } : undefined,
         messages: [
           {
@@ -161,7 +206,7 @@ async function callChatCompletions(
     });
 
     if (!response.ok) {
-      throw new Error(`Model provider failed: ${response.status}`);
+      throw new Error(`Model provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     }
     const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
     return { content: data.choices?.[0]?.message?.content ?? "" };
@@ -188,7 +233,7 @@ async function callVisionSummary(
       },
       body: JSON.stringify({
         model: input.visionModel ?? input.model,
-        temperature: 0.2,
+        temperature: temperatureForModel(input.visionModel ?? input.model, 0.2),
         messages: [
           {
             role: "system",
@@ -207,7 +252,7 @@ async function callVisionSummary(
     });
 
     if (!response.ok) {
-      throw new Error(`Vision provider failed: ${response.status}`);
+      throw new Error(`Vision provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     }
     const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
     return { content: data.choices?.[0]?.message?.content?.trim() ?? "" };
@@ -235,7 +280,7 @@ async function callAudioTranscript(
       },
       body: JSON.stringify({
         model: input.audioModel ?? input.model,
-        temperature: 0.1,
+        temperature: temperatureForModel(input.audioModel ?? input.model, 0.1),
         messages: [
           {
             role: "system",
@@ -254,7 +299,7 @@ async function callAudioTranscript(
     });
 
     if (!response.ok) {
-      throw new Error(`Audio provider failed: ${response.status}`);
+      throw new Error(`Audio provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     }
     const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
     return { content: data.choices?.[0]?.message?.content?.trim() ?? "" };
@@ -278,6 +323,19 @@ function audioFormatFromMime(mime: string) {
   if (mime.includes("ogg")) return "ogg";
   if (mime.includes("m4a") || mime.includes("mp4")) return "mp4";
   return "webm";
+}
+
+function temperatureForModel(model: string, value: number) {
+  return /^openai\/gpt-5|^gpt-5/i.test(model) ? undefined : value;
+}
+
+async function responseErrorSummary(response: Response) {
+  try {
+    const text = await response.text();
+    return text.replace(/\s+/g, " ").trim().slice(0, 260);
+  } catch {
+    return "";
+  }
 }
 
 function parseJson<T>(text: string): T | undefined {

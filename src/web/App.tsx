@@ -1,5 +1,4 @@
 import {
-  Bell,
   Brain,
   Check,
   CircleOff,
@@ -48,7 +47,6 @@ import {
 } from "./api";
 
 type Tab = "home" | "curious" | "chat" | "memory" | "brain" | "profile" | "demo";
-type NotificationStatus = NotificationPermission | "unsupported";
 
 interface SpeechRecognitionLike {
   continuous: boolean;
@@ -133,7 +131,7 @@ export function App() {
   const [wakeThought, setWakeThought] = useState<string>();
   const [demoNote, setDemoNote] = useState<string>();
   const [demoSummary, setDemoSummary] = useState<DemoSummary>();
-  const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>(() => currentNotificationStatus());
+  const [readPapoMessageId, setReadPapoMessageId] = useState<string>();
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -149,10 +147,13 @@ export function App() {
   const tickTimerRef = useRef<number | undefined>(undefined);
   const segmentTimerRef = useRef<number | undefined>(undefined);
   const stopTimerRef = useRef<number | undefined>(undefined);
-  const notifiedPapoMessageIdRef = useRef<string | undefined>(undefined);
 
   const selectedEpisode = lastResult?.episodes[0] ?? profile?.episodes[0];
-  const latestPapoMessage = useMemo(() => profile?.conversation?.find((message) => message.role === "papo"), [profile?.conversation]);
+  const latestPapoMessage = useMemo(
+    () => profile?.conversation?.find((message) => message.role === "papo" && message.channel !== "wake"),
+    [profile?.conversation]
+  );
+  const hasUnreadPapoMessage = Boolean(latestPapoMessage && latestPapoMessage.id !== readPapoMessageId);
 
   useEffect(() => {
     void bootstrap();
@@ -160,22 +161,8 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!latestPapoMessage) return;
-    if (!notifiedPapoMessageIdRef.current) {
-      notifiedPapoMessageIdRef.current = latestPapoMessage.id;
-      return;
-    }
-    if (notifiedPapoMessageIdRef.current === latestPapoMessage.id) return;
-    notifiedPapoMessageIdRef.current = latestPapoMessage.id;
-    if (notificationStatus !== "granted" || typeof Notification === "undefined") return;
-
-    const notification = new Notification("Papo 新说", {
-      body: latestPapoMessage.text,
-      tag: `papo-${latestPapoMessage.id}`,
-      silent: false
-    });
-    window.setTimeout(() => notification.close(), 6500);
-  }, [latestPapoMessage?.id, latestPapoMessage?.text, notificationStatus]);
+    if (tab === "chat" && latestPapoMessage) setReadPapoMessageId(latestPapoMessage.id);
+  }, [latestPapoMessage?.id, tab]);
 
   async function bootstrap() {
     try {
@@ -324,21 +311,6 @@ export function App() {
       setEmergence(result.emergence.text);
       setTab("home");
     });
-  }
-
-  async function enablePapoNotifications() {
-    if (typeof Notification === "undefined") {
-      setNotificationStatus("unsupported");
-      return;
-    }
-    if (Notification.permission === "granted") {
-      notifiedPapoMessageIdRef.current = latestPapoMessage?.id;
-      setNotificationStatus("granted");
-      return;
-    }
-    const permission = await Notification.requestPermission();
-    notifiedPapoMessageIdRef.current = latestPapoMessage?.id;
-    setNotificationStatus(permission ?? Notification.permission);
   }
 
   async function startListening() {
@@ -662,15 +634,11 @@ export function App() {
           lastFeedback={lastFeedback}
           wakeMessage={wakeMessage}
           wakeThought={wakeThought}
-          latestPapoMessage={latestPapoMessage}
-          notificationStatus={notificationStatus}
           busy={busy}
           onFeedback={giveFeedback}
           onTranscribeFeedbackAudio={transcribeFeedbackAudio}
           onGoCapture={() => setTab("chat")}
           onGoCurious={() => setTab("curious")}
-          onGoChat={() => setTab("chat")}
-          onEnableNotifications={enablePapoNotifications}
         />
       ) : null}
 
@@ -707,7 +675,7 @@ export function App() {
 
       <nav className="nav">
         <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => setTab("home")} />
-        <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" onClick={() => setTab("chat")} />
+        <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" unread={hasUnreadPapoMessage} onClick={() => setTab("chat")} />
         <NavButton active={tab === "curious"} icon={Sparkles} label="陪我" onClick={() => setTab("curious")} />
         <NavButton active={tab === "memory"} icon={History} label="记忆" onClick={() => setTab("memory")} />
         <NavButton active={tab === "brain"} icon={Brain} label="脑态" onClick={() => setTab("brain")} />
@@ -726,15 +694,11 @@ function HomeView(props: {
   lastFeedback?: FeedbackRecord;
   wakeMessage?: string;
   wakeThought?: string;
-  latestPapoMessage?: CreatureProfile["conversation"][number];
-  notificationStatus: NotificationStatus;
   busy: boolean;
   onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_transcript" | "button") => void;
   onTranscribeFeedbackAudio: (file: File) => Promise<string>;
   onGoCapture: () => void;
   onGoCurious: () => void;
-  onGoChat: () => void;
-  onEnableNotifications: () => void;
 }) {
   return (
     <section className="stack">
@@ -742,8 +706,8 @@ function HomeView(props: {
         <ShibaAvatar state={props.profile.state} />
         <div className="hero-copy">
           <p className="eyebrow">当前心情</p>
-          <h2>{moodText(props.profile.state.mood)}</h2>
-          <p>{stateSentence(props.profile.state)}</p>
+          <h2>{stateHeadline(props.profile)}</h2>
+          <p>{stateSentence(props.profile)}</p>
           <div className="dog-state-cues">
             <span>{dogMotionText(props.profile.state)}</span>
             <span>{dogSenseText(props.profile.state)}</span>
@@ -761,29 +725,6 @@ function HomeView(props: {
           陪我一会儿
         </button>
       </div>
-
-      {props.latestPapoMessage ? (
-        <section className="papo-notice">
-          <div>
-            <span>Papo 新说</span>
-            <p>{props.latestPapoMessage.text}</p>
-          </div>
-          <div className="papo-notice-actions">
-            <button onClick={props.onGoChat}>
-              <MessagesSquare size={18} />
-              看对话
-            </button>
-            {props.notificationStatus === "granted" ? (
-              <span className="notification-pill">已开提醒</span>
-            ) : props.notificationStatus === "unsupported" ? null : (
-              <button onClick={props.onEnableNotifications} disabled={props.notificationStatus === "denied"}>
-                <Bell size={18} />
-                {props.notificationStatus === "denied" ? "提醒关闭" : "桌面提醒"}
-              </button>
-            )}
-          </div>
-        </section>
-      ) : null}
 
       {props.wakeMessage ? (
         <section className="wake-note">
@@ -1393,10 +1334,10 @@ function EpisodeCard(props: {
         <span>{props.episode.source === "button" ? "你递给我的片段" : "我自己注意到的片段"}</span>
         <strong>权重 {props.episode.weight}</strong>
       </div>
-      <h3>{props.episode.creatureExperience?.earReason ?? props.episode.noticed}</h3>
+      <h3>{props.episode.creatureResponse || props.episode.noticed}</h3>
       {!props.compact ? (
         <div className="episode-experience">
-          <p><strong>我刚才注意到：</strong>{props.episode.noticed}</p>
+          <p><strong>我刚才注意到：</strong>{noticedText(props.episode.noticed)}</p>
           <p><strong>我为什么注意：</strong>{props.episode.creatureExperience?.earReason ?? props.episode.importanceReason}</p>
           <p><strong>我想起了什么：</strong>{props.episode.creatureExperience?.rememberedScene ?? "这次还没有强烈拉起旧片段。"}</p>
           <p><strong>我猜你在做：</strong>{props.episode.possibleIntent}</p>
@@ -1503,6 +1444,13 @@ function episodeStateText(episode: EpisodeMemory) {
   return parts.length ? parts.join("；") : "状态稳定，适合认真观察这一段";
 }
 
+function noticedText(text: string) {
+  return text
+    .replace(/^我刚才注意到[:：]?\s*/, "")
+    .replace(/^我注意到[:：]?\s*/, "")
+    .replace(/^我听到[:：]?\s*/, "");
+}
+
 function FeedbackImpactCard({ feedback }: { feedback: FeedbackRecord }) {
   const stateDeltas = feedback.stateDeltas ?? [];
   const policyDeltas = feedback.policyDeltas ?? [];
@@ -1579,11 +1527,14 @@ function PanelTitle({ icon: Icon, title }: { icon: typeof Brain; title: string }
   );
 }
 
-function NavButton(props: { active: boolean; icon: typeof Brain; label: string; onClick: () => void }) {
+function NavButton(props: { active: boolean; icon: typeof Brain; label: string; unread?: boolean; onClick: () => void }) {
   return (
     <button className={props.active ? "active" : ""} onClick={props.onClick}>
       <props.icon size={19} />
-      <span>{props.label}</span>
+      <span>
+        {props.label}
+        {props.unread ? <i className="unread-dot" aria-label="有未读 Papo 回复" /> : null}
+      </span>
     </button>
   );
 }
@@ -1600,7 +1551,25 @@ function moodText(mood: CreatureState["mood"]) {
   return map[mood];
 }
 
-function stateSentence(state: CreatureState) {
+function stateHeadline(profile: CreatureProfile) {
+  const latest = profile.conversation?.[0];
+  if (latest?.role === "papo") {
+    if (latest.channel === "button") return "刚回应过你";
+    if (latest.channel === "curious") return "刚陪你听完一段";
+    if (latest.channel === "feedback") return "正在学你的反馈";
+    if (latest.channel === "emergence") return "自己想起一点";
+  }
+  const wake = profile.wakeHistory?.[0];
+  if (wake && wake.elapsedMinutes >= 60) return "刚从小睡里醒来";
+  return moodText(profile.state.mood);
+}
+
+function stateSentence(profile: CreatureProfile) {
+  const state = profile.state;
+  const latestChange = profile.stateChanges?.[0];
+  if (latestChange?.reason.includes("button capture")) return "刚才那句话让它集中了一次注意，精力会轻微下降，依恋和唤醒会有一点变化。";
+  if (latestChange?.reason.includes("feedback")) return "它刚被你的反馈调整过，之后类似片段的回应方式会跟着变。";
+  if (latestChange?.reason.includes("wake")) return "这次打开应用触发了醒来节律，能量、唤醒度和好奇心按时间差重新计算。";
   if (state.energy < 35) return "它会短一点回应，把重要片段先存下来。";
   if (state.safety > 74) return "它会更谨慎处理隐私和长期保存。";
   if (state.curiosity > 72) return "它更容易从信息流里挑出新主题。";
@@ -1626,6 +1595,7 @@ function dogSenseText(state: CreatureState) {
 function actionText(action: AttentionEvent["suggestedAction"]) {
   const map = {
     observe: "观察",
+    respond: "回应",
     ask: "轻问",
     save_episode: "存情景",
     save_long_term: "存长期",
@@ -1678,11 +1648,6 @@ function messageFlowText(message: CreatureProfile["conversation"][number]) {
 function locationText(location: NonNullable<StreamSegment["location"]>) {
   const accuracy = typeof location.accuracy === "number" ? `，约 ${Math.round(location.accuracy)} 米` : "";
   return location.label ?? `位置 ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}${accuracy}`;
-}
-
-function currentNotificationStatus(): NotificationStatus {
-  if (typeof Notification === "undefined") return "unsupported";
-  return Notification.permission;
 }
 
 function policyLabel(key: string) {

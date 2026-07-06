@@ -40,6 +40,29 @@ describe("creature core", () => {
     expect(profile.episodes[0].noticed).toContain("小动物");
   });
 
+  it("fallback repair can respond to a direct call when the semantic model is unavailable", async () => {
+    const provider = createModelProvider({});
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(profile, "如果你能说话，你就说句话给我听。", provider);
+
+    expect(result.events[0].actionDecision.action).toBe("respond");
+    expect(result.events[0].semanticSource).toBe("fallback");
+    expect(result.response).toContain("我在，听见了");
+    expect(result.episodes[0].creatureResponse).toContain("我在，听见了");
+    expect(result.memoryCandidates?.[0].candidateText).toContain("你曾经对我说");
+    expect(result.episodes[0].creatureExperience?.earReason).not.toContain("显著性");
+    expect(result.episodes[0].creatureExperience?.earReason).not.toContain("用户主动交给我");
+  });
+
+  it("fallback repair handles playful greeting input without turning it into a generic ask flow", async () => {
+    const provider = createModelProvider({});
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(profile, "汪汪！", provider);
+
+    expect(result.events[0].actionDecision.action).toBe("respond");
+    expect(result.response).toContain("我在，听见了");
+  });
+
   it("curious mode selects salient stream events instead of summarizing everything", () => {
     const profile = createCreatureProfile();
     const result = handleCuriousStream(profile, [
@@ -180,6 +203,40 @@ describe("creature core", () => {
     expect(result.events[0].suggestedAction).toBe("ask");
     expect(result.events[0].semanticSource).toBe("llm");
     expect(result.events[0].decisionTrace?.join(" ")).toContain("guardrail");
+  });
+
+  it("LLM interaction understanding drives reply, action, and memory candidate before persistence", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "interaction model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          interaction: {
+            userIntent: "用户在确认 Papo 是否能听见并主动回应。",
+            emotionalTone: "轻轻试探，有一点期待",
+            shouldReply: true,
+            suggestedAction: "respond",
+            reply: "我在，听见你了。我会把这次你叫我说话的小片段记下来。",
+            memoryCandidateText: "用户曾经轻轻叫 Papo 说句话，Papo 回应并把这当成一次小小的共同经历。",
+            memoryTags: ["回应", "共同经历"]
+          },
+          trace: ["llm: understood direct call"]
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(profile, "如果你能说话，你就说句话给我听。", provider);
+
+    expect(result.events[0].semanticSource).toBe("llm");
+    expect(result.events[0].actionDecision.action).toBe("respond");
+    expect(result.response).toContain("听见你了");
+    expect(result.episodes[0].possibleIntent).toContain("主动回应");
+    expect(result.episodes[0].creatureExperience?.earReason).toContain("主动回应");
+    expect(result.memoryCandidates?.[0].candidateText).toContain("小小的共同经历");
   });
 });
 

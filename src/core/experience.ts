@@ -26,14 +26,45 @@ export function createAttentionExperience(input: {
     ? `我想起之前那段：${summarizeText(input.relatedMemories[0].text, 82)}`
     : undefined;
   return {
-    earReason: strongest
-      ? `我刚才竖起耳朵，是因为${strongest.reason.replace(/。$/, "")}。`
-      : `我刚才竖起耳朵，是因为这段像是你希望我认真理解的一小段经历。`,
+    earReason: earReason(input, strongest),
     rememberedScene,
     actionFeeling: actionFeeling(input.action, input.profile),
     saveFeeling: saveFeeling(input.action, input.privacyRisk),
     learnedHint: "如果你反馈我，我会把这次经历变成以后注意你的方式。"
   };
+}
+
+function earReason(
+  input: {
+    triggerContent: string;
+    relatedMemories: LongTermMemory[];
+    action: ActionKind;
+    privacyRisk: number;
+  },
+  strongest?: SegmentScore["contributions"][number]
+) {
+  if (/说句话|说话|回复|回答|你在吗|你好|hello|汪|打招呼|听见|听到|回应|叫你/i.test(input.triggerContent)) {
+    return "我刚才竖起耳朵，是因为你在对我发出一个需要回应的小信号。";
+  }
+  if (input.relatedMemories.length) {
+    return "我刚才竖起耳朵，是因为这段碰到了我们以前留下的一点记忆。";
+  }
+  if (input.privacyRisk > 65) {
+    return "我刚才竖起耳朵，是因为这里可能有需要保护的隐私。";
+  }
+  if (strongest?.key === "emotional_charge") {
+    return "我刚才竖起耳朵，是因为这段里有情绪，不适合被当成普通背景音。";
+  }
+  if (strongest?.key === "future_value") {
+    return "我刚才竖起耳朵，是因为这段以后可能还会回来找你。";
+  }
+  if (strongest?.key === "identity_relevance") {
+    return "我刚才竖起耳朵，是因为这段在影响我应该长成什么样。";
+  }
+  if (input.action === "respond") {
+    return "我刚才竖起耳朵，是因为最自然的下一步是先回应你。";
+  }
+  return "我刚才竖起耳朵，是因为你把这一小段直接递给了我，我需要认真听懂。";
 }
 
 export function createEpisodeExperience(episode: EpisodeMemory, profile: CreatureProfile): CreatureExperience {
@@ -80,6 +111,8 @@ export function createLearningNote(kind: FeedbackKind, tags: string[] = [], feed
 
 function actionFeeling(action: ActionKind, profile: CreatureProfile) {
   switch (action) {
+    case "respond":
+      return "我想先回你一句，让你知道我听见了，而不是躲在后台只做分析。";
     case "ask":
       return profile.state.confidence < 55
         ? "我更想先轻轻问你一句，确认我有没有理解错。"
@@ -106,6 +139,6 @@ function actionFeeling(action: ActionKind, profile: CreatureProfile) {
 function saveFeeling(action: ActionKind, privacyRisk: number) {
   if (privacyRisk > 65) return "这里有隐私风险，我不会直接长期保存。";
   if (action === "save_long_term") return "它像是可以长期记住的东西，但我会等确认。";
-  if (action === "save_episode" || action === "recall") return "我会先形成情景记忆，不把它无脑塞进长期记忆。";
+  if (action === "save_episode" || action === "recall" || action === "respond") return "我会先形成情景记忆，不把它无脑塞进长期记忆。";
   return "这次我先不急着保存成长期记忆。";
 }

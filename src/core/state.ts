@@ -1,7 +1,8 @@
 import type { CreatureProfile, CreatureState, FeedbackKind, StateChange } from "./types";
 
-export function initialState(): CreatureState {
-  return {
+export function initialState(seed = "papo"): CreatureState {
+  const offset = seededOffset(seed);
+  const state: CreatureState = {
     curiosity: 66,
     attachment: 42,
     energy: 72,
@@ -10,6 +11,13 @@ export function initialState(): CreatureState {
     confidence: 48,
     mood: "curious"
   };
+  state.curiosity += offset("curiosity", 4);
+  state.attachment += offset("attachment", 5);
+  state.energy += offset("energy", 4);
+  state.arousal += offset("arousal", 5);
+  state.safety += offset("safety", 4);
+  state.confidence += offset("confidence", 4);
+  return { ...clampState(state), mood: deriveMood(state) };
 }
 
 export function clampState(state: CreatureState): CreatureState {
@@ -76,4 +84,14 @@ export function deltaForFeedback(kind: FeedbackKind) {
 
 function clamp(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function seededOffset(seed: string) {
+  return (key: string, range: number) => {
+    let hash = 0;
+    for (const char of `${seed}:${key}`) {
+      hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+    }
+    return (hash % (range * 2 + 1)) - range;
+  };
 }

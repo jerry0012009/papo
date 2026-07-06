@@ -390,7 +390,6 @@ select {
 .attention-card,
 .state-item,
 .wake-note,
-.papo-notice,
 .memory-surface {
   border: 1px solid rgba(31, 36, 33, 0.1);
   border-radius: 8px;
@@ -486,28 +485,11 @@ meter {
 .attention-card,
 .episode-card,
 .wake-note,
-.papo-notice,
 .memory-surface,
 .change-row {
   padding: 12px;
 }
 
-.papo-notice {
-  display: grid;
-  gap: 10px;
-}
-
-.papo-notice-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.papo-notice-actions button {
-  flex: 1 1 118px;
-}
-
-.notification-pill,
 .conversation-summary span {
   border-radius: 999px;
   background: rgba(233, 243, 235, 0.82);
@@ -535,7 +517,6 @@ meter {
 .attention-card p,
 .episode-card p,
 .wake-note p,
-.papo-notice p,
 .memory-surface p,
 .change-row p {
   margin: 8px 0;
@@ -617,20 +598,9 @@ meter {
   font-size: 0.78rem;
 }
 
-.papo-notice {
-  display: grid;
-  gap: 10px;
-  background: #e9f3eb;
-}
-
-.papo-notice span,
 .chat-bubble span {
   color: #69756c;
   font-size: 0.78rem;
-}
-
-.papo-notice button {
-  white-space: nowrap;
 }
 
 .chat-list {
@@ -858,7 +828,7 @@ meter {
   transform: translateX(-50%);
   width: min(calc(100% - 24px), 680px);
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 6px;
   padding: 7px;
   border-radius: 16px;
@@ -884,6 +854,21 @@ meter {
   color: #fffaf0;
 }
 
+.nav button span {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.unread-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #d94b3d;
+  box-shadow: 0 0 0 2px rgba(255, 250, 240, 0.94);
+}
+
 @media (max-width: 430px) {
   .hero {
     grid-template-columns: 1fr;
@@ -895,7 +880,4 @@ meter {
     grid-template-columns: 1fr;
   }
 
-  .papo-notice {
-    grid-template-columns: 1fr;
-  }
 }

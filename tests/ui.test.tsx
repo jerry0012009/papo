@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/web/App";
@@ -10,17 +10,6 @@ describe("App", () => {
   });
 
   it("renders the core mobile-first workbench", async () => {
-    const requestPermission = vi.fn(async () => "granted" as NotificationPermission);
-    vi.stubGlobal(
-      "Notification",
-      class {
-        static permission: NotificationPermission = "default";
-        static requestPermission = requestPermission;
-        close = vi.fn();
-        constructor(_title: string, _options?: NotificationOptions) {}
-      }
-    );
-
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith("/api/provider")) return json({ kind: "fallback", name: "Fallback demo brain", available: true, usesRealModel: false });
@@ -83,11 +72,9 @@ describe("App", () => {
     expect(screen.getByText("会先观察，再决定要不要靠近")).toBeInTheDocument();
     expect(screen.getByText("醒来时")).toBeInTheDocument();
     expect(screen.getByText("我醒来时自己又想到妈妈复查这件事。")).toBeInTheDocument();
-    expect(screen.getByText("Papo 新说")).toBeInTheDocument();
-    expect(screen.getByText("桌面提醒")).toBeInTheDocument();
-    const papoNotice = screen.getByText("Papo 新说").closest("section");
-    expect(papoNotice).toBeTruthy();
-    expect(within(papoNotice as HTMLElement).queryByText("日历照片：妈妈周五复查，需要提前准备病历。")).not.toBeInTheDocument();
+    expect(screen.queryByText("Papo 新说")).not.toBeInTheDocument();
+    expect(screen.queryByText("桌面提醒")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("有未读 Papo 回复")).not.toBeInTheDocument();
     expect(screen.getByText("来自30秒共同片段")).toBeInTheDocument();
     expect(screen.getByText("单次输入")).toBeInTheDocument();
     expect(screen.getByText("陪我一会儿")).toBeInTheDocument();
@@ -98,13 +85,13 @@ describe("App", () => {
     expect(screen.getByText("你还补充了：这里请多想一点")).toBeInTheDocument();
     expect(screen.getByText("好奇心 +8")).toBeInTheDocument();
     expect(screen.getByText("深入倾向 +8")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "桌面提醒" }));
-    expect(requestPermission).toHaveBeenCalledOnce();
-    expect(await screen.findByText("已开提醒")).toBeInTheDocument();
+    expect(screen.queryByText("Papo 新说")).not.toBeInTheDocument();
+    expect(screen.queryByText("桌面提醒")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("有未读 Papo 回复")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "单次输入" }));
     expect(screen.getByText("对话和注意流")).toBeInTheDocument();
+    expect(screen.queryByLabelText("有未读 Papo 回复")).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText("直接告诉 Papo 一件刚发生的事")).toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText("直接告诉 Papo 一件刚发生的事"), "刚刚医生确认复查时间改到周六上午。");
     await userEvent.click(screen.getByRole("button", { name: "说给 Papo" }));

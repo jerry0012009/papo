@@ -8,12 +8,13 @@ export function createCreatureProfile(input: {
   now?: string;
 } = {}): CreatureProfile {
   const now = input.now ?? new Date().toISOString();
+  const userId = input.userId ?? makeId("user");
   const profile: CreatureProfile = {
-    userId: input.userId ?? makeId("user"),
+    userId,
     creatureName: input.creatureName?.trim() || "Papo",
     createdAt: now,
     lastSeenAt: now,
-    state: initialState(),
+    state: initialState(userId),
     episodes: [],
     longTermMemories: seedMemories(now),
     feedbackHistory: [],

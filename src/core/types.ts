@@ -1,6 +1,7 @@
 export type AttentionSource = "button" | "curious_stream";
 export type ActionKind =
   | "observe"
+  | "respond"
   | "ask"
   | "save_episode"
   | "save_long_term"
@@ -65,6 +66,7 @@ export interface ScoreContribution {
     | "emotional_charge"
     | "future_value"
     | "identity_relevance"
+    | "communication_intent"
     | "privacy_risk"
     | "state_bias"
     | "redundancy_penalty"

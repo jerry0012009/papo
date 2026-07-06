@@ -41,7 +41,7 @@ Deferred:
 
 - Vector database / Mem0 integration.
 - PWA and native Android.
-- Background sensing and notifications.
+- Background sensing and native notifications.
 - Full skill/action system.
 
 ## Taste And Architecture Decisions
@@ -53,16 +53,19 @@ Use a mixed harness rather than pure rules or pure LLM.
 Rules own:
 
 - State initialization and clamping.
+- The final action enum and guardrails, including whether a proposed `respond` action is allowed.
 - Multi-user isolation.
 - Baseline attention scoring.
 - Privacy and action guardrails.
 - Memory write/promotion/deletion.
 - Feedback reinforcement.
 - Testable invariants.
+- Minimal fallback repair only when the semantic model is unavailable or fails; keyword heuristics must not be treated as the primary understanding path.
 
 LLM owns:
 
 - Rich semantic interpretation.
+- Structured interaction understanding: user intent, emotional tone, whether Papo should reply now, candidate reply text, and a memory candidate for the shared moment.
 - Visual/audio sensing adapters that compress raw screenshots or recordings into editable life-context segments.
 - Better explanation of why something drew attention.
 - Possible user intent.
@@ -70,7 +73,8 @@ LLM owns:
 - Candidate action suggestions.
 - More natural narration for feedback learning and active emergence.
 
-Guardrails always run after LLM suggestions. LLM output cannot directly mutate state values, delete memory, bypass privacy, or write cross-user data.
+Guardrails always run after LLM suggestions. LLM output cannot directly mutate state values, delete memory, bypass privacy, or write cross-user data. LLM can propose actions such as `respond`, `ask`, `recall`, save, review, or reminders, but rules re-run action guardrails before persistence.
+In the normal production path, LLM structured interaction understanding decides which business flow should be proposed. Rule keywords are allowed only as fallback repair after model unavailability/failure, and that fallback status must be visible in diagnostics.
 LLM narration cannot change state, policy, action, memory ids, or persistence. Emergence narration is accepted only when it stays anchored to a real memory already selected by rules.
 Visual and audio models are treated as `sense` adapters only: they may create `image_summary` and `audio_transcript` text, but they do not choose memories, actions, or state changes. Those generated segments remain user-editable before entering Curious Mode.
 Attention is a conversation phase, not a separate product mode: user/world multimodal inputs enter the conversation timeline first, then the harness decides what Papo attends to, remembers, says, or ignores.
@@ -79,13 +83,13 @@ The user-facing conversation unit should often be a short shared moment, not a s
 Episode memories keep provenance back to their source segment/batch/time/location when available, so a memory card can show the shared moment that gave birth to it.
 Feedback is also conversation input: button taps, typed feedback, and audio-transcribed feedback are recorded in the same timeline before Papo's learning response, then rule-owned state/policy/memory changes apply.
 Forget is two-stage for memories: first feedback lowers the target weight to zero and teaches caution; a later forget on the zero-weight target purges it.
-Local notifications are a perception layer for new Papo utterances, not an action planner: rules decide which persisted `papo` conversation message is newest, the browser permission gate decides whether to notify, and no LLM output can bypass that gate.
+Unread dialogue state is a perception layer for new Papo utterances, not an action planner: rules decide persisted `papo` messages, while the UI only shows a small unread dot on the dialogue entry. Wake notes are presence state and do not create unread notifications.
 
 Harness stages:
 
 1. `sense`: receive button or 30-second multimodal stream input and record it as conversation context.
 2. `attend`: create rule-based candidate attention events.
-3. `interpret`: LLM enriches semantics when available.
+3. `interpret`: LLM creates structured interaction understanding when available, including whether the natural action is to answer the user.
 4. `guardrail`: validate action, privacy, and state boundaries.
 5. `remember`: append episode memory.
 6. `learn`: feedback updates state and memory weight.
@@ -125,9 +129,11 @@ ClawRouter:
 OpenRouter multimodal routing:
 
 - Keep text, vision, and audio model ids separately configurable.
-- Default text model remains low-cost and stable for the semantic brain.
+- OpenRouter is the preferred production semantic provider when an `OPENROUTER_API_KEY` is present; Mimo and generic OpenAI-compatible providers are fallback provider families.
+- Default text model is `openai/gpt-5.5` for the semantic brain. Cheaper models may be set explicitly per deployment, but the demo should not silently present fallback output as evidence of lifeform quality.
 - Default vision/audio model ids prefer a Flash-class multimodal model for cost-effective sensing; deployments can override them per account capability.
 - Provider failures return editable fallback segments so the life loop stays demonstrable without raw model success.
+Fallback provider is a degradation path only. It must be visible in health/provider diagnostics and should never be treated as proof that Papo truly understood the user.
 
 ## Code Map
 
@@ -186,7 +192,7 @@ Done:
   - Experimental voice companionship in Curious Mode: browser speech recognition can listen up to 3 minutes and split transcripts every 30 seconds into `audio_transcript` segments.
   - OpenRouter/OpenAI-compatible visual sensing endpoint: uploaded screenshots are summarized into editable `image_summary` segments.
   - OpenRouter/OpenAI-compatible audio sensing endpoint: uploaded recordings are transcribed into editable `audio_transcript` segments.
-  - Papo conversation timeline: multimodal inputs plus wake notes, attention responses, feedback learning, and active emergence are persisted into `conversation`, with a Home notification and a dedicated dialogue history page.
+  - Papo conversation timeline: multimodal inputs plus wake notes, attention responses, feedback learning, and active emergence are persisted into `conversation`, with a dedicated dialogue history page.
   - Curious Mode continuous recording: MediaRecorder records up to 3 minutes, requests audio chunks every 30 seconds, sends chunks to `/api/audio-transcript`, and keeps browser speech recognition only as a local fallback transcript source.
   - Multimodal 30-second batches: text, photo summaries, and audio transcripts carry `batchId` and `observedAt`; photo uploads also carry available browser geolocation so later memories can include time/place.
   - Papo is now rendered as a stateful cartoon Shiba Inu SVG: triangular ears, curled tail, urajiro face/chest, breathing, blinking, tired/alert/attached/careful motion states are bound to `CreatureState`.
@@ -196,8 +202,13 @@ Done:
   - Feedback is integrated into the conversation timeline: buttons, typed notes, and audio-transcribed notes become user feedback inputs before Papo replies with a learning note.
   - Feedback records expose rule-owned state and policy deltas so users can see how they are raising Papo.
   - Forget feedback is staged: it first downranks memory weight to zero, then a repeated forget purges the zero-weight target.
-  - Optional browser notifications can be enabled for newly persisted Papo utterances; historical messages and user/world inputs do not trigger "Papo new said" notifications.
+  - New non-wake Papo utterances show a small unread dot on the dialogue tab; entering the dialogue clears it. Wake notes stay in the wake surface and conversation history only.
   - Direct text input now lives in the dialogue page composer, then routes through the Button Capture harness and returns to the same conversation timeline; the old standalone Button Capture page was removed from the user-facing navigation.
+  - Direct calls such as asking Papo to speak now map to a first-class `respond` action, so the harness can choose to answer before it asks, saves, recalls, or stays quiet.
+  - Semantic brain output now includes structured interaction understanding and can update the episode response plus memory candidate text before rule-owned persistence completes.
+  - Direct-call keyword handling was moved out of the primary action selector and into fallback repair only; successful LLM runs own the proposed interaction/action path.
+  - Provider defaults now prefer OpenRouter `openai/gpt-5.5` when configured, with `.env` support for local/production deployment and visible fallback diagnostics.
+  - Initial creature state has small deterministic per-user variation, and Home state copy is driven by recent wake/conversation/feedback state changes instead of only a static mood label.
 
 Verified:
 
@@ -220,7 +231,7 @@ Verified:
 - Feedback returns a visible learning note.
 - Active emergence reads as inner resurfacing rather than a template reminder.
 - Wake rhythm records an app-open presence event, applies rule-owned time-based state recovery, and can resurface a real user memory after absence.
-- Papo utterances are visible as a latest-message notification and as persisted dialogue history.
+- Papo utterances are visible in persisted dialogue history, and new non-wake replies mark the dialogue tab unread.
 - Curious Mode can create `audio_transcript` segments from real 30-second audio chunks without storing raw audio.
 - Curious Mode can preserve photo upload time/place and batch text/photo/audio as one stream before attention selection.
 - Home renders Papo as an animated Shiba Inu SVG whose visible posture changes with mood, energy, curiosity, attachment, and safety.
@@ -231,6 +242,8 @@ Verified:
 - Feedback text and audio transcript content are persisted as conversation input, and Papo's learning response follows it in the same timeline.
 - Feedback responses include visible state/policy deltas, and forget feedback requires a second click to purge a zero-weight memory.
 - The Home "single input" path opens the dialogue composer, and a submitted text message appears in the same attention/conversation timeline as Papo's response.
+- A direct "say something to me" input selects `respond`, produces a Papo reply, and creates a memory candidate for that small shared moment.
+- Real online model smoke passed through the OpenAI-compatible generic provider with `gpt-5.5`: semantic brain status `applied`, action `respond`, LLM-written reply, and LLM-written memory candidate.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
@@ -241,7 +254,7 @@ Verified:
 
 Next:
 
-1. Add stronger browser visual QA with mobile screenshots for the Shiba Inu avatar, conversation timeline, source-linked episode cards, notification prompt, feedback input, and Curious recording flow.
+1. Add stronger browser visual QA with mobile screenshots for the Shiba Inu avatar, conversation timeline, source-linked episode cards, unread dialogue dot, feedback input, and Curious recording flow.
 2. Tune OpenRouter audio model defaults after testing real account model availability.
 3. Consider a small generated Shiba sprite sheet later if SVG statefulness becomes limiting.
 
@@ -270,7 +283,7 @@ Demo material rule:
 - Curious Mode can segment live recording into audio transcripts.
 - Curious Mode records multimodal input metadata: 30-second batch id, observed time, and photo location when permitted.
 - Papo's visible Shiba Inu SVG avatar reflects state and remains readable on mobile.
-- Conversation timeline treats attention as part of dialogue, and browser notifications only fire for new Papo utterances after explicit permission.
+- Conversation timeline treats attention as part of dialogue, and only non-wake Papo utterances create an unread dialogue indicator.
 - Same-batch multimodal inputs are visible as one shared moment in the conversation timeline.
 - Episode memory provenance links back to the source shared moment where available.
 - Feedback itself is dialogue input, including text and audio transcript feedback, and visible raising deltas are shown after feedback.
