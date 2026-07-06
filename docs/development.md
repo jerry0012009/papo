@@ -212,7 +212,8 @@ Done:
   - Forget feedback is staged: it first downranks memory weight to zero, then a repeated forget purges the zero-weight target.
   - New non-wake Papo utterances show a small unread dot on the dialogue tab; entering the dialogue clears it. Wake notes stay in the wake surface and conversation history only.
   - Conversation bubbles no longer show system-channel labels such as "认真注意后"; Papo replies are shown as Papo speaking, with light context only for user/world inputs.
-  - Memory page no longer defaults to database labels such as `future_review`, batch ids, or numeric weights. It shows "Papo remembers..." language, keeps time/location as part of the shared moment, and puts raw details behind expandable diagnostics.
+  - Memory page no longer defaults to database labels such as `future_review`, batch ids, or numeric weights. It shows Papo's own memory language and keeps time/location as part of the shared moment; raw details belong in Brain/developer diagnostics instead.
+  - Memory page is now treated as Papo's subjective memory surface, not a diagnostics surface: titles, memory text wrappers, familiarity labels, and edit/forget controls use first-person creature language, while raw `kind`/`weight` details stay out of the default page.
   - Active emergence on Home now shows Papo's resurfaced thought plus why it surfaced and which drive brought it back, while technical trace remains in Brain.
   - Home and Demo no longer expose harness trace lines or development backlog cards; technical diagnostics stay in Brain/developer surfaces.
   - Direct text input now lives in the dialogue page composer, then routes through the Button Capture harness and returns to the same conversation timeline; the old standalone Button Capture page was removed from the user-facing navigation.

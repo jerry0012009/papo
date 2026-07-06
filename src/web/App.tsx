@@ -1061,8 +1061,8 @@ function MemoryView(props: {
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={History} title="Papo 记得的事" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一段 Papo 记得的事" />
+        <PanelTitle icon={History} title="我记得的事" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一段我记得的事" />
         {otherMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             {editingId === memory.id ? (
@@ -1083,16 +1083,10 @@ function MemoryView(props: {
                 </div>
               </>
             ) : (
-              <p>{memory.text}</p>
+              <p>{memoryCreatureLine(memory)}</p>
             )}
             <span>{memoryFamiliarityText(memory.weight)} · {memoryKindText(memory.kind)}</span>
-            <details className="brain-details">
-              <summary>记忆细节</summary>
-              <small>
-                {memory.kind} · weight {memory.weight}
-                {memory.consolidatedBecause ? ` · ${memory.consolidatedBecause}` : ""}
-              </small>
-            </details>
+            {memory.consolidatedBecause ? <small>{memoryKeptBecauseText(memory.consolidatedBecause)}</small> : null}
             <div className="memory-actions">
               <button
                 onClick={() => {
@@ -1101,31 +1095,26 @@ function MemoryView(props: {
                 }}
               >
                 <MessageCircle size={16} />
-                帮它改准
+                帮我改准
               </button>
               <button onClick={() => props.onFeedback("forget", memory.id)}>
                 <RefreshCcw size={16} />
-                忘掉
+                {memory.weight <= 0 ? "彻底忘掉" : "先放下"}
               </button>
             </div>
           </article>
         ))}
+        {otherMemories.length ? null : <p className="muted">我还没有把这样的片段长期留下。</p>}
       </div>
       <div className="panel">
-        <PanelTitle icon={Brain} title="Papo 关于自己的小记忆" />
+        <PanelTitle icon={Brain} title="我对自己的小记忆" />
         {selfMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
-            <p>{memory.text}</p>
-            <span>{memoryFamiliarityText(memory.weight)} · 它怎么理解自己</span>
-            <details className="brain-details">
-              <summary>记忆细节</summary>
-              <small>
-                {memory.kind} · weight {memory.weight}
-                {memory.consolidatedBecause ? ` · ${memory.consolidatedBecause}` : ""}
-              </small>
-            </details>
+            <p>{memoryCreatureLine(memory)}</p>
+            <span>{memoryFamiliarityText(memory.weight)} · 我在慢慢认识自己</span>
           </article>
         ))}
+        {selfMemories.length ? null : <p className="muted">我还没有留下关于自己的小理解。</p>}
       </div>
       <div className="panel">
         <PanelTitle icon={Eye} title="刚一起经历过的片段" />
@@ -1577,25 +1566,50 @@ function emergenceDriveText(drive: string) {
 }
 
 function memoryFamiliarityText(weight: number) {
-  if (weight >= 85) return "这段已经很稳了";
-  if (weight >= 65) return "这段它记得比较清楚";
-  if (weight >= 35) return "这段还很新";
-  if (weight <= 0) return "这段已经被放下了";
-  return "这段正在变淡";
+  if (weight >= 85) return "我已经记得很稳了";
+  if (weight >= 65) return "我记得比较清楚";
+  if (weight >= 35) return "这段对我还很新";
+  if (weight <= 0) return "我已经把这段放下了";
+  return "这段在我这里变淡了";
 }
 
 function memoryKindText(kind: CreatureProfile["longTermMemories"][number]["kind"]) {
   const map = {
-    user_preference: "它在学你的偏好",
-    long_theme: "一条反复出现的主题",
-    creature_self_memory: "它关于自己的理解",
-    safety_rule: "它记住的边界",
-    future_review: "以后可能还会回来",
-    relationship: "你们之间的一点关系",
-    habit: "它注意到的习惯",
-    open_question: "还没想完的问题"
+    user_preference: "我在学你喜欢怎样被陪着",
+    long_theme: "这是反复回来的主题",
+    creature_self_memory: "这是我对自己的理解",
+    safety_rule: "我会小心守住这条边界",
+    future_review: "以后我可能还会想起它",
+    relationship: "这是我们之间的一点关系",
+    habit: "我注意到它像一个习惯",
+    open_question: "这是我还没想完的问题"
   };
   return map[kind];
+}
+
+function memoryCreatureLine(memory: CreatureProfile["longTermMemories"][number]) {
+  const rawText = memory.text.trim();
+  if (/^(我|Papo|papo)/.test(rawText)) return rawText;
+  const text = normalizeMemoryText(rawText);
+  const map = {
+    user_preference: `我记得你可能更喜欢：${text}`,
+    long_theme: `我记得这个主题一次次回来：${text}`,
+    creature_self_memory: `我对自己记得：${text}`,
+    safety_rule: `我会小心记着：${text}`,
+    future_review: `我记得以后要回头看看：${text}`,
+    relationship: `我记得我们之间有这一小段：${text}`,
+    habit: `我注意到一个反复出现的小习惯：${text}`,
+    open_question: `我还有个没想完的问题：${text}`
+  };
+  return map[memory.kind];
+}
+
+function memoryKeptBecauseText(reason: string) {
+  return `我当时把它留下，是因为${normalizeMemoryText(reason)}`;
+}
+
+function normalizeMemoryText(text: string) {
+  return text.trim().replace(/[。！？.!?]+$/, "");
 }
 
 function PanelTitle({ icon: Icon, title }: { icon: typeof Brain; title: string }) {

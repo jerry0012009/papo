@@ -442,6 +442,7 @@ select {
 .episode-card small,
 .wake-note span,
 .memory-surface span,
+.memory-surface small,
 .change-row span,
 .muted {
   color: #69756c;
