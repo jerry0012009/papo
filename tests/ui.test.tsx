@@ -105,7 +105,8 @@ describe("App", () => {
     expect(screen.queryByText("当前心情")).not.toBeInTheDocument();
     expect(screen.queryByText(/触发了醒来节律|重新计算/)).not.toBeInTheDocument();
     expect(screen.getByText("刚收到你递来的一小段")).toBeInTheDocument();
-    expect(screen.getByText("它已经接住这一小段，正在把文字、照片或声音放进同一个小情景里听。")).toBeInTheDocument();
+    expect(screen.getByText("我已经接住这一小段，正在把文字、照片或声音放进同一个小情景里听。")).toBeInTheDocument();
+    expect(screen.queryByText("它已经接住这一小段，正在把文字、照片或声音放进同一个小情景里听。")).not.toBeInTheDocument();
     expect(screen.queryByText(/材料|模拟一段信息流|录音分段/)).not.toBeInTheDocument();
     expect(screen.getByText("Papo 抬头看了你一眼")).toBeInTheDocument();
     expect(screen.getByText("我醒来时自己又想到妈妈复查这件事。")).toBeInTheDocument();
@@ -194,7 +195,8 @@ describe("App", () => {
     expect(screen.queryByText(/批次 chat-batch/)).not.toBeInTheDocument();
     expect(screen.getAllByText(/和这一小段世界放在一起/).length).toBeGreaterThan(1);
     expect(screen.getByText("你的反馈")).toBeInTheDocument();
-    expect(screen.getByText(/你在教它/)).toBeInTheDocument();
+    expect(screen.getByText(/你在教我/)).toBeInTheDocument();
+    expect(screen.queryByText(/你在教它/)).not.toBeInTheDocument();
     expect(screen.getAllByText("Papo").length).toBeGreaterThan(1);
     expect(screen.getAllByText("你给 Papo 看了照片")).toHaveLength(2);
     expect(screen.getByText("我刚刚醒着，你一打开我就还在这里。")).toBeInTheDocument();

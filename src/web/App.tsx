@@ -1635,7 +1635,7 @@ function EmergenceCard({ emergence }: { emergence: EmergenceSurface }) {
     <section className="memory-surface active">
       <strong>Papo 自己想起一点</strong>
       <p>{emergence.text}</p>
-      {emergence.whyNow ? <small>为什么这时想起：{emergence.whyNow}</small> : null}
+      {emergence.whyNow ? <small>我为什么这时想起：{emergence.whyNow}</small> : null}
       {emergence.driveSource ? <span>{emergenceDriveText(emergence.driveSource)}</span> : null}
     </section>
   );
@@ -1706,14 +1706,14 @@ function BodySignals({ state }: { state: CreatureState }) {
 }
 
 function mindSignalText(state: CreatureState) {
-  if (state.curiosity > 72) return "会先找最让它在意的一小段";
-  if (state.confidence > 62) return "更敢把自己的理解说出来";
-  if (state.energy < 35) return "会先抱住重点，少说一点";
+  if (state.curiosity > 72) return "我会先找最让我在意的一小段";
+  if (state.confidence > 62) return "我更敢把自己的理解说出来";
+  if (state.energy < 35) return "我会先抱住重点，少说一点";
   return "先听，再决定要不要回应";
 }
 
 function boundarySignalText(state: CreatureState) {
-  if (state.safety > 74) return "会更小心处理隐私和保存";
+  if (state.safety > 74) return "我会更小心处理隐私和保存";
   if (state.arousal > 64) return "对突然出现的动静更敏感";
   return "边界稳定，可以认真靠近";
 }
@@ -1762,14 +1762,14 @@ function privacyFeelingText(risk: number) {
 
 function emergenceDriveText(drive: string) {
   const map: Record<string, string> = {
-    safety: "因为它现在更谨慎",
-    curiosity: "因为它还想继续想",
-    attachment: "因为它想靠近旧片段",
-    rhythm: "因为节律把旧记忆带回来",
-    wake_rhythm: "因为醒来时碰到旧记忆",
-    memory_resonance: "因为新片段碰到旧记忆"
+    safety: "因为我现在更谨慎",
+    curiosity: "因为我还想继续想",
+    attachment: "因为我想靠近旧片段",
+    rhythm: "因为节律把旧记忆带回我这里",
+    wake_rhythm: "因为醒来时碰到我抱着的旧记忆",
+    memory_resonance: "因为新片段碰到我抱着的旧记忆"
   };
-  return map[drive] ?? "因为当前状态把这段带了回来";
+  return map[drive] ?? "因为我现在的状态把这段带了回来";
 }
 
 function memoryFamiliarityText(weight: number) {
@@ -1876,19 +1876,19 @@ function stateSentence(profile: CreatureProfile) {
   const state = profile.state;
   const latest = profile.conversation?.[0];
   const latestChange = profile.stateChanges?.[0];
-  if (latest?.role === "papo" && latest.channel === "feedback") return "你刚刚教过它一次，它会把这种偏好带到后面相似的小片段里。";
-  if (latest?.role === "papo" && latest.channel === "emergence") return "那条旧记忆刚从里面冒出来，它会带着这个方向继续听下一段。";
-  if (latest?.role === "papo" && latest.channel === "curious") return "它刚从一小段世界里挑出自己在意的地方，还没有把所有东西都吞下去。";
-  if (latest?.role === "papo" && latest.channel === "button") return "刚才那句话让它竖起耳朵，正在判断要回应、记住，还是先轻轻问一句。";
-  if (latest?.role === "user" || latest?.role === "world") return "它已经接住这一小段，正在把文字、照片或声音放进同一个小情景里听。";
-  if (latestChange?.reason.includes("button capture")) return "刚才那句话让它竖起耳朵，身体还留着一点被你叫住后的反应。";
-  if (latestChange?.reason.includes("feedback")) return "它刚被你养成了一点，之后遇到相似片段会更接近你的意思。";
-  if (latestChange?.reason.includes("wake")) return "这次重新见到你以后，它先稳住自己，再把耳朵留给新的小片段。";
-  if (state.energy < 35) return "它会短一点回应，把重要片段先抱住，等有力气再展开。";
-  if (state.safety > 74) return "它会先闻一闻边界，隐私和长期保存都会更谨慎。";
-  if (state.curiosity > 72) return "它的耳朵现在更容易被新主题牵动，但还是会挑最值得在意的那一小段。";
-  if (state.attachment > 68) return "它更想把你现在给它的片段，和你们以前经历过的小事连起来。";
-  return "它正安静陪着你，先观察，再决定要不要靠近。";
+  if (latest?.role === "papo" && latest.channel === "feedback") return "你刚刚教过我一次，我会把这种偏好带到后面相似的小片段里。";
+  if (latest?.role === "papo" && latest.channel === "emergence") return "那条旧记忆刚从我里面冒出来，我会带着这个方向继续听下一段。";
+  if (latest?.role === "papo" && latest.channel === "curious") return "我刚从一小段世界里挑出自己在意的地方，还没有把所有东西都吞下去。";
+  if (latest?.role === "papo" && latest.channel === "button") return "刚才那句话让我竖起耳朵，我正在判断要回应、记住，还是先轻轻问一句。";
+  if (latest?.role === "user" || latest?.role === "world") return "我已经接住这一小段，正在把文字、照片或声音放进同一个小情景里听。";
+  if (latestChange?.reason.includes("button capture")) return "刚才那句话让我竖起耳朵，身体还留着一点被你叫住后的反应。";
+  if (latestChange?.reason.includes("feedback")) return "我刚被你养成了一点，之后遇到相似片段会更接近你的意思。";
+  if (latestChange?.reason.includes("wake")) return "这次重新见到你以后，我先稳住自己，再把耳朵留给新的小片段。";
+  if (state.energy < 35) return "我会短一点回应，把重要片段先抱住，等有力气再展开。";
+  if (state.safety > 74) return "我会先闻一闻边界，隐私和长期保存都会更谨慎。";
+  if (state.curiosity > 72) return "我的耳朵现在更容易被新主题牵动，但还是会挑最值得在意的那一小段。";
+  if (state.attachment > 68) return "我更想把你现在给我的片段，和我们以前经历过的小事连起来。";
+  return "我正安静陪着你，先观察，再决定要不要靠近。";
 }
 
 function restingHeadline(state: CreatureState) {
@@ -1912,8 +1912,8 @@ function dogMotionText(state: CreatureState) {
 function dogSenseText(state: CreatureState) {
   if (state.arousal > 64) return "现在对新动静很敏感";
   if (state.confidence > 62) return "表达更确定一点";
-  if (state.safety > 74) return "会先保护隐私和边界";
-  return "会先观察，再决定要不要靠近";
+  if (state.safety > 74) return "我会先保护隐私和边界";
+  return "我会先观察，再决定要不要靠近";
 }
 
 function actionText(action: AttentionEvent["suggestedAction"]) {
@@ -1953,7 +1953,7 @@ function messageTitle(message: CreatureProfile["conversation"][number]) {
 
 function messageContextText(message: CreatureProfile["conversation"][number]) {
   if (message.role === "papo") return "";
-  if (message.channel === "feedback") return "你在教它";
+  if (message.channel === "feedback") return "你在教我";
   if (message.channel === "curious") return "和这一小段世界放在一起";
   return "说给 Papo";
 }

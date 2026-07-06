@@ -152,10 +152,10 @@ function profileFixture() {
         },
         creatureResponse: "我把这张日历照片和你刚才的担心放在一起听了。",
         creatureExperience: {
-          earReason: "这段让我竖起耳朵，因为它是你很容易拖到最后的重要家事。",
+          earReason: "这段让我竖起耳朵，因为这是你很容易拖到最后的重要家事。",
           rememberedScene: "我想起你之前也说过，重要家事容易被压到睡前。",
           actionFeeling: "我更想先轻轻提醒你把资料提前准备好。",
-          saveFeeling: "它值得先成为一段共同经历，等你的反馈决定要不要长期留下。"
+          saveFeeling: "这件事值得先成为一段共同经历，等你的反馈决定要不要长期留下。"
         },
         actionDecision: {
           action: "ask",
