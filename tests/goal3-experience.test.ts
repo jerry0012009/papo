@@ -44,7 +44,7 @@ describe("goal 3 creature experience", () => {
     const emergence = createActiveEmergence(profile);
 
     expect(emergence.message).toContain("我想起了");
-    expect(emergence.message).toContain("不是提醒");
+    expect(emergence.message).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|我浮现的是/);
     expect(emergence.message).not.toContain("我浮现的是");
   });
 });

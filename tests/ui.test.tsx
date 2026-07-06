@@ -184,20 +184,20 @@ describe("App", () => {
     expect(screen.getByText("我刚刚醒着，你一打开我就还在这里。")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "记忆" }));
-    expect(screen.getByText("Papo 抱着的小事")).toBeInTheDocument();
-    expect(screen.getByText("这里不是资料库，是 Papo 现在还抱着的共同小片段。")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("找找 Papo 抱着哪一段")).toBeInTheDocument();
-    expect(screen.getByText("Papo 对自己的小理解")).toBeInTheDocument();
-    expect(screen.getByText("刚和 Papo 过的小片段")).toBeInTheDocument();
-    expect(screen.getByText("我记得以后要回头看看：妈妈周五复查，需要提前准备病历")).toBeInTheDocument();
-    expect(screen.getByText("我正在学习注意。")).toBeInTheDocument();
-    expect(screen.getByText((_, element) => element?.textContent === "我记得比较清楚，以后我可能还会想起它。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "帮 Papo 记准" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "让它先放下" })).toBeInTheDocument();
+    expect(screen.getByText("我还抱着的小事")).toBeInTheDocument();
+    expect(screen.getByText("这里放着我和你一起攒下的小片段，我会按自己的小脑袋慢慢抱稳。")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("找找我抱着哪一段")).toBeInTheDocument();
+    expect(screen.getByText("我对自己的小理解")).toBeInTheDocument();
+    expect(screen.getByText("刚一起过的小片段")).toBeInTheDocument();
+    expect(screen.getByText("这件以后会回来的小事，我先叼在身边：妈妈周五复查，需要提前准备病历")).toBeInTheDocument();
+    expect(screen.getByText("我对自己留下一点小理解：我正在学习注意")).toBeInTheDocument();
+    expect(screen.getByText((_, element) => element?.textContent === "我记得比较清楚。它以后可能会轻轻拽我一下。")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "帮我记准" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "帮我先放下" })).toBeInTheDocument();
     expect(screen.queryByText("future_review · 权重 80")).not.toBeInTheDocument();
     expect(screen.queryByText("future_review · weight 80")).not.toBeInTheDocument();
     expect(screen.queryByText("记忆细节")).not.toBeInTheDocument();
-    expect(screen.queryByText(/memory_resonance|scoreBreakdown|decisionTrace|weight \d|confidence \d|细节记录/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/资料库|memory_resonance|scoreBreakdown|decisionTrace|weight \d|confidence \d|细节记录/)).not.toBeInTheDocument();
     expect(screen.getAllByText("来自半分钟里的一小段").length).toBeGreaterThan(0);
     expect(screen.queryByText(/批次 manual-1/)).not.toBeInTheDocument();
 

@@ -39,10 +39,10 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   expect(chatScreenshot.byteLength).toBeGreaterThan(30_000);
 
   await page.getByRole("button", { name: "记忆" }).click();
-  await expect(page.getByText("Papo 抱着的小事")).toBeVisible();
-  await expect(page.getByText("我记得以后要回头看看：妈妈周五复查，需要提前准备病历")).toBeVisible();
-  await expect(page.getByRole("button", { name: "帮 Papo 记准" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "让它先放下" })).toBeVisible();
+  await expect(page.getByText("我还抱着的小事")).toBeVisible();
+  await expect(page.getByText("这件以后会回来的小事，我先叼在身边：妈妈周五复查，需要提前准备病历")).toBeVisible();
+  await expect(page.getByRole("button", { name: "帮我记准" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "帮我先放下" })).toBeVisible();
   await expect(page.getByText("来自半分钟里的一小段")).toBeVisible();
 
   await page.getByRole("button", { name: "陪我" }).click();

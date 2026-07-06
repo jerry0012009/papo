@@ -96,10 +96,10 @@ export async function enrichEmergenceNarration(
 
 约束：
 - 只改写 message，不要改变 state、driveSource、relatedMemoryIds、memoryId 或任何记忆内容。
-- 必须解释为什么现在浮现，以及下一次它会带着什么倾向去注意。
+- 必须解释为什么这时想起，以及它接下来会怎样听/靠近新的片段。
 - 如果有 related memory，必须引用这条真实记忆里的具体内容，不要编造新事实。
 - 不要提数据库、字段、开发过程、投资人、harness、GitHub、nginx。
-- 不要写成提醒事项，不要使用“我浮现的是”。
+- 不要写成提醒事项，不要使用“我浮现的是”“不是提醒”“内在倾向”“下一次你给我信息流”。
 - 220 字以内。
 
 返回严格 JSON：
@@ -122,7 +122,7 @@ ${JSON.stringify(profile.state)}
 `
     );
     const parsed = emergenceNarrationSchema.safeParse(raw);
-    if (!parsed.success || !isSafeCreatureText(parsed.data.message) || parsed.data.message.includes("我浮现的是")) {
+    if (!parsed.success || !isSafeCreatureText(parsed.data.message) || hasTemplatedEmergenceText(parsed.data.message)) {
       return withText(emergence);
     }
     if (memory && !referencesMemory(parsed.data.message, memory)) return withText(emergence);
@@ -149,6 +149,10 @@ function withText<T extends EmergenceRecord & { text?: string; memoryId?: string
 
 function isSafeCreatureText(text: string) {
   return !/(投资人|开发|harness|GitHub|nginx|prompt|数据库字段|字段)/i.test(text);
+}
+
+function hasTemplatedEmergenceText(text: string) {
+  return /(我浮现的是|不是提醒|内在倾向|下一次你给我信息流|新的信息流)/.test(text);
 }
 
 function referencesMemory(message: string, memory: LongTermMemory) {

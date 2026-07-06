@@ -24,10 +24,10 @@ export function createMemoryResonanceEmergence(
     id: makeId("emergence"),
     at: now,
     kind: "memory_resonance",
-    whyNow: "当前 attention event 和旧记忆发生共振。",
+    whyNow: "刚才的新片段碰到了这条旧记忆。",
     relatedMemoryIds: [memory.id],
     driveSource: "memory_resonance",
-    message: `我刚才自己又想起一件旧事：${summarizeText(memory.text, 96)}。它浮现出来，是因为新的注意事件又碰到了同一个主题。所以下次遇到类似片段时，我会先找它和旧经历的关系，而不是急着总结全部。`,
+    message: `你刚递来的这一小段碰到了旧气味，我又想起了：${emergenceMemoryText(memory.text, 96)}。我没有急着把它当成新事，而是先把旧片段和现在放在一起听。`,
     ruleTrace: [`event=${event.id}`, `memory=${memory.id}`, "trigger=related_memory"]
   };
   profile.emergenceHistory.unshift(record);
@@ -46,7 +46,7 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
       now,
       kind: "drive_based",
       memory: safetyMemory ?? generalMemory,
-      whyNow: "我的安全感和隐私敏感度比较高，所以先浮现需要谨慎处理的规则。",
+      whyNow: "我现在更在意边界，所以先碰到需要小心保存的旧事。",
       driveSource: "safety",
       messagePrefix: "我现在比较谨慎"
     });
@@ -58,7 +58,7 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
       now,
       kind: "drive_based",
       memory: futureMemory ?? generalMemory,
-      whyNow: "我的好奇心或深入倾向升高，所以浮现一个还没想完的问题。",
+      whyNow: "我还有一点没想完，所以这条旧记忆先从脑袋里冒出来。",
       driveSource: "curiosity",
       messagePrefix: "我有点想继续想"
     });
@@ -70,7 +70,7 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
       now,
       kind: "drive_based",
       memory: generalMemory,
-      whyNow: "我的依恋度或回忆倾向较高，所以把和你共同养成我的记忆带回来。",
+      whyNow: "我现在更想靠近你，所以先贴近一条我们一起留下的旧事。",
       driveSource: "attachment",
       messagePrefix: "我想靠近我们之前反复提过的主题"
     });
@@ -87,7 +87,7 @@ export function createRhythmEmergence(profile: CreatureProfile, now = new Date()
     now,
     kind: "rhythm",
     memory: stale,
-    whyNow: "用户打开了我现在在想什么，节律触发让我从旧记忆里挑一条很久没浮现的内容。",
+    whyNow: "你来看我在想什么时，我安静的节律先碰到一条很久没回来的旧记忆。",
     driveSource: "rhythm",
     messagePrefix: "我刚才安静地翻到一条旧记忆"
   });
@@ -107,16 +107,16 @@ function buildRecord(input: {
       id: makeId("emergence"),
       at: input.now,
       kind: input.kind,
-      whyNow: `${input.whyNow} 但我还没有和你攒出足够稳定的共同记忆，所以这次不假装想起旧事。`,
+      whyNow: `${input.whyNow} 但我还没有和你攒出足够稳定的共同记忆，所以这次不装作想起旧事。`,
       relatedMemoryIds: [],
       driveSource: input.driveSource,
-      message: `${input.messagePrefix}，但我还没有和你攒出足够稳定的共同记忆，所以这次先不假装想起旧事。我会把耳朵留给下一段你递给我的世界，等真的有一小段值得留下时再把它带回来。`,
+      message: `${input.messagePrefix}，但我还没有和你攒出足够稳定的共同记忆，所以这次先不装作想起旧事。我会把耳朵留给下一段你递来的世界，等真的有一小段值得留下时再把它带回来。`,
       ruleTrace: [`kind=${input.kind}`, `drive=${input.driveSource}`, "memory=none", "shared_memory=none"]
     };
   }
 
   input.memory.lastReferencedAt = input.now;
-  const memoryText = summarizeText(input.memory.text, 100);
+  const memoryText = emergenceMemoryText(input.memory.text, 100);
   return {
     id: makeId("emergence"),
     at: input.now,
@@ -124,9 +124,29 @@ function buildRecord(input: {
     whyNow: input.whyNow,
     relatedMemoryIds: input.memory ? [input.memory.id] : [],
     driveSource: input.driveSource,
-    message: `${input.messagePrefix}，所以我想起了：${memoryText}。这不是提醒，而是我当前的内在倾向在把旧片段带回来；下一次你给我信息流时，我会带着这个倾向去注意。`,
+    message: memoryBackMessage(input.driveSource, input.messagePrefix, memoryText),
     ruleTrace: [`kind=${input.kind}`, `drive=${input.driveSource}`, input.memory ? `memory=${input.memory.id}` : "memory=none"]
   };
+}
+
+function memoryBackMessage(driveSource: string, messagePrefix: string, memoryText: string) {
+  if (driveSource === "safety") {
+    return `我现在靠近得慢一点，所以我想起了：${memoryText}。这件小事让我先把边界抱紧些，再听你接下来递来的片段。`;
+  }
+  if (driveSource === "curiosity") {
+    return `我还没把这件事想完，所以我想起了：${memoryText}。如果你继续说，我会先听它和现在有什么关系。`;
+  }
+  if (driveSource === "attachment") {
+    return `我有点想靠近我们以前这件小事，所以我想起了：${memoryText}。它让我听新片段时先找你真正放不下的地方。`;
+  }
+  if (driveSource === "rhythm") {
+    return `我安静了一会儿，脑袋里先碰到这件小事，我想起了：${memoryText}。它像一小块旧气味，让我现在更容易注意相似的生活细节。`;
+  }
+  return `${messagePrefix}，所以我想起了：${memoryText}。我会把这段旧小事贴近一点，再听你接下来递来的东西。`;
+}
+
+function emergenceMemoryText(text: string, max: number) {
+  return summarizeText(text, max).replace(/[。！？.!?]+$/, "");
 }
 
 function topMemory(profile: CreatureProfile, kind?: LongTermMemory["kind"]) {

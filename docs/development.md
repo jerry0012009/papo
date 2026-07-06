@@ -90,6 +90,7 @@ Active emergence treats zero-weight memories as unavailable: a memory that has b
 Active emergence must not treat seed self-memory as a shared old experience. A memory produced from a real episode may support emergence even if its kind is `creature_self_memory`; if no positive-weight shared memory exists, Papo may express readiness or inner state, but it must not pretend to remember an old moment.
 Unread dialogue state is a perception layer for new Papo utterances, not an action planner: rules decide persisted `papo` messages, while the UI only shows a small unread dot on the dialogue entry. Wake notes are presence state and do not create unread notifications.
 Internal channel names, memory kinds, batch ids, and numeric weights are developer facts. User-facing dialogue and memory pages should default to natural creature language; raw `channel`, `kind`, `batchId`, and `weight` belong in details or Brain views.
+The memory page is Papo's subjective remembering surface. It should use first-person creature language for what Papo is holding, how familiar the memory feels, why it kept the moment, and how the user can help it remember accurately or let go. Hiding technical fields is necessary but not sufficient UX.
 Harness traces and implementation backlog belong to Brain/development docs, not the Home or Demo experience. The user-facing path should show what Papo noticed, remembered, learned, or wondered, not pipeline step names such as `sense` or `semantic`.
 User-facing pages should not label the companionship flow as `Curious Mode` or expose `image_summary` / `audio_transcript`; use "陪我看一小段世界", "照片", "录音转写", "小片段", and "这一小段" language instead. Keep the raw type names in code, API contracts, tests, and Brain diagnostics only.
 
@@ -244,6 +245,8 @@ Done:
   - User-facing attention and episode cards no longer expose score contributions, numeric confidence, weight, or decision trace details. Those remain in Brain diagnostics while the default cards show Papo's attention strength, caution, memory, action, and save feeling in creature language.
   - Dialogue and shared-moment pages no longer call the user path an "attention flow" or "attention material"; they use "和 Papo 的小日常", "你递来的小片段", and "这一小段" so the interaction reads as a shared experience instead of pipeline input.
   - Browser visual QA now runs in real Chromium on desktop and mobile viewports. It screenshots the Shiba avatar, Home, and conversation surfaces, and verifies the unread dot, dialogue timeline, source-linked memory card, feedback input, and 3-minute listening entry render without bottom-nav overlap.
+  - Active emergence and wake resurfacing fallback language no longer uses "不是提醒", "内在倾向", or "下一次你给我信息流" templates. Rule fallback now describes Papo remembering a selected real memory and how that memory changes the way it listens next.
+  - The memory page now uses first-person creature memory language across titles, search, memory type/familiarity copy, retention reason, and edit/forget controls, instead of third-person management copy.
 
 Verified:
 
@@ -298,6 +301,8 @@ Verified:
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Guided Demo Mode's two-creature section displays how feedback changed their behavior and personality on the same input without exposing policy numbers.
 - `npm run test:e2e`: Playwright Chromium desktop/mobile visual smoke passes for the Shiba avatar, conversation timeline, source-linked episode card, unread dialogue dot, feedback input, and Curious recording entry.
+- Tests protect active emergence and wake resurfacing from template-reminder phrases such as "不是提醒", "内在倾向", and "下一次你给我信息流".
+- UI and visual smoke protect the memory page's first-person creature voice and ensure raw memory diagnostics stay out of the default surface.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`

@@ -105,13 +105,17 @@ function createWakeEmergence(
     id: makeId("emergence"),
     at: now,
     kind: "rhythm",
-    whyNow: `用户离开了 ${elapsedMinutes} 分钟后重新打开 app，节律让我从真实长期记忆里带回一条。`,
+    whyNow: `你离开了 ${elapsedMinutes} 分钟后回来，我醒来的节律先碰到这条真实旧记忆。`,
     relatedMemoryIds: [memory.id],
     driveSource: "wake_rhythm",
-    message: `我醒来时自己又想到：${summarizeText(memory.text, 92)}。它不是提醒，是我隔了一阵以后先碰到的旧片段；下一次你给我新的信息流时，我会带着这条记忆去注意相关细节。`,
+    message: `我醒来时又碰到这件小事，我想起了：${wakeMemoryText(memory.text)}。它像刚闻到的一点旧气味，让我现在更容易留意相似的生活细节。`,
     ruleTrace: [`wake=${wakeId}`, `memory=${memory.id}`, `elapsed_minutes=${elapsedMinutes}`, "trigger=app_wake"]
   };
   profile.emergenceHistory.unshift(record);
   profile.emergenceHistory = profile.emergenceHistory.slice(0, 30);
   return record;
+}
+
+function wakeMemoryText(text: string) {
+  return summarizeText(text, 92).replace(/[。！？.!?]+$/, "");
 }

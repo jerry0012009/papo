@@ -131,6 +131,7 @@ describe("creature core", () => {
     expect(profile.wakeHistory[0].id).toBe(wake.id);
     expect(wake.message).toContain("醒来");
     expect(wake.innerThought).toContain("妈妈");
+    expect(wake.innerThought).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|新的信息流/);
     expect(wake.relatedMemoryIds).toEqual(["ltm_family_review"]);
     expect(profile.emergenceHistory[0].id).toBe(wake.emergenceId);
     expect(profile.emergenceHistory[0].relatedMemoryIds).toEqual(["ltm_family_review"]);
@@ -175,7 +176,7 @@ describe("creature core", () => {
 
     expect(emergence.relatedMemoryIds).toEqual([]);
     expect(emergence.memoryId).toBeUndefined();
-    expect(emergence.text).toContain("不假装想起旧事");
+    expect(emergence.text).toContain("不装作想起旧事");
     expect(emergence.text).not.toContain("所以我想起了");
   });
 
@@ -188,6 +189,7 @@ describe("creature core", () => {
 
     expect(emergence.memoryId).toBe(profile.longTermMemories.find((memory) => memory.sourceEpisodeId)?.id);
     expect(emergence.text).toContain("我想起了");
+    expect(emergence.text).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|我浮现的是/);
   });
 
   it("active emergence does not resurface a memory after forget downranks it to zero", () => {
