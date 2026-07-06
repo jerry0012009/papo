@@ -144,6 +144,8 @@ describe("App", () => {
     expect(await screen.findByText("准备一起交给 Papo 的这一小段")).toBeInTheDocument();
     expect(screen.getByDisplayValue("复查照片.png")).toBeInTheDocument();
     expect(screen.getByDisplayValue("照片里是周五复查的日历备注，写着提前准备病历。")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "照片" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText("直接告诉 Papo 一件刚发生的事"), "这张照片就是刚说的复查。");
     await userEvent.click(screen.getByRole("button", { name: "让 Papo 听听" }));
     await waitFor(() => expect(curiousRequest?.segments?.map((segment) => segment.kind)).toEqual(["text", "image_summary"]));
@@ -164,6 +166,8 @@ describe("App", () => {
     expect(screen.queryByText("Curious Mode")).not.toBeInTheDocument();
     expect(screen.queryByText("Curious 录音感知")).not.toBeInTheDocument();
     expect(screen.queryByText(/image_summary|audio_transcript/)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "文字" }).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "对话" }));
     expect(screen.getByText("和 Papo 的小日常")).toBeInTheDocument();
@@ -200,6 +204,8 @@ describe("App", () => {
     expect(screen.queryByText(/资料库|memory_resonance|scoreBreakdown|decisionTrace|weight \d|confidence \d|细节记录/)).not.toBeInTheDocument();
     expect(screen.getAllByText("来自半分钟里的一小段").length).toBeGreaterThan(0);
     expect(screen.queryByText(/批次 manual-1/)).not.toBeInTheDocument();
+    expect(screen.queryByText("来源细节")).not.toBeInTheDocument();
+    expect(screen.queryByText(/batch manual-1|segment segment-photo/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "脑态" }));
     expect(screen.getByText("最近变化")).toBeInTheDocument();

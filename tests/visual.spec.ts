@@ -44,6 +44,8 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByRole("button", { name: "帮我记准" })).toBeVisible();
   await expect(page.getByRole("button", { name: "帮我先放下" })).toBeVisible();
   await expect(page.getByText("来自半分钟里的一小段")).toBeVisible();
+  await expect(page.getByText("来源细节")).toHaveCount(0);
+  await expect(page.getByText(/batch life-batch-1|segment photo-review/)).toHaveCount(0);
 
   await page.getByRole("button", { name: "陪我" }).click();
   await expect(page.getByText("陪我看一小段世界")).toBeVisible();
@@ -51,6 +53,8 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByRole("button", { name: "开始听 3 分钟" })).toBeVisible();
   await expect(page.getByText("加一张照片")).toBeVisible();
   await expect(page.getByText("加一段录音")).toBeVisible();
+  await expect(page.getByRole("combobox")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "照片" }).first()).toBeVisible();
   await expect(page.getByText("Curious Mode")).toHaveCount(0);
 });
 

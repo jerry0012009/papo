@@ -1,19 +1,19 @@
 # Papo AI 小动物 Demo
 
-Papo 是一个 mobile-first Demo，用最小可行方式展示一个有注意、动力、情景记忆、反馈强化和行动选择的 AI companion。
+Papo 是一个 mobile-first Demo，用最小可行方式展示一只住在手机里的 AI 小动物：它会注意、会记住、会被反馈养成，也会在之后自己想起一件旧事。
 
-当前版本包含 Creature Brain v0.2：Curious Session 审计、可解释 action selection、反馈策略学习、记忆巩固候选，以及三类主动浮现机制。
+当前版本包含 Creature Brain v0.2：可解释注意选择、反馈策略学习、情景记忆巩固候选，以及三类主动浮现机制。
 
-Goal 3 adds a lighter Demo Mode and creature-facing experience language. Default demo inputs use everyday life context, not Papo development notes.
+Goal 3 adds a lighter guided demo and creature-facing experience language. Default demo inputs use everyday life context, not Papo development notes.
 
-Curious Mode also includes an experimental voice companionship control: in supported browsers it listens for up to 3 minutes and turns speech recognition output into 30-second `audio_transcript` segments. Raw audio is not stored.
+“陪我一会儿” includes an experimental voice companionship control: in supported browsers it listens for up to 3 minutes and turns speech into editable 30-second life fragments. Raw audio is not stored.
 Server-side audio sensing uses provider-specific routes: OpenRouter/Mimo may use multimodal chat when the account supports audio input, while generic OpenAI-compatible providers use `/audio/transcriptions` with a transcription model.
 
 ## 生命体 Agent Harness
 
 Demo 采用混合 harness，而不是纯聊天或纯规则：
 
-1. Sense：把 button 或 curious stream 输入转成 observation。
+1. Sense：把对话、照片、录音或 30 秒共同片段转成 observation。
 2. Attend：规则层先生成候选 attention event，保证可解释和可测试。
 3. Interpret：有 Mimo/OpenRouter/通用 API 时，LLM 语义脑会改进“它注意到了什么、为什么、用户可能在做什么、适合怎样回应”。
 4. Guardrail：规则层检查隐私、精力、状态范围和行动合法性。
@@ -24,8 +24,8 @@ Demo 采用混合 harness，而不是纯聊天或纯规则：
 规则负责生命体的骨架和边界：
 
 - 小动物状态初始化和状态范围约束
-- Button Capture 的基础 attention event
-- Curious Mode 的基础显著性打分
+- 直接对话的基础 attention event
+- 多段生活片段的基础显著性打分
 - 行动选择护栏
 - 情景记忆与长期记忆写入
 - 用户反馈对状态和记忆权重的影响
@@ -98,8 +98,8 @@ npm run test:e2e
 
 ## 3 分钟演示脚本
 
-1. 打开首页，选择或创建一个小动物，看状态和当前心情。
-2. 在 Button Capture 输入一段创业想法，观察 attention event 和情景记忆卡。
-3. 点“记住”和“理解对了”，看状态变化与长期记忆。
-4. 打开 Curious Mode，输入多段信息流，让它主动挑出 1-3 个重点。
-5. 点“它现在在想什么”，看它基于旧记忆主动浮现。
+1. 打开首页，选择或创建一只 Papo，看它现在的身体信号和正在抱着的状态。
+2. 进入“对话”，用文字、照片或录音递给它一件刚发生的小事，看它是否选择回应、记下或追问。
+3. 对它的理解点“记住”“继续想”或“这次不用”，看它马上说出自己学到了什么。
+4. 打开“陪我”，给它 8 段生活片段或听 3 分钟，让它只认真盯住 1-3 个重点。
+5. 打开“演示”，一键跑完“它会注意、会被养成、会主动想起”的最小生命闭环。

@@ -990,11 +990,7 @@ function CuriousView(props: {
           <div className="segment-editor" key={segment.id}>
             <div className="segment-row">
               <input value={segment.label} onChange={(event) => updateSegment(index, { label: event.target.value })} />
-              <select value={segment.kind} onChange={(event) => updateSegment(index, { kind: event.target.value as SegmentKind })}>
-                <option value="text">文字</option>
-                <option value="image_summary">照片</option>
-                <option value="audio_transcript">录音转写</option>
-              </select>
+              <SegmentKindPicker value={segment.kind} onChange={(kind) => updateSegment(index, { kind })} />
             </div>
             <textarea value={segment.content} onChange={(event) => updateSegment(index, { content: event.target.value })} rows={4} />
           </div>
@@ -1094,11 +1090,7 @@ function ChatView(props: {
                 <article className="staged-segment" key={segment.id}>
                   <div className="segment-row">
                     <input value={segment.label} onChange={(event) => updateStagedSegment(index, { label: event.target.value })} />
-                    <select value={segment.kind} onChange={(event) => updateStagedSegment(index, { kind: event.target.value as SegmentKind })}>
-                      <option value="text">文字</option>
-                      <option value="image_summary">照片</option>
-                      <option value="audio_transcript">录音转写</option>
-                    </select>
+                    <SegmentKindPicker value={segment.kind} onChange={(kind) => updateStagedSegment(index, { kind })} />
                   </div>
                   <textarea value={segment.content} onChange={(event) => updateStagedSegment(index, { content: event.target.value })} rows={3} />
                   <button onClick={() => removeStagedSegment(index)} disabled={props.busy}>
@@ -1139,6 +1131,30 @@ function ChatView(props: {
         )}
       </div>
     </section>
+  );
+}
+
+function SegmentKindPicker({ value, onChange }: { value: SegmentKind; onChange: (kind: SegmentKind) => void }) {
+  const options: Array<{ kind: SegmentKind; label: string; icon: typeof MessageCircle }> = [
+    { kind: "text", label: "文字", icon: MessageCircle },
+    { kind: "image_summary", label: "照片", icon: ImagePlus },
+    { kind: "audio_transcript", label: "录音", icon: Mic }
+  ];
+  return (
+    <div className="segment-kind-picker" aria-label="这一小段的样子">
+      {options.map((option) => (
+        <button
+          key={option.kind}
+          type="button"
+          className={value === option.kind ? "active" : ""}
+          aria-pressed={value === option.kind}
+          onClick={() => onChange(option.kind)}
+        >
+          <option.icon size={15} />
+          {option.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -1568,16 +1584,6 @@ function EpisodeSourceMoment({ episode, messages, compact }: { episode: EpisodeM
     <div className={`episode-source ${compact ? "compact" : ""}`}>
       <strong>{title}</strong>
       {momentParts.length ? <small>{momentParts.join(" · ")}</small> : null}
-      {!compact && (episode.sourceBatchId || episode.sourceSegmentId) ? (
-        <details className="brain-details">
-          <summary>来源细节</summary>
-          <small>
-            {[episode.sourceBatchId ? `batch ${episode.sourceBatchId}` : "", episode.sourceSegmentId ? `segment ${episode.sourceSegmentId}` : ""]
-              .filter(Boolean)
-              .join(" · ")}
-          </small>
-        </details>
-      ) : null}
       {!compact && messages.length ? (
         <div className="episode-source-list">
           {messages.map((message) => (

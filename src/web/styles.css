@@ -843,7 +843,36 @@ meter {
 }
 
 .segment-row {
-  grid-template-columns: 1fr 120px;
+  grid-template-columns: 1fr minmax(190px, 0.72fr);
+  align-items: center;
+}
+
+.segment-row input {
+  min-width: 0;
+}
+
+.segment-kind-picker {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  min-width: 0;
+}
+
+.segment-kind-picker button {
+  min-width: 0;
+  min-height: 36px;
+  padding: 6px 4px;
+  border-color: rgba(79, 139, 118, 0.18);
+  background: rgba(255, 250, 240, 0.78);
+  color: #465248;
+  font-size: 0.74rem;
+  gap: 4px;
+}
+
+.segment-kind-picker button.active {
+  background: #1f2421;
+  color: #fffaf0;
+  border-color: #1f2421;
 }
 
 .profile-list {
@@ -932,6 +961,10 @@ meter {
   }
 
   .composer-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .segment-row {
     grid-template-columns: 1fr;
   }
 

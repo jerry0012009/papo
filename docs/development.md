@@ -247,6 +247,8 @@ Done:
   - Browser visual QA now runs in real Chromium on desktop and mobile viewports. It screenshots the Shiba avatar, Home, and conversation surfaces, and verifies the unread dot, dialogue timeline, source-linked memory card, feedback input, and 3-minute listening entry render without bottom-nav overlap.
   - Active emergence and wake resurfacing fallback language no longer uses "不是提醒", "内在倾向", or "下一次你给我信息流" templates. Rule fallback now describes Papo remembering a selected real memory and how that memory changes the way it listens next.
   - The memory page now uses first-person creature memory language across titles, search, memory type/familiarity copy, retention reason, and edit/forget controls, instead of third-person management copy.
+  - User-facing multimodal input type controls now use icon segmented buttons for text/photo/audio instead of raw select dropdowns, keeping `image_summary` and `audio_transcript` as internal API terms only.
+  - Episode source provenance on user pages no longer exposes raw `batch` or `segment` ids; those implementation identifiers belong in Brain/developer diagnostics.
 
 Verified:
 
@@ -303,6 +305,7 @@ Verified:
 - `npm run test:e2e`: Playwright Chromium desktop/mobile visual smoke passes for the Shiba avatar, conversation timeline, source-linked episode card, unread dialogue dot, feedback input, and Curious recording entry.
 - Tests protect active emergence and wake resurfacing from template-reminder phrases such as "不是提醒", "内在倾向", and "下一次你给我信息流".
 - UI and visual smoke protect the memory page's first-person creature voice and ensure raw memory diagnostics stay out of the default surface.
+- UI and visual smoke protect the companionship path from raw source ids and type dropdowns on user-facing pages.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`
