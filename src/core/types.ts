@@ -49,6 +49,13 @@ export interface StreamSegment {
   content: string;
   position?: number;
   observedAt?: string;
+  batchId?: string;
+  location?: {
+    latitude: number;
+    longitude: number;
+    accuracy?: number;
+    label?: string;
+  };
 }
 
 export interface ScoreContribution {
@@ -236,11 +243,15 @@ export interface SemanticBrainRecord {
 export interface CreatureMessage {
   id: string;
   at: string;
-  role: "papo";
+  role: "user" | "world" | "papo";
   channel: ConversationChannel;
   text: string;
   sourceId?: string;
   relatedMemoryIds: string[];
+  modality?: SegmentKind | "button";
+  batchId?: string;
+  observedAt?: string;
+  location?: StreamSegment["location"];
 }
 
 export interface CreatureProfile {

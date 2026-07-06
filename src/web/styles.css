@@ -451,6 +451,12 @@ meter {
   justify-self: start;
 }
 
+.chat-bubble.user,
+.chat-bubble.world {
+  justify-self: end;
+  background: #fffaf0;
+}
+
 .chat-bubble div {
   display: flex;
   justify-content: space-between;
@@ -461,6 +467,13 @@ meter {
 .chat-bubble p {
   margin: 8px 0 0;
   line-height: 1.58;
+}
+
+.chat-bubble small {
+  display: block;
+  margin-top: 8px;
+  color: #69756c;
+  line-height: 1.45;
 }
 
 .demo-checklist {

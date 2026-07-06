@@ -25,6 +25,7 @@ Stage 1 must deliver:
 - Button Capture for single text input.
 - Curious Mode for multiple stream segments.
 - Attention Events with source, trigger, reason, related memories, state snapshot, strength, privacy risk, suggested action.
+- Conversation timeline that includes both multimodal inputs and Papo utterances.
 - Episode memory cards.
 - Long-term memories, including `creature_self_memory`.
 - Feedback: understood, continue, not_now, remember, forget.
@@ -38,7 +39,6 @@ Stage 1 must deliver:
 
 Deferred:
 
-- Continuous MediaRecorder chunk upload for Curious Mode.
 - Vector database / Mem0 integration.
 - PWA and native Android.
 - Background sensing and notifications.
@@ -73,10 +73,11 @@ LLM owns:
 Guardrails always run after LLM suggestions. LLM output cannot directly mutate state values, delete memory, bypass privacy, or write cross-user data.
 LLM narration cannot change state, policy, action, memory ids, or persistence. Emergence narration is accepted only when it stays anchored to a real memory already selected by rules.
 Visual and audio models are treated as `sense` adapters only: they may create `image_summary` and `audio_transcript` text, but they do not choose memories, actions, or state changes. Those generated segments remain user-editable before entering Curious Mode.
+Attention is a conversation phase, not a separate product mode: user/world multimodal inputs enter the conversation timeline first, then the harness decides what Papo attends to, remembers, says, or ignores.
 
 Harness stages:
 
-1. `sense`: receive button or stream input.
+1. `sense`: receive button or 30-second multimodal stream input and record it as conversation context.
 2. `attend`: create rule-based candidate attention events.
 3. `interpret`: LLM enriches semantics when available.
 4. `guardrail`: validate action, privacy, and state boundaries.
@@ -179,7 +180,9 @@ Done:
   - Experimental voice companionship in Curious Mode: browser speech recognition can listen up to 3 minutes and split transcripts every 30 seconds into `audio_transcript` segments.
   - OpenRouter/OpenAI-compatible visual sensing endpoint: uploaded screenshots are summarized into editable `image_summary` segments.
   - OpenRouter/OpenAI-compatible audio sensing endpoint: uploaded recordings are transcribed into editable `audio_transcript` segments.
-  - Papo speech timeline: wake notes, attention responses, feedback learning, and active emergence are persisted into `conversation`, with a Home notification and a dedicated dialogue history page.
+  - Papo conversation timeline: multimodal inputs plus wake notes, attention responses, feedback learning, and active emergence are persisted into `conversation`, with a Home notification and a dedicated dialogue history page.
+  - Curious Mode continuous recording: MediaRecorder records up to 3 minutes, requests audio chunks every 30 seconds, sends chunks to `/api/audio-transcript`, and keeps browser speech recognition only as a local fallback transcript source.
+  - Multimodal 30-second batches: text, photo summaries, and audio transcripts carry `batchId` and `observedAt`; photo uploads also carry available browser geolocation so later memories can include time/place.
 
 Verified:
 
@@ -203,6 +206,8 @@ Verified:
 - Active emergence reads as inner resurfacing rather than a template reminder.
 - Wake rhythm records an app-open presence event, applies rule-owned time-based state recovery, and can resurface a real user memory after absence.
 - Papo utterances are visible as a latest-message notification and as persisted dialogue history.
+- Curious Mode can create `audio_transcript` segments from real 30-second audio chunks without storing raw audio.
+- Curious Mode can preserve photo upload time/place and batch text/photo/audio as one stream before attention selection.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
@@ -213,9 +218,10 @@ Verified:
 
 Next:
 
-1. Wire continuous MediaRecorder chunks to `/api/audio-transcript` for 3-minute Curious Mode sessions when browser speech recognition is unavailable or low quality.
+1. Add richer cartoon Shiba Inu visual states and animations so Papo visibly behaves like a small dog, not just a data panel.
 2. Add stronger browser visual QA with mobile screenshots.
 3. Add optional local notification permission flow for important Papo utterances after the in-app timeline is stable.
+4. Tune OpenRouter audio model defaults after testing real account model availability.
 
 Demo material rule:
 
@@ -239,3 +245,5 @@ Demo material rule:
 - UI renders core workbench pages.
 - Demo can run in 3 minutes.
 - Papo messages are persisted and visible in conversation history.
+- Curious Mode can segment live recording into audio transcripts.
+- Curious Mode records multimodal input metadata: 30-second batch id, observed time, and photo location when permitted.

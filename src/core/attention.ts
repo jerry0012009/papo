@@ -62,7 +62,8 @@ export function handleCuriousStream(
     .map((segment, index) => ({
       ...segment,
       position: segment.position ?? index + 1,
-      observedAt: segment.observedAt ?? now
+      observedAt: segment.observedAt ?? now,
+      content: contentWithObservationContext({ ...segment, observedAt: segment.observedAt ?? now })
     }))
     .filter((segment) => segment.content.trim().length > 0);
 
@@ -287,6 +288,20 @@ function buildNoticed(text: string, relatedCount: number): string {
     return `我注意到它和过去的记忆相连：${summarizeText(text, 88)}`;
   }
   return `我注意到这个片段可能是你想让我认真理解的当前事件：${summarizeText(text, 88)}`;
+}
+
+function contentWithObservationContext(segment: StreamSegment) {
+  const details: string[] = [];
+  if (segment.observedAt) {
+    const label = segment.kind === "image_summary" ? "照片时间" : segment.kind === "audio_transcript" ? "音频片段时间" : "观察时间";
+    details.push(`${label}：${segment.observedAt}`);
+  }
+  if (segment.batchId) details.push(`30秒批次：${segment.batchId}`);
+  if (segment.location) {
+    const accuracy = typeof segment.location.accuracy === "number" ? `，精度约 ${Math.round(segment.location.accuracy)} 米` : "";
+    details.push(`观察地点：纬度 ${segment.location.latitude.toFixed(5)}，经度 ${segment.location.longitude.toFixed(5)}${accuracy}`);
+  }
+  return details.length ? `${segment.content.trim()}\n${details.join("\n")}` : segment.content;
 }
 
 function explainScore(score: SegmentScore): string {

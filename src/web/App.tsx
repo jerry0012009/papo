@@ -130,6 +130,10 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const audioFlushRef = useRef<Promise<void>>(Promise.resolve());
   const transcriptBufferRef = useRef("");
   const segmentIndexRef = useRef(1);
   const listeningStartedAtRef = useRef<number | undefined>(undefined);
@@ -203,7 +207,7 @@ export function App() {
     await run(async () => {
       const result = await curiousCapture(
         profile.userId,
-        segments.filter((segment) => segment.content.trim())
+        segments.filter((segment) => segment.content.trim()).map((segment, index) => ensureSegmentContext(segment, index))
       );
       setLastResult(result);
       setProfile(result.profile);
@@ -215,13 +219,19 @@ export function App() {
   async function uploadImageSummary(file?: File) {
     if (!file) return;
     await run(async () => {
+      const observedAt = file.lastModified ? new Date(file.lastModified).toISOString() : new Date().toISOString();
+      const location = await currentLocationSnapshot();
       const dataUrl = await readFileAsDataUrl(file);
-      const result = await summarizeImage(dataUrl, file.name || "上传截图");
+      const result = await summarizeImage(dataUrl, file.name || "上传照片");
       setSegments((current) => [
         ...current,
-        makeSegment(`image-${Date.now()}`, "image_summary", file.name || `截图 ${current.length + 1}`, result.summary)
+        makeSegment(`image-${Date.now()}`, "image_summary", file.name || `照片 ${current.length + 1}`, result.summary, {
+          observedAt,
+          batchId: currentBatchId(),
+          location
+        })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "视觉语义脑已经把截图压成一段 image_summary。" : "当前没有真实视觉模型，已加入一段可手动修改的图片摘要。");
+      setDemoNote(result.semanticSource === "llm" ? "视觉语义脑已经把照片压成一段 image_summary，并记录了可用的时间/地点。" : "当前没有真实视觉模型，已加入一段可手动修改的图片摘要和可用元数据。");
       setTab("curious");
     });
   }
@@ -233,7 +243,10 @@ export function App() {
       const result = await transcribeAudio(dataUrl, file.name || "上传录音");
       setSegments((current) => [
         ...current,
-        makeSegment(`audio-${Date.now()}`, "audio_transcript", file.name || `录音 ${current.length + 1}`, result.transcript)
+        makeSegment(`audio-${Date.now()}`, "audio_transcript", file.name || `录音 ${current.length + 1}`, result.transcript, {
+          observedAt: new Date().toISOString(),
+          batchId: currentBatchId()
+        })
       ]);
       setDemoNote(result.semanticSource === "llm" ? "音频语义脑已经把录音转成一段 audio_transcript。" : "当前没有真实音频模型，已加入一段可手动修改的录音转写。");
       setTab("curious");
@@ -271,22 +284,26 @@ export function App() {
   async function startListening() {
     if (listening) return;
     const Recognition = getSpeechRecognition();
-    if (!Recognition) {
-      setError("当前浏览器不支持实时语音转写。可以继续用文字或手动粘贴录音转写。");
+    const Recorder = getMediaRecorder();
+    if (!Recorder && !Recognition) {
+      setError("当前浏览器不支持录音或实时语音转写。可以继续用文字或手动粘贴录音转写。");
       return;
     }
 
+    let stream: MediaStream | undefined;
     try {
-      await navigator.mediaDevices?.getUserMedia?.({ audio: true });
+      stream = await navigator.mediaDevices?.getUserMedia?.({ audio: true });
     } catch {
       setError("没有拿到麦克风权限。可以继续用文字模拟一段信息流。");
       return;
     }
+    if (!stream) {
+      setError("没有可用的麦克风输入。可以继续用文字模拟一段信息流。");
+      return;
+    }
 
-    const recognition = new Recognition();
-    recognition.continuous = true;
-    recognition.interimResults = true;
-    recognition.lang = "zh-CN";
+    mediaStreamRef.current = stream;
+    recordedChunksRef.current = [];
     transcriptBufferRef.current = "";
     segmentIndexRef.current = 1;
     listeningStartedAtRef.current = Date.now();
@@ -294,39 +311,69 @@ export function App() {
     setListening(true);
     setError(undefined);
 
-    recognition.onresult = (event) => {
-      let finalText = "";
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
-        const result = event.results[index];
-        if (result.isFinal) finalText += result[0].transcript;
-      }
-      if (finalText.trim()) transcriptBufferRef.current = `${transcriptBufferRef.current} ${finalText.trim()}`.trim();
-    };
-    recognition.onerror = (event) => {
-      setError(`语音监听中断：${event.error ?? "未知错误"}`);
-    };
-    recognition.onend = () => {
-      if (listeningStartedAtRef.current) {
-        try {
-          recognition.start();
-        } catch {
-          // Some browsers throw if restart happens too quickly.
+    if (Recorder) {
+      try {
+        const mimeType = preferredAudioMimeType(Recorder);
+        const recorder = new Recorder(stream, mimeType ? { mimeType } : undefined);
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+        };
+        recorder.onerror = () => {
+          setError("录音分段中断。已经得到的片段会继续保留。");
+        };
+        mediaRecorderRef.current = recorder;
+        recorder.start();
+      } catch {
+        if (!Recognition) {
+          stopMediaCapture();
+          setListening(false);
+          listeningStartedAtRef.current = undefined;
+          setError("当前浏览器无法启动录音分段。可以继续用文字或手动上传录音。");
+          return;
         }
       }
-    };
-    recognitionRef.current = recognition;
-    recognition.start();
+    }
+
+    if (Recognition) {
+      const recognition = new Recognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "zh-CN";
+      recognition.onresult = (event) => {
+        let finalText = "";
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          const result = event.results[index];
+          if (result.isFinal) finalText += result[0].transcript;
+        }
+        if (finalText.trim()) transcriptBufferRef.current = `${transcriptBufferRef.current} ${finalText.trim()}`.trim();
+      };
+      recognition.onerror = (event) => {
+        if (!mediaRecorderRef.current) setError(`语音监听中断：${event.error ?? "未知错误"}`);
+      };
+      recognition.onend = () => {
+        if (listeningStartedAtRef.current) {
+          try {
+            recognition.start();
+          } catch {
+            // Some browsers throw if restart happens too quickly.
+          }
+        }
+      };
+      recognitionRef.current = recognition;
+      recognition.start();
+    }
 
     tickTimerRef.current = window.setInterval(() => {
       if (!listeningStartedAtRef.current) return;
       setListeningElapsed(Math.min(180, Math.floor((Date.now() - listeningStartedAtRef.current) / 1000)));
     }, 1000);
-    segmentTimerRef.current = window.setInterval(() => flushAudioTranscriptSegment(false), 30_000);
+    segmentTimerRef.current = window.setInterval(() => {
+      void queueAudioTranscriptSegment(false);
+    }, 30_000);
     stopTimerRef.current = window.setTimeout(() => stopListening(), 180_000);
   }
 
   function stopListening() {
-    flushAudioTranscriptSegment(true);
     if (recognitionRef.current) {
       recognitionRef.current.onend = null;
       recognitionRef.current.stop();
@@ -340,19 +387,96 @@ export function App() {
     stopTimerRef.current = undefined;
     listeningStartedAtRef.current = undefined;
     setListening(false);
+    void queueAudioTranscriptSegment(true).finally(() => stopMediaCapture());
   }
 
-  function flushAudioTranscriptSegment(force: boolean) {
-    const content = transcriptBufferRef.current.trim();
-    if (!content && !force) return;
-    if (!content) return;
+  function queueAudioTranscriptSegment(force: boolean) {
+    audioFlushRef.current = audioFlushRef.current.then(() => flushAudioTranscriptSegment(force)).catch((caught) => {
+      setError(errorMessage(caught));
+    });
+    return audioFlushRef.current;
+  }
+
+  async function flushAudioTranscriptSegment(force: boolean) {
+    const localTranscript = transcriptBufferRef.current.trim();
+    transcriptBufferRef.current = "";
+    const chunks = await takeRecordedAudioChunks();
+    if (!chunks.length && !localTranscript && !force) return;
+    if (!chunks.length && !localTranscript) return;
     const index = segmentIndexRef.current;
     segmentIndexRef.current += 1;
-    transcriptBufferRef.current = "";
+
+    let content = localTranscript;
+    if (chunks.length) {
+      const blob = new Blob(chunks, { type: mediaRecorderRef.current?.mimeType || chunks[0]?.type || "audio/webm" });
+      if (blob.size > 0) {
+        try {
+          const dataUrl = await blobToDataUrl(blob);
+          const result = await transcribeAudio(dataUrl, `语音片段 ${index}`);
+          content = chooseAudioTranscript(result.transcript, localTranscript);
+        } catch (caught) {
+          content = localTranscript || `语音片段 ${index} 已录下，但暂时没有转写成功。${errorMessage(caught)}`;
+        }
+      }
+    }
+
+    if (!content.trim()) return;
     setSegments((current) => [
       ...current,
-      makeSegment(`live-audio-${Date.now()}-${index}`, "audio_transcript", `语音片段 ${index}`, content)
+      makeSegment(`live-audio-${Date.now()}-${index}`, "audio_transcript", `语音片段 ${index}`, content.trim(), {
+        observedAt: new Date().toISOString(),
+        batchId: batchIdForSegment(index)
+      })
     ]);
+  }
+
+  function ensureSegmentContext(segment: StreamSegment, index: number): StreamSegment {
+    return {
+      ...segment,
+      position: segment.position ?? index + 1,
+      observedAt: segment.observedAt ?? new Date().toISOString(),
+      batchId: segment.batchId ?? currentBatchId()
+    };
+  }
+
+  function currentBatchId(nowMs = Date.now()) {
+    const startedAt = listeningStartedAtRef.current;
+    if (!startedAt) return manualBatchId(nowMs);
+    const index = Math.max(1, Math.floor((nowMs - startedAt) / 30_000) + 1);
+    return liveBatchId(startedAt, index);
+  }
+
+  function batchIdForSegment(index: number) {
+    const startedAt = listeningStartedAtRef.current;
+    return startedAt ? liveBatchId(startedAt, index) : manualBatchId();
+  }
+
+  async function takeRecordedAudioChunks() {
+    const recorder = mediaRecorderRef.current;
+    if (recorder?.state === "recording") {
+      try {
+        recorder.requestData();
+        await delay(180);
+      } catch {
+        // Keep any chunks already emitted.
+      }
+    }
+    const chunks = recordedChunksRef.current;
+    recordedChunksRef.current = [];
+    return chunks;
+  }
+
+  function stopMediaCapture() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {
+        // Recorder may already be stopped by the browser.
+      }
+    }
+    mediaRecorderRef.current = null;
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    mediaStreamRef.current = null;
   }
 
   function loadDemoCurious() {
@@ -672,9 +796,9 @@ function CuriousView(props: {
         <PanelTitle icon={Sparkles} title="Curious Mode" />
         <section className="listening-panel">
           <div>
-            <strong>{props.listening ? "我正在听这一小段世界" : "语音陪伴实验"}</strong>
+            <strong>{props.listening ? "我正在录这一小段世界" : "Curious 录音感知"}</strong>
             <p>
-              最多听 3 分钟，每 30 秒把语音转写切成一段。原始音频不保存，只把转写片段放进信息流。
+              最多录 3 分钟，每 30 秒把音频送去转写成一段。原始音频不保存，只把转写片段放进信息流。
             </p>
           </div>
           <button onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
@@ -745,12 +869,19 @@ function ChatView({ profile }: { profile: CreatureProfile }) {
         {messages.length ? (
           <div className="chat-list">
             {messages.map((message) => (
-              <article className="chat-bubble papo" key={message.id}>
+              <article className={`chat-bubble ${message.role}`} key={message.id}>
                 <div>
-                  <strong>{messageChannelText(message.channel)}</strong>
+                  <strong>{messageTitle(message)}</strong>
                   <span>{new Date(message.at).toLocaleString("zh-CN")}</span>
                 </div>
                 <p>{message.text}</p>
+                {message.batchId || message.observedAt || message.location ? (
+                  <small>
+                    {[message.batchId ? `批次 ${message.batchId}` : "", message.observedAt ? `观察 ${new Date(message.observedAt).toLocaleString("zh-CN")}` : "", message.location ? locationText(message.location) : ""]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </small>
+                ) : null}
               </article>
             ))}
           </div>
@@ -1194,6 +1325,18 @@ function messageChannelText(channel: CreatureProfile["conversation"][number]["ch
   return map[channel];
 }
 
+function messageTitle(message: CreatureProfile["conversation"][number]) {
+  if (message.role === "papo") return messageChannelText(message.channel);
+  if (message.modality === "image_summary") return "你给 Papo 看了照片";
+  if (message.modality === "audio_transcript") return "Papo 听到一段声音";
+  return "你告诉 Papo";
+}
+
+function locationText(location: NonNullable<StreamSegment["location"]>) {
+  const accuracy = typeof location.accuracy === "number" ? `，约 ${Math.round(location.accuracy)} 米` : "";
+  return location.label ?? `位置 ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}${accuracy}`;
+}
+
 function policyLabel(key: string) {
   const map: Record<string, string> = {
     preferDepth: "深入倾向",
@@ -1220,12 +1363,67 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
+function blobToDataUrl(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("录音片段读取失败"));
+    reader.readAsDataURL(blob);
+  });
+}
+
 function getSpeechRecognition(): SpeechRecognitionConstructor | undefined {
   const webWindow = window as typeof window & {
     SpeechRecognition?: SpeechRecognitionConstructor;
     webkitSpeechRecognition?: SpeechRecognitionConstructor;
   };
   return webWindow.SpeechRecognition ?? webWindow.webkitSpeechRecognition;
+}
+
+function getMediaRecorder(): typeof MediaRecorder | undefined {
+  return window.MediaRecorder;
+}
+
+function preferredAudioMimeType(Recorder: typeof MediaRecorder) {
+  const candidates = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus", "audio/ogg"];
+  return candidates.find((type) => Recorder.isTypeSupported(type)) ?? "";
+}
+
+function chooseAudioTranscript(modelTranscript: string, localTranscript: string) {
+  const modelText = modelTranscript.trim();
+  const localText = localTranscript.trim();
+  const modelIsFallback = /不能真实转写|暂时没有返回转写|请手动补充|没有转写成功/.test(modelText);
+  if ((!modelText || modelIsFallback) && localText) return localText;
+  return modelText || localText;
+}
+
+async function currentLocationSnapshot(): Promise<StreamSegment["location"] | undefined> {
+  if (!navigator.geolocation) return undefined;
+  return new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      (position) =>
+        resolve({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          label: "上传时的位置"
+        }),
+      () => resolve(undefined),
+      { enableHighAccuracy: false, maximumAge: 300_000, timeout: 2500 }
+    );
+  });
+}
+
+function liveBatchId(startedAt: number, index: number) {
+  return `live-${new Date(startedAt).toISOString()}-${String(index).padStart(2, "0")}`;
+}
+
+function manualBatchId(nowMs = Date.now()) {
+  return `manual-${Math.floor(nowMs / 30_000)}`;
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function formatListeningTime(seconds: number) {

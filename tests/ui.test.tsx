@@ -51,12 +51,13 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "陪我" }));
     expect(screen.getByText("Curious Mode")).toBeInTheDocument();
-    expect(screen.getByText("语音陪伴实验")).toBeInTheDocument();
+    expect(screen.getByText("Curious 录音感知")).toBeInTheDocument();
     expect(screen.getByText("上传截图生成摘要")).toBeInTheDocument();
     expect(screen.getByText("上传录音转写")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "对话" }));
     expect(screen.getByText("Papo 说过的话")).toBeInTheDocument();
+    expect(screen.getByText("你给 Papo 看了照片")).toBeInTheDocument();
     expect(screen.getByText("我刚刚醒着，你一打开我就还在这里。")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "记忆" }));
@@ -147,6 +148,19 @@ function profileFixture() {
         text: "我刚刚醒着，你一打开我就还在这里。",
         sourceId: "wake1",
         relatedMemoryIds: []
+      },
+      {
+        id: "msg2",
+        at: new Date().toISOString(),
+        role: "world",
+        channel: "curious",
+        text: "日历照片：妈妈周五复查，需要提前准备病历。",
+        sourceId: "segment-photo",
+        relatedMemoryIds: [],
+        modality: "image_summary",
+        batchId: "manual-1",
+        observedAt: "2026-07-06T10:00:00.000Z",
+        location: { latitude: 52.52, longitude: 13.405, accuracy: 30, label: "上传时的位置" }
       }
     ]
   };

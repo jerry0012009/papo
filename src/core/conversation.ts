@@ -1,5 +1,5 @@
 import { makeId } from "./ids";
-import type { ConversationChannel, CreatureMessage, CreatureProfile } from "./types";
+import type { ConversationChannel, CreatureMessage, CreatureProfile, SegmentKind, StreamSegment } from "./types";
 
 const MAX_CONVERSATION_MESSAGES = 80;
 
@@ -29,6 +29,46 @@ export function appendPapoMessage(
     text,
     sourceId: input.sourceId,
     relatedMemoryIds: input.relatedMemoryIds ?? []
+  };
+  profile.conversation.unshift(message);
+  profile.conversation = profile.conversation.slice(0, MAX_CONVERSATION_MESSAGES);
+  return message;
+}
+
+export function appendInputMessage(
+  profile: CreatureProfile,
+  input: {
+    channel: ConversationChannel;
+    role?: "user" | "world";
+    text?: string;
+    sourceId?: string;
+    modality?: SegmentKind | "button";
+    batchId?: string;
+    observedAt?: string;
+    location?: StreamSegment["location"];
+    at?: string;
+  }
+): CreatureMessage | undefined {
+  const text = input.text?.trim();
+  if (!text) return undefined;
+  profile.conversation ??= [];
+  const duplicate = profile.conversation.find(
+    (message) => message.role === (input.role ?? "world") && message.channel === input.channel && message.sourceId === input.sourceId && message.text === text
+  );
+  if (duplicate) return duplicate;
+
+  const message: CreatureMessage = {
+    id: makeId("msg"),
+    at: input.at ?? input.observedAt ?? new Date().toISOString(),
+    role: input.role ?? "world",
+    channel: input.channel,
+    text,
+    sourceId: input.sourceId,
+    relatedMemoryIds: [],
+    modality: input.modality,
+    batchId: input.batchId,
+    observedAt: input.observedAt,
+    location: input.location
   };
   profile.conversation.unshift(message);
   profile.conversation = profile.conversation.slice(0, MAX_CONVERSATION_MESSAGES);

@@ -99,8 +99,8 @@ export async function activeEmergence(userId: string) {
   );
 }
 
-export function makeSegment(id: string, kind: SegmentKind, label: string, content: string): StreamSegment {
-  return { id, kind, label, content };
+export function makeSegment(id: string, kind: SegmentKind, label: string, content: string, extra: Partial<StreamSegment> = {}): StreamSegment {
+  return { id, kind, label, content, ...extra };
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

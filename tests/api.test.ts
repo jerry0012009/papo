@@ -42,14 +42,23 @@ describe("api", () => {
       .post(`/api/profiles/${userId}/curious`)
       .send({
         segments: [
-          { id: "s1", kind: "text", label: "片段 1", content: "今天午饭还不错。" },
-          { id: "s2", kind: "text", label: "片段 2", content: "妈妈复查的病历和医保卡还没有放进包里。" }
+          { id: "s1", kind: "text", label: "片段 1", content: "今天午饭还不错。", batchId: "manual-1", observedAt: "2026-07-06T10:00:00.000Z" },
+          {
+            id: "s2",
+            kind: "image_summary",
+            label: "照片 1",
+            content: "妈妈复查的病历和医保卡还没有放进包里。",
+            batchId: "manual-1",
+            observedAt: "2026-07-06T10:00:15.000Z",
+            location: { latitude: 52.52, longitude: 13.405, accuracy: 25, label: "上传时的位置" }
+          }
         ]
       })
       .expect(200)
       .expect((response) => {
         expect(response.body.events.length).toBeGreaterThan(0);
         expect(response.body.profile.conversation[0].channel).toBe("curious");
+        expect(response.body.profile.conversation.some((message: { role: string; modality?: string; batchId?: string }) => message.role === "world" && message.modality === "image_summary" && message.batchId === "manual-1")).toBe(true);
       });
 
     const episodeId = button.body.episodes[0].id;

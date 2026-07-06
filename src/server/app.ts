@@ -1,7 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { z } from "zod";
-import { appendPapoMessage } from "../core/conversation";
+import { appendInputMessage, appendPapoMessage } from "../core/conversation";
 import { createActiveEmergence } from "../core/emergence";
 import { applyFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
@@ -28,7 +28,17 @@ const curiousSchema = z.object({
         id: z.string().min(1),
         kind: z.enum(["text", "image_summary", "audio_transcript"]),
         label: z.string().min(1).max(80),
-        content: z.string().max(4000)
+        content: z.string().max(4000),
+        observedAt: z.string().datetime().optional(),
+        batchId: z.string().min(1).max(80).optional(),
+        location: z
+          .object({
+            latitude: z.number().min(-90).max(90),
+            longitude: z.number().min(-180).max(180),
+            accuracy: z.number().nonnegative().optional(),
+            label: z.string().min(1).max(120).optional()
+          })
+          .optional()
       })
     )
     .min(1)
@@ -161,6 +171,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const body = buttonSchema.parse(req.body);
+      appendInputMessage(profile, { channel: "button", role: "user", text: body.text, sourceId: `button-${Date.now()}`, modality: "button" });
       const result = await runButtonHarness(profile, body.text, provider);
       appendPapoMessage(profile, {
         channel: "button",
@@ -179,6 +190,18 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const body = curiousSchema.parse(req.body);
+      for (const segment of body.segments) {
+        appendInputMessage(profile, {
+          channel: "curious",
+          role: segment.kind === "text" ? "user" : "world",
+          text: `${segment.label}：${segment.content}`,
+          sourceId: segment.id,
+          modality: segment.kind,
+          batchId: segment.batchId,
+          observedAt: segment.observedAt,
+          location: segment.location
+        });
+      }
       const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
       appendPapoMessage(profile, {
         channel: "curious",
