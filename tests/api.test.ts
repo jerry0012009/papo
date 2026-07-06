@@ -28,25 +28,28 @@ describe("api", () => {
       .expect((response) => {
         expect(response.body.wake.message).toBeTruthy();
         expect(response.body.profile.wakeHistory).toHaveLength(1);
+        expect(response.body.profile.conversation[0].channel).toBe("wake");
       });
 
     const button = await request(app)
       .post(`/api/profiles/${userId}/button`)
-      .send({ text: "我希望小动物会注意、会记忆、会根据反馈改变。" })
+      .send({ text: "我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要。" })
       .expect(200);
     expect(button.body.events).toHaveLength(1);
+    expect(button.body.profile.conversation[0].channel).toBe("button");
 
     await request(app)
       .post(`/api/profiles/${userId}/curious`)
       .send({
         segments: [
-          { id: "s1", kind: "text", label: "片段 1", content: "普通信息。" },
-          { id: "s2", kind: "text", label: "片段 2", content: "投资人演示要看到反馈真的改变状态。" }
+          { id: "s1", kind: "text", label: "片段 1", content: "今天午饭还不错。" },
+          { id: "s2", kind: "text", label: "片段 2", content: "妈妈复查的病历和医保卡还没有放进包里。" }
         ]
       })
       .expect(200)
       .expect((response) => {
         expect(response.body.events.length).toBeGreaterThan(0);
+        expect(response.body.profile.conversation[0].channel).toBe("curious");
       });
 
     const episodeId = button.body.episodes[0].id;
@@ -56,6 +59,7 @@ describe("api", () => {
       .expect(200)
       .expect((response) => {
         expect(response.body.profile.longTermMemories.length).toBeGreaterThan(1);
+        expect(response.body.profile.conversation[0].channel).toBe("feedback");
       });
 
     const profileResponse = await request(app).get(`/api/profiles/${userId}`).expect(200);
@@ -73,6 +77,7 @@ describe("api", () => {
       .expect(200)
       .expect((response) => {
         expect(response.body.emergence.whyNow ?? response.body.emergence.text).toBeTruthy();
+        expect(response.body.profile.conversation[0].channel).toBe("emergence");
       });
   });
 

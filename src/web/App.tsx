@@ -7,6 +7,7 @@ import {
   ImagePlus,
   Lightbulb,
   MessageCircle,
+  MessagesSquare,
   Mic,
   Plus,
   RefreshCcw,
@@ -44,7 +45,7 @@ import {
   type ProviderInfo
 } from "./api";
 
-type Tab = "home" | "capture" | "curious" | "memory" | "brain" | "profile" | "demo";
+type Tab = "home" | "capture" | "curious" | "chat" | "memory" | "brain" | "profile" | "demo";
 
 interface SpeechRecognitionLike {
   continuous: boolean;
@@ -137,6 +138,7 @@ export function App() {
   const stopTimerRef = useRef<number | undefined>(undefined);
 
   const selectedEpisode = lastResult?.episodes[0] ?? profile?.episodes[0];
+  const latestPapoMessage = profile?.conversation?.[0];
 
   useEffect(() => {
     void bootstrap();
@@ -475,10 +477,12 @@ export function App() {
           learningNote={learningNote}
           wakeMessage={wakeMessage}
           wakeThought={wakeThought}
+          latestPapoMessage={latestPapoMessage}
           busy={busy}
           onFeedback={giveFeedback}
           onGoCapture={() => setTab("capture")}
           onGoCurious={() => setTab("curious")}
+          onGoChat={() => setTab("chat")}
         />
       ) : null}
 
@@ -501,6 +505,7 @@ export function App() {
         />
       ) : null}
 
+      {tab === "chat" ? <ChatView profile={profile} /> : null}
       {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onEditMemory={editLongTermMemory} /> : null}
       {tab === "brain" ? <BrainView profile={profile} /> : null}
       {tab === "profile" ? <ProfileView profiles={profiles} activeId={profile.userId} onSelect={selectProfile} onAdd={addProfile} /> : null}
@@ -520,6 +525,7 @@ export function App() {
         <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => setTab("home")} />
         <NavButton active={tab === "capture"} icon={MessageCircle} label="输入" onClick={() => setTab("capture")} />
         <NavButton active={tab === "curious"} icon={Sparkles} label="陪我" onClick={() => setTab("curious")} />
+        <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" onClick={() => setTab("chat")} />
         <NavButton active={tab === "memory"} icon={History} label="记忆" onClick={() => setTab("memory")} />
         <NavButton active={tab === "brain"} icon={Brain} label="脑态" onClick={() => setTab("brain")} />
         <NavButton active={tab === "demo"} icon={Wand2} label="演示" onClick={() => setTab("demo")} />
@@ -536,10 +542,12 @@ function HomeView(props: {
   learningNote?: string;
   wakeMessage?: string;
   wakeThought?: string;
+  latestPapoMessage?: CreatureProfile["conversation"][number];
   busy: boolean;
   onFeedback: (kind: FeedbackKind, targetId?: string) => void;
   onGoCapture: () => void;
   onGoCurious: () => void;
+  onGoChat: () => void;
 }) {
   return (
     <section className="stack">
@@ -564,6 +572,19 @@ function HomeView(props: {
           陪我一会儿
         </button>
       </div>
+
+      {props.latestPapoMessage ? (
+        <section className="papo-notice">
+          <div>
+            <span>Papo 新说</span>
+            <p>{props.latestPapoMessage.text}</p>
+          </div>
+          <button onClick={props.onGoChat}>
+            <MessagesSquare size={18} />
+            看对话
+          </button>
+        </section>
+      ) : null}
 
       {props.wakeMessage ? (
         <section className="wake-note">
@@ -710,6 +731,32 @@ function CuriousView(props: {
             开始观察
           </button>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function ChatView({ profile }: { profile: CreatureProfile }) {
+  const messages = [...(profile.conversation ?? [])].slice(0, 50).reverse();
+  return (
+    <section className="stack">
+      <div className="panel">
+        <PanelTitle icon={MessagesSquare} title="Papo 说过的话" />
+        {messages.length ? (
+          <div className="chat-list">
+            {messages.map((message) => (
+              <article className="chat-bubble papo" key={message.id}>
+                <div>
+                  <strong>{messageChannelText(message.channel)}</strong>
+                  <span>{new Date(message.at).toLocaleString("zh-CN")}</span>
+                </div>
+                <p>{message.text}</p>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">Papo 还没有对你说过什么。等它醒来、注意到片段、学到反馈或自己想起旧事，这里会留下记录。</p>
+        )}
       </div>
     </section>
   );
@@ -1134,6 +1181,17 @@ function semanticStatusText(status: NonNullable<CreatureProfile["semanticBrainHi
     failed: "LLM 调用失败"
   };
   return map[status];
+}
+
+function messageChannelText(channel: CreatureProfile["conversation"][number]["channel"]) {
+  const map = {
+    wake: "醒来时",
+    button: "认真注意后",
+    curious: "陪你看完后",
+    feedback: "学到反馈后",
+    emergence: "自己想起时"
+  };
+  return map[channel];
 }
 
 function policyLabel(key: string) {

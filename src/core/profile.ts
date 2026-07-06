@@ -22,7 +22,8 @@ export function createCreatureProfile(input: {
     memoryCandidates: [],
     emergenceHistory: [],
     wakeHistory: [],
-    semanticBrainHistory: []
+    semanticBrainHistory: [],
+    conversation: []
   };
   return profile;
 }
@@ -46,6 +47,7 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.emergenceHistory ??= [];
   profile.wakeHistory ??= [];
   profile.semanticBrainHistory ??= [];
+  profile.conversation ??= [];
   profile.episodes ??= [];
   profile.longTermMemories ??= [];
   profile.feedbackHistory ??= [];

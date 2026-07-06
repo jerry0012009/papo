@@ -129,6 +129,7 @@ OpenRouter multimodal routing:
 - `src/core/attention.ts`: rule-based attention candidates.
 - `src/core/harness.ts`: mixed rule + LLM semantic harness.
 - `src/core/narration.ts`: guarded LLM narration for learning notes and emergence messages.
+- `src/core/conversation.ts`: persistent Papo utterance timeline.
 - `src/core/memory.ts`: episode and long-term memory.
 - `src/core/feedback.ts`: reinforcement rules.
 - `src/core/emergence.ts`: active resurfacing.
@@ -178,6 +179,7 @@ Done:
   - Experimental voice companionship in Curious Mode: browser speech recognition can listen up to 3 minutes and split transcripts every 30 seconds into `audio_transcript` segments.
   - OpenRouter/OpenAI-compatible visual sensing endpoint: uploaded screenshots are summarized into editable `image_summary` segments.
   - OpenRouter/OpenAI-compatible audio sensing endpoint: uploaded recordings are transcribed into editable `audio_transcript` segments.
+  - Papo speech timeline: wake notes, attention responses, feedback learning, and active emergence are persisted into `conversation`, with a Home notification and a dedicated dialogue history page.
 
 Verified:
 
@@ -200,6 +202,7 @@ Verified:
 - Feedback returns a visible learning note.
 - Active emergence reads as inner resurfacing rather than a template reminder.
 - Wake rhythm records an app-open presence event, applies rule-owned time-based state recovery, and can resurface a real user memory after absence.
+- Papo utterances are visible as a latest-message notification and as persisted dialogue history.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
@@ -210,9 +213,9 @@ Verified:
 
 Next:
 
-1. Add a Papo speech/chat timeline so user-facing creature utterances are visible as notifications and history, not only as analysis panels.
-2. Wire continuous MediaRecorder chunks to `/api/audio-transcript` for 3-minute Curious Mode sessions when browser speech recognition is unavailable or low quality.
-3. Add stronger browser visual QA with mobile screenshots.
+1. Wire continuous MediaRecorder chunks to `/api/audio-transcript` for 3-minute Curious Mode sessions when browser speech recognition is unavailable or low quality.
+2. Add stronger browser visual QA with mobile screenshots.
+3. Add optional local notification permission flow for important Papo utterances after the in-app timeline is stable.
 
 Demo material rule:
 
@@ -235,3 +238,4 @@ Demo material rule:
 - API endpoints return expected payloads.
 - UI renders core workbench pages.
 - Demo can run in 3 minutes.
+- Papo messages are persisted and visible in conversation history.

@@ -42,6 +42,7 @@ describe("App", () => {
     expect(screen.getByText("当前心情")).toBeInTheDocument();
     expect(screen.getByText("醒来时")).toBeInTheDocument();
     expect(screen.getByText("我醒来时自己又想到妈妈复查这件事。")).toBeInTheDocument();
+    expect(screen.getByText("Papo 新说")).toBeInTheDocument();
     expect(screen.getByText("单次输入")).toBeInTheDocument();
     expect(screen.getByText("陪我一会儿")).toBeInTheDocument();
 
@@ -53,6 +54,10 @@ describe("App", () => {
     expect(screen.getByText("语音陪伴实验")).toBeInTheDocument();
     expect(screen.getByText("上传截图生成摘要")).toBeInTheDocument();
     expect(screen.getByText("上传录音转写")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "对话" }));
+    expect(screen.getByText("Papo 说过的话")).toBeInTheDocument();
+    expect(screen.getByText("我刚刚醒着，你一打开我就还在这里。")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "记忆" }));
     expect(screen.getByText("长期记忆")).toBeInTheDocument();
@@ -131,6 +136,17 @@ function profileFixture() {
         status: "skipped",
         message: "fallback provider; rules handled the loop",
         ruleTrace: ["provider=fallback", "source=button", "status=skipped"]
+      }
+    ],
+    conversation: [
+      {
+        id: "msg1",
+        at: new Date().toISOString(),
+        role: "papo",
+        channel: "wake",
+        text: "我刚刚醒着，你一打开我就还在这里。",
+        sourceId: "wake1",
+        relatedMemoryIds: []
       }
     ]
   };

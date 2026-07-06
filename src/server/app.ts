@@ -1,6 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { z } from "zod";
+import { appendPapoMessage } from "../core/conversation";
 import { createActiveEmergence } from "../core/emergence";
 import { applyFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
@@ -147,6 +148,8 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         const enriched = await enrichEmergenceNarration(profile, { ...wakeEmergence, text: wakeEmergence.message }, provider);
         wake.innerThought = enriched.text;
       }
+      appendPapoMessage(profile, { channel: "wake", text: wake.message, sourceId: wake.id, relatedMemoryIds: wake.relatedMemoryIds, at: wake.at });
+      appendPapoMessage(profile, { channel: "wake", text: wake.innerThought, sourceId: wake.emergenceId, relatedMemoryIds: wake.relatedMemoryIds, at: wake.at });
       await store.saveProfile(profile);
       res.json({ profile, wake });
     } catch (error) {
@@ -159,6 +162,12 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const profile = await requireProfile(store, req.params.userId);
       const body = buttonSchema.parse(req.body);
       const result = await runButtonHarness(profile, body.text, provider);
+      appendPapoMessage(profile, {
+        channel: "button",
+        text: result.response,
+        sourceId: result.episodes[0]?.id,
+        relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds)
+      });
       await store.saveProfile(profile);
       res.json({ ...result, provider: provider.kind });
     } catch (error) {
@@ -171,6 +180,12 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const profile = await requireProfile(store, req.params.userId);
       const body = curiousSchema.parse(req.body);
       const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
+      appendPapoMessage(profile, {
+        channel: "curious",
+        text: result.response,
+        sourceId: result.curiousSession?.id ?? result.episodes[0]?.id,
+        relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds)
+      });
       await store.saveProfile(profile);
       res.json({ ...result, provider: provider.kind });
     } catch (error) {
@@ -184,6 +199,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const body = feedbackSchema.parse(req.body);
       const feedback = applyFeedback(profile, body);
       await enrichFeedbackNarration(profile, feedback, provider);
+      appendPapoMessage(profile, { channel: "feedback", text: feedback.learningNote, sourceId: feedback.id });
       await store.saveProfile(profile);
       res.json({ profile, feedback });
     } catch (error) {
@@ -220,6 +236,12 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const profile = await requireProfile(store, req.params.userId);
       const emergence = createActiveEmergence(profile);
       await enrichEmergenceNarration(profile, emergence, provider);
+      appendPapoMessage(profile, {
+        channel: "emergence",
+        text: emergence.text,
+        sourceId: emergence.id,
+        relatedMemoryIds: emergence.relatedMemoryIds
+      });
       await store.saveProfile(profile);
       res.json({ profile, emergence });
     } catch (error) {

@@ -250,6 +250,7 @@ select {
 .attention-card,
 .state-item,
 .wake-note,
+.papo-notice,
 .memory-surface {
   border: 1px solid rgba(31, 36, 33, 0.1);
   border-radius: 8px;
@@ -345,6 +346,7 @@ meter {
 .attention-card,
 .episode-card,
 .wake-note,
+.papo-notice,
 .memory-surface,
 .change-row {
   padding: 12px;
@@ -361,6 +363,7 @@ meter {
 .attention-card p,
 .episode-card p,
 .wake-note p,
+.papo-notice p,
 .memory-surface p,
 .change-row p {
   margin: 8px 0;
@@ -411,6 +414,53 @@ meter {
   color: #fffaf0;
   padding: 12px;
   line-height: 1.55;
+}
+
+.papo-notice {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: center;
+  background: #e9f3eb;
+}
+
+.papo-notice span,
+.chat-bubble span {
+  color: #69756c;
+  font-size: 0.78rem;
+}
+
+.papo-notice button {
+  white-space: nowrap;
+}
+
+.chat-list {
+  display: grid;
+  gap: 10px;
+}
+
+.chat-bubble {
+  width: min(92%, 560px);
+  border-radius: 8px;
+  padding: 12px;
+  background: #e9f3eb;
+  border: 1px solid rgba(79, 139, 118, 0.18);
+}
+
+.chat-bubble.papo {
+  justify-self: start;
+}
+
+.chat-bubble div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.chat-bubble p {
+  margin: 8px 0 0;
+  line-height: 1.58;
 }
 
 .demo-checklist {
@@ -508,7 +558,7 @@ meter {
   transform: translateX(-50%);
   width: min(calc(100% - 24px), 680px);
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 6px;
   padding: 7px;
   border-radius: 16px;
@@ -542,6 +592,10 @@ meter {
   }
 
   .state-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .papo-notice {
     grid-template-columns: 1fr;
   }
 }

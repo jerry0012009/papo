@@ -13,6 +13,7 @@ export type ActionKind =
 export type FeedbackKind = "understood" | "continue" | "not_now" | "remember" | "forget";
 export type SegmentKind = "text" | "image_summary" | "audio_transcript";
 export type ProviderKind = "mimo" | "openrouter" | "generic" | "fallback";
+export type ConversationChannel = "wake" | "button" | "curious" | "feedback" | "emergence";
 
 export interface CreatureState {
   curiosity: number;
@@ -232,6 +233,16 @@ export interface SemanticBrainRecord {
   ruleTrace: string[];
 }
 
+export interface CreatureMessage {
+  id: string;
+  at: string;
+  role: "papo";
+  channel: ConversationChannel;
+  text: string;
+  sourceId?: string;
+  relatedMemoryIds: string[];
+}
+
 export interface CreatureProfile {
   userId: string;
   creatureName: string;
@@ -247,6 +258,7 @@ export interface CreatureProfile {
   emergenceHistory: EmergenceRecord[];
   wakeHistory: WakeEvent[];
   semanticBrainHistory: SemanticBrainRecord[];
+  conversation: CreatureMessage[];
 }
 
 export interface EmergenceRecord {
