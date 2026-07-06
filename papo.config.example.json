@@ -1,0 +1,8 @@
+{
+  "MIMO_ENDPOINT": "http://localhost:11434/v1/chat/completions",
+  "MIMO_MODEL": "mimo",
+  "OPENROUTER_API_KEY": "",
+  "OPENROUTER_MODEL": "openai/gpt-4.1-mini",
+  "OPENAI_API_KEY": "",
+  "OPENAI_MODEL": "gpt-4.1-mini"
+}

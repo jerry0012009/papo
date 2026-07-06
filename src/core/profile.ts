@@ -1,0 +1,35 @@
+import { makeId } from "./ids";
+import { initialState } from "./state";
+import type { CreatureProfile, LongTermMemory } from "./types";
+
+export function createCreatureProfile(input: {
+  userId?: string;
+  creatureName?: string;
+  now?: string;
+} = {}): CreatureProfile {
+  const now = input.now ?? new Date().toISOString();
+  const profile: CreatureProfile = {
+    userId: input.userId ?? makeId("user"),
+    creatureName: input.creatureName?.trim() || "Papo",
+    createdAt: now,
+    state: initialState(),
+    episodes: [],
+    longTermMemories: seedMemories(now),
+    feedbackHistory: [],
+    stateChanges: []
+  };
+  return profile;
+}
+
+function seedMemories(now: string): LongTermMemory[] {
+  return [
+    {
+      id: makeId("ltm"),
+      createdAt: now,
+      kind: "creature_self_memory",
+      text: "我正在学习先注意、再记住、再根据反馈改变自己，而不是只做一个聊天框。",
+      weight: 62,
+      tags: ["注意", "记忆", "反馈", "小脑袋"]
+    }
+  ];
+}
