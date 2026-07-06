@@ -87,7 +87,8 @@ Harness stages:
 Wake rhythm split:
 
 - Rules compute elapsed time, state deltas, history caps, and persistence.
-- LLM may later rewrite the presence sentence, but cannot choose elapsed time or mutate state.
+- Rules choose any wake-time memory resurfacing from existing non-self long-term memories.
+- LLM may later rewrite the presence or resurfacing sentence, but cannot choose elapsed time, memory ids, or mutate state.
 - Wake text should describe living presence, not use development notes as interaction material.
 
 ### Borrowed Lessons
@@ -160,6 +161,7 @@ Done:
   - Feedback immediately surfaces a user-facing "I learned" note.
   - Real-model providers can now rewrite feedback learning notes and active emergence messages while rules keep ownership of state, policy, actions, and memory ids.
   - App open/reopen creates a wake event: Papo reacts to time passing, recovers energy by rule, and shows a small "醒来时" presence note on Home.
+  - After a long enough absence, wake can create a rhythm emergence from a real non-self long-term memory, so opening the app can feel like it quietly remembered something.
   - Demo Mode uses life-context examples rather than Papo development text as interaction material.
   - Demo Mode includes Curious stream loading, A/B feedback conditioning, and active emergence.
   - Experimental voice companionship in Curious Mode: browser speech recognition can listen up to 3 minutes and split transcripts every 30 seconds into `audio_transcript` segments.
@@ -183,7 +185,7 @@ Verified:
 - Curious Mode creature report uses user-life material and explains selected/ignored segments.
 - Feedback returns a visible learning note.
 - Active emergence reads as inner resurfacing rather than a template reminder.
-- Wake rhythm records an app-open presence event and applies rule-owned time-based state recovery.
+- Wake rhythm records an app-open presence event, applies rule-owned time-based state recovery, and can resurface a real user memory after absence.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`

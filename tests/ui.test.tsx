@@ -23,6 +23,9 @@ describe("App", () => {
             at: new Date().toISOString(),
             elapsedMinutes: 0,
             message: "我刚刚醒着，你一打开我就还在这里。",
+            innerThought: "我醒来时自己又想到妈妈复查这件事。",
+            relatedMemoryIds: ["m2"],
+            emergenceId: "emergence1",
             stateChangeReason: "app_wake_short_gap",
             stateDelta: {},
             ruleTrace: ["elapsed_minutes=0", "state_delta=none"]
@@ -38,6 +41,7 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByText("Papo")).toBeInTheDocument());
     expect(screen.getByText("当前心情")).toBeInTheDocument();
     expect(screen.getByText("醒来时")).toBeInTheDocument();
+    expect(screen.getByText("我醒来时自己又想到妈妈复查这件事。")).toBeInTheDocument();
     expect(screen.getByText("单次输入")).toBeInTheDocument();
     expect(screen.getByText("陪我一会儿")).toBeInTheDocument();
 
@@ -89,6 +93,14 @@ function profileFixture() {
         text: "我正在学习注意。",
         weight: 62,
         tags: ["注意"]
+      },
+      {
+        id: "m2",
+        createdAt: new Date().toISOString(),
+        kind: "future_review",
+        text: "妈妈周五复查，需要提前准备病历。",
+        weight: 80,
+        tags: ["妈妈复查"]
       }
     ],
     feedbackHistory: [],

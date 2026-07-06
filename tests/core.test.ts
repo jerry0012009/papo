@@ -75,6 +75,14 @@ describe("creature core", () => {
     profile.state.energy = 40;
     profile.state.arousal = 60;
     profile.lastSeenAt = "2026-07-06T06:00:00.000Z";
+    profile.longTermMemories.unshift({
+      id: "ltm_family_review",
+      createdAt: "2026-07-06T07:00:00.000Z",
+      kind: "future_review",
+      text: "妈妈周五 9:30 复查，需要提前准备病历、医保卡和上次检查单。",
+      weight: 80,
+      tags: ["妈妈复查", "病历", "医保卡"]
+    });
 
     const wake = wakeCreature(profile, "2026-07-06T08:00:00.000Z");
 
@@ -84,6 +92,10 @@ describe("creature core", () => {
     expect(profile.lastSeenAt).toBe("2026-07-06T08:00:00.000Z");
     expect(profile.wakeHistory[0].id).toBe(wake.id);
     expect(wake.message).toContain("醒来");
+    expect(wake.innerThought).toContain("妈妈");
+    expect(wake.relatedMemoryIds).toEqual(["ltm_family_review"]);
+    expect(profile.emergenceHistory[0].id).toBe(wake.emergenceId);
+    expect(profile.emergenceHistory[0].relatedMemoryIds).toEqual(["ltm_family_review"]);
   });
 
   it("remember promotes an episode to long-term memory", () => {

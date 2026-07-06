@@ -110,6 +110,7 @@ export function App() {
   const [emergence, setEmergence] = useState<string>();
   const [learningNote, setLearningNote] = useState<string>();
   const [wakeMessage, setWakeMessage] = useState<string>();
+  const [wakeThought, setWakeThought] = useState<string>();
   const [demoNote, setDemoNote] = useState<string>();
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
@@ -145,6 +146,7 @@ export function App() {
       setProfiles(nextProfiles);
       setProfile(woke.profile);
       setWakeMessage(woke.wake.message);
+      setWakeThought(woke.wake.innerThought);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -157,6 +159,7 @@ export function App() {
     const woke = await wakeProfile(active.userId);
     setProfile(woke.profile);
     setWakeMessage(woke.wake.message);
+    setWakeThought(woke.wake.innerThought);
     setTab("home");
   }
 
@@ -167,6 +170,7 @@ export function App() {
     const woke = await wakeProfile(next.userId);
     setProfile(woke.profile);
     setWakeMessage(woke.wake.message);
+    setWakeThought(woke.wake.innerThought);
   }
 
   async function submitButtonCapture() {
@@ -386,6 +390,7 @@ export function App() {
           emergence={emergence}
           learningNote={learningNote}
           wakeMessage={wakeMessage}
+          wakeThought={wakeThought}
           busy={busy}
           onFeedback={giveFeedback}
           onGoCapture={() => setTab("capture")}
@@ -434,6 +439,7 @@ function HomeView(props: {
   emergence?: string;
   learningNote?: string;
   wakeMessage?: string;
+  wakeThought?: string;
   busy: boolean;
   onFeedback: (kind: FeedbackKind, targetId?: string) => void;
   onGoCapture: () => void;
@@ -467,6 +473,7 @@ function HomeView(props: {
         <section className="wake-note">
           <span>醒来时</span>
           <p>{props.wakeMessage}</p>
+          {props.wakeThought ? <p>{props.wakeThought}</p> : null}
         </section>
       ) : null}
       {props.emergence ? <section className="memory-surface active">{props.emergence}</section> : null}

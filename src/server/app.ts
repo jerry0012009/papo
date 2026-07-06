@@ -90,6 +90,11 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const wake = wakeCreature(profile);
+      const wakeEmergence = wake.emergenceId ? profile.emergenceHistory.find((item) => item.id === wake.emergenceId) : undefined;
+      if (wakeEmergence) {
+        const enriched = await enrichEmergenceNarration(profile, { ...wakeEmergence, text: wakeEmergence.message }, provider);
+        wake.innerThought = enriched.text;
+      }
       await store.saveProfile(profile);
       res.json({ profile, wake });
     } catch (error) {

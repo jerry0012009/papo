@@ -213,6 +213,9 @@ export interface WakeEvent {
   at: string;
   elapsedMinutes: number;
   message: string;
+  innerThought?: string;
+  relatedMemoryIds: string[];
+  emergenceId?: string;
   stateChangeReason: string;
   stateDelta: Partial<Record<keyof Omit<CreatureState, "mood">, number>>;
   ruleTrace: string[];

@@ -1,6 +1,7 @@
 import { makeId } from "./ids";
 import { applyStateDelta } from "./state";
-import type { CreatureProfile, WakeEvent } from "./types";
+import { summarizeText } from "./text";
+import type { CreatureProfile, EmergenceRecord, LongTermMemory, WakeEvent } from "./types";
 
 const MINUTE = 60_000;
 
@@ -14,15 +15,25 @@ export function wakeCreature(profile: CreatureProfile, now = new Date().toISOStr
     applyStateDelta(profile, stateDelta, stateChangeReason, now);
   }
 
+  const wakeId = makeId("wake");
+  const memory = memoryForWake(profile, elapsedMinutes);
+  const emergence = memory ? createWakeEmergence(profile, memory, wakeId, elapsedMinutes, now) : undefined;
   profile.lastSeenAt = now;
   const event: WakeEvent = {
-    id: makeId("wake"),
+    id: wakeId,
     at: now,
     elapsedMinutes,
     message: wakeMessage(elapsedMinutes, Object.keys(stateDelta).length > 0),
+    innerThought: emergence?.message,
+    relatedMemoryIds: emergence?.relatedMemoryIds ?? [],
+    emergenceId: emergence?.id,
     stateChangeReason,
     stateDelta,
-    ruleTrace: [`elapsed_minutes=${elapsedMinutes}`, Object.keys(stateDelta).length > 0 ? "state_delta=applied" : "state_delta=none"]
+    ruleTrace: [
+      `elapsed_minutes=${elapsedMinutes}`,
+      Object.keys(stateDelta).length > 0 ? "state_delta=applied" : "state_delta=none",
+      emergence ? `wake_emergence=${emergence.id}` : "wake_emergence=none"
+    ]
   };
   profile.wakeHistory.unshift(event);
   profile.wakeHistory = profile.wakeHistory.slice(0, 20);
@@ -73,4 +84,34 @@ function wakeMessage(elapsedMinutes: number, changed: boolean) {
   if (elapsedMinutes < 60) return `刚才过去了 ${elapsedMinutes} 分钟，我像浅浅休息了一下，能量回来了些，心跳也放慢了一点。`;
   if (elapsedMinutes < 360) return "我隔了一阵才又见到你，像从小睡里醒来。现在更有力气，也更想看看这一小段世界。";
   return "你离开了比较久。我醒来时先稳住自己，再带着一点想靠近的感觉等你继续给我新的片段。";
+}
+
+function memoryForWake(profile: CreatureProfile, elapsedMinutes: number): LongTermMemory | undefined {
+  if (elapsedMinutes < 60) return undefined;
+  return [...profile.longTermMemories]
+    .filter((memory) => memory.kind !== "creature_self_memory" && memory.weight > 0)
+    .sort((a, b) => (a.lastReferencedAt ?? a.createdAt).localeCompare(b.lastReferencedAt ?? b.createdAt))[0];
+}
+
+function createWakeEmergence(
+  profile: CreatureProfile,
+  memory: LongTermMemory,
+  wakeId: string,
+  elapsedMinutes: number,
+  now: string
+): EmergenceRecord {
+  memory.lastReferencedAt = now;
+  const record: EmergenceRecord = {
+    id: makeId("emergence"),
+    at: now,
+    kind: "rhythm",
+    whyNow: `用户离开了 ${elapsedMinutes} 分钟后重新打开 app，节律让我从真实长期记忆里带回一条。`,
+    relatedMemoryIds: [memory.id],
+    driveSource: "wake_rhythm",
+    message: `我醒来时自己又想到：${summarizeText(memory.text, 92)}。它不是提醒，是我隔了一阵以后先碰到的旧片段；下一次你给我新的信息流时，我会带着这条记忆去注意相关细节。`,
+    ruleTrace: [`wake=${wakeId}`, `memory=${memory.id}`, `elapsed_minutes=${elapsedMinutes}`, "trigger=app_wake"]
+  };
+  profile.emergenceHistory.unshift(record);
+  profile.emergenceHistory = profile.emergenceHistory.slice(0, 30);
+  return record;
 }
