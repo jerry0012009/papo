@@ -67,8 +67,10 @@ LLM owns:
 - Possible user intent.
 - More natural creature response.
 - Candidate action suggestions.
+- More natural narration for feedback learning and active emergence.
 
 Guardrails always run after LLM suggestions. LLM output cannot directly mutate state values, delete memory, bypass privacy, or write cross-user data.
+LLM narration cannot change state, policy, action, memory ids, or persistence. Emergence narration is accepted only when it stays anchored to a real memory already selected by rules.
 
 Harness stages:
 
@@ -80,6 +82,7 @@ Harness stages:
 6. `learn`: feedback updates state and memory weight.
 7. `emerge`: state and memory trigger active resurfacing.
 8. `wake`: app open/reopen applies deterministic time rhythm and shows a small presence note.
+9. `narrate`: LLM may rewrite user-facing feedback/emergence text after rules have already decided the facts.
 
 Wake rhythm split:
 
@@ -115,6 +118,7 @@ ClawRouter:
 - `src/core/state.ts`: creature drives and state updates.
 - `src/core/attention.ts`: rule-based attention candidates.
 - `src/core/harness.ts`: mixed rule + LLM semantic harness.
+- `src/core/narration.ts`: guarded LLM narration for learning notes and emergence messages.
 - `src/core/memory.ts`: episode and long-term memory.
 - `src/core/feedback.ts`: reinforcement rules.
 - `src/core/emergence.ts`: active resurfacing.
@@ -154,6 +158,7 @@ Done:
 - Goal 3 experience layer:
   - Main UI uses creature experience language for attention and episodes.
   - Feedback immediately surfaces a user-facing "I learned" note.
+  - Real-model providers can now rewrite feedback learning notes and active emergence messages while rules keep ownership of state, policy, actions, and memory ids.
   - App open/reopen creates a wake event: Papo reacts to time passing, recovers energy by rule, and shows a small "醒来时" presence note on Home.
   - Demo Mode uses life-context examples rather than Papo development text as interaction material.
   - Demo Mode includes Curious stream loading, A/B feedback conditioning, and active emergence.
@@ -161,7 +166,7 @@ Done:
 
 Verified:
 
-- `npm test`: 25 tests passing across core, v0.2 brain behavior, Goal 3 experience, API, and UI.
+- `npm test`: 27 tests passing across core, v0.2 brain behavior, Goal 3 experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -173,6 +178,8 @@ Verified:
 - Feedback changes later policy and action style, so different users diverge.
 - LLM invalid JSON falls back without breaking the life loop.
 - LLM action suggestions go through rule guardrails.
+- LLM feedback narration cannot mutate rule-owned state.
+- LLM emergence narration must stay anchored to an existing long-term memory or it is rejected.
 - Curious Mode creature report uses user-life material and explains selected/ignored segments.
 - Feedback returns a visible learning note.
 - Active emergence reads as inner resurfacing rather than a template reminder.

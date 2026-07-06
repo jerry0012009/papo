@@ -3,6 +3,7 @@ import { handleButtonCapture, handleCuriousStream } from "../src/core/attention"
 import { createActiveEmergence } from "../src/core/emergence";
 import { applyFeedback } from "../src/core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../src/core/harness";
+import { enrichEmergenceNarration, enrichFeedbackNarration } from "../src/core/narration";
 import { createCreatureProfile } from "../src/core/profile";
 import type { ModelProvider } from "../src/core/provider";
 
@@ -154,6 +155,70 @@ describe("creature brain v0.2", () => {
     expect(result.events.length).toBeLessThanOrEqual(3);
     expect(result.events[0].semanticSource).toBe("llm");
     expect(result.harnessTrace?.join(" ")).toContain("llm interpretation applied");
+  });
+
+  it("LLM can narrate feedback learning without mutating rule-owned state", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "narration model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      generateJson: async <T,>() =>
+        ({
+          learningNote: "我学到：妈妈复查这件事你希望我多停一下，之后遇到相似担心时，我会先陪你把它放稳。",
+          trace: ["llm: feedback narration"]
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "我有点担心自己又把妈妈复查这件事拖到睡前。");
+    const feedback = applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id });
+    const stateAfterRules = structuredClone(profile.state);
+
+    await enrichFeedbackNarration(profile, feedback, provider);
+
+    expect(feedback.learningNote).toContain("妈妈复查");
+    expect(profile.state).toEqual(stateAfterRules);
+  });
+
+  it("LLM emergence narration must stay anchored to an existing memory", async () => {
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "妈妈复查这件事对我很重要，我希望提前准备。");
+    applyFeedback(profile, { kind: "remember", targetId: result.episodes[0].id });
+    profile.state.curiosity = 86;
+    const emergence = createActiveEmergence(profile);
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "anchored narration model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      generateJson: async <T,>() =>
+        ({
+          message: "我刚才自己又想起妈妈复查这件事。它现在冒出来，是因为我的好奇心还在轻轻推我：下次你给我新的片段时，我会先找哪些东西能帮你提前准备。",
+          trace: ["llm: emergence narration"]
+        }) as T
+    };
+
+    const enriched = await enrichEmergenceNarration(profile, emergence, provider);
+
+    expect(enriched.text).toContain("妈妈复查");
+    expect(profile.emergenceHistory[0].message).toContain("妈妈复查");
+
+    const unsafe = createActiveEmergence(profile);
+    const unsafeOriginal = unsafe.message;
+    const unsafeProvider: ModelProvider = {
+      ...provider,
+      generateJson: async <T,>() =>
+        ({
+          message: "我刚才想起一件不存在的旅行计划，所以准备提醒你订票。",
+          trace: ["llm: unanchored hallucination"]
+        }) as T
+    };
+
+    const rejected = await enrichEmergenceNarration(profile, unsafe, unsafeProvider);
+
+    expect(rejected.text).toBe(unsafeOriginal);
   });
 });
 

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createActiveEmergence } from "../core/emergence";
 import { applyFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
+import { enrichEmergenceNarration, enrichFeedbackNarration } from "../core/narration";
 import { createModelProvider, type ModelProvider } from "../core/provider";
 import { promoteEpisode, updateLongTermMemory } from "../core/memory";
 import { wakeCreature } from "../core/rhythm";
@@ -125,6 +126,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const profile = await requireProfile(store, req.params.userId);
       const body = feedbackSchema.parse(req.body);
       const feedback = applyFeedback(profile, body);
+      await enrichFeedbackNarration(profile, feedback, provider);
       await store.saveProfile(profile);
       res.json({ profile, feedback });
     } catch (error) {
@@ -160,6 +162,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const emergence = createActiveEmergence(profile);
+      await enrichEmergenceNarration(profile, emergence, provider);
       await store.saveProfile(profile);
       res.json({ profile, emergence });
     } catch (error) {
