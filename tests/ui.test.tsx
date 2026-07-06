@@ -85,15 +85,18 @@ describe("App", () => {
 
     await waitFor(() => expect(screen.getByText("Papo")).toBeInTheDocument());
     expect(screen.getByLabelText("Papo 是一只卡通柴犬")).toBeInTheDocument();
-    expect(screen.getByText("当前心情")).toBeInTheDocument();
-    expect(screen.getByText("会先观察，再决定要不要靠近")).toBeInTheDocument();
+    expect(screen.getByText("Papo 现在")).toBeInTheDocument();
+    expect(screen.queryByText("当前心情")).not.toBeInTheDocument();
+    expect(screen.queryByText(/触发了醒来节律|重新计算/)).not.toBeInTheDocument();
+    expect(screen.getByText("刚收到你递来的一小段")).toBeInTheDocument();
+    expect(screen.getByText("它已经接到这段材料，下一步会把文字、照片或声音放在同一个小情景里理解。")).toBeInTheDocument();
     expect(screen.getByText("Papo 刚动了一下")).toBeInTheDocument();
     expect(screen.getByText("我醒来时自己又想到妈妈复查这件事。")).toBeInTheDocument();
     expect(screen.queryByText("Papo 新说")).not.toBeInTheDocument();
     expect(screen.queryByText("桌面提醒")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("有未读 Papo 回复")).not.toBeInTheDocument();
     expect(screen.getByText("来自半分钟里的一小段")).toBeInTheDocument();
-    expect(screen.getByText("单次输入")).toBeInTheDocument();
+    expect(screen.getByText("跟 Papo 说")).toBeInTheDocument();
     expect(screen.getByText("陪我一会儿")).toBeInTheDocument();
 
     await userEvent.type(screen.getByPlaceholderText("也可以告诉 Papo：为什么对、为什么不想要、要怎么记"), "这里请多想一点");
@@ -106,7 +109,7 @@ describe("App", () => {
     expect(screen.queryByText("桌面提醒")).not.toBeInTheDocument();
     expect(screen.getByLabelText("有未读 Papo 回复")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "单次输入" }));
+    await userEvent.click(screen.getByRole("button", { name: "跟 Papo 说" }));
     expect(screen.getByText("对话和注意流")).toBeInTheDocument();
     expect(screen.queryByLabelText("有未读 Papo 回复")).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText("直接告诉 Papo 一件刚发生的事")).toBeInTheDocument();

@@ -798,7 +798,7 @@ function HomeView(props: {
       <div className="hero">
         <ShibaAvatar state={props.profile.state} />
         <div className="hero-copy">
-          <p className="eyebrow">当前心情</p>
+          <p className="eyebrow">Papo 现在</p>
           <h2>{stateHeadline(props.profile)}</h2>
           <p>{stateSentence(props.profile)}</p>
           <div className="dog-state-cues">
@@ -811,7 +811,7 @@ function HomeView(props: {
       <div className="action-row">
         <button onClick={props.onGoCapture}>
           <MessageCircle size={18} />
-          单次输入
+          跟 Papo 说
         </button>
         <button onClick={props.onGoCurious}>
           <Sparkles size={18} />
@@ -1794,27 +1794,44 @@ function moodText(mood: CreatureState["mood"]) {
 function stateHeadline(profile: CreatureProfile) {
   const latest = profile.conversation?.[0];
   if (latest?.role === "papo") {
-    if (latest.channel === "button") return "刚回应过你";
-    if (latest.channel === "curious") return "刚陪你听完一段";
-    if (latest.channel === "feedback") return "正在学你的反馈";
-    if (latest.channel === "emergence") return "自己想起一点";
+    if (latest.channel === "button") return "刚把耳朵转向你";
+    if (latest.channel === "curious") return "刚陪你听过一小段";
+    if (latest.channel === "feedback") return "正在把你的意思记进身体里";
+    if (latest.channel === "emergence") return "刚自己想起一小段";
   }
+  if (latest?.role === "user" || latest?.role === "world") return "刚收到你递来的一小段";
   const wake = profile.wakeHistory?.[0];
   if (wake && wake.elapsedMinutes >= 60) return "刚从小睡里醒来";
-  return moodText(profile.state.mood);
+  return restingHeadline(profile.state);
 }
 
 function stateSentence(profile: CreatureProfile) {
   const state = profile.state;
+  const latest = profile.conversation?.[0];
   const latestChange = profile.stateChanges?.[0];
-  if (latestChange?.reason.includes("button capture")) return "刚才那句话让它集中了一次注意，精力会轻微下降，依恋和唤醒会有一点变化。";
-  if (latestChange?.reason.includes("feedback")) return "它刚被你的反馈调整过，之后类似片段的回应方式会跟着变。";
-  if (latestChange?.reason.includes("wake")) return "这次打开应用触发了醒来节律，能量、唤醒度和好奇心按时间差重新计算。";
-  if (state.energy < 35) return "它会短一点回应，把重要片段先存下来。";
-  if (state.safety > 74) return "它会更谨慎处理隐私和长期保存。";
-  if (state.curiosity > 72) return "它更容易从信息流里挑出新主题。";
-  if (state.attachment > 68) return "它更愿意把当前片段和你们的旧经历连起来。";
-  return "它正在用稳定的注意力观察当前片段。";
+  if (latest?.role === "papo" && latest.channel === "feedback") return "你刚刚教过它一次，它会把这种偏好带到后面相似的小片段里。";
+  if (latest?.role === "papo" && latest.channel === "emergence") return "那条旧记忆刚从里面冒出来，它会带着这个方向继续听下一段。";
+  if (latest?.role === "papo" && latest.channel === "curious") return "它刚从一小段世界里挑出自己在意的地方，还没有把所有东西都吞下去。";
+  if (latest?.role === "papo" && latest.channel === "button") return "刚才那句话让它竖起耳朵，正在判断要回应、记住，还是先轻轻问一句。";
+  if (latest?.role === "user" || latest?.role === "world") return "它已经接到这段材料，下一步会把文字、照片或声音放在同一个小情景里理解。";
+  if (latestChange?.reason.includes("button capture")) return "刚才那句话让它竖起耳朵，身体还留着一点被你叫住后的反应。";
+  if (latestChange?.reason.includes("feedback")) return "它刚被你养成了一点，之后遇到相似片段会更接近你的意思。";
+  if (latestChange?.reason.includes("wake")) return "这次重新见到你以后，它先稳住自己，再把耳朵留给新的小片段。";
+  if (state.energy < 35) return "它会短一点回应，把重要片段先抱住，等有力气再展开。";
+  if (state.safety > 74) return "它会先闻一闻边界，隐私和长期保存都会更谨慎。";
+  if (state.curiosity > 72) return "它的耳朵现在更容易被新主题牵动，但还是会挑最值得在意的那一小段。";
+  if (state.attachment > 68) return "它更想把你现在给它的片段，和你们以前经历过的小事连起来。";
+  return "它正安静陪着你，先观察，再决定要不要靠近。";
+}
+
+function restingHeadline(state: CreatureState) {
+  if (state.energy < 35) return "趴着听你";
+  if (state.safety > 74) return "先小心闻一闻";
+  if (state.attachment > 68) return "身体往你这边靠";
+  if (state.confidence > 70 && state.energy > 55) return "眼睛亮了一点";
+  if (state.arousal < 36) return "安静贴着这一刻";
+  if (state.curiosity > 62) return "耳朵正朝着你";
+  return moodText(state.mood);
 }
 
 function dogMotionText(state: CreatureState) {
