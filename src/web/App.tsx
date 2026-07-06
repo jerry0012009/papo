@@ -1801,6 +1801,7 @@ function emergenceDriveText(drive: string) {
     attachment: "因为我想靠近旧片段",
     rhythm: "因为节律把旧记忆带回我这里",
     wake_rhythm: "因为醒来时碰到我抱着的旧记忆",
+    wake_self_memory: "因为醒来时碰到你养出来的习惯",
     memory_resonance: "因为新片段碰到我抱着的旧记忆"
   };
   return map[drive] ?? "因为我现在的状态把这段带了回来";

@@ -120,6 +120,7 @@ Wake rhythm split:
 
 - Rules compute elapsed time, state deltas, history caps, and persistence.
 - Rules choose any wake-time memory resurfacing from existing non-self long-term memories.
+- If no non-self long-term memory is available, rules may surface feedback-shaped `creature_self_memory` as "how you have raised me", but must not phrase it as an old shared event.
 - LLM may later rewrite the presence or resurfacing sentence, but cannot choose elapsed time, memory ids, or mutate state.
 - Wake text should describe living presence, not use development notes as interaction material.
 
@@ -252,6 +253,7 @@ Done:
   - Brain page shows model routing diagnostics, including which provider handles semantic text, vision sensing, and audio sensing.
   - Initial creature state has small deterministic per-user variation, and Home state copy is driven by recent wake/conversation/feedback state changes instead of only a static mood label.
   - Short wake gaps now use living presence language instead of "not a new experience" system-log wording.
+  - Wake rhythm can now carry feedback-shaped self-memory when no shared life memory is available, so Papo can wake with the habits the user taught it without pretending it remembered an event.
   - Active emergence no longer uses seed self-memory as a fake shared memory. User-generated memories can still support emergence even when they are about Papo itself; with no real shared memory, it says it will wait for a real shared moment instead of claiming it remembered one.
   - Memory cards now combine familiarity and memory type into Papo's own subjective sentence, so the default memory page reads less like a database record.
   - Home presence copy no longer labels Papo as "current mood" or explains state as calculation. It now prioritizes the latest conversation, feedback, emergence, or wake context before falling back to body-state cues.
@@ -276,7 +278,7 @@ Done:
 
 Verified:
 
-- `npm test`: 40 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
+- `npm test`: 41 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.

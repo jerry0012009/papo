@@ -169,6 +169,22 @@ describe("creature core", () => {
     expect(wake.message).not.toContain("当前状态");
   });
 
+  it("wake can carry feedback-shaped self memory without faking a shared old event", () => {
+    const profile = createCreatureProfile({ now: "2026-07-06T06:00:00.000Z" });
+    const result = handleButtonCapture(profile, "我担心自己又把妈妈复查这件事拖到睡前。", "2026-07-06T06:01:00.000Z");
+    applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id, now: "2026-07-06T06:02:00.000Z" });
+    profile.lastSeenAt = "2026-07-06T06:02:00.000Z";
+
+    const wake = wakeCreature(profile, "2026-07-06T08:02:00.000Z");
+
+    expect(wake.innerThought).toContain("你教过我的样子");
+    expect(wake.innerThought).toContain("不把它装成旧事件");
+    expect(wake.innerThought).not.toContain("我想起了");
+    expect(wake.relatedMemoryIds).toEqual([expect.stringMatching(/^ltm_/)]);
+    expect(profile.emergenceHistory[0].driveSource).toBe("wake_self_memory");
+    expect(profile.longTermMemories.find((memory) => memory.id === wake.relatedMemoryIds[0])?.tags).toContain("被你养成");
+  });
+
   it("remember promotes an episode to long-term memory", () => {
     const profile = createCreatureProfile();
     handleButtonCapture(profile, "用户更喜欢我解释自己为什么注意到某件事。");

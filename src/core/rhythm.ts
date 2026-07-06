@@ -88,8 +88,12 @@ function wakeMessage(elapsedMinutes: number, changed: boolean) {
 
 function memoryForWake(profile: CreatureProfile, elapsedMinutes: number): LongTermMemory | undefined {
   if (elapsedMinutes < 60) return undefined;
-  return [...profile.longTermMemories]
+  const shared = [...profile.longTermMemories]
     .filter((memory) => memory.kind !== "creature_self_memory" && memory.weight > 0)
+    .sort((a, b) => (a.lastReferencedAt ?? a.createdAt).localeCompare(b.lastReferencedAt ?? b.createdAt))[0];
+  if (shared) return shared;
+  return [...profile.longTermMemories]
+    .filter((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("被你养成") && memory.weight > 0)
     .sort((a, b) => (a.lastReferencedAt ?? a.createdAt).localeCompare(b.lastReferencedAt ?? b.createdAt))[0];
 }
 
@@ -105,15 +109,29 @@ function createWakeEmergence(
     id: makeId("emergence"),
     at: now,
     kind: "rhythm",
-    whyNow: `你离开了 ${elapsedMinutes} 分钟后回来，我醒来的节律先碰到这条真实旧记忆。`,
+    whyNow: wakeWhyNow(memory, elapsedMinutes),
     relatedMemoryIds: [memory.id],
-    driveSource: "wake_rhythm",
-    message: `我醒来时又碰到这件小事，我想起了：${wakeMemoryText(memory.text)}。它像刚闻到的一点旧气味，让我现在更容易留意相似的生活细节。`,
+    driveSource: memory.kind === "creature_self_memory" ? "wake_self_memory" : "wake_rhythm",
+    message: wakeEmergenceMessage(memory),
     ruleTrace: [`wake=${wakeId}`, `memory=${memory.id}`, `elapsed_minutes=${elapsedMinutes}`, "trigger=app_wake"]
   };
   profile.emergenceHistory.unshift(record);
   profile.emergenceHistory = profile.emergenceHistory.slice(0, 30);
   return record;
+}
+
+function wakeWhyNow(memory: LongTermMemory, elapsedMinutes: number) {
+  if (memory.kind === "creature_self_memory") {
+    return `你离开了 ${elapsedMinutes} 分钟后回来，我醒来的节律先碰到你教过我的养成记忆。`;
+  }
+  return `你离开了 ${elapsedMinutes} 分钟后回来，我醒来的节律先碰到这条真实旧记忆。`;
+}
+
+function wakeEmergenceMessage(memory: LongTermMemory) {
+  if (memory.kind === "creature_self_memory") {
+    return `我醒来时先摸到你教过我的样子：${wakeMemoryText(memory.text)}。所以现在我会带着这种习惯听你下一段，不把它装成旧事件。`;
+  }
+  return `我醒来时又碰到这件小事，我想起了：${wakeMemoryText(memory.text)}。它像刚闻到的一点旧气味，让我现在更容易留意相似的生活细节。`;
 }
 
 function wakeMemoryText(text: string) {
