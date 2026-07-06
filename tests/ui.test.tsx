@@ -171,15 +171,16 @@ describe("App", () => {
     expect(screen.getByText("我刚刚醒着，你一打开我就还在这里。")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "记忆" }));
-    expect(screen.getByText("我记得的事")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("找一段我记得的事")).toBeInTheDocument();
-    expect(screen.getByText("我对自己的小记忆")).toBeInTheDocument();
-    expect(screen.getByText("刚一起经历过的片段")).toBeInTheDocument();
+    expect(screen.getByText("Papo 抱着的小事")).toBeInTheDocument();
+    expect(screen.getByText("这里不是资料库，是 Papo 现在还抱着的共同小片段。")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("找找 Papo 抱着哪一段")).toBeInTheDocument();
+    expect(screen.getByText("Papo 对自己的小理解")).toBeInTheDocument();
+    expect(screen.getByText("刚和 Papo 过的小片段")).toBeInTheDocument();
     expect(screen.getByText("我记得以后要回头看看：妈妈周五复查，需要提前准备病历")).toBeInTheDocument();
     expect(screen.getByText("我正在学习注意。")).toBeInTheDocument();
     expect(screen.getByText((_, element) => element?.textContent === "我记得比较清楚，以后我可能还会想起它。")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "帮我改准" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "先放下" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "帮 Papo 记准" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "让它先放下" })).toBeInTheDocument();
     expect(screen.queryByText("future_review · 权重 80")).not.toBeInTheDocument();
     expect(screen.queryByText("future_review · weight 80")).not.toBeInTheDocument();
     expect(screen.queryByText("记忆细节")).not.toBeInTheDocument();
@@ -195,6 +196,8 @@ describe("App", () => {
     expect(screen.getByText("演示模式")).toBeInTheDocument();
     expect(screen.getByText("一键准备 4 分钟演示")).toBeInTheDocument();
     expect(screen.getByText("场景 1：准备 8 段生活片段")).toBeInTheDocument();
+    expect(screen.getByText("场景 2：看两只 Papo 长出不同性格")).toBeInTheDocument();
+    expect(screen.queryByText("场景 2：生成 A/B 养成对比")).not.toBeInTheDocument();
     expect(screen.queryByText("后续任务")).not.toBeInTheDocument();
   });
 });

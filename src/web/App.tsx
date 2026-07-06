@@ -633,7 +633,7 @@ export function App() {
         contrast,
         emergence: emerged.emergence.text
       });
-      setDemoNote("完整演示已准备好：主线小动物、A/B 养成对比和主动浮现都已生成。");
+      setDemoNote("完整演示已准备好：主线小动物、两只 Papo 的性格差异和主动浮现都已生成。");
       setTab("demo");
     });
   }
@@ -1200,8 +1200,9 @@ function MemoryView(props: {
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={History} title="我记得的事" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一段我记得的事" />
+        <PanelTitle icon={History} title="Papo 抱着的小事" />
+        <p className="muted">这里不是资料库，是 Papo 现在还抱着的共同小片段。</p>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找找 Papo 抱着哪一段" />
         {otherMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             {editingId === memory.id ? (
@@ -1216,9 +1217,9 @@ function MemoryView(props: {
                     }}
                   >
                     <Save size={16} />
-                    保存
+                    这样记
                   </button>
-                  <button onClick={() => setEditingId(undefined)}>取消</button>
+                  <button onClick={() => setEditingId(undefined)}>先不改</button>
                 </div>
               </>
             ) : (
@@ -1234,29 +1235,29 @@ function MemoryView(props: {
                 }}
               >
                 <MessageCircle size={16} />
-                帮我改准
+                帮 Papo 记准
               </button>
               <button onClick={() => props.onFeedback("forget", memory.id)}>
                 <RefreshCcw size={16} />
-                {memory.weight <= 0 ? "彻底忘掉" : "先放下"}
+                {memory.weight <= 0 ? "让它真的忘掉" : "让它先放下"}
               </button>
             </div>
           </article>
         ))}
-        {otherMemories.length ? null : <p className="muted">我还没有把这样的片段长期留下。</p>}
+        {otherMemories.length ? null : <p className="muted">Papo 还没有把别的事抱稳。</p>}
       </div>
       <div className="panel">
-        <PanelTitle icon={Brain} title="我对自己的小记忆" />
+        <PanelTitle icon={Brain} title="Papo 对自己的小理解" />
         {selfMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             <p>{memoryCreatureLine(memory)}</p>
-            <span>{memoryFamiliarityText(memory.weight)} · 我在慢慢认识自己</span>
+            <span>{memoryFamiliarityText(memory.weight)}，我在一点点认识自己。</span>
           </article>
         ))}
-        {selfMemories.length ? null : <p className="muted">我还没有留下关于自己的小理解。</p>}
+        {selfMemories.length ? null : <p className="muted">Papo 还没留下关于自己的小理解。</p>}
       </div>
       <div className="panel">
-        <PanelTitle icon={Eye} title="刚一起经历过的片段" />
+        <PanelTitle icon={Eye} title="刚和 Papo 过的小片段" />
         {props.profile.episodes.map((episode) => (
           <EpisodeCard
             key={episode.id}
@@ -1425,7 +1426,7 @@ function DemoView(props: {
         </button>
         <button onClick={props.onRunContrast} disabled={props.busy}>
           <UserRound size={18} />
-          场景 2：生成 A/B 养成对比
+          场景 2：看两只 Papo 长出不同性格
         </button>
         <button onClick={props.onEmerge} disabled={props.busy}>
           <Lightbulb size={18} />

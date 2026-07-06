@@ -11,10 +11,24 @@ export function createContrastSummary(input: {
   const deepLine = summarizeInnerChoice(input.deepResult);
   const quietLine = summarizeInnerChoice(input.quietResult);
   return [
-    `同一句输入下，深想型选择${actionTone(deepAction)}，安静型选择${actionTone(quietAction)}。`,
-    `养成差异：深想型深入倾向 ${input.deepProfile.policyProfile.preferDepth}、回忆倾向 ${input.deepProfile.policyProfile.recallTendency}；安静型安静倾向 ${input.quietProfile.policyProfile.quietTendency}、主动性 ${input.quietProfile.policyProfile.preferProactivity}。`,
+    `同一句话下，深想型 Papo ${actionTone(deepAction)}；安静型 Papo ${actionTone(quietAction)}。`,
+    `养成差异：${deepProfileLine(input.deepProfile, input.quietProfile)}；${quietProfileLine(input.quietProfile, input.deepProfile)}。`,
     `它们的内在选择也不一样：深想型「${deepLine}」；安静型「${quietLine}」。`
   ].join(" ");
+}
+
+function deepProfileLine(deep: CreatureProfile, quiet: CreatureProfile) {
+  const parts = ["深想型 Papo 被你养得更愿意停下来多想一点"];
+  if (deep.policyProfile.recallTendency > quiet.policyProfile.recallTendency) parts.push("更容易把旧片段带回来一起听");
+  if (deep.policyProfile.preferProactivity > quiet.policyProfile.preferProactivity) parts.push("也更可能轻轻接一句话");
+  return parts.join("，");
+}
+
+function quietProfileLine(quiet: CreatureProfile, deep: CreatureProfile) {
+  const parts = ["安静型 Papo 被你养得更会收住声音"];
+  if (quiet.policyProfile.quietTendency > deep.policyProfile.quietTendency) parts.push("先陪着，不急着打扰你");
+  if (quiet.policyProfile.privacySensitivity >= deep.policyProfile.privacySensitivity) parts.push("保存前会多等你的意思");
+  return parts.join("，");
 }
 
 function actionTone(action: string) {

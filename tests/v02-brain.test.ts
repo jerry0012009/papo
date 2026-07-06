@@ -72,8 +72,10 @@ describe("creature brain v0.2", () => {
     });
     expect(summary).toContain("深想型");
     expect(summary).toContain("安静型");
-    expect(summary).toContain(`深入倾向 ${a.policyProfile.preferDepth}`);
-    expect(summary).toContain(`安静倾向 ${b.policyProfile.quietTendency}`);
+    expect(summary).toContain("更愿意停下来多想一点");
+    expect(summary).toContain("更会收住声音");
+    expect(summary).not.toContain(`深入倾向 ${a.policyProfile.preferDepth}`);
+    expect(summary).not.toContain(`安静倾向 ${b.policyProfile.quietTendency}`);
     expect(summary).toContain("它们的内在选择也不一样");
   });
 

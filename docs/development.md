@@ -223,6 +223,8 @@ Done:
   - Home and Demo no longer expose harness trace lines or development backlog cards; technical diagnostics stay in Brain/developer surfaces.
   - Direct text input now lives in the dialogue page composer, then routes through the Button Capture harness and returns to the same conversation timeline; the old standalone Button Capture page was removed from the user-facing navigation.
   - Direct calls such as asking Papo to speak now map to a first-class `respond` action, so the harness can choose to answer before it asks, saves, recalls, or stays quiet.
+  - Memory page is a subjective creature memory surface: it should read like Papo holding and revisiting shared moments, not like a memory administration table. Editing/forgetting copy should frame the user as helping Papo remember accurately or let go.
+  - Demo personality contrast should show behavior/personality differences between two conditioned Papos. Raw policy names or numbers such as `preferDepth`, `quietTendency`, "深入倾向 69", or "安静倾向 62" belong in Brain diagnostics, not the user-facing Demo.
   - Semantic brain output now includes structured interaction understanding and can update the episode response plus memory candidate text before rule-owned persistence completes.
   - Semantic brain can rewrite Curious Mode selected/ignored reasons and the session creature report, while rules still own the selected set, ignored set, scores, attention budget, and guardrails.
   - Direct-call keyword handling was moved out of the primary action selector and into fallback repair only; successful LLM runs own the proposed interaction/action path.
@@ -282,7 +284,7 @@ Verified:
 - Real online Curious smoke passed through the OpenAI-compatible generic provider with `gpt-5.5`: semantic brain status `applied`, source `llm`, rule-owned event count stayed fixed, and LLM rewrote selected/ignored reasons into creature-facing narration.
 - Real online feedback narration smoke passed through the OpenAI-compatible generic provider with `gpt-5.5`: LLM rewrote learning/follow-up text while rule-owned `responseAction`, state, and memory candidate ids stayed fixed.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
-- Guided Demo Mode's A/B section displays how feedback changed the two creatures' depth/recall/quiet/proactivity tendencies and how their inner choices differ on the same input.
+- Guided Demo Mode's two-creature section displays how feedback changed their behavior and personality on the same input without exposing policy numbers.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`
