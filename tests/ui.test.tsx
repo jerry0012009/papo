@@ -128,14 +128,17 @@ describe("App", () => {
     expect(screen.queryByLabelText("切换用户")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "首页" }));
 
-    await userEvent.type(screen.getByPlaceholderText("也可以告诉 Papo：为什么对、为什么不想要、要怎么记"), "这里请多想一点");
-    await userEvent.click(screen.getByRole("button", { name: "继续想" }));
-    expect(await screen.findByText("这次养成变化")).toBeInTheDocument();
-    expect(screen.getByText("你还补充了：这里请多想一点")).toBeInTheDocument();
-    expect(screen.getByText("下次遇到相似的小片段，它会多停一下，愿意展开一点。")).toBeInTheDocument();
-    expect(screen.getByText("它刚认真用过一点力，接下来会先抱住重点。")).toBeInTheDocument();
+    expect(screen.getByText("这一下你怎么养我")).toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText("也可以补一句：哪里懂对了、哪里先放下、要怎么记准"), "这里请多想一点");
+    await userEvent.click(screen.getByRole("button", { name: "再想一会儿" }));
+    expect(await screen.findByText("我这一下变了一点")).toBeInTheDocument();
+    expect(screen.getByText("你刚才还告诉我：这里请多想一点")).toBeInTheDocument();
+    expect(screen.getByText("下次遇到相似的小片段，我会多停一下，愿意展开一点。")).toBeInTheDocument();
+    expect(screen.getByText("我刚认真用过一点力，接下来会先抱住重点。")).toBeInTheDocument();
     expect(screen.queryByText("好奇心 +8")).not.toBeInTheDocument();
     expect(screen.queryByText("深入倾向 +8")).not.toBeInTheDocument();
+    expect(screen.queryByText("这次养成变化")).not.toBeInTheDocument();
+    expect(screen.queryByText("下次遇到相似的小片段，它会多停一下，愿意展开一点。")).not.toBeInTheDocument();
     expect(screen.queryByText("Papo 新说")).not.toBeInTheDocument();
     expect(screen.queryByText("桌面提醒")).not.toBeInTheDocument();
     expect(screen.getByLabelText("有未读 Papo 回复")).toBeInTheDocument();
@@ -392,7 +395,7 @@ function profileWithFeedback() {
         at: new Date().toISOString(),
         role: "user",
         channel: "feedback",
-        text: "继续想：这里请多想一点",
+        text: "再想一会儿：这里请多想一点",
         sourceId: "feedback1:input",
         relatedMemoryIds: [],
         modality: "text",

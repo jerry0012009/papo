@@ -96,6 +96,7 @@ User-facing pages should not label the companionship flow as `Curious Mode` or e
 Demo entry copy should guide a person through Papo's life loop rather than sound like a script runner. Prefer "带 Papo 走一圈", "先给它生活片段", and "问问它想到什么" over "一键", "场景 1/2/3", or setup-task language on user-facing surfaces.
 Multi-creature contrast should feel like two Papos being raised differently, not two labeled configurations. Avoid user-facing names such as "深想型/安静型" or "演示主线"; use small creature names and explain the difference as feedback-shaped behavior.
 User-facing empty, error, and status copy is part of the creature experience too. Avoid "材料", "模拟信息流", and "录音分段" on user surfaces; say Papo is receiving, hearing, or holding "这一小段" instead.
+Feedback controls on user-facing memory and episode surfaces should sound like the user is raising Papo, not pressing admin actions. Prefer "再想一会儿", "先安静点", "帮我记住", and first-person learning echoes such as "我会..." while keeping raw feedback kinds in code/API/Brain diagnostics.
 
 Harness stages:
 
@@ -255,6 +256,7 @@ Done:
   - Demo entry copy now frames the guided run as taking Papo through a life loop, not preparing numbered scenes or running a script.
   - Demo-created comparison creatures now use natural small names and describe divergence as feedback-shaped behavior instead of classifier-style "deep/quiet type" labels.
   - Home and listening error/status copy no longer uses "材料", "模拟信息流", or "录音分段"; those are replaced with Papo receiving or hearing a small shared fragment.
+  - Feedback controls and feedback impact now read as Papo being raised in first person: buttons use "再想一会儿/先安静点/帮我记住", typed or voice feedback is framed as something Papo hears, and visible impact lines say "我会..." instead of third-person product summaries.
 
 Verified:
 
@@ -315,6 +317,7 @@ Verified:
 - UI smoke protects the demo entry from "一键准备" and numbered-scene copy.
 - Core and UI tests protect multi-creature contrast from "深想型/安静型" classifier labels on user-facing surfaces.
 - UI smoke protects Home status copy from "材料", "模拟一段信息流", and "录音分段" wording.
+- UI smoke protects feedback surfaces from third-person product-summary language after the user teaches Papo.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`

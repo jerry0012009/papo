@@ -80,6 +80,7 @@ describe("api", () => {
         expect(response.body.profile.conversation[0].role).toBe("papo");
         expect(response.body.profile.conversation[0].text).toContain("我会把你补充的这点");
         expect(response.body.profile.conversation[1].role).toBe("user");
+        expect(response.body.profile.conversation[1].text).toContain("帮我记住");
         expect(response.body.profile.conversation[1].text).toContain("这件事确实要记住");
         expect(response.body.profile.conversation[1].modality).toBe("audio_transcript");
       });

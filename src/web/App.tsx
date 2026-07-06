@@ -88,11 +88,11 @@ type ConversationSection =
   | { kind: "single"; id: string; message: ConversationMessage };
 
 const feedbacks: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }> = [
-  { kind: "understood", label: "理解对了", icon: Check },
-  { kind: "continue", label: "继续想", icon: Lightbulb },
-  { kind: "not_now", label: "这次不用", icon: CircleOff },
-  { kind: "remember", label: "记住", icon: Save },
-  { kind: "forget", label: "忘掉", icon: RefreshCcw }
+  { kind: "understood", label: "这次懂了", icon: Check },
+  { kind: "continue", label: "再想一会儿", icon: Lightbulb },
+  { kind: "not_now", label: "先安静点", icon: CircleOff },
+  { kind: "remember", label: "帮我记住", icon: Save },
+  { kind: "forget", label: "帮我放下", icon: RefreshCcw }
 ];
 
 const starterSegments: Array<{ kind: SegmentKind; label: string; content: string }> = [
@@ -629,7 +629,7 @@ export function App() {
       setEmergence(emerged.emergence);
       setDemoSummary({
         attention: `它看了 ${curiousResult.curiousSession?.totalSegments ?? demoCuriousSegments.length} 段，只认真注意到 ${curiousResult.events.length} 段。`,
-        feedback: learned || "它已经收到“记住”和“继续想”的反馈，并更新了状态与策略。",
+        feedback: learned || "它已经听见“帮我记住”和“再想一会儿”，正在把这点养进后面的回应里。",
         contrast,
         emergence: emerged.emergence.text
       });
@@ -1533,6 +1533,10 @@ function EpisodeCard(props: {
       ) : null}
       <EpisodeSourceMoment episode={props.episode} messages={props.sourceMessages ?? []} compact={props.compact} />
       <div className="feedback-input">
+        <div className="feedback-teach">
+          <strong>这一下你怎么养我</strong>
+          <span>你补的一句话，也会被我当成反馈一起听进去。</span>
+        </div>
         <textarea
           value={feedbackText}
           onChange={(event) => {
@@ -1540,11 +1544,11 @@ function EpisodeCard(props: {
             setFeedbackModality("text");
           }}
           rows={props.compact ? 2 : 3}
-          placeholder="也可以告诉 Papo：为什么对、为什么不想要、要怎么记"
+          placeholder="也可以补一句：哪里懂对了、哪里先放下、要怎么记准"
         />
         <label className="upload-button compact-upload">
           <Mic size={16} />
-          语音反馈
+          说给我听
           <input
             type="file"
             accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg"
@@ -1644,8 +1648,8 @@ function FeedbackImpactCard({ feedback }: { feedback: FeedbackRecord }) {
   if (!changes.length) return null;
   return (
     <section className="feedback-impact">
-      <strong>这次养成变化</strong>
-      {feedback.inputText ? <p>你还补充了：{feedback.inputText}</p> : null}
+      <strong>我这一下变了一点</strong>
+      {feedback.inputText ? <p>你刚才还告诉我：{feedback.inputText}</p> : null}
       <div>
         {changes.map((line) => (
           <span key={line}>{line}</span>
@@ -1723,24 +1727,24 @@ function feedbackChangeLines(
   const policy = new Map(policyDeltas.map((item) => [item.key, item.delta]));
 
   if ((state.get("curiosity") ?? 0) > 0 || (policy.get("preferDepth") ?? 0) > 0) {
-    lines.push("下次遇到相似的小片段，它会多停一下，愿意展开一点。");
+    lines.push("下次遇到相似的小片段，我会多停一下，愿意展开一点。");
   }
   if ((policy.get("recallTendency") ?? 0) > 0 || (state.get("attachment") ?? 0) > 0) {
-    lines.push("它会更容易把这段和你们以前的小事连起来。");
+    lines.push("我会更容易把这段和你们以前的小事连起来。");
   }
   if ((policy.get("quietTendency") ?? 0) > 0 || (state.get("arousal") ?? 0) < 0) {
-    lines.push("它学会收小一点声音，不是每次竖起耳朵都打扰你。");
+    lines.push("我学会收小一点声音，不是每次竖起耳朵都打扰你。");
   }
   if ((policy.get("privacySensitivity") ?? 0) > 0 || (state.get("safety") ?? 0) > 0) {
-    lines.push("它会更小心守住边界，保存前多等你的意思。");
+    lines.push("我会更小心守住边界，保存前多等你的意思。");
   }
   if ((state.get("confidence") ?? 0) > 0) {
-    lines.push("它会更敢把自己的理解轻轻说出来。");
+    lines.push("我会更敢把自己的理解轻轻说出来。");
   }
   if ((state.get("energy") ?? 0) < 0) {
-    lines.push("它刚认真用过一点力，接下来会先抱住重点。");
+    lines.push("我刚认真用过一点力，接下来会先抱住重点。");
   }
-  return lines.length ? [...new Set(lines)] : ["它已经把你的反馈放进后面的回应方式里。"];
+  return lines.length ? [...new Set(lines)] : ["我已经把你的反馈放进后面的回应方式里。"];
 }
 
 function attentionStrengthText(strength: number) {

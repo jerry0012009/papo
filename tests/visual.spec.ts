@@ -22,7 +22,7 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByText("Papo 抬头看了你一眼")).toBeVisible();
   await expect(page.getByText("我醒来时又碰到妈妈复查这件小事。")).toBeVisible();
   await expect(page.getByLabel("有未读 Papo 回复")).toBeVisible();
-  await expect(page.getByPlaceholder("也可以告诉 Papo：为什么对、为什么不想要、要怎么记")).toBeVisible();
+  await expect(page.getByPlaceholder("也可以补一句：哪里懂对了、哪里先放下、要怎么记准")).toBeVisible();
   await expect(page.getByText("来自半分钟里的一小段").first()).toBeVisible();
   expect(await navSitsOutsideScrollPort(page)).toBe(true);
 

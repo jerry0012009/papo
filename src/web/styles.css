@@ -799,6 +799,21 @@ meter {
   gap: 8px;
 }
 
+.feedback-teach {
+  display: grid;
+  gap: 2px;
+}
+
+.feedback-teach strong {
+  font-size: 0.86rem;
+}
+
+.feedback-teach span {
+  color: #69756c;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
 .compact-upload {
   min-height: 36px;
   justify-content: center;

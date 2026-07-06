@@ -315,11 +315,11 @@ async function requireProfile(store: ProfileStore, userId: string) {
 
 function feedbackInputText(kind: string, content?: string) {
   const label = {
-    understood: "理解对了",
-    continue: "继续想",
-    not_now: "这次不用",
-    remember: "记住",
-    forget: "忘掉"
+    understood: "这次懂了",
+    continue: "再想一会儿",
+    not_now: "先安静点",
+    remember: "帮我记住",
+    forget: "帮我放下"
   }[kind] ?? kind;
   const note = content?.trim();
   return note ? `${label}：${note}` : label;
