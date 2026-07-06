@@ -611,9 +611,40 @@ meter {
   padding: 10px;
 }
 
-.chat-composer button {
-  justify-self: end;
-  min-width: 132px;
+.composer-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.composer-tools button,
+.composer-tools .upload-button {
+  min-width: 0;
+  width: 100%;
+}
+
+.staged-moment {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.78);
+  border: 1px solid rgba(31, 36, 33, 0.08);
+  padding: 10px;
+}
+
+.staged-segment {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.58);
+  border: 1px solid rgba(79, 139, 118, 0.12);
+  padding: 8px;
+}
+
+.staged-segment button {
+  justify-self: start;
+  min-height: 34px;
+  padding: 6px 9px;
 }
 
 .chat-batch {
@@ -871,6 +902,10 @@ meter {
   }
 
   .state-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .composer-tools {
     grid-template-columns: 1fr;
   }
 

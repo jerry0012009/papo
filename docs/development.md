@@ -205,6 +205,7 @@ Done:
   - Papo is now rendered as a stateful cartoon Shiba Inu SVG: triangular ears, curled tail, urajiro face/chest, breathing, blinking, tired/alert/attached/careful motion states are bound to `CreatureState`.
   - Conversation and attention are unified in the UI: the dialogue page shows user/world inputs as attention material and Papo utterances as outputs in one timeline.
   - Dialogue inputs with the same 30-second batch are grouped as one shared moment, so multimodal fragments feel like one thing Papo experienced with the user.
+  - Dialogue composer now accepts text, photo summaries, and audio transcripts directly. When a photo/audio segment is staged, submitting the dialogue sends the whole 30-second shared moment through the Curious attention harness instead of forcing the user into a separate mode.
   - Episode memories preserve source segment/batch/time/location metadata and memory cards can show the exact shared moment that created them.
   - Feedback is integrated into the conversation timeline: buttons, typed notes, and audio-transcribed notes become user feedback inputs before Papo replies with a learning note.
   - Feedback can now advance the interaction instead of only issuing a receipt: rules choose acknowledge/follow-up/quiet/memory-note behavior, and substantive feedback can attach a new memory candidate or strengthen a promoted memory.

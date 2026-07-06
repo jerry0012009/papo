@@ -10,9 +10,13 @@ describe("App", () => {
   });
 
   it("renders the core mobile-first workbench", async () => {
+    let curiousRequest: { segments?: Array<{ kind: string; batchId?: string; content: string }> } | undefined;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith("/api/provider")) return json({ kind: "fallback", name: "Fallback demo brain", available: true, usesRealModel: false });
+      if (url.endsWith("/api/image-summary")) {
+        return json({ summary: "照片里是周五复查的日历备注，写着提前准备病历。", provider: "fallback", semanticSource: "fallback" });
+      }
       if (url.endsWith("/api/profiles") && init?.method === "POST") {
         return json({ profile: profileFixture() }, 201);
       }
@@ -61,6 +65,18 @@ describe("App", () => {
           provider: "fallback"
         });
       }
+      if (url.endsWith("/api/profiles/u1/curious")) {
+        curiousRequest = JSON.parse(String(init?.body ?? "{}"));
+        return json({
+          profile: profileWithChatMoment(),
+          events: [],
+          episodes: [],
+          response: "我把你刚说的话和照片放在同一小段里听了。",
+          memoryCandidates: [],
+          harnessTrace: ["sense: curious_stream", "semantic: fallback/rules only"],
+          provider: "fallback"
+        });
+      }
       if (url.endsWith("/api/profiles")) return json({ profiles: [] });
       return json({ profile: profileFixture() });
     });
@@ -98,6 +114,19 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "说给 Papo" }));
     expect(await screen.findByText("刚刚医生确认复查时间改到周六上午。")).toBeInTheDocument();
     expect(screen.queryByText("认真注意后")).not.toBeInTheDocument();
+
+    await userEvent.upload(screen.getByLabelText("加照片"), new File(["fake"], "复查照片.png", { type: "image/png" }));
+    expect(await screen.findByText("准备一起交给 Papo 的小素材")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("复查照片.png")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("照片里是周五复查的日历备注，写着提前准备病历。")).toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText("直接告诉 Papo 一件刚发生的事"), "这张照片就是刚说的复查。");
+    await userEvent.click(screen.getByRole("button", { name: "交给 Papo 注意" }));
+    await waitFor(() => expect(curiousRequest?.segments?.map((segment) => segment.kind)).toEqual(["text", "image_summary"]));
+    expect(new Set(curiousRequest?.segments?.map((segment) => segment.batchId)).size).toBe(1);
+    expect(await screen.findByText("我把你刚说的话和照片放在同一小段里听了。")).toBeInTheDocument();
+    expect(screen.getByText("这张照片就是刚说的复查。")).toBeInTheDocument();
+    expect(screen.getByText("照片里是周五复查的日历备注，写着提前准备病历。")).toBeInTheDocument();
+
     await userEvent.click(screen.getByRole("button", { name: "首页" }));
     expect(screen.queryByText(/sense: button/)).not.toBeInTheDocument();
     expect(screen.queryByText(/semantic: fallback/)).not.toBeInTheDocument();
@@ -110,16 +139,17 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "对话" }));
     expect(screen.getByText("对话和注意流")).toBeInTheDocument();
-    expect(screen.getByText("3 条注意素材")).toBeInTheDocument();
-    expect(screen.getByText("3 条 Papo 回应")).toBeInTheDocument();
-    expect(screen.getByText("半分钟里的一小段")).toBeInTheDocument();
+    expect(screen.getByText("5 条注意素材")).toBeInTheDocument();
+    expect(screen.getByText("4 条 Papo 回应")).toBeInTheDocument();
+    expect(screen.getAllByText("半分钟里的一小段")).toHaveLength(2);
+    expect(screen.getByText("2 条小素材")).toBeInTheDocument();
     expect(screen.getByText("1 条小素材")).toBeInTheDocument();
     expect(screen.queryByText("manual-1 · 1 条素材")).not.toBeInTheDocument();
-    expect(screen.getByText(/和这一小段世界放在一起/)).toBeInTheDocument();
+    expect(screen.getAllByText(/和这一小段世界放在一起/).length).toBeGreaterThan(1);
     expect(screen.getByText("你的反馈")).toBeInTheDocument();
     expect(screen.getByText(/你在教它/)).toBeInTheDocument();
     expect(screen.getAllByText("Papo").length).toBeGreaterThan(1);
-    expect(screen.getByText("你给 Papo 看了照片")).toBeInTheDocument();
+    expect(screen.getAllByText("你给 Papo 看了照片")).toHaveLength(2);
     expect(screen.getByText("我刚刚醒着，你一打开我就还在这里。")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "记忆" }));
@@ -340,6 +370,49 @@ function profileWithChatInput() {
         sourceId: "button-chat",
         relatedMemoryIds: [],
         modality: "button"
+      },
+      ...profile.conversation
+    ]
+  };
+}
+
+function profileWithChatMoment() {
+  const profile = profileWithChatInput();
+  return {
+    ...profile,
+    conversation: [
+      {
+        id: "msg9",
+        at: new Date().toISOString(),
+        role: "papo",
+        channel: "curious",
+        text: "我把你刚说的话和照片放在同一小段里听了。",
+        sourceId: "chat-session",
+        relatedMemoryIds: []
+      },
+      {
+        id: "msg8",
+        at: new Date().toISOString(),
+        role: "world",
+        channel: "curious",
+        text: "照片里是周五复查的日历备注，写着提前准备病历。",
+        sourceId: "chat-image",
+        relatedMemoryIds: [],
+        modality: "image_summary",
+        batchId: "chat-batch",
+        observedAt: new Date().toISOString()
+      },
+      {
+        id: "msg7",
+        at: new Date().toISOString(),
+        role: "user",
+        channel: "curious",
+        text: "这张照片就是刚说的复查。",
+        sourceId: "chat-text",
+        relatedMemoryIds: [],
+        modality: "text",
+        batchId: "chat-batch",
+        observedAt: new Date().toISOString()
       },
       ...profile.conversation
     ]

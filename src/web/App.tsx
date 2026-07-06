@@ -132,6 +132,7 @@ export function App() {
   const [segments, setSegments] = useState(
     starterSegments.map((segment, index) => makeSegment(`segment-${index + 1}`, segment.kind, segment.label, segment.content))
   );
+  const [chatSegments, setChatSegments] = useState<StreamSegment[]>([]);
   const [lastResult, setLastResult] = useState<CaptureResult>();
   const [emergence, setEmergence] = useState<EmergenceSurface>();
   const [learningNote, setLearningNote] = useState<string>();
@@ -227,6 +228,30 @@ export function App() {
     });
   }
 
+  async function submitChatMoment(text: string) {
+    const cleanText = text.trim();
+    if (!profile) return;
+    if (!chatSegments.length) {
+      await submitTextCapture(cleanText, "chat");
+      return;
+    }
+    await run(async () => {
+      const batchId = chatSegments[0]?.batchId ?? currentBatchId();
+      const textSegment = cleanText
+        ? [makeSegment(`chat-text-${Date.now()}`, "text", "你刚说的话", cleanText, { observedAt: new Date().toISOString(), batchId })]
+        : [];
+      const result = await curiousCapture(
+        profile.userId,
+        [...textSegment, ...chatSegments].filter((segment) => segment.content.trim()).map((segment, index) => ensureSegmentContext(segment, index))
+      );
+      setChatSegments([]);
+      setLastResult(result);
+      setProfile(result.profile);
+      setLearningNote(undefined);
+      setTab("chat");
+    });
+  }
+
   async function submitCurious() {
     if (!profile) return;
     await run(async () => {
@@ -238,6 +263,43 @@ export function App() {
       setProfile(result.profile);
       setLearningNote(undefined);
       setTab("home");
+    });
+  }
+
+  async function uploadChatImageSummary(file?: File) {
+    if (!file) return;
+    await run(async () => {
+      const observedAt = file.lastModified ? new Date(file.lastModified).toISOString() : new Date().toISOString();
+      const location = await currentLocationSnapshot();
+      const dataUrl = await readFileAsDataUrl(file);
+      const result = await summarizeImage(dataUrl, file.name || "对话照片");
+      setChatSegments((current) => [
+        ...current,
+        makeSegment(`chat-image-${Date.now()}`, "image_summary", file.name || `照片 ${current.length + 1}`, result.summary, {
+          observedAt,
+          batchId: current[0]?.batchId ?? currentBatchId(),
+          location
+        })
+      ]);
+      setDemoNote(result.semanticSource === "llm" ? "照片已经变成一段可编辑的小素材，会和这半分钟里的话一起交给 Papo。" : "照片先以可编辑摘要进入这一小段，对话提交时会一起交给 Papo。");
+      setTab("chat");
+    });
+  }
+
+  async function uploadChatAudioTranscript(file?: File) {
+    if (!file) return;
+    await run(async () => {
+      const dataUrl = await readFileAsDataUrl(file);
+      const result = await transcribeAudio(dataUrl, file.name || "对话录音");
+      setChatSegments((current) => [
+        ...current,
+        makeSegment(`chat-audio-${Date.now()}`, "audio_transcript", file.name || `录音 ${current.length + 1}`, result.transcript, {
+          observedAt: new Date().toISOString(),
+          batchId: current[0]?.batchId ?? currentBatchId()
+        })
+      ]);
+      setDemoNote(result.semanticSource === "llm" ? "录音已经转成一段可编辑的小素材，会和这半分钟里的话一起交给 Papo。" : "录音先以可编辑转写进入这一小段，对话提交时会一起交给 Papo。");
+      setTab("chat");
     });
   }
 
@@ -678,7 +740,17 @@ export function App() {
         />
       ) : null}
 
-      {tab === "chat" ? <ChatView profile={profile} busy={busy} onSubmitText={(text) => submitTextCapture(text, "chat")} /> : null}
+      {tab === "chat" ? (
+        <ChatView
+          profile={profile}
+          busy={busy}
+          stagedSegments={chatSegments}
+          onChangeStagedSegments={setChatSegments}
+          onSubmitMoment={submitChatMoment}
+          onUploadImage={uploadChatImageSummary}
+          onUploadAudio={uploadChatAudioTranscript}
+        />
+      ) : null}
       {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onTranscribeFeedbackAudio={transcribeFeedbackAudio} onEditMemory={editLongTermMemory} /> : null}
       {tab === "brain" ? <BrainView profile={profile} /> : null}
       {tab === "profile" ? <ProfileView profiles={profiles} activeId={profile.userId} onSelect={selectProfile} onAdd={addProfile} /> : null}
@@ -940,17 +1012,35 @@ function CuriousView(props: {
   );
 }
 
-function ChatView({ profile, busy, onSubmitText }: { profile: CreatureProfile; busy: boolean; onSubmitText: (text: string) => Promise<void> }) {
+function ChatView(props: {
+  profile: CreatureProfile;
+  busy: boolean;
+  stagedSegments: StreamSegment[];
+  onChangeStagedSegments: (segments: StreamSegment[] | ((current: StreamSegment[]) => StreamSegment[])) => void;
+  onSubmitMoment: (text: string) => Promise<void>;
+  onUploadImage: (file?: File) => void;
+  onUploadAudio: (file?: File) => void;
+}) {
   const [draft, setDraft] = useState("");
-  const messages = [...(profile.conversation ?? [])].slice(0, 50).reverse();
+  const messages = [...(props.profile.conversation ?? [])].slice(0, 50).reverse();
   const sections = groupConversationSections(messages);
   const inputCount = messages.filter((message) => message.role !== "papo").length;
   const papoCount = messages.filter((message) => message.role === "papo").length;
+  const canSubmit = Boolean(draft.trim() || props.stagedSegments.some((segment) => segment.content.trim()));
+
+  function updateStagedSegment(index: number, patch: Partial<StreamSegment>) {
+    props.onChangeStagedSegments((current) => current.map((segment, currentIndex) => (currentIndex === index ? { ...segment, ...patch } : segment)));
+  }
+
+  function removeStagedSegment(index: number) {
+    props.onChangeStagedSegments((current) => current.filter((_, currentIndex) => currentIndex !== index));
+  }
+
   async function submitDraft() {
     const text = draft.trim();
-    if (!text) return;
+    if (!text && !props.stagedSegments.length) return;
     setDraft("");
-    await onSubmitText(text);
+    await props.onSubmitMoment(text);
   }
   return (
     <section className="stack">
@@ -963,10 +1053,60 @@ function ChatView({ profile, busy, onSubmitText }: { profile: CreatureProfile; b
             rows={3}
             placeholder="直接告诉 Papo 一件刚发生的事"
           />
-          <button className="primary" onClick={submitDraft} disabled={busy || !draft.trim()}>
-            <MessageCircle size={18} />
-            说给 Papo
-          </button>
+          <div className="composer-tools">
+            <label className="upload-button compact-upload">
+              <ImagePlus size={16} />
+              加照片
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => {
+                  props.onUploadImage(event.currentTarget.files?.[0]);
+                  event.currentTarget.value = "";
+                }}
+                disabled={props.busy}
+              />
+            </label>
+            <label className="upload-button compact-upload">
+              <Mic size={16} />
+              加录音
+              <input
+                type="file"
+                accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg"
+                onChange={(event) => {
+                  props.onUploadAudio(event.currentTarget.files?.[0]);
+                  event.currentTarget.value = "";
+                }}
+                disabled={props.busy}
+              />
+            </label>
+            <button className="primary" onClick={submitDraft} disabled={props.busy || !canSubmit}>
+              <MessageCircle size={18} />
+              {props.stagedSegments.length ? "交给 Papo 注意" : "说给 Papo"}
+            </button>
+          </div>
+          {props.stagedSegments.length ? (
+            <section className="staged-moment">
+              <strong>准备一起交给 Papo 的小素材</strong>
+              {props.stagedSegments.map((segment, index) => (
+                <article className="staged-segment" key={segment.id}>
+                  <div className="segment-row">
+                    <input value={segment.label} onChange={(event) => updateStagedSegment(index, { label: event.target.value })} />
+                    <select value={segment.kind} onChange={(event) => updateStagedSegment(index, { kind: event.target.value as SegmentKind })}>
+                      <option value="text">文字</option>
+                      <option value="image_summary">照片摘要</option>
+                      <option value="audio_transcript">录音转写</option>
+                    </select>
+                  </div>
+                  <textarea value={segment.content} onChange={(event) => updateStagedSegment(index, { content: event.target.value })} rows={3} />
+                  <button onClick={() => removeStagedSegment(index)} disabled={props.busy}>
+                    <RefreshCcw size={16} />
+                    先不带这段
+                  </button>
+                </article>
+              ))}
+            </section>
+          ) : null}
         </div>
         <div className="conversation-summary">
           <span>{inputCount} 条注意素材</span>
