@@ -84,6 +84,7 @@ Episode memories keep provenance back to their source segment/batch/time/locatio
 Feedback is also conversation input: button taps, typed feedback, and audio-transcribed feedback are recorded in the same timeline before Papo's learning response, then rule-owned state/policy/memory changes apply.
 Forget is two-stage for memories: first feedback lowers the target weight to zero and teaches caution; a later forget on the zero-weight target purges it.
 Unread dialogue state is a perception layer for new Papo utterances, not an action planner: rules decide persisted `papo` messages, while the UI only shows a small unread dot on the dialogue entry. Wake notes are presence state and do not create unread notifications.
+Internal channel names, memory kinds, batch ids, and numeric weights are developer facts. User-facing dialogue and memory pages should default to natural creature language; raw `channel`, `kind`, `batchId`, and `weight` belong in details or Brain views.
 
 Harness stages:
 
@@ -184,7 +185,7 @@ Done:
   - Feedback immediately surfaces a user-facing "I learned" note.
   - Real-model providers can now rewrite feedback learning notes and active emergence messages while rules keep ownership of state, policy, actions, and memory ids.
   - Semantic brain runs are persisted as diagnostics: fallback/skipped, applied, empty, invalid JSON, and failed model calls are visible in Brain page.
-  - App open/reopen creates a wake event: Papo reacts to time passing, recovers energy by rule, and shows a small "醒来时" presence note on Home.
+  - App open/reopen creates a wake event: Papo reacts to time passing, recovers energy by rule, and shows a small presence note on Home.
   - After a long enough absence, wake can create a rhythm emergence from a real non-self long-term memory, so opening the app can feel like it quietly remembered something.
   - Demo Mode uses life-context examples rather than Papo development text as interaction material.
   - Demo Mode includes Curious stream loading, A/B feedback conditioning, and active emergence.
@@ -203,6 +204,8 @@ Done:
   - Feedback records expose rule-owned state and policy deltas so users can see how they are raising Papo.
   - Forget feedback is staged: it first downranks memory weight to zero, then a repeated forget purges the zero-weight target.
   - New non-wake Papo utterances show a small unread dot on the dialogue tab; entering the dialogue clears it. Wake notes stay in the wake surface and conversation history only.
+  - Conversation bubbles no longer show system-channel labels such as "认真注意后"; Papo replies are shown as Papo speaking, with light context only for user/world inputs.
+  - Memory page no longer defaults to database labels such as `future_review`, batch ids, or numeric weights. It shows "Papo remembers..." language, keeps time/location as part of the shared moment, and puts raw details behind expandable diagnostics.
   - Direct text input now lives in the dialogue page composer, then routes through the Button Capture harness and returns to the same conversation timeline; the old standalone Button Capture page was removed from the user-facing navigation.
   - Direct calls such as asking Papo to speak now map to a first-class `respond` action, so the harness can choose to answer before it asks, saves, recalls, or stays quiet.
   - Semantic brain output now includes structured interaction understanding and can update the episode response plus memory candidate text before rule-owned persistence completes.

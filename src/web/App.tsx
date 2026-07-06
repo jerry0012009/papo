@@ -728,7 +728,7 @@ function HomeView(props: {
 
       {props.wakeMessage ? (
         <section className="wake-note">
-          <span>醒来时</span>
+          <span>Papo 刚动了一下</span>
           <p>{props.wakeMessage}</p>
           {props.wakeThought ? <p>{props.wakeThought}</p> : null}
         </section>
@@ -960,9 +960,9 @@ function ChatView({ profile, busy, onSubmitText }: { profile: CreatureProfile; b
               section.kind === "batch" ? (
                 <section className="chat-batch" key={section.id}>
                   <div className="chat-batch-head">
-                    <strong>30秒共同片段</strong>
+                    <strong>半分钟里的一小段</strong>
                     <span>
-                      {section.batchId} · {section.messages.length} 条素材
+                      {section.messages.length} 条小素材
                     </span>
                   </div>
                   {section.messages.map((message) => (
@@ -983,12 +983,13 @@ function ChatView({ profile, busy, onSubmitText }: { profile: CreatureProfile; b
 }
 
 function ChatBubble({ message }: { message: ConversationMessage }) {
+  const context = messageContextText(message);
   return (
     <article className={`chat-bubble ${message.role}`}>
       <div>
         <strong>{messageTitle(message)}</strong>
         <span>
-          {messageFlowText(message)} · {new Date(message.at).toLocaleString("zh-CN")}
+          {context ? `${context} · ` : ""}{new Date(message.at).toLocaleString("zh-CN")}
         </span>
       </div>
       <p>{message.text}</p>
@@ -1042,8 +1043,8 @@ function MemoryView(props: {
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={History} title="长期记忆" />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索旧记忆" />
+        <PanelTitle icon={History} title="Papo 记得的事" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一段 Papo 记得的事" />
         {otherMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             {editingId === memory.id ? (
@@ -1066,7 +1067,14 @@ function MemoryView(props: {
             ) : (
               <p>{memory.text}</p>
             )}
-            <span>{memory.kind} · 权重 {memory.weight}</span>
+            <span>{memoryFamiliarityText(memory.weight)} · {memoryKindText(memory.kind)}</span>
+            <details className="brain-details">
+              <summary>记忆细节</summary>
+              <small>
+                {memory.kind} · weight {memory.weight}
+                {memory.consolidatedBecause ? ` · ${memory.consolidatedBecause}` : ""}
+              </small>
+            </details>
             <div className="memory-actions">
               <button
                 onClick={() => {
@@ -1075,7 +1083,7 @@ function MemoryView(props: {
                 }}
               >
                 <MessageCircle size={16} />
-                修改
+                帮它改准
               </button>
               <button onClick={() => props.onFeedback("forget", memory.id)}>
                 <RefreshCcw size={16} />
@@ -1086,16 +1094,23 @@ function MemoryView(props: {
         ))}
       </div>
       <div className="panel">
-        <PanelTitle icon={Brain} title="小动物自己的成长记忆" />
+        <PanelTitle icon={Brain} title="Papo 关于自己的小记忆" />
         {selfMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             <p>{memory.text}</p>
-            <span>{memory.consolidatedBecause ?? "creature_self_memory"} · 权重 {memory.weight}</span>
+            <span>{memoryFamiliarityText(memory.weight)} · 它怎么理解自己</span>
+            <details className="brain-details">
+              <summary>记忆细节</summary>
+              <small>
+                {memory.kind} · weight {memory.weight}
+                {memory.consolidatedBecause ? ` · ${memory.consolidatedBecause}` : ""}
+              </small>
+            </details>
           </article>
         ))}
       </div>
       <div className="panel">
-        <PanelTitle icon={Eye} title="情景记忆" />
+        <PanelTitle icon={Eye} title="刚一起经历过的片段" />
         {props.profile.episodes.map((episode) => (
           <EpisodeCard
             key={episode.id}
@@ -1332,7 +1347,7 @@ function EpisodeCard(props: {
     <article className="episode-card">
       <div className="episode-head">
         <span>{props.episode.source === "button" ? "你递给我的片段" : "我自己注意到的片段"}</span>
-        <strong>权重 {props.episode.weight}</strong>
+        <strong>{memoryFamiliarityText(props.episode.weight)}</strong>
       </div>
       <h3>{props.episode.creatureResponse || props.episode.noticed}</h3>
       {!props.compact ? (
@@ -1378,8 +1393,8 @@ function EpisodeCard(props: {
       </div>
       {props.episode.decisionTrace?.length && !props.compact ? (
         <details className="brain-details">
-          <summary>开发者 trace</summary>
-          <small>{props.episode.decisionTrace.join(" -> ")}</small>
+          <summary>细节记录</summary>
+          <small>weight {props.episode.weight} · {props.episode.decisionTrace.join(" -> ")}</small>
         </details>
       ) : null}
       <div className="feedback-row">
@@ -1396,19 +1411,25 @@ function EpisodeCard(props: {
 
 function EpisodeSourceMoment({ episode, messages, compact }: { episode: EpisodeMemory; messages: ConversationMessage[]; compact: boolean }) {
   if (!messages.length && !episode.sourceBatchId && !episode.sourceObservedAt && !episode.sourceLocation) return null;
-  const title = episode.sourceBatchId ? "来自30秒共同片段" : "来自当时的输入";
+  const title = episode.sourceBatchId ? "来自半分钟里的一小段" : "来自当时你给它的片段";
+  const momentParts = [
+    episode.sourceObservedAt ? `那时 ${new Date(episode.sourceObservedAt).toLocaleString("zh-CN")}` : "",
+    episode.sourceLocation ? locationText(episode.sourceLocation) : ""
+  ].filter(Boolean);
   return (
     <div className={`episode-source ${compact ? "compact" : ""}`}>
       <strong>{title}</strong>
-      <small>
-        {[
-          episode.sourceBatchId ? `批次 ${episode.sourceBatchId}` : "",
-          episode.sourceObservedAt ? `观察 ${new Date(episode.sourceObservedAt).toLocaleString("zh-CN")}` : "",
-          episode.sourceLocation ? locationText(episode.sourceLocation) : ""
-        ]
-          .filter(Boolean)
-          .join(" · ")}
-      </small>
+      {momentParts.length ? <small>{momentParts.join(" · ")}</small> : null}
+      {!compact && (episode.sourceBatchId || episode.sourceSegmentId) ? (
+        <details className="brain-details">
+          <summary>来源细节</summary>
+          <small>
+            {[episode.sourceBatchId ? `batch ${episode.sourceBatchId}` : "", episode.sourceSegmentId ? `segment ${episode.sourceSegmentId}` : ""]
+              .filter(Boolean)
+              .join(" · ")}
+          </small>
+        </details>
+      ) : null}
       {!compact && messages.length ? (
         <div className="episode-source-list">
           {messages.map((message) => (
@@ -1518,6 +1539,28 @@ function deltaText(delta: number) {
   return `${delta > 0 ? "+" : ""}${delta}`;
 }
 
+function memoryFamiliarityText(weight: number) {
+  if (weight >= 85) return "这段已经很稳了";
+  if (weight >= 65) return "这段它记得比较清楚";
+  if (weight >= 35) return "这段还很新";
+  if (weight <= 0) return "这段已经被放下了";
+  return "这段正在变淡";
+}
+
+function memoryKindText(kind: CreatureProfile["longTermMemories"][number]["kind"]) {
+  const map = {
+    user_preference: "它在学你的偏好",
+    long_theme: "一条反复出现的主题",
+    creature_self_memory: "它关于自己的理解",
+    safety_rule: "它记住的边界",
+    future_review: "以后可能还会回来",
+    relationship: "你们之间的一点关系",
+    habit: "它注意到的习惯",
+    open_question: "还没想完的问题"
+  };
+  return map[kind];
+}
+
 function PanelTitle({ icon: Icon, title }: { icon: typeof Brain; title: string }) {
   return (
     <div className="panel-title">
@@ -1619,30 +1662,19 @@ function semanticStatusText(status: NonNullable<CreatureProfile["semanticBrainHi
   return map[status];
 }
 
-function messageChannelText(channel: CreatureProfile["conversation"][number]["channel"]) {
-  const map = {
-    wake: "醒来时",
-    button: "认真注意后",
-    curious: "陪你看完后",
-    feedback: "学到反馈后",
-    emergence: "自己想起时"
-  };
-  return map[channel];
-}
-
 function messageTitle(message: CreatureProfile["conversation"][number]) {
-  if (message.role === "papo") return messageChannelText(message.channel);
-  if (message.channel === "feedback") return "你给 Papo 反馈";
+  if (message.role === "papo") return "Papo";
+  if (message.channel === "feedback") return "你的反馈";
   if (message.modality === "image_summary") return "你给 Papo 看了照片";
-  if (message.modality === "audio_transcript") return "Papo 听到一段声音";
-  return "你告诉 Papo";
+  if (message.modality === "audio_transcript") return "一段声音";
+  return message.role === "world" ? "周围的一段" : "你";
 }
 
-function messageFlowText(message: CreatureProfile["conversation"][number]) {
-  if (message.role === "papo") return "Papo 输出";
-  if (message.channel === "feedback") return "反馈也是对话输入";
-  if (message.channel === "curious") return "进入30秒注意批次";
-  return "进入注意素材";
+function messageContextText(message: CreatureProfile["conversation"][number]) {
+  if (message.role === "papo") return "";
+  if (message.channel === "feedback") return "你在教它";
+  if (message.channel === "curious") return "和这一小段世界放在一起";
+  return "说给 Papo";
 }
 
 function locationText(location: NonNullable<StreamSegment["location"]>) {
