@@ -13,7 +13,7 @@ import {
   Wand2,
   UserRound
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   AttentionEvent,
   CaptureResult,
@@ -40,6 +40,24 @@ import {
 } from "./api";
 
 type Tab = "home" | "capture" | "curious" | "memory" | "brain" | "profile" | "demo";
+
+interface SpeechRecognitionLike {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: ((event: { error?: string }) => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
 const feedbacks: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }> = [
   { kind: "understood", label: "理解对了", icon: Check },
@@ -91,13 +109,23 @@ export function App() {
   const [emergence, setEmergence] = useState<string>();
   const [learningNote, setLearningNote] = useState<string>();
   const [demoNote, setDemoNote] = useState<string>();
+  const [listening, setListening] = useState(false);
+  const [listeningElapsed, setListeningElapsed] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const transcriptBufferRef = useRef("");
+  const segmentIndexRef = useRef(1);
+  const listeningStartedAtRef = useRef<number | undefined>(undefined);
+  const tickTimerRef = useRef<number | undefined>(undefined);
+  const segmentTimerRef = useRef<number | undefined>(undefined);
+  const stopTimerRef = useRef<number | undefined>(undefined);
 
   const selectedEpisode = lastResult?.episodes[0] ?? profile?.episodes[0];
 
   useEffect(() => {
     void bootstrap();
+    return () => stopListening();
   }, []);
 
   async function bootstrap() {
@@ -183,6 +211,93 @@ export function App() {
       setEmergence(result.emergence.text);
       setTab("home");
     });
+  }
+
+  async function startListening() {
+    if (listening) return;
+    const Recognition = getSpeechRecognition();
+    if (!Recognition) {
+      setError("当前浏览器不支持实时语音转写。可以继续用文字或手动粘贴录音转写。");
+      return;
+    }
+
+    try {
+      await navigator.mediaDevices?.getUserMedia?.({ audio: true });
+    } catch {
+      setError("没有拿到麦克风权限。可以继续用文字模拟一段信息流。");
+      return;
+    }
+
+    const recognition = new Recognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "zh-CN";
+    transcriptBufferRef.current = "";
+    segmentIndexRef.current = 1;
+    listeningStartedAtRef.current = Date.now();
+    setListeningElapsed(0);
+    setListening(true);
+    setError(undefined);
+
+    recognition.onresult = (event) => {
+      let finalText = "";
+      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+        const result = event.results[index];
+        if (result.isFinal) finalText += result[0].transcript;
+      }
+      if (finalText.trim()) transcriptBufferRef.current = `${transcriptBufferRef.current} ${finalText.trim()}`.trim();
+    };
+    recognition.onerror = (event) => {
+      setError(`语音监听中断：${event.error ?? "未知错误"}`);
+    };
+    recognition.onend = () => {
+      if (listeningStartedAtRef.current) {
+        try {
+          recognition.start();
+        } catch {
+          // Some browsers throw if restart happens too quickly.
+        }
+      }
+    };
+    recognitionRef.current = recognition;
+    recognition.start();
+
+    tickTimerRef.current = window.setInterval(() => {
+      if (!listeningStartedAtRef.current) return;
+      setListeningElapsed(Math.min(180, Math.floor((Date.now() - listeningStartedAtRef.current) / 1000)));
+    }, 1000);
+    segmentTimerRef.current = window.setInterval(() => flushAudioTranscriptSegment(false), 30_000);
+    stopTimerRef.current = window.setTimeout(() => stopListening(), 180_000);
+  }
+
+  function stopListening() {
+    flushAudioTranscriptSegment(true);
+    if (recognitionRef.current) {
+      recognitionRef.current.onend = null;
+      recognitionRef.current.stop();
+      recognitionRef.current = null;
+    }
+    if (tickTimerRef.current) window.clearInterval(tickTimerRef.current);
+    if (segmentTimerRef.current) window.clearInterval(segmentTimerRef.current);
+    if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current);
+    tickTimerRef.current = undefined;
+    segmentTimerRef.current = undefined;
+    stopTimerRef.current = undefined;
+    listeningStartedAtRef.current = undefined;
+    setListening(false);
+  }
+
+  function flushAudioTranscriptSegment(force: boolean) {
+    const content = transcriptBufferRef.current.trim();
+    if (!content && !force) return;
+    if (!content) return;
+    const index = segmentIndexRef.current;
+    segmentIndexRef.current += 1;
+    transcriptBufferRef.current = "";
+    setSegments((current) => [
+      ...current,
+      makeSegment(`live-audio-${Date.now()}-${index}`, "audio_transcript", `语音片段 ${index}`, content)
+    ]);
   }
 
   function loadDemoCurious() {
@@ -273,7 +388,16 @@ export function App() {
       ) : null}
 
       {tab === "curious" ? (
-        <CuriousView segments={segments} setSegments={setSegments} onSubmit={submitCurious} busy={busy} />
+        <CuriousView
+          segments={segments}
+          setSegments={setSegments}
+          onSubmit={submitCurious}
+          busy={busy}
+          listening={listening}
+          listeningElapsed={listeningElapsed}
+          onStartListening={startListening}
+          onStopListening={stopListening}
+        />
       ) : null}
 
       {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onEditMemory={editLongTermMemory} /> : null}
@@ -380,9 +504,13 @@ function CaptureView(props: { value: string; onChange: (value: string) => void; 
 
 function CuriousView(props: {
   segments: StreamSegment[];
-  setSegments: (segments: StreamSegment[]) => void;
+  setSegments: (segments: StreamSegment[] | ((current: StreamSegment[]) => StreamSegment[])) => void;
   onSubmit: () => void;
   busy: boolean;
+  listening: boolean;
+  listeningElapsed: number;
+  onStartListening: () => void;
+  onStopListening: () => void;
 }) {
   function updateSegment(index: number, patch: Partial<StreamSegment>) {
     props.setSegments(props.segments.map((segment, current) => (current === index ? { ...segment, ...patch } : segment)));
@@ -399,6 +527,18 @@ function CuriousView(props: {
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={Sparkles} title="Curious Mode" />
+        <section className="listening-panel">
+          <div>
+            <strong>{props.listening ? "我正在听这一小段世界" : "语音陪伴实验"}</strong>
+            <p>
+              最多听 3 分钟，每 30 秒把语音转写切成一段。原始音频不保存，只把转写片段放进信息流。
+            </p>
+          </div>
+          <button onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
+            <Sparkles size={18} />
+            {props.listening ? `停止 ${formatListeningTime(props.listeningElapsed)}` : "开始听 3 分钟"}
+          </button>
+        </section>
         {props.segments.map((segment, index) => (
           <div className="segment-editor" key={segment.id}>
             <div className="segment-row">
@@ -824,4 +964,18 @@ function policyLabel(key: string) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "发生未知错误";
+}
+
+function getSpeechRecognition(): SpeechRecognitionConstructor | undefined {
+  const webWindow = window as typeof window & {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  };
+  return webWindow.SpeechRecognition ?? webWindow.webkitSpeechRecognition;
+}
+
+function formatListeningTime(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${minutes}:${String(rest).padStart(2, "0")}`;
 }

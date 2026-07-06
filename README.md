@@ -6,6 +6,8 @@ Papo 是一个 mobile-first Demo，用最小可行方式展示一个有注意、
 
 Goal 3 adds a lighter Demo Mode and creature-facing experience language. Default demo inputs use everyday life context, not Papo development notes.
 
+Curious Mode also includes an experimental voice companionship control: in supported browsers it listens for up to 3 minutes and turns speech recognition output into 30-second `audio_transcript` segments. Raw audio is not stored.
+
 ## 生命体 Agent Harness
 
 Demo 采用混合 harness，而不是纯聊天或纯规则：

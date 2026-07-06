@@ -148,6 +148,7 @@ Done:
   - Feedback immediately surfaces a user-facing "I learned" note.
   - Demo Mode uses life-context examples rather than Papo development text as interaction material.
   - Demo Mode includes Curious stream loading, A/B feedback conditioning, and active emergence.
+  - Experimental voice companionship in Curious Mode: browser speech recognition can listen up to 3 minutes and split transcripts every 30 seconds into `audio_transcript` segments.
 
 Verified:
 
@@ -175,7 +176,7 @@ Verified:
 Next:
 
 1. Improve real Mimo/OpenRouter connectivity diagnostics and surface model errors in Brain page.
-2. Curious Mode continuous audio: optional 3-minute recording, auto-split every 30 seconds, transcribe each chunk into `audio_transcript` segments, then feed them into the same attention session audit.
+2. Replace browser-only speech recognition with a robust transcription backend for audio chunks where needed.
 3. Add real image upload with model-created image summaries.
 4. Add stronger browser visual QA with mobile screenshots.
 5. Add a guided 4-minute investor demo seed/reset flow.

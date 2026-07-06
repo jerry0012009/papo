@@ -430,6 +430,22 @@ meter {
   gap: 8px;
 }
 
+.listening-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #e9f3eb;
+  border: 1px solid rgba(79, 139, 118, 0.18);
+}
+
+.listening-panel p {
+  margin: 6px 0 0;
+  color: #465248;
+  line-height: 1.5;
+  font-size: 0.9rem;
+}
+
 .segment-row {
   grid-template-columns: 1fr 120px;
 }
