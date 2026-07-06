@@ -17,6 +17,7 @@ import {
   UserRound
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createContrastSummary } from "../core/demo";
 import type {
   AttentionEvent,
   CaptureResult,
@@ -552,6 +553,12 @@ export function App() {
       }
       const deepResult = await buttonCapture(deep.userId, input);
       const quietResult = await buttonCapture(quiet.userId, input);
+      const contrast = createContrastSummary({
+        deepProfile: deepResult.profile,
+        quietProfile: quietResult.profile,
+        deepResult,
+        quietResult
+      });
 
       setProfiles(await listProfiles());
       setProfile(emerged.profile);
@@ -561,7 +568,7 @@ export function App() {
       setDemoSummary({
         attention: `它看了 ${curiousResult.curiousSession?.totalSegments ?? demoCuriousSegments.length} 段，只认真注意到 ${curiousResult.events.length} 段。`,
         feedback: learned || "它已经收到“记住”和“继续想”的反馈，并更新了状态与策略。",
-        contrast: `同一句输入下，深想型选择 ${deepResult.events[0] ? actionText(deepResult.events[0].actionDecision.action) : "无动作"}，安静型选择 ${quietResult.events[0] ? actionText(quietResult.events[0].actionDecision.action) : "无动作"}。`,
+        contrast,
         emergence: emerged.emergence.text
       });
       setDemoNote("完整演示已准备好：主线小动物、A/B 养成对比和主动浮现都已生成。");
@@ -583,12 +590,18 @@ export function App() {
         bProfile = (await sendFeedback(b.userId, "not_now", bFirst.episodes[0].id)).profile;
       }
       const aResult = await buttonCapture(a.userId, input);
-      await buttonCapture(b.userId, input);
+      const bResult = await buttonCapture(b.userId, input);
+      const contrast = createContrastSummary({
+        deepProfile: aResult.profile,
+        quietProfile: bResult.profile,
+        deepResult: aResult,
+        quietResult: bResult
+      });
       setProfiles(await listProfiles());
       setProfile(aResult.profile);
       setLastResult(aResult);
-      setLearningNote("A 连续收到“继续想”，B 连续收到“这次不用”。同一句输入下，A 会更愿意展开，B 会更克制。");
-      setDemoNote(`已创建两个小动物：${aProfile.creatureName} 和 ${bProfile.creatureName}。你可以去“小动物切换”查看差异。`);
+      setLearningNote(contrast);
+      setDemoNote(`已创建两个小动物：${aProfile.creatureName} 和 ${bProfile.creatureName}。${contrast}`);
       setTab("home");
     });
   }

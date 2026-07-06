@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { handleButtonCapture, handleCuriousStream } from "../src/core/attention";
+import { createContrastSummary } from "../src/core/demo";
 import { createActiveEmergence } from "../src/core/emergence";
 import { applyFeedback } from "../src/core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../src/core/harness";
@@ -62,6 +63,18 @@ describe("creature brain v0.2", () => {
     expect(a.policyProfile.quietTendency).toBeLessThan(b.policyProfile.quietTendency);
     expect(aNext.events[0].actionDecision.action).not.toBe("quiet");
     expect(["observe", "quiet", "ask"]).toContain(bNext.events[0].actionDecision.action);
+
+    const summary = createContrastSummary({
+      deepProfile: a,
+      quietProfile: b,
+      deepResult: aNext,
+      quietResult: bNext
+    });
+    expect(summary).toContain("深想型");
+    expect(summary).toContain("安静型");
+    expect(summary).toContain(`深入倾向 ${a.policyProfile.preferDepth}`);
+    expect(summary).toContain(`安静倾向 ${b.policyProfile.quietTendency}`);
+    expect(summary).toContain("它们的内在选择也不一样");
   });
 
   it("memory consolidation creates candidates before long-term promotion", () => {

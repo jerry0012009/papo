@@ -194,6 +194,7 @@ Done:
   - Demo Mode uses life-context examples rather than Papo development text as interaction material.
   - Demo Mode includes Curious stream loading, A/B feedback conditioning, and active emergence.
   - Demo Mode now has a guided 4-minute run that creates a fresh main creature, runs the 8-part Curious script, applies remember/continue feedback, creates A/B conditioned creatures, and surfaces a real emergence summary without exposing a public reset endpoint.
+  - Demo Mode A/B contrast now shows policy differences and inner-choice wording for the two conditioned creatures, not just action names.
   - Experimental voice companionship in Curious Mode: browser speech recognition can listen up to 3 minutes and split transcripts every 30 seconds into `audio_transcript` segments.
   - OpenRouter/OpenAI-compatible visual sensing endpoint: uploaded screenshots are summarized into editable `image_summary` segments.
   - OpenRouter/OpenAI-compatible audio sensing endpoint: uploaded recordings are transcribed into editable `audio_transcript` segments.
@@ -259,6 +260,7 @@ Verified:
 - Real online Curious smoke passed through the OpenAI-compatible generic provider with `gpt-5.5`: semantic brain status `applied`, source `llm`, rule-owned event count stayed fixed, and LLM rewrote selected/ignored reasons into creature-facing narration.
 - Real online feedback narration smoke passed through the OpenAI-compatible generic provider with `gpt-5.5`: LLM rewrote learning/follow-up text while rule-owned `responseAction`, state, and memory candidate ids stayed fixed.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
+- Guided Demo Mode's A/B section displays how feedback changed the two creatures' depth/recall/quiet/proactivity tendencies and how their inner choices differ on the same input.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`
