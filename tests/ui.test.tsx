@@ -173,6 +173,7 @@ describe("App", () => {
     expect(screen.queryByText("future_review · 权重 80")).not.toBeInTheDocument();
     expect(screen.queryByText("future_review · weight 80")).not.toBeInTheDocument();
     expect(screen.queryByText("记忆细节")).not.toBeInTheDocument();
+    expect(screen.queryByText(/memory_resonance|scoreBreakdown|decisionTrace|weight \d|confidence \d|细节记录/)).not.toBeInTheDocument();
     expect(screen.getAllByText("来自半分钟里的一小段").length).toBeGreaterThan(0);
     expect(screen.queryByText(/批次 manual-1/)).not.toBeInTheDocument();
 

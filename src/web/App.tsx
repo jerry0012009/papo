@@ -1441,28 +1441,19 @@ function AttentionCard({ event }: { event: AttentionEvent }) {
     <article className="attention-card">
       <div>
         <span>{event.triggerLabel}</span>
-        <strong>{event.attentionStrength}</strong>
+        <strong>{attentionStrengthText(event.attentionStrength)}</strong>
       </div>
       <p>{event.noticed}</p>
-      <small>{event.reason}</small>
+      <small>{event.creatureExperience.earReason}</small>
       <details className="brain-details">
-        <summary>为什么它注意到了这个</summary>
-        <div className="score-list">
-          {event.scoreBreakdown?.contributions.map((item) => (
-            <span key={`${event.id}-${item.label}-${item.reason}`}>
-              {item.label} {item.value >= 0 ? "+" : ""}
-              {item.value}: {item.reason}
-            </span>
-          ))}
-        </div>
-        <p>{event.actionDecision.reason}</p>
-        {event.actionDecision.blockedActions.length ? (
-          <p>被拦截：{event.actionDecision.blockedActions.map((item) => `${actionText(item.action)}: ${item.reason}`).join("；")}</p>
-        ) : null}
+        <summary>它刚才怎么理解</summary>
+        <p>{event.creatureExperience.rememberedScene ?? "这次还没有强烈拉起旧片段。"}</p>
+        <p>{event.creatureExperience.actionFeeling}</p>
+        <p>{event.creatureExperience.saveFeeling}</p>
       </details>
       <footer>
-        <span>{actionText(event.actionDecision.action)} · {event.actionDecision.confidence}</span>
-        <span>隐私 {event.privacyRisk}</span>
+        <span>{actionText(event.actionDecision.action)}</span>
+        <span>{privacyFeelingText(event.privacyRisk)}</span>
       </footer>
     </article>
   );
@@ -1533,12 +1524,6 @@ function EpisodeCard(props: {
           />
         </label>
       </div>
-      {props.episode.decisionTrace?.length && !props.compact ? (
-        <details className="brain-details">
-          <summary>细节记录</summary>
-          <small>weight {props.episode.weight} · {props.episode.decisionTrace.join(" -> ")}</small>
-        </details>
-      ) : null}
       <div className="feedback-row">
         {feedbacks.map((item) => (
           <button key={item.kind} onClick={() => submitFeedback(item.kind)} aria-label={item.label}>
@@ -1690,6 +1675,19 @@ function stateDriveLabel(key: keyof Omit<CreatureState, "mood">) {
 
 function deltaText(delta: number) {
   return `${delta > 0 ? "+" : ""}${delta}`;
+}
+
+function attentionStrengthText(strength: number) {
+  if (strength >= 82) return "认真盯住";
+  if (strength >= 62) return "竖起耳朵";
+  if (strength >= 42) return "轻轻注意";
+  return "先放过去";
+}
+
+function privacyFeelingText(risk: number) {
+  if (risk >= 55) return "这段我会先小心放着";
+  if (risk >= 25) return "这段先不急着长期留下";
+  return "这段可以轻轻记成情景";
 }
 
 function emergenceDriveText(drive: string) {

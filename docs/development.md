@@ -230,6 +230,7 @@ Done:
   - Active emergence no longer uses seed self-memory as a fake shared memory. User-generated memories can still support emergence even when they are about Papo itself; with no real shared memory, it says it will wait for a real shared moment instead of claiming it remembered one.
   - Memory cards now combine familiarity and memory type into Papo's own subjective sentence, so the default memory page reads less like a database record.
   - Home presence copy no longer labels Papo as "current mood" or explains state as calculation. It now prioritizes the latest conversation, feedback, emergence, or wake context before falling back to body-state cues.
+  - User-facing attention and episode cards no longer expose score contributions, numeric confidence, weight, or decision trace details. Those remain in Brain diagnostics while the default cards show Papo's attention strength, caution, memory, action, and save feeling in creature language.
 
 Verified:
 
@@ -260,6 +261,7 @@ Verified:
 - Curious Mode can preserve photo upload time/place and batch text/photo/audio as one stream before attention selection.
 - Home renders Papo as an animated Shiba Inu SVG whose visible posture changes with mood, energy, curiosity, attachment, and safety.
 - Home presence copy is context-first and does not expose "current mood" or state-calculation wording.
+- User-facing memory/attention pages do not expose `memory_resonance`, `decisionTrace`, numeric `weight`, or numeric `confidence`; Brain keeps technical diagnostics.
 - The Home "Papo new said" surface only selects `role=papo` messages even when newer user/world inputs exist.
 - The dialogue page presents one attention/conversation timeline with counts for attention material and Papo responses.
 - The dialogue page groups same-batch multimodal inputs into a "30-second shared moment" before Papo's response.
