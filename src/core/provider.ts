@@ -37,7 +37,10 @@ function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
     apiKey: merged.OPENROUTER_API_KEY,
     model: merged.OPENROUTER_MODEL ?? "openai/gpt-5.5",
     visionModel: merged.OPENROUTER_VISION_MODEL ?? "google/gemini-2.0-flash-001",
-    audioModel: merged.OPENROUTER_AUDIO_MODEL ?? merged.OPENROUTER_VISION_MODEL ?? "google/gemini-2.0-flash-001"
+    audioModel: merged.OPENROUTER_AUDIO_MODEL ?? merged.OPENROUTER_VISION_MODEL ?? "google/gemini-2.0-flash-001",
+    chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
+    visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
+    audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 45_000)
   });
 }
 
@@ -49,12 +52,15 @@ function mimoProvider(merged: NodeJS.ProcessEnv): ModelProvider {
     apiKey: merged.MIMO_API_KEY,
     model: merged.MIMO_MODEL ?? "mimo",
     visionModel: merged.MIMO_VISION_MODEL ?? merged.MIMO_MODEL ?? "mimo",
-    audioModel: merged.MIMO_AUDIO_MODEL ?? merged.MIMO_MODEL ?? "mimo"
+    audioModel: merged.MIMO_AUDIO_MODEL ?? merged.MIMO_MODEL ?? "mimo",
+    chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
+    visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
+    audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 45_000)
   });
 }
 
 function genericProvider(merged: NodeJS.ProcessEnv): ModelProvider {
-    return openAiCompatibleProvider({
+  return openAiCompatibleProvider({
     kind: "generic",
     name: "Generic model API",
     endpoint: merged.OPENAI_BASE_URL
@@ -63,7 +69,10 @@ function genericProvider(merged: NodeJS.ProcessEnv): ModelProvider {
     apiKey: merged.OPENAI_API_KEY ?? merged.GENERIC_MODEL_API_KEY,
     model: merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-5.5",
     visionModel: merged.OPENAI_VISION_MODEL ?? merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-5.5",
-    audioModel: merged.OPENAI_AUDIO_MODEL ?? merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-5.5"
+    audioModel: merged.OPENAI_AUDIO_MODEL ?? merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-5.5",
+    chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
+    visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
+    audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 45_000)
   });
 }
 
@@ -119,6 +128,12 @@ function parseEnvFile(content: string): NodeJS.ProcessEnv {
   return parsed;
 }
 
+function timeoutFromEnv(env: NodeJS.ProcessEnv, key: string, fallback: number) {
+  const value = Number(env[key]);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return Math.max(5_000, Math.min(120_000, Math.round(value)));
+}
+
 function staticProvider(kind: ProviderKind, name: string, available: boolean): ModelProvider {
   return {
     kind,
@@ -149,6 +164,9 @@ function openAiCompatibleProvider(input: {
   model: string;
   visionModel?: string;
   audioModel?: string;
+  chatTimeoutMs: number;
+  visionTimeoutMs: number;
+  audioTimeoutMs: number;
 }): ModelProvider {
   return {
     kind: input.kind,
@@ -175,12 +193,12 @@ function openAiCompatibleProvider(input: {
 }
 
 async function callChatCompletions(
-  input: { endpoint: string; apiKey?: string; model: string; kind: ProviderKind },
+  input: { endpoint: string; apiKey?: string; model: string; kind: ProviderKind; chatTimeoutMs: number },
   prompt: string,
   json: boolean
 ) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
+  const timeout = setTimeout(() => controller.abort(), input.chatTimeoutMs);
   try {
     const response = await fetch(input.endpoint, {
       method: "POST",
@@ -216,12 +234,12 @@ async function callChatCompletions(
 }
 
 async function callVisionSummary(
-  input: { endpoint: string; apiKey?: string; model: string; visionModel?: string; kind: ProviderKind },
+  input: { endpoint: string; apiKey?: string; model: string; visionModel?: string; kind: ProviderKind; visionTimeoutMs: number },
   dataUrl: string,
   prompt: string
 ) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25_000);
+  const timeout = setTimeout(() => controller.abort(), input.visionTimeoutMs);
   try {
     const response = await fetch(input.endpoint, {
       method: "POST",
@@ -262,13 +280,13 @@ async function callVisionSummary(
 }
 
 async function callAudioTranscript(
-  input: { endpoint: string; apiKey?: string; model: string; audioModel?: string; kind: ProviderKind },
+  input: { endpoint: string; apiKey?: string; model: string; audioModel?: string; kind: ProviderKind; audioTimeoutMs: number },
   dataUrl: string,
   prompt: string
 ) {
   const audio = parseAudioDataUrl(dataUrl);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30_000);
+  const timeout = setTimeout(() => controller.abort(), input.audioTimeoutMs);
   try {
     const response = await fetch(input.endpoint, {
       method: "POST",

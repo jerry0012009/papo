@@ -748,7 +748,7 @@ function HomeView(props: {
               <p>{props.lastResult.curiousSession.creatureReport}</p>
               {props.lastResult.curiousSession.ignored.slice(0, 4).map((item) => (
                 <small key={item.segmentId}>
-                  未选 {item.label}：{item.whyIgnored}
+                  Papo 放过了 {item.label}：{item.whyIgnored}
                 </small>
               ))}
             </div>

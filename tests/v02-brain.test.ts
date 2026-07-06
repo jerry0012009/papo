@@ -141,6 +141,17 @@ describe("creature brain v0.2", () => {
             reason: "它同时包含产品身份、情绪担心和未来演示价值。",
             suggestedAction: "recall"
           })),
+          curiousSession: {
+            creatureReport: "我陪你看完这一小段世界后，只把身份担心和未来演示这两处叼了出来，其他背景声先让它们过去。",
+            selected: [
+              { segmentId: "s2", whySelected: "这段不是普通抱怨，它在问 Papo 会不会从小动物变回工具。" },
+              { segmentId: "s3", whySelected: "这段关系到之后怎么证明反馈真的会改变 Papo。" }
+            ],
+            ignored: [
+              { segmentId: "s1", whyIgnored: "它更像今天路过的背景声，没有拉起旧记忆，也不需要 Papo 插话。" },
+              { segmentId: "s4", whyIgnored: "它和第一段普通记录一样轻，我先不把每个背景声都抓住。" }
+            ]
+          },
           trace: ["llm: semantic curious judgment"]
         } as T;
       }
@@ -160,6 +171,10 @@ describe("creature brain v0.2", () => {
     expect(result.events.length).toBeGreaterThanOrEqual(1);
     expect(result.events.length).toBeLessThanOrEqual(3);
     expect(result.events[0].semanticSource).toBe("llm");
+    expect(result.curiousSession?.selected.some((item) => item.whySelected.includes("变回工具"))).toBe(true);
+    expect(result.curiousSession?.ignored.some((item) => item.whyIgnored.includes("背景声"))).toBe(true);
+    expect(result.curiousSession?.creatureReport).toContain("叼了出来");
+    expect(result.curiousSession?.selected.map((item) => item.segmentId).sort()).toEqual(["s2", "s3"]);
     expect(result.harnessTrace?.join(" ")).toContain("llm interpretation applied");
     expect(profile.semanticBrainHistory[0].status).toBe("applied");
   });

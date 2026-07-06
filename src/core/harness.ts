@@ -2,6 +2,7 @@ import { z } from "zod";
 import { guardActionDecision } from "./action";
 import { createMemoryResonanceEmergence } from "./emergence";
 import { handleButtonCapture, handleCuriousStream } from "./attention";
+import { createCuriousCreatureReport } from "./experience";
 import { makeId } from "./ids";
 import type { ModelProvider } from "./provider";
 import type { CaptureResult, CreatureProfile, SemanticBrainRecord, StreamSegment } from "./types";
@@ -41,9 +42,42 @@ const brainSuggestionSchema = z.object({
       })
     )
     .optional(),
+  curiousSession: z
+    .object({
+      creatureReport: z.string().min(1).max(900).optional(),
+      selected: z
+        .array(
+          z.object({
+            segmentId: z.string(),
+            whySelected: z.string().min(1).max(360)
+          })
+        )
+        .max(8)
+        .optional(),
+      ignored: z
+        .array(
+          z.object({
+            segmentId: z.string(),
+            whyIgnored: z.string().min(1).max(360)
+          })
+        )
+        .max(12)
+        .optional()
+    })
+    .optional(),
   trace: z.array(z.string().min(1).max(160)).max(8).optional()
 }).refine(
-  (value) => Boolean(value.response || value.interaction || value.events?.length || value.episodes?.length || value.trace?.length),
+  (value) =>
+    Boolean(
+      value.response ||
+        value.interaction ||
+        value.events?.length ||
+        value.episodes?.length ||
+        value.curiousSession?.creatureReport ||
+        value.curiousSession?.selected?.length ||
+        value.curiousSession?.ignored?.length ||
+        value.trace?.length
+    ),
   "semantic brain result must contain at least one useful field"
 );
 
@@ -232,6 +266,8 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
     ];
   }
 
+  applyCuriousSessionSuggestion(result, suggestion);
+
   for (const event of result.events) {
     const episode = episodeByEventId.get(event.id);
     if (!episode) continue;
@@ -253,6 +289,26 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
   if (primaryEpisode && result.response) {
     primaryEpisode.creatureResponse = result.response;
   }
+}
+
+function applyCuriousSessionSuggestion(result: CaptureResult, suggestion: BrainSuggestion) {
+  const session = result.curiousSession;
+  const narrative = suggestion.curiousSession;
+  if (!session || !narrative) return;
+
+  const selectedById = new Map(session.selected.map((item) => [item.segmentId, item]));
+  for (const item of narrative.selected ?? []) {
+    const selected = selectedById.get(item.segmentId);
+    if (selected) selected.whySelected = item.whySelected.trim();
+  }
+
+  const ignoredById = new Map(session.ignored.map((item) => [item.segmentId, item]));
+  for (const item of narrative.ignored ?? []) {
+    const ignored = ignoredById.get(item.segmentId);
+    if (ignored) ignored.whyIgnored = item.whyIgnored.trim();
+  }
+
+  session.creatureReport = narrative.creatureReport?.trim() || createCuriousCreatureReport(session);
 }
 
 function interactionExperience(interaction: NonNullable<BrainSuggestion["interaction"]>, event: CaptureResult["events"][number]) {
@@ -317,6 +373,7 @@ function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "b
 - 改写 noticed/reason，让它更像小动物真的注意到了什么。
 - 给出 suggestedAction，但只能从 observe, respond, ask, save_episode, save_long_term, recall, review, quiet, draft_reminder, draft_question_list 选择。
 - 改写 episode 的 possibleIntent/importanceReason/creatureResponse。
+- 如果 source 是 curious_stream，可以改写 curiousSession.selected/ignored 的 whySelected/whyIgnored 和 creatureReport；只能解释规则层已经选中或放过的片段，不能新增、删除、排序或改变分数。
 - 给出一条 memoryCandidateText，必须是这次真实互动可记住的小回忆，不要写流程说明。
 - 写一段 response，给用户展示这次小动物的整体回应。
 
@@ -332,6 +389,7 @@ function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "b
   "interaction": {"userIntent":"...", "emotionalTone":"...", "shouldReply":true, "suggestedAction":"respond", "reply":"...", "memoryCandidateText":"...", "memoryTags":["..."]},
   "events": [{"id":"...", "noticed":"...", "reason":"...", "suggestedAction":"..."}],
   "episodes": [{"eventId":"...", "possibleIntent":"...", "importanceReason":"...", "creatureResponse":"..."}],
+  "curiousSession": {"creatureReport":"...", "selected":[{"segmentId":"...", "whySelected":"..."}], "ignored":[{"segmentId":"...", "whyIgnored":"..."}]},
   "trace": ["短审计线索"]
 }
 
@@ -358,5 +416,30 @@ ${JSON.stringify(result.events.map((event) => ({
   suggestedAction: event.suggestedAction,
   tags: event.tags
 })))}
+
+curious_session_rule_audit:
+${JSON.stringify(result.curiousSession ? {
+  totalSegments: result.curiousSession.totalSegments,
+  attentionBudget: result.curiousSession.attentionBudget,
+  stateInfluence: result.curiousSession.stateInfluence,
+  selected: result.curiousSession.selected.map((item) => ({
+    segmentId: item.segmentId,
+    label: item.label,
+    whySelected: item.whySelected,
+    scoreTotal: item.score.total,
+    privacyRisk: item.score.privacyRisk,
+    relatedIds: item.score.relatedIds,
+    tags: item.score.tags
+  })),
+  ignored: result.curiousSession.ignored.map((item) => ({
+    segmentId: item.segmentId,
+    label: item.label,
+    whyIgnored: item.whyIgnored,
+    scoreTotal: item.score.total,
+    privacyRisk: item.score.privacyRisk,
+    redundancyPenalty: item.score.redundancyPenalty,
+    tags: item.score.tags
+  }))
+} : null)}
 `;
 }

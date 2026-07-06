@@ -68,6 +68,7 @@ LLM owns:
 - Structured interaction understanding: user intent, emotional tone, whether Papo should reply now, candidate reply text, and a memory candidate for the shared moment.
 - Visual/audio sensing adapters that compress raw screenshots or recordings into editable life-context segments.
 - Better explanation of why something drew attention.
+- Creature-facing Curious Mode narration for why existing rule-selected segments were noticed or let go.
 - Possible user intent.
 - More natural creature response.
 - Candidate action suggestions.
@@ -133,6 +134,7 @@ OpenRouter multimodal routing:
 - OpenRouter is the preferred production semantic provider when an `OPENROUTER_API_KEY` is present; Mimo and generic OpenAI-compatible providers are fallback provider families.
 - Default text model is `openai/gpt-5.5` for the semantic brain. Cheaper models may be set explicitly per deployment, but the demo should not silently present fallback output as evidence of lifeform quality.
 - Default vision/audio model ids prefer a Flash-class multimodal model for cost-effective sensing; deployments can override them per account capability.
+- Model call timeouts are configurable with `PAPO_MODEL_TIMEOUT_MS`, `PAPO_VISION_TIMEOUT_MS`, and `PAPO_AUDIO_TIMEOUT_MS`; default semantic/vision/audio limits are 45 seconds so real Curious Mode prompts do not silently degrade to fallback after a short wait.
 - Provider failures return editable fallback segments so the life loop stays demonstrable without raw model success.
 Fallback provider is a degradation path only. It must be visible in health/provider diagnostics and should never be treated as proof that Papo truly understood the user.
 
@@ -209,13 +211,14 @@ Done:
   - Direct text input now lives in the dialogue page composer, then routes through the Button Capture harness and returns to the same conversation timeline; the old standalone Button Capture page was removed from the user-facing navigation.
   - Direct calls such as asking Papo to speak now map to a first-class `respond` action, so the harness can choose to answer before it asks, saves, recalls, or stays quiet.
   - Semantic brain output now includes structured interaction understanding and can update the episode response plus memory candidate text before rule-owned persistence completes.
+  - Semantic brain can rewrite Curious Mode selected/ignored reasons and the session creature report, while rules still own the selected set, ignored set, scores, attention budget, and guardrails.
   - Direct-call keyword handling was moved out of the primary action selector and into fallback repair only; successful LLM runs own the proposed interaction/action path.
   - Provider defaults now prefer OpenRouter `openai/gpt-5.5` when configured, with `.env` support for local/production deployment and visible fallback diagnostics.
   - Initial creature state has small deterministic per-user variation, and Home state copy is driven by recent wake/conversation/feedback state changes instead of only a static mood label.
 
 Verified:
 
-- `npm test`: 28 tests passing across core, v0.2 brain behavior, Goal 3 experience, API, and UI.
+- `npm test`: 31 tests passing across core, v0.2 brain behavior, Goal 3 experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -247,6 +250,7 @@ Verified:
 - The Home "single input" path opens the dialogue composer, and a submitted text message appears in the same attention/conversation timeline as Papo's response.
 - A direct "say something to me" input selects `respond`, produces a Papo reply, and creates a memory candidate for that small shared moment.
 - Real online model smoke passed through the OpenAI-compatible generic provider with `gpt-5.5`: semantic brain status `applied`, action `respond`, LLM-written reply, and LLM-written memory candidate.
+- Real online Curious smoke passed through the OpenAI-compatible generic provider with `gpt-5.5`: semantic brain status `applied`, source `llm`, rule-owned event count stayed fixed, and LLM rewrote selected/ignored reasons into creature-facing narration.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
