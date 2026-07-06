@@ -59,7 +59,7 @@ describe("App", () => {
           profile: profileWithChatInput(),
           events: [],
           episodes: [],
-          response: "我先试着理解：你刚才说的这件事会进入我们的对话和注意流。",
+          response: "我先试着理解：你刚才说的这件事会和这一小段放在一起。",
           memoryCandidates: [],
           harnessTrace: ["sense: button", "semantic: fallback/rules only"],
           provider: "fallback"
@@ -110,7 +110,7 @@ describe("App", () => {
     expect(screen.getByLabelText("有未读 Papo 回复")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "跟 Papo 说" }));
-    expect(screen.getByText("对话和注意流")).toBeInTheDocument();
+    expect(screen.getByText("和 Papo 的小日常")).toBeInTheDocument();
     expect(screen.queryByLabelText("有未读 Papo 回复")).not.toBeInTheDocument();
     expect(screen.getByPlaceholderText("直接告诉 Papo 一件刚发生的事")).toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText("直接告诉 Papo 一件刚发生的事"), "刚刚医生确认复查时间改到周六上午。");
@@ -119,11 +119,11 @@ describe("App", () => {
     expect(screen.queryByText("认真注意后")).not.toBeInTheDocument();
 
     await userEvent.upload(screen.getByLabelText("加照片"), new File(["fake"], "复查照片.png", { type: "image/png" }));
-    expect(await screen.findByText("准备一起交给 Papo 的小素材")).toBeInTheDocument();
+    expect(await screen.findByText("准备一起交给 Papo 的这一小段")).toBeInTheDocument();
     expect(screen.getByDisplayValue("复查照片.png")).toBeInTheDocument();
     expect(screen.getByDisplayValue("照片里是周五复查的日历备注，写着提前准备病历。")).toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText("直接告诉 Papo 一件刚发生的事"), "这张照片就是刚说的复查。");
-    await userEvent.click(screen.getByRole("button", { name: "交给 Papo 注意" }));
+    await userEvent.click(screen.getByRole("button", { name: "让 Papo 听听" }));
     await waitFor(() => expect(curiousRequest?.segments?.map((segment) => segment.kind)).toEqual(["text", "image_summary"]));
     expect(new Set(curiousRequest?.segments?.map((segment) => segment.batchId)).size).toBe(1);
     expect(await screen.findByText("我把你刚说的话和照片放在同一小段里听了。")).toBeInTheDocument();
@@ -144,13 +144,14 @@ describe("App", () => {
     expect(screen.queryByText(/image_summary|audio_transcript/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "对话" }));
-    expect(screen.getByText("对话和注意流")).toBeInTheDocument();
-    expect(screen.getByText("5 条注意素材")).toBeInTheDocument();
-    expect(screen.getByText("4 条 Papo 回应")).toBeInTheDocument();
+    expect(screen.getByText("和 Papo 的小日常")).toBeInTheDocument();
+    expect(screen.getByText("5 条你递来的小片段")).toBeInTheDocument();
+    expect(screen.getByText("4 次 Papo 回应")).toBeInTheDocument();
     expect(screen.getAllByText("半分钟里的一小段")).toHaveLength(2);
-    expect(screen.getByText("2 条小素材")).toBeInTheDocument();
-    expect(screen.getByText("1 条小素材")).toBeInTheDocument();
+    expect(screen.getByText("2 条小片段")).toBeInTheDocument();
+    expect(screen.getByText("1 条小片段")).toBeInTheDocument();
     expect(screen.queryByText("manual-1 · 1 条素材")).not.toBeInTheDocument();
+    expect(screen.queryByText(/对话和注意流|注意素材|小素材|刚才的注意事件/)).not.toBeInTheDocument();
     expect(screen.queryByText(/批次 manual-1/)).not.toBeInTheDocument();
     expect(screen.queryByText(/批次 chat-batch/)).not.toBeInTheDocument();
     expect(screen.getAllByText(/和这一小段世界放在一起/).length).toBeGreaterThan(1);
@@ -366,7 +367,7 @@ function profileWithChatInput() {
         at: new Date().toISOString(),
         role: "papo",
         channel: "button",
-        text: "我先试着理解：你刚才说的这件事会进入我们的对话和注意流。",
+        text: "我先试着理解：你刚才说的这件事会和这一小段放在一起。",
         sourceId: "episode-chat",
         relatedMemoryIds: []
       },

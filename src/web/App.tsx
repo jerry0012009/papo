@@ -281,7 +281,7 @@ export function App() {
           location
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "照片已经变成一段可编辑的小素材，会和这半分钟里的话一起交给 Papo。" : "照片先以可编辑的小素材进入这一小段，对话提交时会一起交给 Papo。");
+      setDemoNote(result.semanticSource === "llm" ? "照片已经变成一段可改准的小片段，会和这半分钟里的话一起交给 Papo。" : "照片先放进这一小段，对话提交时会一起交给 Papo。");
       setTab("chat");
     });
   }
@@ -298,7 +298,7 @@ export function App() {
           batchId: current[0]?.batchId ?? currentBatchId()
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "录音已经变成一段可编辑的小素材，会和这半分钟里的话一起交给 Papo。" : "录音先以可编辑的小素材进入这一小段，对话提交时会一起交给 Papo。");
+      setDemoNote(result.semanticSource === "llm" ? "录音已经变成一段可改准的小片段，会和这半分钟里的话一起交给 Papo。" : "录音先放进这一小段，对话提交时会一起交给 Papo。");
       setTab("chat");
     });
   }
@@ -318,7 +318,7 @@ export function App() {
           location
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "Papo 已经把照片看成一段可编辑的小素材，并记录了可用的时间/地点。" : "照片已经进入这一小段，你可以先改准再交给 Papo 注意。");
+      setDemoNote(result.semanticSource === "llm" ? "Papo 已经把照片看成一段可改准的小片段，并记下可用的时间和地点。" : "照片已经进入这一小段，你可以先改准再交给 Papo。");
       setTab("curious");
     });
   }
@@ -335,7 +335,7 @@ export function App() {
           batchId: currentBatchId()
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "Papo 已经把录音听成一段可编辑的小素材。" : "录音已经进入这一小段，你可以先改准再交给 Papo 注意。");
+      setDemoNote(result.semanticSource === "llm" ? "Papo 已经把录音听成一段可改准的小片段。" : "录音已经进入这一小段，你可以先改准再交给 Papo。");
       setTab("curious");
     });
   }
@@ -834,7 +834,7 @@ function HomeView(props: {
 
       {props.lastResult ? (
         <section className="panel">
-          <PanelTitle icon={Eye} title="刚才的注意事件" />
+          <PanelTitle icon={Eye} title="刚才 Papo 竖起耳朵的地方" />
           <p className="response">{props.lastResult.response}</p>
           {props.lastResult.curiousSession ? (
             <div className="session-audit">
@@ -950,7 +950,7 @@ function CuriousView(props: {
           <div>
             <strong>{props.listening ? "我正在听这一小段世界" : "陪我听一会儿"}</strong>
             <p>
-              最多听 3 分钟，每 30 秒整理成一小段。原始声音不保存，只把可编辑的小素材放进这次共同经历。
+              最多听 3 分钟，每 30 秒整理成一小段。原始声音不保存，只把可改准的小片段放进这次共同经历。
             </p>
           </div>
           <button onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
@@ -1004,7 +1004,7 @@ function CuriousView(props: {
           </button>
           <button className="primary" onClick={props.onSubmit} disabled={props.busy}>
             <Eye size={18} />
-            交给 Papo 注意
+            让 Papo 看看
           </button>
         </div>
       </div>
@@ -1045,7 +1045,7 @@ function ChatView(props: {
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={MessagesSquare} title="对话和注意流" />
+        <PanelTitle icon={MessagesSquare} title="和 Papo 的小日常" />
         <div className="chat-composer">
           <textarea
             value={draft}
@@ -1082,12 +1082,12 @@ function ChatView(props: {
             </label>
             <button className="primary" onClick={submitDraft} disabled={props.busy || !canSubmit}>
               <MessageCircle size={18} />
-              {props.stagedSegments.length ? "交给 Papo 注意" : "说给 Papo"}
+              {props.stagedSegments.length ? "让 Papo 听听" : "说给 Papo"}
             </button>
           </div>
           {props.stagedSegments.length ? (
             <section className="staged-moment">
-              <strong>准备一起交给 Papo 的小素材</strong>
+              <strong>准备一起交给 Papo 的这一小段</strong>
               {props.stagedSegments.map((segment, index) => (
                 <article className="staged-segment" key={segment.id}>
                   <div className="segment-row">
@@ -1109,8 +1109,8 @@ function ChatView(props: {
           ) : null}
         </div>
         <div className="conversation-summary">
-          <span>{inputCount} 条注意素材</span>
-          <span>{papoCount} 条 Papo 回应</span>
+          <span>{inputCount} 条你递来的小片段</span>
+          <span>{papoCount} 次 Papo 回应</span>
         </div>
         {messages.length ? (
           <div className="chat-list">
@@ -1120,7 +1120,7 @@ function ChatView(props: {
                   <div className="chat-batch-head">
                     <strong>半分钟里的一小段</strong>
                     <span>
-                      {section.messages.length} 条小素材
+                      {section.messages.length} 条小片段
                     </span>
                   </div>
                   {section.messages.map((message) => (
@@ -1405,7 +1405,7 @@ function DemoView(props: {
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={Wand2} title="演示模式" />
-        <p className="response">用生活化素材演示三件事：它会从信息流里注意，它会被反馈养成，它会主动想起旧片段。</p>
+        <p className="response">用生活里的小片段演示三件事：它会竖起耳朵，它会被反馈养成，它会主动想起旧片段。</p>
         {props.note ? <section className="learning-note">{props.note}</section> : null}
         {props.summary ? (
           <section className="demo-checklist">

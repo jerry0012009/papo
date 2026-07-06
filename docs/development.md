@@ -90,7 +90,7 @@ Active emergence must not treat seed self-memory as a shared old experience. A m
 Unread dialogue state is a perception layer for new Papo utterances, not an action planner: rules decide persisted `papo` messages, while the UI only shows a small unread dot on the dialogue entry. Wake notes are presence state and do not create unread notifications.
 Internal channel names, memory kinds, batch ids, and numeric weights are developer facts. User-facing dialogue and memory pages should default to natural creature language; raw `channel`, `kind`, `batchId`, and `weight` belong in details or Brain views.
 Harness traces and implementation backlog belong to Brain/development docs, not the Home or Demo experience. The user-facing path should show what Papo noticed, remembered, learned, or wondered, not pipeline step names such as `sense` or `semantic`.
-User-facing pages should not label the companionship flow as `Curious Mode` or expose `image_summary` / `audio_transcript`; use "陪我看一小段世界", "照片", "录音转写", and "小素材" language instead. Keep the raw type names in code, API contracts, tests, and Brain diagnostics only.
+User-facing pages should not label the companionship flow as `Curious Mode` or expose `image_summary` / `audio_transcript`; use "陪我看一小段世界", "照片", "录音转写", "小片段", and "这一小段" language instead. Keep the raw type names in code, API contracts, tests, and Brain diagnostics only.
 
 Harness stages:
 
@@ -205,7 +205,7 @@ Done:
   - Curious Mode continuous recording: MediaRecorder records up to 3 minutes, requests audio chunks every 30 seconds, sends chunks to `/api/audio-transcript`, and keeps browser speech recognition only as a local fallback transcript source.
   - Multimodal 30-second batches: text, photo summaries, and audio transcripts carry `batchId` and `observedAt`; photo uploads also carry available browser geolocation so later memories can include time/place.
   - Papo is now rendered as a stateful cartoon Shiba Inu SVG: triangular ears, curled tail, urajiro face/chest, breathing, blinking, tired/alert/attached/careful motion states are bound to `CreatureState`.
-  - Conversation and attention are unified in the UI: the dialogue page shows user/world inputs as attention material and Papo utterances as outputs in one timeline.
+  - Conversation and attention are unified in the UI: the dialogue page shows user/world fragments and Papo utterances as one shared-moment timeline.
   - Dialogue inputs with the same 30-second batch are grouped as one shared moment, so multimodal fragments feel like one thing Papo experienced with the user.
   - Dialogue composer now accepts text, photo summaries, and audio transcripts directly. When a photo/audio segment is staged, submitting the dialogue sends the whole 30-second shared moment through the Curious attention harness instead of forcing the user into a separate mode.
   - Episode memories preserve source segment/batch/time/location metadata and memory cards can show the exact shared moment that created them.
@@ -231,6 +231,7 @@ Done:
   - Memory cards now combine familiarity and memory type into Papo's own subjective sentence, so the default memory page reads less like a database record.
   - Home presence copy no longer labels Papo as "current mood" or explains state as calculation. It now prioritizes the latest conversation, feedback, emergence, or wake context before falling back to body-state cues.
   - User-facing attention and episode cards no longer expose score contributions, numeric confidence, weight, or decision trace details. Those remain in Brain diagnostics while the default cards show Papo's attention strength, caution, memory, action, and save feeling in creature language.
+  - Dialogue and shared-moment pages no longer call the user path an "attention flow" or "attention material"; they use "和 Papo 的小日常", "你递来的小片段", and "这一小段" so the interaction reads as a shared experience instead of pipeline input.
 
 Verified:
 
@@ -262,8 +263,9 @@ Verified:
 - Home renders Papo as an animated Shiba Inu SVG whose visible posture changes with mood, energy, curiosity, attachment, and safety.
 - Home presence copy is context-first and does not expose "current mood" or state-calculation wording.
 - User-facing memory/attention pages do not expose `memory_resonance`, `decisionTrace`, numeric `weight`, or numeric `confidence`; Brain keeps technical diagnostics.
+- User-facing dialogue pages do not show "attention flow", "attention material", or "small material" wording; they present shared moments as small life fragments handed to Papo.
 - The Home "Papo new said" surface only selects `role=papo` messages even when newer user/world inputs exist.
-- The dialogue page presents one attention/conversation timeline with counts for attention material and Papo responses.
+- The dialogue page presents one shared-moment timeline with counts for user fragments and Papo responses.
 - The dialogue page groups same-batch multimodal inputs into a "30-second shared moment" before Papo's response.
 - Episode cards can trace a memory back to the source shared moment, including batch, observed time, location, and matching conversation input when present.
 - Feedback text and audio transcript content are persisted as conversation input, and Papo's learning response follows it in the same timeline.
