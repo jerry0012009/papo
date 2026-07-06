@@ -35,6 +35,7 @@ import {
   makeSegment,
   sendFeedback,
   updateLongTermMemory,
+  wakeProfile,
   type ProfileSummary,
   type ProviderInfo
 } from "./api";
@@ -108,6 +109,7 @@ export function App() {
   const [lastResult, setLastResult] = useState<CaptureResult>();
   const [emergence, setEmergence] = useState<string>();
   const [learningNote, setLearningNote] = useState<string>();
+  const [wakeMessage, setWakeMessage] = useState<string>();
   const [demoNote, setDemoNote] = useState<string>();
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
@@ -139,8 +141,10 @@ export function App() {
         active = await createProfile("Papo");
         nextProfiles = await listProfiles();
       }
+      const woke = await wakeProfile(active.userId);
       setProfiles(nextProfiles);
-      setProfile(active);
+      setProfile(woke.profile);
+      setWakeMessage(woke.wake.message);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -149,7 +153,10 @@ export function App() {
   }
 
   async function selectProfile(userId: string) {
-    setProfile(await getProfile(userId));
+    const active = await getProfile(userId);
+    const woke = await wakeProfile(active.userId);
+    setProfile(woke.profile);
+    setWakeMessage(woke.wake.message);
     setTab("home");
   }
 
@@ -157,7 +164,9 @@ export function App() {
     const name = `Papo ${profiles.length + 1}`;
     const next = await createProfile(name);
     setProfiles(await listProfiles());
-    setProfile(next);
+    const woke = await wakeProfile(next.userId);
+    setProfile(woke.profile);
+    setWakeMessage(woke.wake.message);
   }
 
   async function submitButtonCapture() {
@@ -376,6 +385,7 @@ export function App() {
           selectedEpisode={selectedEpisode}
           emergence={emergence}
           learningNote={learningNote}
+          wakeMessage={wakeMessage}
           busy={busy}
           onFeedback={giveFeedback}
           onGoCapture={() => setTab("capture")}
@@ -423,6 +433,7 @@ function HomeView(props: {
   selectedEpisode?: EpisodeMemory;
   emergence?: string;
   learningNote?: string;
+  wakeMessage?: string;
   busy: boolean;
   onFeedback: (kind: FeedbackKind, targetId?: string) => void;
   onGoCapture: () => void;
@@ -452,6 +463,12 @@ function HomeView(props: {
         </button>
       </div>
 
+      {props.wakeMessage ? (
+        <section className="wake-note">
+          <span>醒来时</span>
+          <p>{props.wakeMessage}</p>
+        </section>
+      ) : null}
       {props.emergence ? <section className="memory-surface active">{props.emergence}</section> : null}
       {props.learningNote ? <section className="learning-note">{props.learningNote}</section> : null}
 

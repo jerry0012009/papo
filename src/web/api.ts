@@ -1,4 +1,4 @@
-import type { CaptureResult, CreatureProfile, FeedbackKind, FeedbackRecord, SegmentKind, StreamSegment } from "../core/types";
+import type { CaptureResult, CreatureProfile, FeedbackKind, FeedbackRecord, SegmentKind, StreamSegment, WakeEvent } from "../core/types";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 const apiBase = import.meta.env.VITE_API_BASE as string | undefined;
@@ -37,6 +37,10 @@ export async function createProfile(creatureName: string): Promise<CreatureProfi
 export async function getProfile(userId: string): Promise<CreatureProfile> {
   const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}`);
   return data.profile;
+}
+
+export async function wakeProfile(userId: string): Promise<{ profile: CreatureProfile; wake: WakeEvent }> {
+  return request<{ profile: CreatureProfile; wake: WakeEvent }>(`/api/profiles/${userId}/wake`, { method: "POST" });
 }
 
 export async function buttonCapture(userId: string, text: string): Promise<CaptureResult> {

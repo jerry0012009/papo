@@ -22,6 +22,14 @@ describe("api", () => {
     const created = await request(app).post("/api/profiles").send({ creatureName: "Demo" }).expect(201);
     const userId = created.body.profile.userId;
 
+    await request(app)
+      .post(`/api/profiles/${userId}/wake`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.wake.message).toBeTruthy();
+        expect(response.body.profile.wakeHistory).toHaveLength(1);
+      });
+
     const button = await request(app)
       .post(`/api/profiles/${userId}/button`)
       .send({ text: "我希望小动物会注意、会记忆、会根据反馈改变。" })

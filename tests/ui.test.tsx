@@ -15,6 +15,20 @@ describe("App", () => {
       if (url.endsWith("/api/profiles") && init?.method === "POST") {
         return json({ profile: profileFixture() }, 201);
       }
+      if (url.endsWith("/api/profiles/u1/wake")) {
+        return json({
+          profile: profileFixture(),
+          wake: {
+            id: "wake1",
+            at: new Date().toISOString(),
+            elapsedMinutes: 0,
+            message: "我刚刚醒着，你一打开我就还在这里。",
+            stateChangeReason: "app_wake_short_gap",
+            stateDelta: {},
+            ruleTrace: ["elapsed_minutes=0", "state_delta=none"]
+          }
+        });
+      }
       if (url.endsWith("/api/profiles")) return json({ profiles: [] });
       return json({ profile: profileFixture() });
     });
@@ -23,6 +37,7 @@ describe("App", () => {
 
     await waitFor(() => expect(screen.getByText("Papo")).toBeInTheDocument());
     expect(screen.getByText("当前心情")).toBeInTheDocument();
+    expect(screen.getByText("醒来时")).toBeInTheDocument();
     expect(screen.getByText("单次输入")).toBeInTheDocument();
     expect(screen.getByText("陪我一会儿")).toBeInTheDocument();
 
@@ -55,6 +70,7 @@ function profileFixture() {
     userId: "u1",
     creatureName: "Papo",
     createdAt: new Date().toISOString(),
+    lastSeenAt: new Date().toISOString(),
     state: {
       curiosity: 66,
       attachment: 42,
@@ -87,6 +103,7 @@ function profileFixture() {
       quietTendency: 35
     },
     memoryCandidates: [],
-    emergenceHistory: []
+    emergenceHistory: [],
+    wakeHistory: []
   };
 }

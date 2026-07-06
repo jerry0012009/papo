@@ -208,10 +208,21 @@ export interface FeedbackRecord {
   learningNote: string;
 }
 
+export interface WakeEvent {
+  id: string;
+  at: string;
+  elapsedMinutes: number;
+  message: string;
+  stateChangeReason: string;
+  stateDelta: Partial<Record<keyof Omit<CreatureState, "mood">, number>>;
+  ruleTrace: string[];
+}
+
 export interface CreatureProfile {
   userId: string;
   creatureName: string;
   createdAt: string;
+  lastSeenAt: string;
   state: CreatureState;
   episodes: EpisodeMemory[];
   longTermMemories: LongTermMemory[];
@@ -220,6 +231,7 @@ export interface CreatureProfile {
   policyProfile: FeedbackPolicyProfile;
   memoryCandidates: MemoryCandidate[];
   emergenceHistory: EmergenceRecord[];
+  wakeHistory: WakeEvent[];
 }
 
 export interface EmergenceRecord {

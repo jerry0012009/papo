@@ -6,6 +6,7 @@ import { runButtonHarness } from "../src/core/harness";
 import { promoteEpisode } from "../src/core/memory";
 import { createCreatureProfile } from "../src/core/profile";
 import { createModelProvider, type ModelProvider } from "../src/core/provider";
+import { wakeCreature } from "../src/core/rhythm";
 import type { CreatureState } from "../src/core/types";
 
 describe("creature core", () => {
@@ -67,6 +68,22 @@ describe("creature core", () => {
     expect(profile.state.curiosity).toBeGreaterThan(before);
     expect(inRange(profile.state)).toBe(true);
     expect(profile.feedbackHistory[0].kind).toBe("continue");
+  });
+
+  it("wake rhythm applies time-based state recovery and records a presence event", () => {
+    const profile = createCreatureProfile({ now: "2026-07-06T08:00:00.000Z" });
+    profile.state.energy = 40;
+    profile.state.arousal = 60;
+    profile.lastSeenAt = "2026-07-06T06:00:00.000Z";
+
+    const wake = wakeCreature(profile, "2026-07-06T08:00:00.000Z");
+
+    expect(wake.elapsedMinutes).toBe(120);
+    expect(profile.state.energy).toBeGreaterThan(40);
+    expect(profile.state.arousal).toBeLessThan(60);
+    expect(profile.lastSeenAt).toBe("2026-07-06T08:00:00.000Z");
+    expect(profile.wakeHistory[0].id).toBe(wake.id);
+    expect(wake.message).toContain("醒来");
   });
 
   it("remember promotes an episode to long-term memory", () => {

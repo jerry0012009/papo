@@ -6,6 +6,7 @@ import { applyFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { createModelProvider, type ModelProvider } from "../core/provider";
 import { promoteEpisode, updateLongTermMemory } from "../core/memory";
+import { wakeCreature } from "../core/rhythm";
 import type { StreamSegment } from "../core/types";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
@@ -79,6 +80,17 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       res.json({ profile });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/profiles/:userId/wake", async (req, res, next) => {
+    try {
+      const profile = await requireProfile(store, req.params.userId);
+      const wake = wakeCreature(profile);
+      await store.saveProfile(profile);
+      res.json({ profile, wake });
     } catch (error) {
       next(error);
     }

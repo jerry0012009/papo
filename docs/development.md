@@ -79,6 +79,13 @@ Harness stages:
 5. `remember`: append episode memory.
 6. `learn`: feedback updates state and memory weight.
 7. `emerge`: state and memory trigger active resurfacing.
+8. `wake`: app open/reopen applies deterministic time rhythm and shows a small presence note.
+
+Wake rhythm split:
+
+- Rules compute elapsed time, state deltas, history caps, and persistence.
+- LLM may later rewrite the presence sentence, but cannot choose elapsed time or mutate state.
+- Wake text should describe living presence, not use development notes as interaction material.
 
 ### Borrowed Lessons
 
@@ -111,6 +118,7 @@ ClawRouter:
 - `src/core/memory.ts`: episode and long-term memory.
 - `src/core/feedback.ts`: reinforcement rules.
 - `src/core/emergence.ts`: active resurfacing.
+- `src/core/rhythm.ts`: app-open wake rhythm and time-based state recovery.
 - `src/core/provider.ts`: Mimo/OpenRouter/generic/fallback provider layer.
 - `src/server/app.ts`: API orchestration.
 - `src/server/index.ts`: API listener, defaults to `127.0.0.1` for nginx proxying.
@@ -146,13 +154,14 @@ Done:
 - Goal 3 experience layer:
   - Main UI uses creature experience language for attention and episodes.
   - Feedback immediately surfaces a user-facing "I learned" note.
+  - App open/reopen creates a wake event: Papo reacts to time passing, recovers energy by rule, and shows a small "醒来时" presence note on Home.
   - Demo Mode uses life-context examples rather than Papo development text as interaction material.
   - Demo Mode includes Curious stream loading, A/B feedback conditioning, and active emergence.
   - Experimental voice companionship in Curious Mode: browser speech recognition can listen up to 3 minutes and split transcripts every 30 seconds into `audio_transcript` segments.
 
 Verified:
 
-- `npm test`: 24 tests passing across core, v0.2 brain behavior, Goal 3 experience, API, and UI.
+- `npm test`: 25 tests passing across core, v0.2 brain behavior, Goal 3 experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -167,6 +176,8 @@ Verified:
 - Curious Mode creature report uses user-life material and explains selected/ignored segments.
 - Feedback returns a visible learning note.
 - Active emergence reads as inner resurfacing rather than a template reminder.
+- Wake rhythm records an app-open presence event and applies rule-owned time-based state recovery.
+- Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`
   - API: `https://eu.jerrypsy.top/papo-api/health`

@@ -12,6 +12,7 @@ export function createCreatureProfile(input: {
     userId: input.userId ?? makeId("user"),
     creatureName: input.creatureName?.trim() || "Papo",
     createdAt: now,
+    lastSeenAt: now,
     state: initialState(),
     episodes: [],
     longTermMemories: seedMemories(now),
@@ -19,7 +20,8 @@ export function createCreatureProfile(input: {
     stateChanges: [],
     policyProfile: initialPolicyProfile(),
     memoryCandidates: [],
-    emergenceHistory: []
+    emergenceHistory: [],
+    wakeHistory: []
   };
   return profile;
 }
@@ -37,9 +39,11 @@ export function initialPolicyProfile(): FeedbackPolicyProfile {
 }
 
 export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProfile {
+  profile.lastSeenAt ??= profile.createdAt;
   profile.policyProfile ??= initialPolicyProfile();
   profile.memoryCandidates ??= [];
   profile.emergenceHistory ??= [];
+  profile.wakeHistory ??= [];
   profile.episodes ??= [];
   profile.longTermMemories ??= [];
   profile.feedbackHistory ??= [];

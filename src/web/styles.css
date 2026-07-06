@@ -243,6 +243,7 @@ select {
 .episode-card,
 .attention-card,
 .state-item,
+.wake-note,
 .memory-surface {
   border: 1px solid rgba(31, 36, 33, 0.1);
   border-radius: 8px;
@@ -293,6 +294,7 @@ select {
 .state-item span,
 .attention-card small,
 .episode-card small,
+.wake-note span,
 .memory-surface span,
 .change-row span,
 .muted {
@@ -336,6 +338,7 @@ meter {
 
 .attention-card,
 .episode-card,
+.wake-note,
 .memory-surface,
 .change-row {
   padding: 12px;
@@ -351,6 +354,7 @@ meter {
 
 .attention-card p,
 .episode-card p,
+.wake-note p,
 .memory-surface p,
 .change-row p {
   margin: 8px 0;
