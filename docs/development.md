@@ -225,7 +225,7 @@ Done:
 
 Verified:
 
-- `npm test`: 32 tests passing across core, v0.2 brain behavior, Goal 3 experience, API, and UI.
+- `npm test`: 33 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -246,6 +246,7 @@ Verified:
 - Wake rhythm records an app-open presence event, applies rule-owned time-based state recovery, and can resurface a real user memory after absence.
 - Papo utterances are visible in persisted dialogue history, and new non-wake replies mark the dialogue tab unread.
 - Active emergence ignores zero-weight forgotten memories; it may use a derived safety rule, but it will not resurface the forgotten target itself.
+- Goal 3 acceptance flow is covered by an end-to-end core test: wake, 8-part Curious stream, selected/ignored reasons, remember/continue feedback, A/B conditioned creatures, and active emergence from a real promoted memory.
 - Curious Mode can create `audio_transcript` segments from real 30-second audio chunks without storing raw audio.
 - Curious Mode can preserve photo upload time/place and batch text/photo/audio as one stream before attention selection.
 - Home renders Papo as an animated Shiba Inu SVG whose visible posture changes with mood, energy, curiosity, attachment, and safety.
