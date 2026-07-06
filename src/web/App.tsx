@@ -857,23 +857,38 @@ function ShibaAvatar({ state, idle = false }: { state?: CreatureState; idle?: bo
 
   return (
     <div className={className} aria-label="Papo 是一只卡通柴犬">
-      <div className="shiba-tail" />
-      <div className="shiba-body">
-        <span className="shiba-chest" />
-        <span className="shiba-paw left" />
-        <span className="shiba-paw right" />
-      </div>
-      <div className="shiba-head">
-        <span className="shiba-ear left" />
-        <span className="shiba-ear right" />
-        <span className="shiba-brow left" />
-        <span className="shiba-brow right" />
-        <span className="shiba-eye left" />
-        <span className="shiba-eye right" />
-        <span className="shiba-muzzle" />
-        <span className="shiba-nose" />
-        <span className="shiba-mouth" />
-      </div>
+      <svg className="shiba-svg" viewBox="0 0 160 150" role="img" aria-hidden="true">
+        <g className="shiba-tail">
+          <path className="shiba-tail-ring" d="M120 86c23-7 29-34 10-43-17-8-32 8-23 22 6 10 21 7 21-3" />
+          <path className="shiba-tail-tip" d="M129 43c13 9 9 29-8 36" />
+        </g>
+        <g className="shiba-body">
+          <path className="shiba-body-fur" d="M42 87c8-23 51-28 73-8 17 15 15 45-9 52-21 7-55 5-69-8-11-10-10-24 5-36Z" />
+          <path className="shiba-chest" d="M60 92c8 8 27 8 35 0 7 14 3 31-17 32-19 1-26-15-18-32Z" />
+          <ellipse className="shiba-paw left" cx="55" cy="127" rx="15" ry="9" />
+          <ellipse className="shiba-paw right" cx="99" cy="127" rx="15" ry="9" />
+        </g>
+        <g className="shiba-head">
+          <path className="shiba-ear left" d="M46 42 34 10c-2-6 4-11 9-7l25 22Z" />
+          <path className="shiba-ear-inner left" d="M46 33 40 15l15 14Z" />
+          <path className="shiba-ear right" d="M113 42 126 10c2-6-4-11-9-7L92 25Z" />
+          <path className="shiba-ear-inner right" d="M113 33 119 15l-15 14Z" />
+          <path className="shiba-head-fur" d="M37 59c0-26 19-42 43-42s43 16 43 42c0 28-19 49-43 49S37 87 37 59Z" />
+          <path className="shiba-urajiro left" d="M44 64c0-17 11-31 25-34 2 19-5 38-19 48-4-3-6-8-6-14Z" />
+          <path className="shiba-urajiro right" d="M116 64c0-17-11-31-25-34-2 19 5 38 19 48 4-3 6-8 6-14Z" />
+          <ellipse className="shiba-brow left" cx="64" cy="50" rx="8" ry="4" />
+          <ellipse className="shiba-brow right" cx="96" cy="50" rx="8" ry="4" />
+          <ellipse className="shiba-eye left" cx="64" cy="61" rx="5.5" ry="7" />
+          <ellipse className="shiba-eye right" cx="96" cy="61" rx="5.5" ry="7" />
+          <circle className="shiba-eye-shine left" cx="62" cy="58" r="1.6" />
+          <circle className="shiba-eye-shine right" cx="94" cy="58" r="1.6" />
+          <ellipse className="shiba-cheek left" cx="50" cy="77" rx="8" ry="5" />
+          <ellipse className="shiba-cheek right" cx="110" cy="77" rx="8" ry="5" />
+          <path className="shiba-muzzle" d="M61 76c4-10 34-10 38 0 4 12-5 24-19 24S57 88 61 76Z" />
+          <path className="shiba-nose" d="M73 76c2-5 12-5 14 0 1 5-2 8-7 8s-8-3-7-8Z" />
+          <path className="shiba-mouth" d="M80 84c0 8-10 10-14 4M80 84c0 8 10 10 14 4" />
+        </g>
+      </svg>
     </div>
   );
 }

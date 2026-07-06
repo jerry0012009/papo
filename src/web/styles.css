@@ -156,16 +156,17 @@ select {
 }
 
 .shiba {
-  width: 112px;
+  width: 124px;
   aspect-ratio: 1;
   position: relative;
   justify-self: center;
   animation: breathe 3.6s ease-in-out infinite;
-  --fur: #d57738;
-  --fur-dark: #a9572d;
-  --cream: #fff0cf;
-  --ink: #1d1d1a;
-  --blush: #eaa27d;
+  --fur: #d97836;
+  --fur-dark: #9f4f25;
+  --cream: #fff1cf;
+  --inner-ear: #f6b47f;
+  --ink: #1e1d1a;
+  --blush: #e99a78;
   --tail-speed: 1.2s;
 }
 
@@ -173,204 +174,92 @@ select {
   margin: 0 auto;
 }
 
-.shiba-body {
-  position: absolute;
-  left: 22px;
-  right: 18px;
-  bottom: 2px;
-  height: 58px;
-  border-radius: 45% 48% 35% 35%;
-  background: var(--fur);
-  box-shadow: inset -12px -10px 0 rgba(31, 36, 33, 0.08);
-}
-
-.shiba-chest {
-  position: absolute;
-  left: 22px;
-  bottom: 0;
-  width: 30px;
-  height: 39px;
-  border-radius: 45% 45% 35% 35%;
-  background: var(--cream);
-}
-
-.shiba-paw {
-  position: absolute;
-  bottom: -2px;
-  width: 18px;
-  height: 14px;
-  border-radius: 12px 12px 7px 7px;
-  background: var(--cream);
-}
-
-.shiba-paw.left {
-  left: 18px;
-}
-
-.shiba-paw.right {
-  right: 14px;
+.shiba-svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  filter: drop-shadow(0 8px 10px rgba(31, 36, 33, 0.12));
 }
 
 .shiba-tail {
-  position: absolute;
-  right: 3px;
-  bottom: 38px;
-  width: 42px;
-  height: 42px;
-  border: 10px solid var(--fur);
-  border-left-color: transparent;
-  border-bottom-color: transparent;
-  border-radius: 50%;
+  transform-box: fill-box;
   transform-origin: 13px 36px;
   animation: tail-wag var(--tail-speed) ease-in-out infinite;
-  filter: drop-shadow(0 2px 0 rgba(31, 36, 33, 0.08));
+}
+
+.shiba-tail-ring,
+.shiba-tail-tip {
+  fill: none;
+  stroke: var(--fur);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 14;
+}
+
+.shiba-tail-tip {
+  stroke: var(--cream);
+  stroke-width: 7;
+}
+
+.shiba-body-fur,
+.shiba-head-fur,
+.shiba-ear {
+  fill: var(--fur);
+  stroke: var(--fur-dark);
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+.shiba-chest,
+.shiba-paw,
+.shiba-urajiro,
+.shiba-muzzle,
+.shiba-brow {
+  fill: var(--cream);
+}
+
+.shiba-ear-inner {
+  fill: var(--inner-ear);
+  opacity: 0.92;
 }
 
 .shiba-head {
-  position: absolute;
-  left: 14px;
-  top: 7px;
-  width: 82px;
-  height: 76px;
-  border-radius: 46% 46% 44% 44%;
-  background: var(--fur);
-  box-shadow: inset -10px -8px 0 rgba(31, 36, 33, 0.07);
+  transform-box: fill-box;
+  transform-origin: center bottom;
 }
 
 .shiba-ear {
-  position: absolute;
-  top: -18px;
-  width: 30px;
-  height: 36px;
-  background: var(--fur);
-  border-radius: 10px 80% 10px 80%;
+  transform-box: fill-box;
   transform-origin: bottom center;
-}
-
-.shiba-ear::after {
-  content: "";
-  position: absolute;
-  inset: 8px 7px 5px;
-  border-radius: inherit;
-  background: #f3b27c;
-}
-
-.shiba-ear.left {
-  left: 8px;
-  transform: rotate(-24deg);
-}
-
-.shiba-ear.right {
-  right: 8px;
-  transform: scaleX(-1) rotate(-24deg);
+  transition: transform 180ms ease;
 }
 
 .shiba-eye,
-.shiba-brow,
-.shiba-muzzle,
-.shiba-nose,
-.shiba-mouth {
-  position: absolute;
+.shiba-nose {
+  fill: var(--ink);
 }
 
 .shiba-eye {
-  top: 31px;
-  width: 9px;
-  height: 11px;
-  border-radius: 50%;
-  background: var(--ink);
+  transform-box: fill-box;
+  transform-origin: center;
   animation: blink 5s ease-in-out infinite;
 }
 
-.shiba-eye.left {
-  left: 26px;
+.shiba-eye-shine {
+  fill: #fffaf0;
 }
 
-.shiba-eye.right {
-  right: 26px;
-}
-
-.shiba-brow {
-  top: 23px;
-  width: 13px;
-  height: 5px;
-  border-radius: 999px;
-  background: var(--cream);
-}
-
-.shiba-brow.left {
-  left: 22px;
-}
-
-.shiba-brow.right {
-  right: 22px;
-}
-
-.shiba-muzzle {
-  left: 23px;
-  bottom: 12px;
-  width: 36px;
-  height: 25px;
-  border-radius: 50% 50% 45% 45%;
-  background: var(--cream);
-}
-
-.shiba-nose {
-  left: 37px;
-  bottom: 28px;
-  width: 10px;
-  height: 8px;
-  border-radius: 50% 50% 45% 45%;
-  background: var(--ink);
-}
-
-.shiba-mouth {
-  left: 36px;
-  bottom: 19px;
-  width: 12px;
-  height: 7px;
-  border-bottom: 2px solid var(--ink);
-  border-radius: 0 0 12px 12px;
-}
-
-.shiba-mouth::before,
-.shiba-mouth::after {
-  content: "";
-  position: absolute;
-  top: 1px;
-  width: 10px;
-  height: 8px;
-  border-bottom: 2px solid var(--ink);
-  border-radius: 0 0 12px 12px;
-}
-
-.shiba-mouth::before {
-  right: 6px;
-}
-
-.shiba-mouth::after {
-  left: 6px;
-}
-
-.shiba::before,
-.shiba::after {
-  content: "";
-  position: absolute;
-  top: 53px;
-  width: 9px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--blush);
-  z-index: 3;
+.shiba-cheek {
+  fill: var(--blush);
   opacity: 0.7;
 }
 
-.shiba::before {
-  left: 29px;
-}
-
-.shiba::after {
-  right: 31px;
+.shiba-mouth {
+  fill: none;
+  stroke: var(--ink);
+  stroke-linecap: round;
+  stroke-width: 3;
 }
 
 .shiba-calm {
@@ -399,27 +288,37 @@ select {
 
 .shiba-bright,
 .shiba.is-alert {
-  --fur: #db8737;
+  --fur: #df8234;
   --tail-speed: 0.78s;
 }
 
 .shiba.is-alert .shiba-ear.left {
-  transform: rotate(-12deg) translateY(-2px);
+  transform: rotate(-7deg) translateY(-2px);
 }
 
 .shiba.is-alert .shiba-ear.right {
-  transform: scaleX(-1) rotate(-12deg) translateY(-2px);
+  transform: rotate(7deg) translateY(-2px);
 }
 
 .shiba.is-tired .shiba-eye {
-  height: 4px;
-  top: 35px;
+  transform: scaleY(0.32);
   animation: none;
 }
 
-.shiba.is-tired .shiba-mouth {
-  width: 14px;
-  border-bottom-width: 2px;
+.shiba.is-attached .shiba-head {
+  transform: translateY(2px) rotate(-2deg);
+}
+
+.shiba.is-careful .shiba-head {
+  transform: translateY(1px);
+}
+
+.shiba.is-careful .shiba-ear.left {
+  transform: rotate(-4deg);
+}
+
+.shiba.is-careful .shiba-ear.right {
+  transform: rotate(4deg);
 }
 
 .dog-state-cues {

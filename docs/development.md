@@ -188,7 +188,7 @@ Done:
   - Papo conversation timeline: multimodal inputs plus wake notes, attention responses, feedback learning, and active emergence are persisted into `conversation`, with a Home notification and a dedicated dialogue history page.
   - Curious Mode continuous recording: MediaRecorder records up to 3 minutes, requests audio chunks every 30 seconds, sends chunks to `/api/audio-transcript`, and keeps browser speech recognition only as a local fallback transcript source.
   - Multimodal 30-second batches: text, photo summaries, and audio transcripts carry `batchId` and `observedAt`; photo uploads also carry available browser geolocation so later memories can include time/place.
-  - Papo is now rendered as a cute cartoon Shiba Inu: ears, curled tail, breathing, blinking, tired/alert/attached/careful motion states are bound to `CreatureState`.
+  - Papo is now rendered as a stateful cartoon Shiba Inu SVG: triangular ears, curled tail, urajiro face/chest, breathing, blinking, tired/alert/attached/careful motion states are bound to `CreatureState`.
   - Conversation and attention are unified in the UI: the dialogue page shows user/world inputs as attention material and Papo utterances as outputs in one timeline.
   - Dialogue inputs with the same 30-second batch are grouped as one shared moment, so multimodal fragments feel like one thing Papo experienced with the user.
   - Episode memories preserve source segment/batch/time/location metadata and memory cards can show the exact shared moment that created them.
@@ -221,7 +221,7 @@ Verified:
 - Papo utterances are visible as a latest-message notification and as persisted dialogue history.
 - Curious Mode can create `audio_transcript` segments from real 30-second audio chunks without storing raw audio.
 - Curious Mode can preserve photo upload time/place and batch text/photo/audio as one stream before attention selection.
-- Home renders Papo as an animated Shiba Inu whose visible posture changes with mood, energy, curiosity, attachment, and safety.
+- Home renders Papo as an animated Shiba Inu SVG whose visible posture changes with mood, energy, curiosity, attachment, and safety.
 - The Home "Papo new said" surface only selects `role=papo` messages even when newer user/world inputs exist.
 - The dialogue page presents one attention/conversation timeline with counts for attention material and Papo responses.
 - The dialogue page groups same-batch multimodal inputs into a "30-second shared moment" before Papo's response.
@@ -238,9 +238,9 @@ Verified:
 
 Next:
 
-1. Replace the CSS-only Shiba with a cuter, more standard Shiba visual system after collecting suitable references or generating a small raster/vector asset set.
-2. Add stronger browser visual QA with mobile screenshots for the Shiba Inu avatar, conversation timeline, source-linked episode cards, notification prompt, feedback input, and Curious recording flow.
-3. Tune OpenRouter audio model defaults after testing real account model availability.
+1. Add stronger browser visual QA with mobile screenshots for the Shiba Inu avatar, conversation timeline, source-linked episode cards, notification prompt, feedback input, and Curious recording flow.
+2. Tune OpenRouter audio model defaults after testing real account model availability.
+3. Consider a small generated Shiba sprite sheet later if SVG statefulness becomes limiting.
 
 Demo material rule:
 
@@ -266,7 +266,7 @@ Demo material rule:
 - Papo messages are persisted and visible in conversation history.
 - Curious Mode can segment live recording into audio transcripts.
 - Curious Mode records multimodal input metadata: 30-second batch id, observed time, and photo location when permitted.
-- Papo's visible Shiba Inu avatar reflects state and remains readable on mobile.
+- Papo's visible Shiba Inu SVG avatar reflects state and remains readable on mobile.
 - Conversation timeline treats attention as part of dialogue, and browser notifications only fire for new Papo utterances after explicit permission.
 - Same-batch multimodal inputs are visible as one shared moment in the conversation timeline.
 - Episode memory provenance links back to the source shared moment where available.
