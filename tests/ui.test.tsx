@@ -61,6 +61,16 @@ describe("App", () => {
           }
         });
       }
+      if (url.endsWith("/api/profiles/u1/button")) {
+        return json({
+          profile: profileWithChatInput(),
+          events: [],
+          episodes: [],
+          response: "我先试着理解：你刚才说的这件事会进入我们的对话和注意流。",
+          memoryCandidates: [],
+          provider: "fallback"
+        });
+      }
       if (url.endsWith("/api/profiles")) return json({ profiles: [] });
       return json({ profile: profileFixture() });
     });
@@ -93,8 +103,13 @@ describe("App", () => {
     expect(requestPermission).toHaveBeenCalledOnce();
     expect(await screen.findByText("已开提醒")).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "输入" }));
-    expect(screen.getByText("Button Capture")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "单次输入" }));
+    expect(screen.getByText("对话和注意流")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("直接告诉 Papo 一件刚发生的事")).toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText("直接告诉 Papo 一件刚发生的事"), "刚刚医生确认复查时间改到周六上午。");
+    await userEvent.click(screen.getByRole("button", { name: "说给 Papo" }));
+    expect(await screen.findByText("刚刚医生确认复查时间改到周六上午。")).toBeInTheDocument();
+    expect(screen.getByText("认真注意后")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "陪我" }));
     expect(screen.getByText("Curious Mode")).toBeInTheDocument();
@@ -104,8 +119,8 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "对话" }));
     expect(screen.getByText("对话和注意流")).toBeInTheDocument();
-    expect(screen.getByText("2 条注意素材")).toBeInTheDocument();
-    expect(screen.getByText("2 条 Papo 回应")).toBeInTheDocument();
+    expect(screen.getByText("3 条注意素材")).toBeInTheDocument();
+    expect(screen.getByText("3 条 Papo 回应")).toBeInTheDocument();
     expect(screen.getByText("30秒共同片段")).toBeInTheDocument();
     expect(screen.getByText("manual-1 · 1 条素材")).toBeInTheDocument();
     expect(screen.getByText(/进入30秒注意批次/)).toBeInTheDocument();
@@ -293,6 +308,35 @@ function profileWithFeedback() {
         relatedMemoryIds: [],
         modality: "text",
         observedAt: new Date().toISOString()
+      },
+      ...profile.conversation
+    ]
+  };
+}
+
+function profileWithChatInput() {
+  const profile = profileWithFeedback();
+  return {
+    ...profile,
+    conversation: [
+      {
+        id: "msg6",
+        at: new Date().toISOString(),
+        role: "papo",
+        channel: "button",
+        text: "我先试着理解：你刚才说的这件事会进入我们的对话和注意流。",
+        sourceId: "episode-chat",
+        relatedMemoryIds: []
+      },
+      {
+        id: "msg5",
+        at: new Date().toISOString(),
+        role: "user",
+        channel: "button",
+        text: "刚刚医生确认复查时间改到周六上午。",
+        sourceId: "button-chat",
+        relatedMemoryIds: [],
+        modality: "button"
       },
       ...profile.conversation
     ]

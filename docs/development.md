@@ -74,6 +74,7 @@ Guardrails always run after LLM suggestions. LLM output cannot directly mutate s
 LLM narration cannot change state, policy, action, memory ids, or persistence. Emergence narration is accepted only when it stays anchored to a real memory already selected by rules.
 Visual and audio models are treated as `sense` adapters only: they may create `image_summary` and `audio_transcript` text, but they do not choose memories, actions, or state changes. Those generated segments remain user-editable before entering Curious Mode.
 Attention is a conversation phase, not a separate product mode: user/world multimodal inputs enter the conversation timeline first, then the harness decides what Papo attends to, remembers, says, or ignores.
+Button Capture remains a harness primitive, but it is no longer a standalone user-facing mode. Direct text input should appear in the dialogue composer and then flow through the same attention/memory/action loop.
 The user-facing conversation unit should often be a short shared moment, not a single database row: text, photo summaries, and audio transcripts with the same 30-second `batchId` are presented together before Papo's attention response.
 Episode memories keep provenance back to their source segment/batch/time/location when available, so a memory card can show the shared moment that gave birth to it.
 Feedback is also conversation input: button taps, typed feedback, and audio-transcribed feedback are recorded in the same timeline before Papo's learning response, then rule-owned state/policy/memory changes apply.
@@ -196,6 +197,7 @@ Done:
   - Feedback records expose rule-owned state and policy deltas so users can see how they are raising Papo.
   - Forget feedback is staged: it first downranks memory weight to zero, then a repeated forget purges the zero-weight target.
   - Optional browser notifications can be enabled for newly persisted Papo utterances; historical messages and user/world inputs do not trigger "Papo new said" notifications.
+  - Direct text input now lives in the dialogue page composer, then routes through the Button Capture harness and returns to the same conversation timeline; the old standalone Button Capture page was removed from the user-facing navigation.
 
 Verified:
 
@@ -228,6 +230,7 @@ Verified:
 - Episode cards can trace a memory back to the source shared moment, including batch, observed time, location, and matching conversation input when present.
 - Feedback text and audio transcript content are persisted as conversation input, and Papo's learning response follows it in the same timeline.
 - Feedback responses include visible state/policy deltas, and forget feedback requires a second click to purge a zero-weight memory.
+- The Home "single input" path opens the dialogue composer, and a submitted text message appears in the same attention/conversation timeline as Papo's response.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:

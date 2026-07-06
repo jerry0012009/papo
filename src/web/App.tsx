@@ -47,7 +47,7 @@ import {
   type ProviderInfo
 } from "./api";
 
-type Tab = "home" | "capture" | "curious" | "chat" | "memory" | "brain" | "profile" | "demo";
+type Tab = "home" | "curious" | "chat" | "memory" | "brain" | "profile" | "demo";
 type NotificationStatus = NotificationPermission | "unsupported";
 
 interface SpeechRecognitionLike {
@@ -122,7 +122,6 @@ export function App() {
   const [provider, setProvider] = useState<ProviderInfo>();
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [profile, setProfile] = useState<CreatureProfile>();
-  const [buttonText, setButtonText] = useState("我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要，但我最近总是这样。");
   const [segments, setSegments] = useState(
     starterSegments.map((segment, index) => makeSegment(`segment-${index + 1}`, segment.kind, segment.label, segment.content))
   );
@@ -220,14 +219,15 @@ export function App() {
     setWakeThought(woke.wake.innerThought);
   }
 
-  async function submitButtonCapture() {
-    if (!profile || !buttonText.trim()) return;
+  async function submitTextCapture(text: string, nextTab: Tab = "chat") {
+    const cleanText = text.trim();
+    if (!profile || !cleanText) return;
     await run(async () => {
-      const result = await buttonCapture(profile.userId, buttonText);
+      const result = await buttonCapture(profile.userId, cleanText);
       setLastResult(result);
       setProfile(result.profile);
       setLearningNote(undefined);
-      setTab("home");
+      setTab(nextTab);
     });
   }
 
@@ -667,15 +667,11 @@ export function App() {
           busy={busy}
           onFeedback={giveFeedback}
           onTranscribeFeedbackAudio={transcribeFeedbackAudio}
-          onGoCapture={() => setTab("capture")}
+          onGoCapture={() => setTab("chat")}
           onGoCurious={() => setTab("curious")}
           onGoChat={() => setTab("chat")}
           onEnableNotifications={enablePapoNotifications}
         />
-      ) : null}
-
-      {tab === "capture" ? (
-        <CaptureView value={buttonText} onChange={setButtonText} onSubmit={submitButtonCapture} busy={busy} />
       ) : null}
 
       {tab === "curious" ? (
@@ -693,7 +689,7 @@ export function App() {
         />
       ) : null}
 
-      {tab === "chat" ? <ChatView profile={profile} /> : null}
+      {tab === "chat" ? <ChatView profile={profile} busy={busy} onSubmitText={(text) => submitTextCapture(text, "chat")} /> : null}
       {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onTranscribeFeedbackAudio={transcribeFeedbackAudio} onEditMemory={editLongTermMemory} /> : null}
       {tab === "brain" ? <BrainView profile={profile} /> : null}
       {tab === "profile" ? <ProfileView profiles={profiles} activeId={profile.userId} onSelect={selectProfile} onAdd={addProfile} /> : null}
@@ -711,9 +707,8 @@ export function App() {
 
       <nav className="nav">
         <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => setTab("home")} />
-        <NavButton active={tab === "capture"} icon={MessageCircle} label="输入" onClick={() => setTab("capture")} />
-        <NavButton active={tab === "curious"} icon={Sparkles} label="陪我" onClick={() => setTab("curious")} />
         <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" onClick={() => setTab("chat")} />
+        <NavButton active={tab === "curious"} icon={Sparkles} label="陪我" onClick={() => setTab("curious")} />
         <NavButton active={tab === "memory"} icon={History} label="记忆" onClick={() => setTab("memory")} />
         <NavButton active={tab === "brain"} icon={Brain} label="脑态" onClick={() => setTab("brain")} />
         <NavButton active={tab === "demo"} icon={Wand2} label="演示" onClick={() => setTab("demo")} />
@@ -893,19 +888,6 @@ function ShibaAvatar({ state, idle = false }: { state?: CreatureState; idle?: bo
   );
 }
 
-function CaptureView(props: { value: string; onChange: (value: string) => void; onSubmit: () => void; busy: boolean }) {
-  return (
-    <section className="panel">
-      <PanelTitle icon={MessageCircle} title="Button Capture" />
-      <textarea value={props.value} onChange={(event) => props.onChange(event.target.value)} rows={8} />
-      <button className="primary" onClick={props.onSubmit} disabled={props.busy || !props.value.trim()}>
-        <Eye size={18} />
-        让它认真注意
-      </button>
-    </section>
-  );
-}
-
 function CuriousView(props: {
   segments: StreamSegment[];
   setSegments: (segments: StreamSegment[] | ((current: StreamSegment[]) => StreamSegment[])) => void;
@@ -999,15 +981,34 @@ function CuriousView(props: {
   );
 }
 
-function ChatView({ profile }: { profile: CreatureProfile }) {
+function ChatView({ profile, busy, onSubmitText }: { profile: CreatureProfile; busy: boolean; onSubmitText: (text: string) => Promise<void> }) {
+  const [draft, setDraft] = useState("");
   const messages = [...(profile.conversation ?? [])].slice(0, 50).reverse();
   const sections = groupConversationSections(messages);
   const inputCount = messages.filter((message) => message.role !== "papo").length;
   const papoCount = messages.filter((message) => message.role === "papo").length;
+  async function submitDraft() {
+    const text = draft.trim();
+    if (!text) return;
+    setDraft("");
+    await onSubmitText(text);
+  }
   return (
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={MessagesSquare} title="对话和注意流" />
+        <div className="chat-composer">
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            rows={3}
+            placeholder="直接告诉 Papo 一件刚发生的事"
+          />
+          <button className="primary" onClick={submitDraft} disabled={busy || !draft.trim()}>
+            <MessageCircle size={18} />
+            说给 Papo
+          </button>
+        </div>
         <div className="conversation-summary">
           <span>{inputCount} 条注意素材</span>
           <span>{papoCount} 条 Papo 回应</span>

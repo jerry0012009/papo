@@ -638,6 +638,20 @@ meter {
   gap: 10px;
 }
 
+.chat-composer {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  background: rgba(233, 243, 235, 0.72);
+  border: 1px solid rgba(79, 139, 118, 0.16);
+  padding: 10px;
+}
+
+.chat-composer button {
+  justify-self: end;
+  min-width: 132px;
+}
+
 .chat-batch {
   display: grid;
   gap: 8px;
