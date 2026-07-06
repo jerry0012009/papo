@@ -6,9 +6,21 @@ import { App } from "../src/web/App";
 describe("App", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("renders the core mobile-first workbench", async () => {
+    const requestPermission = vi.fn(async () => "granted" as NotificationPermission);
+    vi.stubGlobal(
+      "Notification",
+      class {
+        static permission: NotificationPermission = "default";
+        static requestPermission = requestPermission;
+        close = vi.fn();
+        constructor(_title: string, _options?: NotificationOptions) {}
+      }
+    );
+
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith("/api/provider")) return json({ kind: "fallback", name: "Fallback demo brain", available: true, usesRealModel: false });
@@ -45,8 +57,14 @@ describe("App", () => {
     expect(screen.getByText("醒来时")).toBeInTheDocument();
     expect(screen.getByText("我醒来时自己又想到妈妈复查这件事。")).toBeInTheDocument();
     expect(screen.getByText("Papo 新说")).toBeInTheDocument();
+    expect(screen.getByText("桌面提醒")).toBeInTheDocument();
+    expect(screen.queryByText("日历照片：妈妈周五复查，需要提前准备病历。")).not.toBeInTheDocument();
     expect(screen.getByText("单次输入")).toBeInTheDocument();
     expect(screen.getByText("陪我一会儿")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "桌面提醒" }));
+    expect(requestPermission).toHaveBeenCalledOnce();
+    expect(await screen.findByText("已开提醒")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "输入" }));
     expect(screen.getByText("Button Capture")).toBeInTheDocument();
@@ -58,7 +76,11 @@ describe("App", () => {
     expect(screen.getByText("上传录音转写")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "对话" }));
-    expect(screen.getByText("Papo 说过的话")).toBeInTheDocument();
+    expect(screen.getByText("对话和注意流")).toBeInTheDocument();
+    expect(screen.getByText("1 条注意素材")).toBeInTheDocument();
+    expect(screen.getByText("1 条 Papo 回应")).toBeInTheDocument();
+    expect(screen.getByText(/进入30秒注意批次/)).toBeInTheDocument();
+    expect(screen.getByText(/Papo 输出/)).toBeInTheDocument();
     expect(screen.getByText("你给 Papo 看了照片")).toBeInTheDocument();
     expect(screen.getByText("我刚刚醒着，你一打开我就还在这里。")).toBeInTheDocument();
 
@@ -143,15 +165,6 @@ function profileFixture() {
     ],
     conversation: [
       {
-        id: "msg1",
-        at: new Date().toISOString(),
-        role: "papo",
-        channel: "wake",
-        text: "我刚刚醒着，你一打开我就还在这里。",
-        sourceId: "wake1",
-        relatedMemoryIds: []
-      },
-      {
         id: "msg2",
         at: new Date().toISOString(),
         role: "world",
@@ -163,6 +176,15 @@ function profileFixture() {
         batchId: "manual-1",
         observedAt: "2026-07-06T10:00:00.000Z",
         location: { latitude: 52.52, longitude: 13.405, accuracy: 30, label: "上传时的位置" }
+      },
+      {
+        id: "msg1",
+        at: new Date().toISOString(),
+        role: "papo",
+        channel: "wake",
+        text: "我刚刚醒着，你一打开我就还在这里。",
+        sourceId: "wake1",
+        relatedMemoryIds: []
       }
     ]
   };

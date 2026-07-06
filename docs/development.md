@@ -74,6 +74,7 @@ Guardrails always run after LLM suggestions. LLM output cannot directly mutate s
 LLM narration cannot change state, policy, action, memory ids, or persistence. Emergence narration is accepted only when it stays anchored to a real memory already selected by rules.
 Visual and audio models are treated as `sense` adapters only: they may create `image_summary` and `audio_transcript` text, but they do not choose memories, actions, or state changes. Those generated segments remain user-editable before entering Curious Mode.
 Attention is a conversation phase, not a separate product mode: user/world multimodal inputs enter the conversation timeline first, then the harness decides what Papo attends to, remembers, says, or ignores.
+Local notifications are a perception layer for new Papo utterances, not an action planner: rules decide which persisted `papo` conversation message is newest, the browser permission gate decides whether to notify, and no LLM output can bypass that gate.
 
 Harness stages:
 
@@ -184,6 +185,8 @@ Done:
   - Curious Mode continuous recording: MediaRecorder records up to 3 minutes, requests audio chunks every 30 seconds, sends chunks to `/api/audio-transcript`, and keeps browser speech recognition only as a local fallback transcript source.
   - Multimodal 30-second batches: text, photo summaries, and audio transcripts carry `batchId` and `observedAt`; photo uploads also carry available browser geolocation so later memories can include time/place.
   - Papo is now rendered as a cute cartoon Shiba Inu: ears, curled tail, breathing, blinking, tired/alert/attached/careful motion states are bound to `CreatureState`.
+  - Conversation and attention are unified in the UI: the dialogue page shows user/world inputs as attention material and Papo utterances as outputs in one timeline.
+  - Optional browser notifications can be enabled for newly persisted Papo utterances; historical messages and user/world inputs do not trigger "Papo new said" notifications.
 
 Verified:
 
@@ -210,6 +213,8 @@ Verified:
 - Curious Mode can create `audio_transcript` segments from real 30-second audio chunks without storing raw audio.
 - Curious Mode can preserve photo upload time/place and batch text/photo/audio as one stream before attention selection.
 - Home renders Papo as an animated Shiba Inu whose visible posture changes with mood, energy, curiosity, attachment, and safety.
+- The Home "Papo new said" surface only selects `role=papo` messages even when newer user/world inputs exist.
+- The dialogue page presents one attention/conversation timeline with counts for attention material and Papo responses.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
@@ -220,9 +225,9 @@ Verified:
 
 Next:
 
-1. Add stronger browser visual QA with mobile screenshots for the Shiba Inu avatar, conversation timeline, and Curious recording flow.
-2. Add optional local notification permission flow for important Papo utterances after the in-app timeline is stable.
-3. Tune OpenRouter audio model defaults after testing real account model availability.
+1. Add stronger browser visual QA with mobile screenshots for the Shiba Inu avatar, conversation timeline, notification prompt, and Curious recording flow.
+2. Tune OpenRouter audio model defaults after testing real account model availability.
+3. Explore richer conversation grouping by 30-second batch so photo/text/audio fragments feel like one shared moment.
 
 Demo material rule:
 
@@ -249,3 +254,4 @@ Demo material rule:
 - Curious Mode can segment live recording into audio transcripts.
 - Curious Mode records multimodal input metadata: 30-second batch id, observed time, and photo location when permitted.
 - Papo's visible Shiba Inu avatar reflects state and remains readable on mobile.
+- Conversation timeline treats attention as part of dialogue, and browser notifications only fire for new Papo utterances after explicit permission.

@@ -593,6 +593,38 @@ meter {
   padding: 12px;
 }
 
+.papo-notice {
+  display: grid;
+  gap: 10px;
+}
+
+.papo-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.papo-notice-actions button {
+  flex: 1 1 118px;
+}
+
+.notification-pill,
+.conversation-summary span {
+  border-radius: 999px;
+  background: rgba(233, 243, 235, 0.82);
+  color: #465248;
+  border: 1px solid rgba(31, 36, 33, 0.08);
+  padding: 6px 9px;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.conversation-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .attention-card div,
 .attention-card footer,
 .episode-head {

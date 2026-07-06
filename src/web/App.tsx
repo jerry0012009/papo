@@ -1,4 +1,5 @@
 import {
+  Bell,
   Brain,
   Check,
   CircleOff,
@@ -46,6 +47,7 @@ import {
 } from "./api";
 
 type Tab = "home" | "capture" | "curious" | "chat" | "memory" | "brain" | "profile" | "demo";
+type NotificationStatus = NotificationPermission | "unsupported";
 
 interface SpeechRecognitionLike {
   continuous: boolean;
@@ -125,6 +127,7 @@ export function App() {
   const [wakeThought, setWakeThought] = useState<string>();
   const [demoNote, setDemoNote] = useState<string>();
   const [demoSummary, setDemoSummary] = useState<DemoSummary>();
+  const [notificationStatus, setNotificationStatus] = useState<NotificationStatus>(() => currentNotificationStatus());
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -140,14 +143,33 @@ export function App() {
   const tickTimerRef = useRef<number | undefined>(undefined);
   const segmentTimerRef = useRef<number | undefined>(undefined);
   const stopTimerRef = useRef<number | undefined>(undefined);
+  const notifiedPapoMessageIdRef = useRef<string | undefined>(undefined);
 
   const selectedEpisode = lastResult?.episodes[0] ?? profile?.episodes[0];
-  const latestPapoMessage = profile?.conversation?.[0];
+  const latestPapoMessage = useMemo(() => profile?.conversation?.find((message) => message.role === "papo"), [profile?.conversation]);
 
   useEffect(() => {
     void bootstrap();
     return () => stopListening();
   }, []);
+
+  useEffect(() => {
+    if (!latestPapoMessage) return;
+    if (!notifiedPapoMessageIdRef.current) {
+      notifiedPapoMessageIdRef.current = latestPapoMessage.id;
+      return;
+    }
+    if (notifiedPapoMessageIdRef.current === latestPapoMessage.id) return;
+    notifiedPapoMessageIdRef.current = latestPapoMessage.id;
+    if (notificationStatus !== "granted" || typeof Notification === "undefined") return;
+
+    const notification = new Notification("Papo 新说", {
+      body: latestPapoMessage.text,
+      tag: `papo-${latestPapoMessage.id}`,
+      silent: false
+    });
+    window.setTimeout(() => notification.close(), 6500);
+  }, [latestPapoMessage?.id, latestPapoMessage?.text, notificationStatus]);
 
   async function bootstrap() {
     try {
@@ -279,6 +301,21 @@ export function App() {
       setEmergence(result.emergence.text);
       setTab("home");
     });
+  }
+
+  async function enablePapoNotifications() {
+    if (typeof Notification === "undefined") {
+      setNotificationStatus("unsupported");
+      return;
+    }
+    if (Notification.permission === "granted") {
+      notifiedPapoMessageIdRef.current = latestPapoMessage?.id;
+      setNotificationStatus("granted");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    notifiedPapoMessageIdRef.current = latestPapoMessage?.id;
+    setNotificationStatus(permission ?? Notification.permission);
   }
 
   async function startListening() {
@@ -602,11 +639,13 @@ export function App() {
           wakeMessage={wakeMessage}
           wakeThought={wakeThought}
           latestPapoMessage={latestPapoMessage}
+          notificationStatus={notificationStatus}
           busy={busy}
           onFeedback={giveFeedback}
           onGoCapture={() => setTab("capture")}
           onGoCurious={() => setTab("curious")}
           onGoChat={() => setTab("chat")}
+          onEnableNotifications={enablePapoNotifications}
         />
       ) : null}
 
@@ -667,11 +706,13 @@ function HomeView(props: {
   wakeMessage?: string;
   wakeThought?: string;
   latestPapoMessage?: CreatureProfile["conversation"][number];
+  notificationStatus: NotificationStatus;
   busy: boolean;
   onFeedback: (kind: FeedbackKind, targetId?: string) => void;
   onGoCapture: () => void;
   onGoCurious: () => void;
   onGoChat: () => void;
+  onEnableNotifications: () => void;
 }) {
   return (
     <section className="stack">
@@ -705,10 +746,20 @@ function HomeView(props: {
             <span>Papo 新说</span>
             <p>{props.latestPapoMessage.text}</p>
           </div>
-          <button onClick={props.onGoChat}>
-            <MessagesSquare size={18} />
-            看对话
-          </button>
+          <div className="papo-notice-actions">
+            <button onClick={props.onGoChat}>
+              <MessagesSquare size={18} />
+              看对话
+            </button>
+            {props.notificationStatus === "granted" ? (
+              <span className="notification-pill">已开提醒</span>
+            ) : props.notificationStatus === "unsupported" ? null : (
+              <button onClick={props.onEnableNotifications} disabled={props.notificationStatus === "denied"}>
+                <Bell size={18} />
+                {props.notificationStatus === "denied" ? "提醒关闭" : "桌面提醒"}
+              </button>
+            )}
+          </div>
         </section>
       ) : null}
 
@@ -901,17 +952,23 @@ function CuriousView(props: {
 
 function ChatView({ profile }: { profile: CreatureProfile }) {
   const messages = [...(profile.conversation ?? [])].slice(0, 50).reverse();
+  const inputCount = messages.filter((message) => message.role !== "papo").length;
+  const papoCount = messages.filter((message) => message.role === "papo").length;
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={MessagesSquare} title="Papo 说过的话" />
+        <PanelTitle icon={MessagesSquare} title="对话和注意流" />
+        <div className="conversation-summary">
+          <span>{inputCount} 条注意素材</span>
+          <span>{papoCount} 条 Papo 回应</span>
+        </div>
         {messages.length ? (
           <div className="chat-list">
             {messages.map((message) => (
               <article className={`chat-bubble ${message.role}`} key={message.id}>
                 <div>
                   <strong>{messageTitle(message)}</strong>
-                  <span>{new Date(message.at).toLocaleString("zh-CN")}</span>
+                  <span>{messageFlowText(message)} · {new Date(message.at).toLocaleString("zh-CN")}</span>
                 </div>
                 <p>{message.text}</p>
                 {message.batchId || message.observedAt || message.location ? (
@@ -925,7 +982,7 @@ function ChatView({ profile }: { profile: CreatureProfile }) {
             ))}
           </div>
         ) : (
-          <p className="muted">Papo 还没有对你说过什么。等它醒来、注意到片段、学到反馈或自己想起旧事，这里会留下记录。</p>
+          <p className="muted">还没有对话。等你给 Papo 文字、照片或声音，它的注意和回应会在这里连成一条时间线。</p>
         )}
       </div>
     </section>
@@ -1386,9 +1443,20 @@ function messageTitle(message: CreatureProfile["conversation"][number]) {
   return "你告诉 Papo";
 }
 
+function messageFlowText(message: CreatureProfile["conversation"][number]) {
+  if (message.role === "papo") return "Papo 输出";
+  if (message.channel === "curious") return "进入30秒注意批次";
+  return "进入注意素材";
+}
+
 function locationText(location: NonNullable<StreamSegment["location"]>) {
   const accuracy = typeof location.accuracy === "number" ? `，约 ${Math.round(location.accuracy)} 米` : "";
   return location.label ?? `位置 ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}${accuracy}`;
+}
+
+function currentNotificationStatus(): NotificationStatus {
+  if (typeof Notification === "undefined") return "unsupported";
+  return Notification.permission;
 }
 
 function policyLabel(key: string) {
