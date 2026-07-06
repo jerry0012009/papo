@@ -132,10 +132,13 @@ describe("App", () => {
     expect(screen.queryByText(/semantic: fallback/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "陪我" }));
-    expect(screen.getByText("Curious Mode")).toBeInTheDocument();
-    expect(screen.getByText("Curious 录音感知")).toBeInTheDocument();
-    expect(screen.getByText("上传截图生成摘要")).toBeInTheDocument();
-    expect(screen.getByText("上传录音转写")).toBeInTheDocument();
+    expect(screen.getByText("陪我看一小段世界")).toBeInTheDocument();
+    expect(screen.getByText("陪我听一会儿")).toBeInTheDocument();
+    expect(screen.getByText("加一张照片")).toBeInTheDocument();
+    expect(screen.getByText("加一段录音")).toBeInTheDocument();
+    expect(screen.queryByText("Curious Mode")).not.toBeInTheDocument();
+    expect(screen.queryByText("Curious 录音感知")).not.toBeInTheDocument();
+    expect(screen.queryByText(/image_summary|audio_transcript/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "对话" }));
     expect(screen.getByText("对话和注意流")).toBeInTheDocument();
@@ -145,6 +148,8 @@ describe("App", () => {
     expect(screen.getByText("2 条小素材")).toBeInTheDocument();
     expect(screen.getByText("1 条小素材")).toBeInTheDocument();
     expect(screen.queryByText("manual-1 · 1 条素材")).not.toBeInTheDocument();
+    expect(screen.queryByText(/批次 manual-1/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/批次 chat-batch/)).not.toBeInTheDocument();
     expect(screen.getAllByText(/和这一小段世界放在一起/).length).toBeGreaterThan(1);
     expect(screen.getByText("你的反馈")).toBeInTheDocument();
     expect(screen.getByText(/你在教它/)).toBeInTheDocument();
@@ -175,7 +180,7 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "演示" }));
     expect(screen.getByText("演示模式")).toBeInTheDocument();
     expect(screen.getByText("一键准备 4 分钟演示")).toBeInTheDocument();
-    expect(screen.getByText("场景 1：填入 8 段信息流")).toBeInTheDocument();
+    expect(screen.getByText("场景 1：准备 8 段生活片段")).toBeInTheDocument();
     expect(screen.queryByText("后续任务")).not.toBeInTheDocument();
   });
 });

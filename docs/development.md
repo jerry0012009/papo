@@ -89,6 +89,7 @@ Active emergence treats zero-weight memories as unavailable: a memory that has b
 Unread dialogue state is a perception layer for new Papo utterances, not an action planner: rules decide persisted `papo` messages, while the UI only shows a small unread dot on the dialogue entry. Wake notes are presence state and do not create unread notifications.
 Internal channel names, memory kinds, batch ids, and numeric weights are developer facts. User-facing dialogue and memory pages should default to natural creature language; raw `channel`, `kind`, `batchId`, and `weight` belong in details or Brain views.
 Harness traces and implementation backlog belong to Brain/development docs, not the Home or Demo experience. The user-facing path should show what Papo noticed, remembered, learned, or wondered, not pipeline step names such as `sense` or `semantic`.
+User-facing pages should not label the companionship flow as `Curious Mode` or expose `image_summary` / `audio_transcript`; use "陪我看一小段世界", "照片", "录音转写", and "小素材" language instead. Keep the raw type names in code, API contracts, tests, and Brain diagnostics only.
 
 Harness stages:
 

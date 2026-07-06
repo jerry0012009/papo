@@ -281,7 +281,7 @@ export function App() {
           location
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "照片已经变成一段可编辑的小素材，会和这半分钟里的话一起交给 Papo。" : "照片先以可编辑摘要进入这一小段，对话提交时会一起交给 Papo。");
+      setDemoNote(result.semanticSource === "llm" ? "照片已经变成一段可编辑的小素材，会和这半分钟里的话一起交给 Papo。" : "照片先以可编辑的小素材进入这一小段，对话提交时会一起交给 Papo。");
       setTab("chat");
     });
   }
@@ -298,7 +298,7 @@ export function App() {
           batchId: current[0]?.batchId ?? currentBatchId()
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "录音已经转成一段可编辑的小素材，会和这半分钟里的话一起交给 Papo。" : "录音先以可编辑转写进入这一小段，对话提交时会一起交给 Papo。");
+      setDemoNote(result.semanticSource === "llm" ? "录音已经变成一段可编辑的小素材，会和这半分钟里的话一起交给 Papo。" : "录音先以可编辑的小素材进入这一小段，对话提交时会一起交给 Papo。");
       setTab("chat");
     });
   }
@@ -318,7 +318,7 @@ export function App() {
           location
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "视觉语义脑已经把照片压成一段 image_summary，并记录了可用的时间/地点。" : "当前没有真实视觉模型，已加入一段可手动修改的图片摘要和可用元数据。");
+      setDemoNote(result.semanticSource === "llm" ? "Papo 已经把照片看成一段可编辑的小素材，并记录了可用的时间/地点。" : "照片已经进入这一小段，你可以先改准再交给 Papo 注意。");
       setTab("curious");
     });
   }
@@ -335,7 +335,7 @@ export function App() {
           batchId: currentBatchId()
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "音频语义脑已经把录音转成一段 audio_transcript。" : "当前没有真实音频模型，已加入一段可手动修改的录音转写。");
+      setDemoNote(result.semanticSource === "llm" ? "Papo 已经把录音听成一段可编辑的小素材。" : "录音已经进入这一小段，你可以先改准再交给 Papo 注意。");
       setTab("curious");
     });
   }
@@ -945,12 +945,12 @@ function CuriousView(props: {
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={Sparkles} title="Curious Mode" />
+        <PanelTitle icon={Sparkles} title="陪我看一小段世界" />
         <section className="listening-panel">
           <div>
-            <strong>{props.listening ? "我正在录这一小段世界" : "Curious 录音感知"}</strong>
+            <strong>{props.listening ? "我正在听这一小段世界" : "陪我听一会儿"}</strong>
             <p>
-              最多录 3 分钟，每 30 秒把音频送去转写成一段。原始音频不保存，只把转写片段放进信息流。
+              最多听 3 分钟，每 30 秒整理成一小段。原始声音不保存，只把可编辑的小素材放进这次共同经历。
             </p>
           </div>
           <button onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
@@ -960,7 +960,7 @@ function CuriousView(props: {
         </section>
         <label className="upload-button">
           <ImagePlus size={18} />
-          上传截图生成摘要
+          加一张照片
           <input
             type="file"
             accept="image/png,image/jpeg,image/webp"
@@ -973,7 +973,7 @@ function CuriousView(props: {
         </label>
         <label className="upload-button">
           <Mic size={18} />
-          上传录音转写
+          加一段录音
           <input
             type="file"
             accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg"
@@ -990,7 +990,7 @@ function CuriousView(props: {
               <input value={segment.label} onChange={(event) => updateSegment(index, { label: event.target.value })} />
               <select value={segment.kind} onChange={(event) => updateSegment(index, { kind: event.target.value as SegmentKind })}>
                 <option value="text">文字</option>
-                <option value="image_summary">截图摘要</option>
+                <option value="image_summary">照片</option>
                 <option value="audio_transcript">录音转写</option>
               </select>
             </div>
@@ -1000,11 +1000,11 @@ function CuriousView(props: {
         <div className="action-row">
           <button onClick={addSegment}>
             <Plus size={18} />
-            加片段
+            加一小段
           </button>
           <button className="primary" onClick={props.onSubmit} disabled={props.busy}>
             <Eye size={18} />
-            开始观察
+            交给 Papo 注意
           </button>
         </div>
       </div>
@@ -1094,7 +1094,7 @@ function ChatView(props: {
                     <input value={segment.label} onChange={(event) => updateStagedSegment(index, { label: event.target.value })} />
                     <select value={segment.kind} onChange={(event) => updateStagedSegment(index, { kind: event.target.value as SegmentKind })}>
                       <option value="text">文字</option>
-                      <option value="image_summary">照片摘要</option>
+                      <option value="image_summary">照片</option>
                       <option value="audio_transcript">录音转写</option>
                     </select>
                   </div>
@@ -1151,10 +1151,9 @@ function ChatBubble({ message }: { message: ConversationMessage }) {
         </span>
       </div>
       <p>{message.text}</p>
-      {message.batchId || message.observedAt || message.location ? (
+      {message.observedAt || message.location ? (
         <small>
           {[
-            message.batchId ? `批次 ${message.batchId}` : "",
             message.observedAt ? `观察 ${new Date(message.observedAt).toLocaleString("zh-CN")}` : "",
             message.location ? locationText(message.location) : ""
           ]
@@ -1422,7 +1421,7 @@ function DemoView(props: {
         </button>
         <button onClick={props.onLoadCurious} disabled={props.busy}>
           <Sparkles size={18} />
-          场景 1：填入 8 段信息流
+          场景 1：准备 8 段生活片段
         </button>
         <button onClick={props.onRunContrast} disabled={props.busy}>
           <UserRound size={18} />
