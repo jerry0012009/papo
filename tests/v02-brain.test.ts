@@ -70,8 +70,10 @@ describe("creature brain v0.2", () => {
       deepResult: aNext,
       quietResult: bNext
     });
-    expect(summary).toContain("深想型");
-    expect(summary).toContain("安静型");
+    expect(summary).toContain("被你鼓励多想的 Papo");
+    expect(summary).toContain("被你教会轻声陪着的 Papo");
+    expect(summary).not.toContain("深想型");
+    expect(summary).not.toContain("安静型");
     expect(summary).toContain("更愿意停下来多想一点");
     expect(summary).toContain("更会收住声音");
     expect(summary).not.toContain(`深入倾向 ${a.policyProfile.preferDepth}`);

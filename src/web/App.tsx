@@ -591,7 +591,7 @@ export function App() {
 
   async function runGuidedDemo() {
     await run(async () => {
-      const main = await createProfile("Papo 演示主线");
+      const main = await createProfile("Papo 小团");
       const curiousResult = await curiousCapture(
         main.userId,
         demoCuriousSegments.map((segment, index) => makeSegment(`guided-${index + 1}`, segment.kind, segment.label, segment.content))
@@ -605,8 +605,8 @@ export function App() {
       const emerged = await activeEmergence(main.userId);
 
       const input = "我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要。";
-      const deep = await createProfile("Papo 深想型");
-      const quiet = await createProfile("Papo 安静型");
+      const deep = await createProfile("Papo 小想");
+      const quiet = await createProfile("Papo 小静");
       const deepFirst = await buttonCapture(deep.userId, input);
       const quietFirst = await buttonCapture(quiet.userId, input);
       for (let index = 0; index < 3; index += 1) {
@@ -641,8 +641,8 @@ export function App() {
   async function runDemoContrast() {
     await run(async () => {
       const input = "我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要。";
-      const a = await createProfile("Papo 深想型");
-      const b = await createProfile("Papo 安静型");
+      const a = await createProfile("Papo 小想");
+      const b = await createProfile("Papo 小静");
       const aFirst = await buttonCapture(a.userId, input);
       const bFirst = await buttonCapture(b.userId, input);
       let aProfile = aFirst.profile;
@@ -692,7 +692,7 @@ export function App() {
   return (
     <main className="shell">
       <header className="topbar">
-        <button className="icon-button" onClick={() => setTab("profile")} aria-label="切换用户">
+        <button className="icon-button" onClick={() => setTab("profile")} aria-label="看看哪只 Papo 在身边">
           <UserRound size={19} />
         </button>
         <div>
@@ -1408,7 +1408,7 @@ function ProfileView(props: {
 }) {
   return (
     <section className="panel">
-      <PanelTitle icon={UserRound} title="小动物切换" />
+      <PanelTitle icon={UserRound} title="哪只 Papo 在你身边" />
       <div className="profile-list">
         {props.profiles.map((profile) => (
           <button
@@ -1423,7 +1423,7 @@ function ProfileView(props: {
       </div>
       <button className="primary" onClick={props.onAdd}>
         <Plus size={18} />
-        新建小动物
+        再养一只 Papo
       </button>
     </section>
   );

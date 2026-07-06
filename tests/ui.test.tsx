@@ -119,6 +119,14 @@ describe("App", () => {
     expect(screen.getByText("跟 Papo 说")).toBeInTheDocument();
     expect(screen.getByText("陪我一会儿")).toBeInTheDocument();
 
+    await userEvent.click(screen.getByLabelText("看看哪只 Papo 在身边"));
+    expect(screen.getByText("哪只 Papo 在你身边")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "再养一只 Papo" })).toBeInTheDocument();
+    expect(screen.queryByText("小动物切换")).not.toBeInTheDocument();
+    expect(screen.queryByText("新建小动物")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("切换用户")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "首页" }));
+
     await userEvent.type(screen.getByPlaceholderText("也可以告诉 Papo：为什么对、为什么不想要、要怎么记"), "这里请多想一点");
     await userEvent.click(screen.getByRole("button", { name: "继续想" }));
     expect(await screen.findByText("这次养成变化")).toBeInTheDocument();
