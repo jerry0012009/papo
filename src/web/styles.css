@@ -321,6 +321,19 @@ meter {
   gap: 10px;
 }
 
+.session-audit {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(233, 243, 235, 0.7);
+}
+
+.session-audit p {
+  margin: 0;
+  line-height: 1.45;
+}
+
 .attention-card,
 .episode-card,
 .memory-surface,
@@ -348,6 +361,23 @@ meter {
   margin-top: 10px;
   color: #4f8b76;
   font-size: 0.82rem;
+}
+
+.brain-details {
+  margin-top: 10px;
+  color: #465248;
+}
+
+.brain-details summary {
+  cursor: pointer;
+  font-size: 0.86rem;
+}
+
+.score-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 0.8rem;
 }
 
 .episode-card {

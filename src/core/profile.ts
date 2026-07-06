@@ -1,6 +1,6 @@
 import { makeId } from "./ids";
 import { initialState } from "./state";
-import type { CreatureProfile, LongTermMemory } from "./types";
+import type { CreatureProfile, FeedbackPolicyProfile, LongTermMemory } from "./types";
 
 export function createCreatureProfile(input: {
   userId?: string;
@@ -16,8 +16,39 @@ export function createCreatureProfile(input: {
     episodes: [],
     longTermMemories: seedMemories(now),
     feedbackHistory: [],
-    stateChanges: []
+    stateChanges: [],
+    policyProfile: initialPolicyProfile(),
+    memoryCandidates: [],
+    emergenceHistory: []
   };
+  return profile;
+}
+
+export function initialPolicyProfile(): FeedbackPolicyProfile {
+  return {
+    preferDepth: 45,
+    preferProactivity: 45,
+    privacySensitivity: 55,
+    saveThreshold: 70,
+    askThreshold: 58,
+    recallTendency: 50,
+    quietTendency: 35
+  };
+}
+
+export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProfile {
+  profile.policyProfile ??= initialPolicyProfile();
+  profile.memoryCandidates ??= [];
+  profile.emergenceHistory ??= [];
+  profile.episodes ??= [];
+  profile.longTermMemories ??= [];
+  profile.feedbackHistory ??= [];
+  profile.stateChanges ??= [];
+
+  for (const episode of profile.episodes) {
+    episode.memoryCandidateIds ??= [];
+  }
+
   return profile;
 }
 

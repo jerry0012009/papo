@@ -6,7 +6,9 @@ export type ActionKind =
   | "save_long_term"
   | "recall"
   | "review"
-  | "quiet";
+  | "quiet"
+  | "draft_reminder"
+  | "draft_question_list";
 
 export type FeedbackKind = "understood" | "continue" | "not_now" | "remember" | "forget";
 export type SegmentKind = "text" | "image_summary" | "audio_transcript";
@@ -22,6 +24,16 @@ export interface CreatureState {
   mood: "curious" | "calm" | "attached" | "careful" | "tired" | "bright";
 }
 
+export interface FeedbackPolicyProfile {
+  preferDepth: number;
+  preferProactivity: number;
+  privacySensitivity: number;
+  saveThreshold: number;
+  askThreshold: number;
+  recallTendency: number;
+  quietTendency: number;
+}
+
 export interface StateChange {
   at: string;
   reason: string;
@@ -34,6 +46,70 @@ export interface StreamSegment {
   kind: SegmentKind;
   label: string;
   content: string;
+  position?: number;
+  observedAt?: string;
+}
+
+export interface ScoreContribution {
+  key:
+    | "novelty"
+    | "memory_resonance"
+    | "emotional_charge"
+    | "future_value"
+    | "identity_relevance"
+    | "privacy_risk"
+    | "state_bias"
+    | "redundancy_penalty"
+    | "fatigue_penalty";
+  label: string;
+  value: number;
+  reason: string;
+}
+
+export interface SegmentScore {
+  total: number;
+  novelty: number;
+  memoryResonance: number;
+  emotionalCharge: number;
+  futureValue: number;
+  identityRelevance: number;
+  privacyRisk: number;
+  stateBias: number;
+  redundancyPenalty: number;
+  fatiguePenalty: number;
+  relatedIds: string[];
+  tags: string[];
+  contributions: ScoreContribution[];
+}
+
+export interface ActionDecision {
+  action: ActionKind;
+  confidence: number;
+  reason: string;
+  blockedActions: Array<{ action: ActionKind; reason: string }>;
+  safetyNotes: string[];
+  llmSuggestedAction?: ActionKind;
+  ruleTrace: string[];
+}
+
+export interface CuriousSessionAudit {
+  id: string;
+  createdAt: string;
+  totalSegments: number;
+  selected: Array<{
+    segmentId: string;
+    label: string;
+    score: SegmentScore;
+    whySelected: string;
+  }>;
+  ignored: Array<{
+    segmentId: string;
+    label: string;
+    score: SegmentScore;
+    whyIgnored: string;
+  }>;
+  stateInfluence: string;
+  attentionBudget: number;
 }
 
 export interface AttentionEvent {
@@ -49,6 +125,8 @@ export interface AttentionEvent {
   attentionStrength: number;
   privacyRisk: number;
   suggestedAction: ActionKind;
+  actionDecision: ActionDecision;
+  scoreBreakdown?: SegmentScore;
   tags: string[];
   semanticSource: "rules" | "llm" | "fallback";
   decisionTrace?: string[];
@@ -68,6 +146,8 @@ export interface EpisodeMemory {
   creatureResponse: string;
   feedback: FeedbackKind[];
   promotedToLongTerm: boolean;
+  memoryCandidateIds: string[];
+  actionDecision?: ActionDecision;
   weight: number;
   tags: string[];
   decisionTrace?: string[];
@@ -76,12 +156,36 @@ export interface EpisodeMemory {
 export interface LongTermMemory {
   id: string;
   createdAt: string;
-  kind: "user_preference" | "long_theme" | "creature_self_memory" | "safety_rule" | "future_review";
+  kind:
+    | "user_preference"
+    | "long_theme"
+    | "creature_self_memory"
+    | "safety_rule"
+    | "future_review"
+    | "relationship"
+    | "habit"
+    | "open_question";
   text: string;
   sourceEpisodeId?: string;
+  consolidatedBecause?: string;
   weight: number;
   tags: string[];
   lastReferencedAt?: string;
+}
+
+export interface MemoryCandidate {
+  id: string;
+  createdAt: string;
+  candidateText: string;
+  memoryKind: LongTermMemory["kind"];
+  confidence: number;
+  sourceEpisodeId: string;
+  whyConsolidate: string;
+  writePolicy: "auto" | "ask_user" | "wait_feedback" | "do_not_save";
+  privacyReason?: string;
+  decayPolicy: "stable" | "decay_without_feedback" | "forget_if_dismissed";
+  status: "candidate" | "promoted" | "dismissed";
+  tags: string[];
 }
 
 export interface FeedbackRecord {
@@ -101,6 +205,20 @@ export interface CreatureProfile {
   longTermMemories: LongTermMemory[];
   feedbackHistory: FeedbackRecord[];
   stateChanges: StateChange[];
+  policyProfile: FeedbackPolicyProfile;
+  memoryCandidates: MemoryCandidate[];
+  emergenceHistory: EmergenceRecord[];
+}
+
+export interface EmergenceRecord {
+  id: string;
+  at: string;
+  kind: "memory_resonance" | "drive_based" | "rhythm";
+  whyNow: string;
+  relatedMemoryIds: string[];
+  driveSource: string;
+  message: string;
+  ruleTrace: string[];
 }
 
 export interface CaptureResult {
@@ -109,4 +227,6 @@ export interface CaptureResult {
   episodes: EpisodeMemory[];
   response: string;
   harnessTrace?: string[];
+  curiousSession?: CuriousSessionAudit;
+  memoryCandidates?: MemoryCandidate[];
 }

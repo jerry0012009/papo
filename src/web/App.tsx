@@ -288,6 +288,19 @@ function HomeView(props: {
           {props.lastResult.harnessTrace?.length ? (
             <div className="trace-line">{props.lastResult.harnessTrace.join(" -> ")}</div>
           ) : null}
+          {props.lastResult.curiousSession ? (
+            <div className="session-audit">
+              <p>
+                输入 {props.lastResult.curiousSession.totalSegments} 段，注意预算 {props.lastResult.curiousSession.attentionBudget}。
+              </p>
+              <p>状态影响：{props.lastResult.curiousSession.stateInfluence}</p>
+              {props.lastResult.curiousSession.ignored.slice(0, 4).map((item) => (
+                <small key={item.segmentId}>
+                  未选 {item.label}：{item.whyIgnored}
+                </small>
+              ))}
+            </div>
+          ) : null}
           <div className="event-list">
             {props.lastResult.events.map((event) => (
               <AttentionCard key={event.id} event={event} />
@@ -376,13 +389,15 @@ function MemoryView(props: {
   const memories = props.profile.longTermMemories.filter((memory) =>
     `${memory.text} ${memory.kind} ${memory.tags.join(" ")}`.toLowerCase().includes(query.toLowerCase())
   );
+  const selfMemories = memories.filter((memory) => memory.kind === "creature_self_memory");
+  const otherMemories = memories.filter((memory) => memory.kind !== "creature_self_memory");
 
   return (
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={History} title="长期记忆" />
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索旧记忆" />
-        {memories.map((memory) => (
+        {otherMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             {editingId === memory.id ? (
               <>
@@ -424,6 +439,15 @@ function MemoryView(props: {
         ))}
       </div>
       <div className="panel">
+        <PanelTitle icon={Brain} title="小动物自己的成长记忆" />
+        {selfMemories.map((memory) => (
+          <article className="memory-surface" key={memory.id}>
+            <p>{memory.text}</p>
+            <span>{memory.consolidatedBecause ?? "creature_self_memory"} · 权重 {memory.weight}</span>
+          </article>
+        ))}
+      </div>
+      <div className="panel">
         <PanelTitle icon={Eye} title="情景记忆" />
         {props.profile.episodes.map((episode) => (
           <EpisodeCard key={episode.id} episode={episode} onFeedback={props.onFeedback} compact />
@@ -434,9 +458,56 @@ function MemoryView(props: {
 }
 
 function BrainView({ profile }: { profile: CreatureProfile }) {
+  const latestEpisode = profile.episodes[0];
+  const latestEmergence = profile.emergenceHistory?.[0];
   return (
     <section className="stack">
       <StateGrid state={profile.state} />
+      <div className="panel">
+        <PanelTitle icon={Brain} title="反馈策略" />
+        <div className="state-grid">
+          {Object.entries(profile.policyProfile ?? {}).map(([key, value]) => (
+            <div className="state-item" key={key}>
+              <div>
+                <span>{policyLabel(key)}</span>
+                <strong>{value}</strong>
+              </div>
+              <meter min={0} max={100} value={Number(value)} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="panel">
+        <PanelTitle icon={Eye} title="最近决策" />
+        {latestEpisode?.actionDecision ? (
+          <article className="change-row">
+            <p>{actionText(latestEpisode.actionDecision.action)}：{latestEpisode.actionDecision.reason}</p>
+            <span>{latestEpisode.actionDecision.ruleTrace.join(" -> ")}</span>
+          </article>
+        ) : (
+          <p className="muted">还没有行动决策。</p>
+        )}
+      </div>
+      <div className="panel">
+        <PanelTitle icon={Sparkles} title="最近浮现" />
+        {latestEmergence ? (
+          <article className="change-row">
+            <p>{latestEmergence.message}</p>
+            <span>{latestEmergence.whyNow} · {latestEmergence.ruleTrace.join(" -> ")}</span>
+          </article>
+        ) : (
+          <p className="muted">还没有主动浮现历史。</p>
+        )}
+      </div>
+      <div className="panel">
+        <PanelTitle icon={Save} title="记忆候选" />
+        {(profile.memoryCandidates ?? []).slice(0, 5).map((candidate) => (
+          <article className="change-row" key={candidate.id}>
+            <p>{candidate.candidateText}</p>
+            <span>{candidate.memoryKind} · {candidate.writePolicy} · confidence {candidate.confidence}</span>
+          </article>
+        ))}
+      </div>
       <div className="panel">
         <PanelTitle icon={Brain} title="最近变化" />
         {profile.stateChanges.length ? (
@@ -501,8 +572,23 @@ function AttentionCard({ event }: { event: AttentionEvent }) {
       </div>
       <p>{event.noticed}</p>
       <small>{event.reason}</small>
+      <details className="brain-details">
+        <summary>为什么它注意到了这个</summary>
+        <div className="score-list">
+          {event.scoreBreakdown?.contributions.map((item) => (
+            <span key={`${event.id}-${item.label}-${item.reason}`}>
+              {item.label} {item.value >= 0 ? "+" : ""}
+              {item.value}: {item.reason}
+            </span>
+          ))}
+        </div>
+        <p>{event.actionDecision.reason}</p>
+        {event.actionDecision.blockedActions.length ? (
+          <p>被拦截：{event.actionDecision.blockedActions.map((item) => `${actionText(item.action)}: ${item.reason}`).join("；")}</p>
+        ) : null}
+      </details>
       <footer>
-        <span>{actionText(event.suggestedAction)}</span>
+        <span>{actionText(event.actionDecision.action)} · {event.actionDecision.confidence}</span>
         <span>隐私 {event.privacyRisk}</span>
       </footer>
     </article>
@@ -611,9 +697,24 @@ function actionText(action: AttentionEvent["suggestedAction"]) {
     save_long_term: "存长期",
     recall: "回忆",
     review: "复盘",
-    quiet: "安静"
+    quiet: "安静",
+    draft_reminder: "提醒草稿",
+    draft_question_list: "问题清单"
   };
   return map[action];
+}
+
+function policyLabel(key: string) {
+  const map: Record<string, string> = {
+    preferDepth: "深入倾向",
+    preferProactivity: "主动倾向",
+    privacySensitivity: "隐私敏感",
+    saveThreshold: "保存阈值",
+    askThreshold: "询问阈值",
+    recallTendency: "回忆倾向",
+    quietTendency: "安静倾向"
+  };
+  return map[key] ?? key;
 }
 
 function errorMessage(error: unknown) {

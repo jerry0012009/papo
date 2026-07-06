@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { createCreatureProfile } from "../core/profile";
+import { createCreatureProfile, normalizeCreatureProfile } from "../core/profile";
 import type { CreatureProfile } from "../core/types";
 
 export interface ProfileStore {
@@ -19,7 +19,7 @@ export class JsonProfileStore implements ProfileStore {
 
   async listProfiles() {
     const data = await this.read();
-    return Object.values(data.profiles).map((profile) => ({
+    return Object.values(data.profiles).map((profile) => normalizeCreatureProfile(profile)).map((profile) => ({
       userId: profile.userId,
       creatureName: profile.creatureName,
       createdAt: profile.createdAt
@@ -28,12 +28,13 @@ export class JsonProfileStore implements ProfileStore {
 
   async getProfile(userId: string) {
     const data = await this.read();
-    return data.profiles[userId];
+    const profile = data.profiles[userId];
+    return profile ? normalizeCreatureProfile(profile) : undefined;
   }
 
   async saveProfile(profile: CreatureProfile) {
     const data = await this.read();
-    data.profiles[profile.userId] = profile;
+    data.profiles[profile.userId] = normalizeCreatureProfile(profile);
     await this.write(data);
   }
 
@@ -73,11 +74,12 @@ export class MemoryProfileStore implements ProfileStore {
   }
 
   async getProfile(userId: string) {
-    return this.profiles.get(userId);
+    const profile = this.profiles.get(userId);
+    return profile ? normalizeCreatureProfile(profile) : undefined;
   }
 
   async saveProfile(profile: CreatureProfile) {
-    this.profiles.set(profile.userId, profile);
+    this.profiles.set(profile.userId, normalizeCreatureProfile(profile));
   }
 
   async createProfile(input: { userId?: string; creatureName?: string }) {

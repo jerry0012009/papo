@@ -135,10 +135,18 @@ Done:
 - Frontend can be built under `/papo/` with API under `/papo-api`.
 - Initial tests.
 - Runtime check: API remains usable when configured Mimo fails; harness records model failure and falls back to rule output.
+- Creature Brain v0.2:
+  - Curious Session audit with selected and ignored segments.
+  - Segment score contributions: novelty, memory resonance, emotion, future value, identity, privacy, state bias, redundancy, fatigue.
+  - Independent action selector with confidence, blocked actions, safety notes, and LLM-suggested action guardrails.
+  - Feedback policy profile: depth, proactivity, privacy sensitivity, save threshold, ask threshold, recall tendency, quiet tendency.
+  - Episode-level memory candidates with write policy before long-term promotion.
+  - Drive-based, rhythm, and memory-resonance emergence records.
+  - Brain page shows policy, recent decision, recent emergence, and memory candidates.
 
 Verified:
 
-- `npm test`: 13 tests passing across core, API, and UI.
+- `npm test`: 21 tests passing across core, v0.2 brain behavior, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -146,6 +154,10 @@ Verified:
 - Curious Mode selected salient stream segments and ignored a low-salience ordinary segment.
 - Feedback `remember` promoted an episode to long-term memory and changed state.
 - Active emergence referenced an existing long-term memory.
+- Curious Mode selects 1-3 salient segments from an 8-part stream and audits ignored segments.
+- Feedback changes later policy and action style, so different users diverge.
+- LLM invalid JSON falls back without breaking the life loop.
+- LLM action suggestions go through rule guardrails.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`
   - API: `https://eu.jerrypsy.top/papo-api/health`
@@ -154,11 +166,11 @@ Verified:
 
 Next:
 
-1. Improve real Mimo/OpenRouter connectivity diagnostics.
+1. Improve real Mimo/OpenRouter connectivity diagnostics and surface model errors in Brain page.
 2. Add real image upload with model-created image summaries.
 3. Add audio upload/recording and transcription.
-4. Add memory search UI and edit/forget controls for long-term memories.
-5. Add stronger mobile visual QA with browser screenshots.
+4. Add stronger browser visual QA with mobile screenshots.
+5. Add a guided 4-minute investor demo seed/reset flow.
 
 ## Verification Checklist
 

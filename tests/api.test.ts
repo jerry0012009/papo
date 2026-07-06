@@ -64,7 +64,7 @@ describe("api", () => {
       .post(`/api/profiles/${userId}/emergence`)
       .expect(200)
       .expect((response) => {
-        expect(response.body.emergence.text).toContain("记忆");
+        expect(response.body.emergence.whyNow ?? response.body.emergence.text).toBeTruthy();
       });
   });
 });
