@@ -14,6 +14,7 @@ describe("api", () => {
 
     await request(app).get("/api/provider").expect(200).expect((response) => {
       expect(response.body.kind).toBe("fallback");
+      expect(response.body.diagnostics.audioRoute).toBe("fallback");
     });
   });
 
@@ -122,6 +123,27 @@ describe("api", () => {
       .expect((response) => {
         expect(response.body.semanticSource).toBe("fallback");
         expect(response.body.transcript).toContain("音频");
+      });
+  });
+
+  it("turns empty real-model audio transcripts into an editable no-speech segment", async () => {
+    const provider = {
+      ...createModelProvider({}),
+      kind: "generic" as const,
+      name: "empty audio model",
+      usesRealModel: true,
+      diagnostics: { audioRoute: "audio_transcriptions" as const, audioModel: "gpt-4o-mini-transcribe" },
+      transcribeAudio: async () => ""
+    };
+    const app = createApp({ store: new MemoryProfileStore(), provider });
+
+    await request(app)
+      .post("/api/audio-transcript")
+      .send({ dataUrl: `data:audio/wav;base64,${"A".repeat(80)}`, label: "空录音" })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.semanticSource).toBe("llm");
+        expect(response.body.transcript).toContain("没有听到清楚的人声");
       });
   });
 });

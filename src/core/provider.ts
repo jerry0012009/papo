@@ -7,10 +7,18 @@ export interface ModelProvider {
   name: string;
   available: boolean;
   usesRealModel: boolean;
+  diagnostics?: ProviderDiagnostics;
   generate(prompt: string): Promise<string>;
   generateJson<T>(prompt: string): Promise<T | undefined>;
   summarizeImage(dataUrl: string, prompt: string): Promise<string>;
   transcribeAudio(dataUrl: string, prompt: string): Promise<string>;
+}
+
+export interface ProviderDiagnostics {
+  textModel?: string;
+  visionModel?: string;
+  audioModel?: string;
+  audioRoute?: "chat_completions" | "audio_transcriptions" | "fallback";
 }
 
 export function createModelProvider(env: NodeJS.ProcessEnv = process.env): ModelProvider {
@@ -30,14 +38,18 @@ export function createModelProvider(env: NodeJS.ProcessEnv = process.env): Model
 }
 
 function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
+  const textModel = merged.OPENROUTER_MODEL ?? "openai/gpt-5.5";
+  const visionModel = merged.OPENROUTER_VISION_MODEL ?? "google/gemini-3.1-flash-lite";
+  const audioModel = merged.OPENROUTER_AUDIO_MODEL ?? merged.OPENROUTER_VISION_MODEL ?? "google/gemini-3.1-flash-lite";
   return openAiCompatibleProvider({
     kind: "openrouter",
     name: "OpenRouter",
     endpoint: "https://openrouter.ai/api/v1/chat/completions",
     apiKey: merged.OPENROUTER_API_KEY,
-    model: merged.OPENROUTER_MODEL ?? "openai/gpt-5.5",
-    visionModel: merged.OPENROUTER_VISION_MODEL ?? "google/gemini-2.0-flash-001",
-    audioModel: merged.OPENROUTER_AUDIO_MODEL ?? merged.OPENROUTER_VISION_MODEL ?? "google/gemini-2.0-flash-001",
+    model: textModel,
+    visionModel,
+    audioModel,
+    audioRoute: "chat_completions",
     chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
     visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
     audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 45_000)
@@ -60,20 +72,31 @@ function mimoProvider(merged: NodeJS.ProcessEnv): ModelProvider {
 }
 
 function genericProvider(merged: NodeJS.ProcessEnv): ModelProvider {
+  const baseUrl = (merged.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/$/, "");
+  const textModel = merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-5.5";
+  const audioModel = transcriptionModel(merged);
   return openAiCompatibleProvider({
     kind: "generic",
     name: "Generic model API",
-    endpoint: merged.OPENAI_BASE_URL
-      ? `${merged.OPENAI_BASE_URL.replace(/\/$/, "")}/chat/completions`
-      : "https://api.openai.com/v1/chat/completions",
+    endpoint: `${baseUrl}/chat/completions`,
+    audioEndpoint: `${baseUrl}/audio/transcriptions`,
     apiKey: merged.OPENAI_API_KEY ?? merged.GENERIC_MODEL_API_KEY,
-    model: merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-5.5",
-    visionModel: merged.OPENAI_VISION_MODEL ?? merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-5.5",
-    audioModel: merged.OPENAI_AUDIO_MODEL ?? merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-5.5",
+    model: textModel,
+    visionModel: merged.OPENAI_VISION_MODEL ?? textModel,
+    audioModel,
+    audioRoute: "audio_transcriptions",
     chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
     visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
     audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 45_000)
   });
+}
+
+function transcriptionModel(merged: NodeJS.ProcessEnv) {
+  const explicit = merged.OPENAI_AUDIO_TRANSCRIPTION_MODEL ?? merged.OPENAI_TRANSCRIPTION_MODEL;
+  if (explicit) return explicit;
+  const legacy = merged.OPENAI_AUDIO_MODEL;
+  if (legacy && /(transcribe|whisper)/i.test(legacy)) return legacy;
+  return "gpt-4o-mini-transcribe";
 }
 
 function shouldLoadLocalEnv(env: NodeJS.ProcessEnv) {
@@ -140,6 +163,7 @@ function staticProvider(kind: ProviderKind, name: string, available: boolean): M
     name,
     available,
     usesRealModel: false,
+    diagnostics: { audioRoute: "fallback" },
     async generate(prompt: string) {
       const firstLine = prompt.split("\n").find(Boolean) ?? prompt;
       return `fallback:${firstLine.slice(0, 160)}`;
@@ -160,10 +184,12 @@ function openAiCompatibleProvider(input: {
   kind: ProviderKind;
   name: string;
   endpoint: string;
+  audioEndpoint?: string;
   apiKey?: string;
   model: string;
   visionModel?: string;
   audioModel?: string;
+  audioRoute?: ProviderDiagnostics["audioRoute"];
   chatTimeoutMs: number;
   visionTimeoutMs: number;
   audioTimeoutMs: number;
@@ -173,6 +199,12 @@ function openAiCompatibleProvider(input: {
     name: input.name,
     available: true,
     usesRealModel: true,
+    diagnostics: {
+      textModel: input.model,
+      visionModel: input.visionModel ?? input.model,
+      audioModel: input.audioModel ?? input.model,
+      audioRoute: input.audioRoute ?? "chat_completions"
+    },
     async generate(prompt: string) {
       const payload = await callChatCompletions(input, prompt, false);
       return payload.content;
@@ -186,7 +218,10 @@ function openAiCompatibleProvider(input: {
       return payload.content;
     },
     async transcribeAudio(dataUrl: string, prompt: string) {
-      const payload = await callAudioTranscript(input, dataUrl, prompt);
+      const payload =
+        input.audioRoute === "audio_transcriptions"
+          ? await callAudioTranscriptionEndpoint(input, dataUrl, prompt)
+          : await callAudioTranscript(input, dataUrl, prompt);
       return payload.content;
     }
   };
@@ -326,12 +361,47 @@ async function callAudioTranscript(
   }
 }
 
+async function callAudioTranscriptionEndpoint(
+  input: { audioEndpoint?: string; apiKey?: string; audioModel?: string; model: string; audioTimeoutMs: number },
+  dataUrl: string,
+  prompt: string
+) {
+  if (!input.audioEndpoint) throw new Error("Audio transcription endpoint is not configured");
+  const audio = parseAudioDataUrl(dataUrl);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), input.audioTimeoutMs);
+  const form = new FormData();
+  const bytes = Buffer.from(audio.data, "base64");
+  const file = new Blob([new Uint8Array(bytes)], { type: audio.mime });
+  form.append("model", input.audioModel ?? input.model);
+  form.append("file", file, `papo-audio.${audio.format}`);
+  form.append("prompt", prompt);
+  try {
+    const response = await fetch(input.audioEndpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {})
+      },
+      body: form
+    });
+
+    if (!response.ok) {
+      throw new Error(`Audio provider failed: ${response.status} ${await responseErrorSummary(response)}`);
+    }
+    const data = (await response.json()) as { text?: string; choices?: Array<{ message?: { content?: string } }> };
+    return { content: (data.text ?? data.choices?.[0]?.message?.content ?? "").trim() };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function parseAudioDataUrl(dataUrl: string) {
   const match = dataUrl.match(/^data:(audio\/[^;]+);base64,([A-Za-z0-9+/=]+)$/);
   if (!match) throw new Error("Invalid audio data URL");
   const mime = match[1].toLowerCase();
   const format = audioFormatFromMime(mime);
-  return { data: match[2], format };
+  return { data: match[2], format, mime };
 }
 
 function audioFormatFromMime(mime: string) {

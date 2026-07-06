@@ -8,6 +8,12 @@ export interface ProviderInfo {
   name: string;
   available: boolean;
   usesRealModel: boolean;
+  diagnostics?: {
+    textModel?: string;
+    visionModel?: string;
+    audioModel?: string;
+    audioRoute?: string;
+  };
 }
 
 export interface ProfileSummary {

@@ -7,6 +7,7 @@ Papo 是一个 mobile-first Demo，用最小可行方式展示一个有注意、
 Goal 3 adds a lighter Demo Mode and creature-facing experience language. Default demo inputs use everyday life context, not Papo development notes.
 
 Curious Mode also includes an experimental voice companionship control: in supported browsers it listens for up to 3 minutes and turns speech recognition output into 30-second `audio_transcript` segments. Raw audio is not stored.
+Server-side audio sensing uses provider-specific routes: OpenRouter/Mimo may use multimodal chat when the account supports audio input, while generic OpenAI-compatible providers use `/audio/transcriptions` with a transcription model.
 
 ## 生命体 Agent Harness
 
@@ -75,6 +76,7 @@ Provider 配置来源：
 
 环境变量会覆盖本地配置文件。可从 `papo.config.example.json` 复制配置结构。
 `PAPO_PROVIDER` 可显式指定 `openrouter`、`mimo` 或 `generic`；未指定时按下面顺序自动选择。
+Generic/OpenAI-compatible audio transcription should use `OPENAI_AUDIO_TRANSCRIPTION_MODEL` or `OPENAI_TRANSCRIPTION_MODEL`; if unset, Papo defaults to `gpt-4o-mini-transcribe`.
 
 Provider 选择优先级：
 
@@ -87,9 +89,11 @@ Provider 选择优先级：
 
 ```bash
 npm test
+npm run test:e2e
 ```
 
 测试保护核心闭环：多用户隔离、注意事件、情景记忆、反馈强化、长期记忆、主动浮现和主要 API。
+`npm run test:e2e` uses Playwright Chromium to check the mobile/desktop lifeform surfaces in a real browser.
 
 ## 3 分钟演示脚本
 

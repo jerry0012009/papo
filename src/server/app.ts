@@ -83,7 +83,13 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
   });
 
   app.get("/api/provider", (_req, res) => {
-    res.json({ kind: provider.kind, name: provider.name, available: provider.available, usesRealModel: provider.usesRealModel });
+    res.json({
+      kind: provider.kind,
+      name: provider.name,
+      available: provider.available,
+      usesRealModel: provider.usesRealModel,
+      diagnostics: provider.diagnostics
+    });
   });
 
   app.post("/api/image-summary", async (req, res, next) => {
@@ -110,7 +116,9 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const body = audioTranscriptSchema.parse(req.body);
       const prompt = `请把这段音频转写成中文。只保留用户生活片段里值得 Papo 注意的内容，最多 400 字，给 Curious Mode 当 audio_transcript。标签：${body.label ?? "录音"}`;
       try {
-        const transcript = (await provider.transcribeAudio(body.dataUrl, prompt)).slice(0, 1200);
+        const transcript =
+          (await provider.transcribeAudio(body.dataUrl, prompt)).slice(0, 1200).trim() ||
+          "这段录音里没有听到清楚的人声。你可以补一句这段声音里发生了什么。";
         res.json({ transcript, provider: provider.kind, semanticSource: provider.usesRealModel ? "llm" : "fallback" });
       } catch (error) {
         res.json({

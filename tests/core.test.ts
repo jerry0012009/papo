@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { handleButtonCapture, handleCuriousStream } from "../src/core/attention";
 import { createActiveEmergence } from "../src/core/emergence";
 import { applyFeedback } from "../src/core/feedback";
@@ -211,6 +211,38 @@ describe("creature core", () => {
     expect(result.events[0].semanticSource).toBe("rules");
     expect(result.harnessTrace?.join(" ")).toContain("fallback");
     expect(profile.semanticBrainHistory[0].status).toBe("skipped");
+  });
+
+  it("generic provider sends audio sensing through the transcription endpoint", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ text: "没有听到人声。" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      })
+    );
+    try {
+      const provider = createModelProvider({
+        PAPO_PROVIDER: "generic",
+        OPENAI_API_KEY: "test-key",
+        OPENAI_BASE_URL: "https://model.example.test/v1",
+        OPENAI_MODEL: "gpt-5.5",
+        OPENAI_AUDIO_MODEL: "gpt-5.5"
+      });
+
+      const result = await provider.transcribeAudio(`data:audio/wav;base64,${Buffer.from("fake wav").toString("base64")}`, "判断有没有人声。");
+
+      expect(result).toBe("没有听到人声。");
+      expect(provider.diagnostics?.audioRoute).toBe("audio_transcriptions");
+      expect(provider.diagnostics?.audioModel).toBe("gpt-4o-mini-transcribe");
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(fetchSpy.mock.calls[0][0]).toBe("https://model.example.test/v1/audio/transcriptions");
+      const init = fetchSpy.mock.calls[0][1] as RequestInit;
+      expect(init.body).toBeInstanceOf(FormData);
+      expect((init.body as FormData).get("model")).toBe("gpt-4o-mini-transcribe");
+      expect(JSON.stringify(init.headers ?? {})).not.toContain("Content-Type");
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it("LLM suggestions enrich wording but guardrails block unsafe long-term save", async () => {
