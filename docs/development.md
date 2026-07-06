@@ -223,6 +223,7 @@ Done:
   - Memory page is now treated as Papo's subjective memory surface, not a diagnostics surface: titles, memory text wrappers, familiarity labels, and edit/forget controls use first-person creature language, while raw `kind`/`weight` details stay out of the default page.
   - Active emergence on Home now shows Papo's resurfaced thought plus why it surfaced and which drive brought it back, while technical trace remains in Brain.
   - Home and Demo no longer expose harness trace lines or development backlog cards; technical diagnostics stay in Brain/developer surfaces.
+  - Home topbar no longer exposes provider names or "LLM configured" technical text. It presents Papo as a small companion, while model/provider routing lives in Brain diagnostics.
   - Direct text input now lives in the dialogue page composer, then routes through the Button Capture harness and returns to the same conversation timeline; the old standalone Button Capture page was removed from the user-facing navigation.
   - Direct calls such as asking Papo to speak now map to a first-class `respond` action, so the harness can choose to answer before it asks, saves, recalls, or stays quiet.
   - Memory page is a subjective creature memory surface: it should read like Papo holding and revisiting shared moments, not like a memory administration table. Editing/forgetting copy should frame the user as helping Papo remember accurately or let go.
@@ -233,6 +234,7 @@ Done:
   - Provider defaults now prefer OpenRouter `openai/gpt-5.5` when configured, with `.env` support for local/production deployment and visible fallback diagnostics.
   - Provider diagnostics now expose non-secret model ids and the audio sensing route. Generic audio sensing uses `/audio/transcriptions`, so 30-second recording chunks can reach a real transcription model instead of failing through chat `input_audio`.
   - Provider diagnostics now also expose per-modality provider routing (`textProvider`, `visionProvider`, `audioProvider`). If OpenRouter is the semantic brain but generic credentials exist, audio sensing automatically routes through generic transcription unless `PAPO_AUDIO_PROVIDER=primary` is set.
+  - Brain page shows model routing diagnostics, including which provider handles semantic text, vision sensing, and audio sensing.
   - Initial creature state has small deterministic per-user variation, and Home state copy is driven by recent wake/conversation/feedback state changes instead of only a static mood label.
   - Short wake gaps now use living presence language instead of "not a new experience" system-log wording.
   - Active emergence no longer uses seed self-memory as a fake shared memory. User-generated memories can still support emergence even when they are about Papo itself; with no real shared memory, it says it will wait for a real shared moment instead of claiming it remembered one.
@@ -272,6 +274,7 @@ Verified:
 - Curious Mode can preserve photo upload time/place and batch text/photo/audio as one stream before attention selection.
 - Home renders Papo as an animated Shiba Inu SVG whose visible posture changes with mood, energy, curiosity, attachment, and safety.
 - Home presence copy is context-first and does not expose "current mood" or state-calculation wording.
+- Home topbar does not expose provider names, fallback labels, or "LLM configured" text; those diagnostics are visible in Brain only.
 - Home shows state as creature body signals rather than raw meters; numeric state remains in Brain diagnostics.
 - User-facing memory/attention pages do not expose `memory_resonance`, `decisionTrace`, numeric `weight`, or numeric `confidence`; Brain keeps technical diagnostics.
 - User-facing dialogue pages do not show "attention flow", "attention material", or "small material" wording; they present shared moments as small life fragments handed to Papo.
@@ -290,6 +293,7 @@ Verified:
 - Real online feedback narration smoke passed through the OpenAI-compatible generic provider with `gpt-5.5`: LLM rewrote learning/follow-up text while rule-owned `responseAction`, state, and memory candidate ids stayed fixed.
 - Real online audio sensing smoke passed through the OpenAI-compatible generic provider using `gpt-4o-mini-transcribe` on `/audio/transcriptions`: a short WAV was accepted and returned a no-speech transcript instead of falling back.
 - Mixed provider routing is covered: OpenRouter can remain the semantic/text provider while audio sensing is delegated to generic `/audio/transcriptions`, preventing OpenRouter audio 403 from breaking continuous listening.
+- UI smoke covers model route diagnostics in Brain while keeping provider labels off Home.
 - OpenRouter account/model availability was checked against `/api/v1/models`: `google/gemini-3.5-flash` and `google/gemini-3.1-flash-lite` report audio input support, but real audio requests from the current account returned provider-side 403, so OpenRouter audio is not yet counted as a verified sensing path.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Guided Demo Mode's two-creature section displays how feedback changed their behavior and personality on the same input without exposing policy numbers.

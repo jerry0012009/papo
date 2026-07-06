@@ -696,9 +696,9 @@ export function App() {
           <UserRound size={19} />
         </button>
         <div>
-          <p className="eyebrow">{provider?.name ?? "Fallback demo brain"}</p>
+          <p className="eyebrow">住在手机里的小狗</p>
           <h1>{profile.creatureName}</h1>
-          {provider?.usesRealModel ? <p className="eyebrow">LLM 语义脑已配置</p> : null}
+          <p className="eyebrow">正在陪你攒小片段</p>
         </div>
         <button className="icon-button" onClick={askEmergence} disabled={busy} aria-label="它现在在想什么">
           <Sparkles size={19} />
@@ -752,7 +752,7 @@ export function App() {
         />
       ) : null}
       {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onTranscribeFeedbackAudio={transcribeFeedbackAudio} onEditMemory={editLongTermMemory} /> : null}
-      {tab === "brain" ? <BrainView profile={profile} /> : null}
+      {tab === "brain" ? <BrainView profile={profile} provider={provider} /> : null}
       {tab === "profile" ? <ProfileView profiles={profiles} activeId={profile.userId} onSelect={selectProfile} onAdd={addProfile} /> : null}
       {tab === "demo" ? (
         <DemoView
@@ -1275,13 +1275,31 @@ function MemoryView(props: {
   );
 }
 
-function BrainView({ profile }: { profile: CreatureProfile }) {
+function BrainView({ profile, provider }: { profile: CreatureProfile; provider?: ProviderInfo }) {
   const latestEpisode = profile.episodes[0];
   const latestEmergence = profile.emergenceHistory?.[0];
   const semanticRuns = profile.semanticBrainHistory ?? [];
   return (
     <section className="stack">
       <StateGrid state={profile.state} />
+      <div className="panel">
+        <PanelTitle icon={Brain} title="模型路由" />
+        {provider ? (
+          <div className="state-grid">
+            {providerRouteRows(provider).map((row) => (
+              <div className="state-item" key={row.label}>
+                <div>
+                  <span>{row.label}</span>
+                  <strong>{row.value}</strong>
+                </div>
+                <small>{row.detail}</small>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">还没有模型路由信息。</p>
+        )}
+      </div>
       <div className="panel">
         <PanelTitle icon={Brain} title="语义脑诊断" />
         {semanticRuns.length ? (
@@ -1934,6 +1952,27 @@ function messageContextText(message: CreatureProfile["conversation"][number]) {
 function locationText(location: NonNullable<StreamSegment["location"]>) {
   const accuracy = typeof location.accuracy === "number" ? `，约 ${Math.round(location.accuracy)} 米` : "";
   return location.label ?? `位置 ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}${accuracy}`;
+}
+
+function providerRouteRows(provider: ProviderInfo) {
+  const diagnostics = provider.diagnostics ?? {};
+  return [
+    {
+      label: "语义脑",
+      value: diagnostics.textProvider ?? provider.kind,
+      detail: diagnostics.textModel ?? provider.name
+    },
+    {
+      label: "视觉感知",
+      value: diagnostics.visionProvider ?? provider.kind,
+      detail: diagnostics.visionModel ?? "未单独配置"
+    },
+    {
+      label: "声音感知",
+      value: diagnostics.audioProvider ?? provider.kind,
+      detail: [diagnostics.audioModel, diagnostics.audioRoute].filter(Boolean).join(" · ") || "未单独配置"
+    }
+  ];
 }
 
 function policyLabel(key: string) {

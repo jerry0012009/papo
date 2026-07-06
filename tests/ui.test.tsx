@@ -13,7 +13,15 @@ describe("App", () => {
     let curiousRequest: { segments?: Array<{ kind: string; batchId?: string; content: string }> } | undefined;
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
-      if (url.endsWith("/api/provider")) return json({ kind: "fallback", name: "Fallback demo brain", available: true, usesRealModel: false });
+      if (url.endsWith("/api/provider")) {
+        return json({
+          kind: "fallback",
+          name: "Fallback demo brain",
+          available: true,
+          usesRealModel: false,
+          diagnostics: { textProvider: "fallback", visionProvider: "fallback", audioProvider: "fallback", audioRoute: "fallback" }
+        });
+      }
       if (url.endsWith("/api/image-summary")) {
         return json({ summary: "照片里是周五复查的日历备注，写着提前准备病历。", provider: "fallback", semanticSource: "fallback" });
       }
@@ -87,6 +95,11 @@ describe("App", () => {
     render(<App />);
 
     await waitFor(() => expect(screen.getByText("Papo")).toBeInTheDocument());
+    expect(screen.getByText("住在手机里的小狗")).toBeInTheDocument();
+    expect(screen.getByText("正在陪你攒小片段")).toBeInTheDocument();
+    expect(screen.queryByText("Fallback demo brain")).not.toBeInTheDocument();
+    expect(screen.queryByText("Generic model API")).not.toBeInTheDocument();
+    expect(screen.queryByText("LLM 语义脑已配置")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Papo 是一只卡通柴犬")).toBeInTheDocument();
     expect(screen.getByText("Papo 现在")).toBeInTheDocument();
     expect(screen.queryByText("当前心情")).not.toBeInTheDocument();
@@ -190,7 +203,10 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "脑态" }));
     expect(screen.getByText("最近变化")).toBeInTheDocument();
+    expect(screen.getByText("模型路由")).toBeInTheDocument();
     expect(screen.getByText("语义脑诊断")).toBeInTheDocument();
+    expect(screen.getByText("声音感知")).toBeInTheDocument();
+    expect(screen.getAllByText("fallback").length).toBeGreaterThan(0);
 
     await userEvent.click(screen.getByRole("button", { name: "演示" }));
     expect(screen.getByText("演示模式")).toBeInTheDocument();
