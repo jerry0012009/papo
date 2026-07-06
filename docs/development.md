@@ -265,6 +265,7 @@ Done:
   - Curious result, Episode detail, memory feeling, and Demo entry copy now avoid report-style observer phrases such as "Papo 放过了", "它刚才怎么理解", and "它以后可能".
   - Rule/fallback creature responses now use action-oriented shared-moment language instead of analysis-template wording such as "我先试着理解" or "这个片段可能是".
   - Memory candidate text, promoted long-term memory text, and consolidation reasons now use shared-moment language instead of internal phrases such as "这条 episode", "用户反馈这段", "我和用户", or "forget feedback".
+  - Memory page rendering now treats persisted memory text as raw material, not final copy: legacy/model phrases such as "用户确认", "episode", "candidate", or "长期保存" are translated away before the user sees Papo's subjective memory surface.
 
 Verified:
 

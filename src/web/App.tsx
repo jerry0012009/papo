@@ -1218,9 +1218,9 @@ function MemoryView(props: {
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={History} title="我还抱着的小事" />
-        <p className="muted">这里放着我和你一起攒下的小片段，我会按自己的小脑袋慢慢抱稳。</p>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找找我抱着哪一段" />
+        <PanelTitle icon={History} title="我记得的你和我" />
+        <p className="muted">我把一起经历过的片段放在这里。你教过我的，我会慢慢记稳；该放下的，我也会听你的。</p>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一找我记着哪一段" />
         {otherMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             {editingId === memory.id ? (
@@ -1235,9 +1235,9 @@ function MemoryView(props: {
                     }}
                   >
                     <Save size={16} />
-                    这样记
+                    就这样记住
                   </button>
-                  <button onClick={() => setEditingId(undefined)}>先不改</button>
+                  <button onClick={() => setEditingId(undefined)}>先按原来记</button>
                 </div>
               </>
             ) : (
@@ -1262,20 +1262,20 @@ function MemoryView(props: {
             </div>
           </article>
         ))}
-        {otherMemories.length ? null : <p className="muted">我还没有把别的事抱稳。</p>}
+        {otherMemories.length ? null : <p className="muted">我还没有真正记下一段和你的事。</p>}
       </div>
       <div className="panel">
-        <PanelTitle icon={Brain} title="我对自己的小理解" />
+        <PanelTitle icon={Brain} title="我学会认识自己" />
         {selfMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             <p>{memoryCreatureLine(memory)}</p>
             <span>{memoryFamiliarityText(memory.weight)}，我在一点点认识自己。</span>
           </article>
         ))}
-        {selfMemories.length ? null : <p className="muted">我还没留下关于自己的小理解。</p>}
+        {selfMemories.length ? null : <p className="muted">我还没留下关于自己的小理解，等以后从你身边慢慢学。</p>}
       </div>
       <div className="panel">
-        <PanelTitle icon={Eye} title="刚一起过的小片段" />
+        <PanelTitle icon={Eye} title="刚刚一起经历的" />
         {props.profile.episodes.map((episode) => (
           <EpisodeCard
             key={episode.id}
@@ -1782,14 +1782,14 @@ function memoryFamiliarityText(weight: number) {
 
 function memoryKindText(kind: CreatureProfile["longTermMemories"][number]["kind"]) {
   const map = {
-    user_preference: "我会按这个方式靠近你",
-    long_theme: "这件事像总会回来的旧气味",
-    creature_self_memory: "这是我认识自己的小脚印",
-    safety_rule: "我会先把这条边界抱紧",
-    future_review: "以后这件事可能会轻轻拽我一下",
-    relationship: "这是我们之间的一小块暖地方",
-    habit: "这像一个反复出现的小习惯",
-    open_question: "这件事我还想再歪头想想"
+    user_preference: "下次我会照着这个方式靠近你",
+    long_theme: "这是会反复回来找我的主题",
+    creature_self_memory: "这是我认识自己的小痕迹",
+    safety_rule: "这是你教我的边界",
+    future_review: "到时候我会把它想起来",
+    relationship: "这是我们之间变熟的一小段",
+    habit: "这是我闻出来的习惯",
+    open_question: "这是我还想继续歪头想的事"
   };
   return map[kind];
 }
@@ -1805,12 +1805,12 @@ function memoryCreatureLine(memory: CreatureProfile["longTermMemories"][number])
   const rawText = memory.text.trim();
   const text = normalizeMemoryText(rawText);
   const map = {
-    user_preference: `我记得这样靠近你会更合适：${text}`,
-    long_theme: `这件事总会回来，我把它放在耳朵旁边：${text}`,
+    user_preference: `我记住你喜欢我这样做：${text}`,
+    long_theme: `我会把这件事放在耳边，之后听见相近的声音就想起它：${text}`,
     creature_self_memory: `我对自己留下一点小理解：${text}`,
-    safety_rule: `这条边界我会先抱紧：${text}`,
-    future_review: `这件以后会回来的小事，我先叼在身边：${text}`,
-    relationship: `我们之间这小段，我会贴近一点记着：${text}`,
+    safety_rule: `这条边界我会先守住：${text}`,
+    future_review: `这件事以后可能还会来，我先替你记着：${text}`,
+    relationship: `这段让我更认识你一点：${text}`,
     habit: `我闻到一个反复出现的小习惯：${text}`,
     open_question: `这件事我还会歪头想一想：${text}`
   };
@@ -1822,7 +1822,26 @@ function memoryKeptBecauseText(reason: string) {
 }
 
 function normalizeMemoryText(text: string) {
-  return text.trim().replace(/[。！？.!?]+$/, "");
+  return text
+    .trim()
+    .replace(/我和用户/g, "我和你")
+    .replace(/用户主动/g, "你主动")
+    .replace(/用户确认/g, "你确认")
+    .replace(/用户反馈/g, "你后来教我")
+    .replace(/用户/g, "你")
+    .replace(/Papo/g, "我")
+    .replace(/^(你主动|你确认|你后来教我)[：:]\s*/, "")
+    .replace(/这条\s*episode/gi, "这一小段")
+    .replace(/episode/gi, "小片段")
+    .replace(/memory candidate/gi, "还没完全记稳的想法")
+    .replace(/candidate/gi, "还没完全记稳的想法")
+    .replace(/当前工作区/g, "现在这一刻")
+    .replace(/长期保存/g, "一直记着")
+    .replace(/长期记忆/g, "一直记着的事")
+    .replace(/短期记忆/g, "刚刚记下的事")
+    .replace(/隐私风险/g, "需要先小心的边界")
+    .replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, "$1$2")
+    .replace(/[。！？.!?]+$/, "");
 }
 
 function PanelTitle({ icon: Icon, title }: { icon: typeof Brain; title: string }) {
