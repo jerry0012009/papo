@@ -855,13 +855,15 @@ function HomeView(props: {
       ) : null}
 
       {props.selectedEpisode ? (
-        <EpisodeCard
-          episode={props.selectedEpisode}
-          sourceMessages={episodeSourceMessages(props.profile, props.selectedEpisode)}
-          onFeedback={props.onFeedback}
-          onTranscribeFeedbackAudio={props.onTranscribeFeedbackAudio}
-          compact={false}
-        />
+        <div className="home-episode-slot">
+          <EpisodeCard
+            episode={props.selectedEpisode}
+            sourceMessages={episodeSourceMessages(props.profile, props.selectedEpisode)}
+            onFeedback={props.onFeedback}
+            onTranscribeFeedbackAudio={props.onTranscribeFeedbackAudio}
+            compact={false}
+          />
+        </div>
       ) : null}
     </section>
   );

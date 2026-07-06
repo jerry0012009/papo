@@ -196,9 +196,9 @@ Done:
   - App open/reopen creates a wake event: Papo reacts to time passing, recovers energy by rule, and shows a small presence note on Home.
   - After a long enough absence, wake can create a rhythm emergence from a real non-self long-term memory, so opening the app can feel like it quietly remembered something.
   - Demo Mode uses life-context examples rather than Papo development text as interaction material.
-  - Demo Mode includes Curious stream loading, A/B feedback conditioning, and active emergence.
-  - Demo Mode now has a guided 4-minute run that creates a fresh main creature, runs the 8-part Curious script, applies remember/continue feedback, creates A/B conditioned creatures, and surfaces a real emergence summary without exposing a public reset endpoint.
-  - Demo Mode A/B contrast now shows policy differences and inner-choice wording for the two conditioned creatures, not just action names.
+  - Demo Mode includes Curious stream loading, two-creature feedback conditioning, and active emergence.
+  - Demo Mode now has a guided 4-minute run that creates a fresh main creature, runs the 8-part Curious script, applies remember/continue feedback, creates two conditioned creatures, and surfaces a real emergence summary without exposing a public reset endpoint.
+  - Demo Mode contrast shows behavior and personality differences for the two conditioned creatures without exposing raw policy numbers.
   - Experimental voice companionship in Curious Mode: browser speech recognition can listen up to 3 minutes and split transcripts every 30 seconds into `audio_transcript` segments.
   - OpenRouter/OpenAI-compatible visual sensing endpoint: uploaded screenshots are summarized into editable `image_summary` segments.
   - OpenRouter/OpenAI-compatible audio sensing endpoint: uploaded recordings are transcribed into editable `audio_transcript` segments.
@@ -237,6 +237,7 @@ Done:
   - Home no longer shows raw state meters by default. It translates state into visible body signals such as ears, tail, little head, and boundaries, while Brain keeps numeric meters.
   - User-facing attention and episode cards no longer expose score contributions, numeric confidence, weight, or decision trace details. Those remain in Brain diagnostics while the default cards show Papo's attention strength, caution, memory, action, and save feeling in creature language.
   - Dialogue and shared-moment pages no longer call the user path an "attention flow" or "attention material"; they use "和 Papo 的小日常", "你递来的小片段", and "这一小段" so the interaction reads as a shared experience instead of pipeline input.
+  - Browser visual QA now runs in real Chromium on desktop and mobile viewports. It screenshots the Shiba avatar, Home, and conversation surfaces, and verifies the unread dot, dialogue timeline, source-linked memory card, feedback input, and 3-minute listening entry render without bottom-nav overlap.
 
 Verified:
 
@@ -285,6 +286,7 @@ Verified:
 - Real online feedback narration smoke passed through the OpenAI-compatible generic provider with `gpt-5.5`: LLM rewrote learning/follow-up text while rule-owned `responseAction`, state, and memory candidate ids stayed fixed.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Guided Demo Mode's two-creature section displays how feedback changed their behavior and personality on the same input without exposing policy numbers.
+- `npm run test:e2e`: Playwright Chromium desktop/mobile visual smoke passes for the Shiba avatar, conversation timeline, source-linked episode card, unread dialogue dot, feedback input, and Curious recording entry.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`
@@ -294,9 +296,8 @@ Verified:
 
 Next:
 
-1. Add stronger browser visual QA with mobile screenshots for the Shiba Inu avatar, conversation timeline, source-linked episode cards, unread dialogue dot, feedback input, and Curious recording flow.
-2. Tune OpenRouter audio model defaults after testing real account model availability.
-3. Consider a small generated Shiba sprite sheet later if SVG statefulness becomes limiting.
+1. Tune OpenRouter audio model defaults after testing real account model availability.
+2. Consider a small generated Shiba sprite sheet later if SVG statefulness becomes limiting.
 
 Demo material rule:
 
