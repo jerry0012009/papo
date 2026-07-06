@@ -10,6 +10,7 @@ import {
   RefreshCcw,
   Save,
   Sparkles,
+  Wand2,
   UserRound
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -38,7 +39,7 @@ import {
   type ProviderInfo
 } from "./api";
 
-type Tab = "home" | "capture" | "curious" | "memory" | "brain" | "profile";
+type Tab = "home" | "capture" | "curious" | "memory" | "brain" | "profile" | "demo";
 
 const feedbacks: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }> = [
   { kind: "understood", label: "理解对了", icon: Check },
@@ -51,19 +52,30 @@ const feedbacks: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }
 const starterSegments: Array<{ kind: SegmentKind; label: string; content: string }> = [
   {
     kind: "text",
-    label: "片段 1",
-    content: "这个 demo 不能只是一个记忆库，它要像一个有小脑袋的小动物，会自己注意到重点。"
+    label: "早晨记录",
+    content: "今天早上只是匆匆吃了面包，没发生什么特别的事。"
   },
   {
     kind: "image_summary",
-    label: "截图摘要 2",
-    content: "竞品页面展示了自动总结、知识库和提醒功能，但看起来更像效率工具。"
+    label: "日历截图",
+    content: "日历里标着周五 9:30 妈妈复查，旁边还有准备病历和医保卡的备注。"
   },
   {
     kind: "audio_transcript",
-    label: "录音转写 3",
-    content: "我担心投资人看完以后觉得这只是普通聊天机器人，所以要让反馈后真的有变化。"
+    label: "语音转写",
+    content: "我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要。"
   }
+];
+
+const demoCuriousSegments: Array<{ kind: SegmentKind; label: string; content: string }> = [
+  { kind: "text", label: "背景 1", content: "今天早餐吃了面包，路上有点堵。" },
+  { kind: "image_summary", label: "日历截图", content: "周五 9:30 妈妈复查，备注写着提前准备病历、医保卡和上次检查单。" },
+  { kind: "text", label: "隐私片段", content: "短信里有一个验证码 4921 和缴费链接，这段不应该被长期保存。" },
+  { kind: "audio_transcript", label: "语音 1", content: "我有点担心自己又把妈妈复查这件事拖到最后，明明很重要。" },
+  { kind: "image_summary", label: "购物截图", content: "购物车里有洗衣液、纸巾和一个水杯。" },
+  { kind: "text", label: "朋友提醒", content: "朋友说我最近总是把重要家事压到睡前才处理，容易焦虑。" },
+  { kind: "audio_transcript", label: "语音 2", content: "下周想提前一天提醒自己准备资料，不要又临时找东西。" },
+  { kind: "text", label: "重复背景", content: "妈妈复查这件事刚才已经说过一次，这里只是重复提醒。" }
 ];
 
 export function App() {
@@ -71,12 +83,14 @@ export function App() {
   const [provider, setProvider] = useState<ProviderInfo>();
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [profile, setProfile] = useState<CreatureProfile>();
-  const [buttonText, setButtonText] = useState("我希望这个 AI 小动物先学会注意我反复强调的核心主题，而不是急着做很多工具功能。");
+  const [buttonText, setButtonText] = useState("我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要，但我最近总是这样。");
   const [segments, setSegments] = useState(
     starterSegments.map((segment, index) => makeSegment(`segment-${index + 1}`, segment.kind, segment.label, segment.content))
   );
   const [lastResult, setLastResult] = useState<CaptureResult>();
   const [emergence, setEmergence] = useState<string>();
+  const [learningNote, setLearningNote] = useState<string>();
+  const [demoNote, setDemoNote] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
 
@@ -124,6 +138,7 @@ export function App() {
       const result = await buttonCapture(profile.userId, buttonText);
       setLastResult(result);
       setProfile(result.profile);
+      setLearningNote(undefined);
       setTab("home");
     });
   }
@@ -137,6 +152,7 @@ export function App() {
       );
       setLastResult(result);
       setProfile(result.profile);
+      setLearningNote(undefined);
       setTab("home");
     });
   }
@@ -144,8 +160,9 @@ export function App() {
   async function giveFeedback(kind: FeedbackKind, targetId?: string) {
     if (!profile) return;
     await run(async () => {
-      const next = await sendFeedback(profile.userId, kind, targetId);
+      const { profile: next, feedback } = await sendFeedback(profile.userId, kind, targetId);
       setProfile(next);
+      setLearningNote(feedback.learningNote);
       setLastResult((current) => (current ? { ...current, profile: next } : current));
     });
   }
@@ -164,6 +181,36 @@ export function App() {
       const result = await activeEmergence(profile.userId);
       setProfile(result.profile);
       setEmergence(result.emergence.text);
+      setTab("home");
+    });
+  }
+
+  function loadDemoCurious() {
+    setSegments(demoCuriousSegments.map((segment, index) => makeSegment(`demo-${index + 1}`, segment.kind, segment.label, segment.content)));
+    setDemoNote("我已经放入 8 段生活化信息流：背景、日历、隐私、语音和重复片段。下一步点“开始观察”。");
+    setTab("curious");
+  }
+
+  async function runDemoContrast() {
+    await run(async () => {
+      const input = "我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要。";
+      const a = await createProfile("Papo 深想型");
+      const b = await createProfile("Papo 安静型");
+      const aFirst = await buttonCapture(a.userId, input);
+      const bFirst = await buttonCapture(b.userId, input);
+      let aProfile = aFirst.profile;
+      let bProfile = bFirst.profile;
+      for (let i = 0; i < 3; i += 1) {
+        aProfile = (await sendFeedback(a.userId, "continue", aFirst.episodes[0].id)).profile;
+        bProfile = (await sendFeedback(b.userId, "not_now", bFirst.episodes[0].id)).profile;
+      }
+      const aResult = await buttonCapture(a.userId, input);
+      await buttonCapture(b.userId, input);
+      setProfiles(await listProfiles());
+      setProfile(aResult.profile);
+      setLastResult(aResult);
+      setLearningNote("A 连续收到“继续想”，B 连续收到“这次不用”。同一句输入下，A 会更愿意展开，B 会更克制。");
+      setDemoNote(`已创建两个小动物：${aProfile.creatureName} 和 ${bProfile.creatureName}。你可以去“小动物切换”查看差异。`);
       setTab("home");
     });
   }
@@ -213,6 +260,7 @@ export function App() {
           lastResult={lastResult}
           selectedEpisode={selectedEpisode}
           emergence={emergence}
+          learningNote={learningNote}
           busy={busy}
           onFeedback={giveFeedback}
           onGoCapture={() => setTab("capture")}
@@ -231,6 +279,7 @@ export function App() {
       {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onEditMemory={editLongTermMemory} /> : null}
       {tab === "brain" ? <BrainView profile={profile} /> : null}
       {tab === "profile" ? <ProfileView profiles={profiles} activeId={profile.userId} onSelect={selectProfile} onAdd={addProfile} /> : null}
+      {tab === "demo" ? <DemoView onLoadCurious={loadDemoCurious} onRunContrast={runDemoContrast} onEmerge={askEmergence} note={demoNote} busy={busy} /> : null}
 
       <nav className="nav">
         <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => setTab("home")} />
@@ -238,6 +287,7 @@ export function App() {
         <NavButton active={tab === "curious"} icon={Sparkles} label="陪我" onClick={() => setTab("curious")} />
         <NavButton active={tab === "memory"} icon={History} label="记忆" onClick={() => setTab("memory")} />
         <NavButton active={tab === "brain"} icon={Brain} label="脑态" onClick={() => setTab("brain")} />
+        <NavButton active={tab === "demo"} icon={Wand2} label="演示" onClick={() => setTab("demo")} />
       </nav>
     </main>
   );
@@ -248,6 +298,7 @@ function HomeView(props: {
   lastResult?: CaptureResult;
   selectedEpisode?: EpisodeMemory;
   emergence?: string;
+  learningNote?: string;
   busy: boolean;
   onFeedback: (kind: FeedbackKind, targetId?: string) => void;
   onGoCapture: () => void;
@@ -278,6 +329,7 @@ function HomeView(props: {
       </div>
 
       {props.emergence ? <section className="memory-surface active">{props.emergence}</section> : null}
+      {props.learningNote ? <section className="learning-note">{props.learningNote}</section> : null}
 
       <StateGrid state={props.profile.state} />
 
@@ -285,21 +337,18 @@ function HomeView(props: {
         <section className="panel">
           <PanelTitle icon={Eye} title="刚才的注意事件" />
           <p className="response">{props.lastResult.response}</p>
-          {props.lastResult.harnessTrace?.length ? (
-            <div className="trace-line">{props.lastResult.harnessTrace.join(" -> ")}</div>
-          ) : null}
           {props.lastResult.curiousSession ? (
             <div className="session-audit">
-              <p>
-                输入 {props.lastResult.curiousSession.totalSegments} 段，注意预算 {props.lastResult.curiousSession.attentionBudget}。
-              </p>
-              <p>状态影响：{props.lastResult.curiousSession.stateInfluence}</p>
+              <p>{props.lastResult.curiousSession.creatureReport}</p>
               {props.lastResult.curiousSession.ignored.slice(0, 4).map((item) => (
                 <small key={item.segmentId}>
                   未选 {item.label}：{item.whyIgnored}
                 </small>
               ))}
             </div>
+          ) : null}
+          {props.lastResult.harnessTrace?.length ? (
+            <div className="trace-line">{props.lastResult.harnessTrace.join(" -> ")}</div>
           ) : null}
           <div className="event-list">
             {props.lastResult.events.map((event) => (
@@ -563,6 +612,40 @@ function ProfileView(props: {
   );
 }
 
+function DemoView(props: {
+  onLoadCurious: () => void;
+  onRunContrast: () => void;
+  onEmerge: () => void;
+  note?: string;
+  busy: boolean;
+}) {
+  return (
+    <section className="stack">
+      <div className="panel">
+        <PanelTitle icon={Wand2} title="演示模式" />
+        <p className="response">用生活化素材演示三件事：它会从信息流里注意，它会被反馈养成，它会主动想起旧片段。</p>
+        {props.note ? <section className="learning-note">{props.note}</section> : null}
+        <button onClick={props.onLoadCurious} disabled={props.busy}>
+          <Sparkles size={18} />
+          场景 1：填入 8 段信息流
+        </button>
+        <button onClick={props.onRunContrast} disabled={props.busy}>
+          <UserRound size={18} />
+          场景 2：生成 A/B 养成对比
+        </button>
+        <button onClick={props.onEmerge} disabled={props.busy}>
+          <Lightbulb size={18} />
+          场景 3：让它现在想一想
+        </button>
+      </div>
+      <div className="panel">
+        <PanelTitle icon={Brain} title="后续任务" />
+        <p className="response">Curious Mode 后续会加入持续录音：最多 3 分钟，每 30 秒自动切成一段 audio transcript，再作为注意素材进入同一套 session audit。</p>
+      </div>
+    </section>
+  );
+}
+
 function AttentionCard({ event }: { event: AttentionEvent }) {
   return (
     <article className="attention-card">
@@ -603,14 +686,26 @@ function EpisodeCard(props: {
   return (
     <article className="episode-card">
       <div className="episode-head">
-        <span>{props.episode.source === "button" ? "Button" : "Curious"}</span>
+        <span>{props.episode.source === "button" ? "你递给我的片段" : "我自己注意到的片段"}</span>
         <strong>权重 {props.episode.weight}</strong>
       </div>
-      <h3>{props.episode.noticed}</h3>
-      {!props.compact ? <p>{props.episode.creatureResponse}</p> : null}
-      <small>{props.episode.importanceReason}</small>
+      <h3>{props.episode.creatureExperience?.earReason ?? props.episode.noticed}</h3>
+      {!props.compact ? (
+        <div className="episode-experience">
+          <p><strong>我刚才注意到：</strong>{props.episode.noticed}</p>
+          <p><strong>我为什么注意：</strong>{props.episode.creatureExperience?.earReason ?? props.episode.importanceReason}</p>
+          <p><strong>我想起了什么：</strong>{props.episode.creatureExperience?.rememberedScene ?? "这次还没有强烈拉起旧片段。"}</p>
+          <p><strong>我猜你在做：</strong>{props.episode.possibleIntent}</p>
+          <p><strong>我当时的状态：</strong>{episodeStateText(props.episode)}</p>
+          <p><strong>我选择：</strong>{props.episode.creatureExperience?.actionFeeling ?? props.episode.actionDecision?.reason}</p>
+          <p><strong>要不要长期记：</strong>{props.episode.creatureExperience?.saveFeeling ?? "先作为情景记忆，等你的反馈决定。"}</p>
+        </div>
+      ) : null}
       {props.episode.decisionTrace?.length && !props.compact ? (
-        <small>{props.episode.decisionTrace.join(" -> ")}</small>
+        <details className="brain-details">
+          <summary>开发者 trace</summary>
+          <small>{props.episode.decisionTrace.join(" -> ")}</small>
+        </details>
       ) : null}
       <div className="feedback-row">
         {feedbacks.map((item) => (
@@ -622,6 +717,16 @@ function EpisodeCard(props: {
       </div>
     </article>
   );
+}
+
+function episodeStateText(episode: EpisodeMemory) {
+  const state = episode.stateSnapshot;
+  const parts = [];
+  if (state.curiosity > 70) parts.push("好奇心比较高，所以更容易被新主题吸引");
+  if (state.attachment > 60) parts.push("依恋度较高，所以更愿意联想旧记忆");
+  if (state.energy < 35) parts.push("精力偏低，所以会短一点回应");
+  if (state.safety > 70) parts.push("安全感偏谨慎，所以不会急着保存隐私内容");
+  return parts.length ? parts.join("；") : "状态稳定，适合认真观察这一段";
 }
 
 function StateGrid({ state }: { state: CreatureState }) {

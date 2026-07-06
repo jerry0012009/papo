@@ -1,4 +1,4 @@
-import type { CaptureResult, CreatureProfile, FeedbackKind, SegmentKind, StreamSegment } from "../core/types";
+import type { CaptureResult, CreatureProfile, FeedbackKind, FeedbackRecord, SegmentKind, StreamSegment } from "../core/types";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 const apiBase = import.meta.env.VITE_API_BASE as string | undefined;
@@ -55,13 +55,12 @@ export async function curiousCapture(userId: string, segments: StreamSegment[]):
   });
 }
 
-export async function sendFeedback(userId: string, kind: FeedbackKind, targetId?: string): Promise<CreatureProfile> {
-  const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/feedback`, {
+export async function sendFeedback(userId: string, kind: FeedbackKind, targetId?: string): Promise<{ profile: CreatureProfile; feedback: FeedbackRecord }> {
+  return request<{ profile: CreatureProfile; feedback: FeedbackRecord }>(`/api/profiles/${userId}/feedback`, {
     method: "POST",
     headers: jsonHeaders,
     body: JSON.stringify({ kind, targetId })
   });
-  return data.profile;
 }
 
 export async function updateLongTermMemory(userId: string, memoryId: string, text: string): Promise<CreatureProfile> {

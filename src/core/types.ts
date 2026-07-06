@@ -92,6 +92,14 @@ export interface ActionDecision {
   ruleTrace: string[];
 }
 
+export interface CreatureExperience {
+  earReason: string;
+  rememberedScene?: string;
+  actionFeeling: string;
+  saveFeeling: string;
+  learnedHint?: string;
+}
+
 export interface CuriousSessionAudit {
   id: string;
   createdAt: string;
@@ -110,6 +118,7 @@ export interface CuriousSessionAudit {
   }>;
   stateInfluence: string;
   attentionBudget: number;
+  creatureReport: string;
 }
 
 export interface AttentionEvent {
@@ -127,6 +136,7 @@ export interface AttentionEvent {
   suggestedAction: ActionKind;
   actionDecision: ActionDecision;
   scoreBreakdown?: SegmentScore;
+  creatureExperience: CreatureExperience;
   tags: string[];
   semanticSource: "rules" | "llm" | "fallback";
   decisionTrace?: string[];
@@ -148,6 +158,7 @@ export interface EpisodeMemory {
   promotedToLongTerm: boolean;
   memoryCandidateIds: string[];
   actionDecision?: ActionDecision;
+  creatureExperience?: CreatureExperience;
   weight: number;
   tags: string[];
   decisionTrace?: string[];
@@ -194,6 +205,7 @@ export interface FeedbackRecord {
   kind: FeedbackKind;
   targetId?: string;
   effect: string;
+  learningNote: string;
 }
 
 export interface CreatureProfile {

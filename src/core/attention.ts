@@ -1,5 +1,6 @@
 import { selectAction } from "./action";
 import { describeStateInfluence } from "./drive";
+import { createAttentionExperience, createCuriousCreatureReport } from "./experience";
 import { makeId } from "./ids";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, findRelatedMemories } from "./memory";
 import { applyStateDelta } from "./state";
@@ -9,6 +10,7 @@ import type {
   CaptureResult,
   CreatureProfile,
   CuriousSessionAudit,
+  LongTermMemory,
   ScoreContribution,
   SegmentScore,
   StreamSegment
@@ -129,8 +131,10 @@ export function handleCuriousStream(
       whyIgnored: item.whyIgnored
     })),
     stateInfluence: describeStateInfluence(profile),
-    attentionBudget
+    attentionBudget,
+    creatureReport: ""
   };
+  curiousSession.creatureReport = createCuriousCreatureReport(curiousSession);
 
   return {
     profile,
@@ -217,6 +221,9 @@ function buildAttentionEvent(
     relatedMemoryIds: related,
     score: input.score
   });
+  const relatedMemories = related
+    .map((id) => profile.longTermMemories.find((memory) => memory.id === id))
+    .filter((memory): memory is LongTermMemory => Boolean(memory));
 
   return {
     id: makeId("attention"),
@@ -233,6 +240,14 @@ function buildAttentionEvent(
     suggestedAction: actionDecision.action,
     actionDecision,
     scoreBreakdown: input.score,
+    creatureExperience: createAttentionExperience({
+      profile,
+      triggerContent: input.triggerContent,
+      relatedMemories,
+      score: input.score,
+      action: actionDecision.action,
+      privacyRisk
+    }),
     tags,
     semanticSource: "rules",
     decisionTrace: [

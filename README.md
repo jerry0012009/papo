@@ -4,6 +4,8 @@ Papo 是一个 mobile-first Demo，用最小可行方式展示一个有注意、
 
 当前版本包含 Creature Brain v0.2：Curious Session 审计、可解释 action selection、反馈策略学习、记忆巩固候选，以及三类主动浮现机制。
 
+Goal 3 adds a lighter Demo Mode and creature-facing experience language. Default demo inputs use everyday life context, not Papo development notes.
+
 ## 生命体 Agent Harness
 
 Demo 采用混合 harness，而不是纯聊天或纯规则：

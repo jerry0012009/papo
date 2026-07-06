@@ -36,6 +36,7 @@ export function createEpisodeFromEvent(
     promotedToLongTerm: false,
     memoryCandidateIds: candidateIds,
     actionDecision: event.actionDecision,
+    creatureExperience: event.creatureExperience,
     weight: Math.max(20, Math.round(event.attentionStrength)),
     tags: event.tags,
     decisionTrace: event.decisionTrace

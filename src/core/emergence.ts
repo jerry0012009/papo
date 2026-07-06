@@ -27,7 +27,7 @@ export function createMemoryResonanceEmergence(
     whyNow: "当前 attention event 和旧记忆发生共振。",
     relatedMemoryIds: [memory.id],
     driveSource: "memory_resonance",
-    message: `我想起了之前的一件事：${summarizeText(memory.text, 96)}。因为刚才这段又碰到了同一个主题，我会先解释为什么注意到，再决定要不要行动。`,
+    message: `我刚才自己又想起一件旧事：${summarizeText(memory.text, 96)}。它浮现出来，是因为新的注意事件又碰到了同一个主题。所以下次遇到类似片段时，我会先找它和旧经历的关系，而不是急着总结全部。`,
     ruleTrace: [`event=${event.id}`, `memory=${memory.id}`, "trigger=related_memory"]
   };
   profile.emergenceHistory.unshift(record);
@@ -49,7 +49,7 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
       memory: safetyMemory ?? generalMemory,
       whyNow: "我的安全感和隐私敏感度比较高，所以先浮现需要谨慎处理的规则。",
       driveSource: "safety",
-      messagePrefix: "我现在比较谨慎。"
+      messagePrefix: "我现在比较谨慎"
     });
   }
 
@@ -61,7 +61,7 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
       memory: futureMemory ?? selfMemory ?? generalMemory,
       whyNow: "我的好奇心或深入倾向升高，所以浮现一个还没想完的问题。",
       driveSource: "curiosity",
-      messagePrefix: "我有点想继续想。"
+      messagePrefix: "我有点想继续想"
     });
   }
 
@@ -73,7 +73,7 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
       memory: selfMemory ?? generalMemory,
       whyNow: "我的依恋度或回忆倾向较高，所以把和你共同养成我的记忆带回来。",
       driveSource: "attachment",
-      messagePrefix: "我想靠近我们之前反复提过的主题。"
+      messagePrefix: "我想靠近我们之前反复提过的主题"
     });
   }
 
@@ -90,7 +90,7 @@ export function createRhythmEmergence(profile: CreatureProfile, now = new Date()
     memory: stale,
     whyNow: "用户打开了我现在在想什么，节律触发让我从旧记忆里挑一条很久没浮现的内容。",
     driveSource: "rhythm",
-    messagePrefix: "我刚才安静地翻到一条旧记忆。"
+    messagePrefix: "我刚才安静地翻到一条旧记忆"
   });
 }
 
@@ -112,7 +112,7 @@ function buildRecord(input: {
     whyNow: input.whyNow,
     relatedMemoryIds: input.memory ? [input.memory.id] : [],
     driveSource: input.driveSource,
-    message: `${input.messagePrefix}我浮现的是：${memoryText}。接下来我会用这个倾向影响我怎么注意你给我的新片段。`,
+    message: `${input.messagePrefix}，所以我想起了：${memoryText}。这不是提醒，而是我当前的内在倾向在把旧片段带回来；下一次你给我信息流时，我会带着这个倾向去注意。`,
     ruleTrace: [`kind=${input.kind}`, `drive=${input.driveSource}`, input.memory ? `memory=${input.memory.id}` : "memory=none"]
   };
 }

@@ -48,6 +48,9 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   for (const episode of profile.episodes) {
     episode.memoryCandidateIds ??= [];
   }
+  for (const feedback of profile.feedbackHistory) {
+    feedback.learningNote ??= feedback.effect;
+  }
 
   return profile;
 }

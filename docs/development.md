@@ -143,10 +143,15 @@ Done:
   - Episode-level memory candidates with write policy before long-term promotion.
   - Drive-based, rhythm, and memory-resonance emergence records.
   - Brain page shows policy, recent decision, recent emergence, and memory candidates.
+- Goal 3 experience layer:
+  - Main UI uses creature experience language for attention and episodes.
+  - Feedback immediately surfaces a user-facing "I learned" note.
+  - Demo Mode uses life-context examples rather than Papo development text as interaction material.
+  - Demo Mode includes Curious stream loading, A/B feedback conditioning, and active emergence.
 
 Verified:
 
-- `npm test`: 21 tests passing across core, v0.2 brain behavior, API, and UI.
+- `npm test`: 24 tests passing across core, v0.2 brain behavior, Goal 3 experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -158,6 +163,9 @@ Verified:
 - Feedback changes later policy and action style, so different users diverge.
 - LLM invalid JSON falls back without breaking the life loop.
 - LLM action suggestions go through rule guardrails.
+- Curious Mode creature report uses user-life material and explains selected/ignored segments.
+- Feedback returns a visible learning note.
+- Active emergence reads as inner resurfacing rather than a template reminder.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`
   - API: `https://eu.jerrypsy.top/papo-api/health`
@@ -167,10 +175,15 @@ Verified:
 Next:
 
 1. Improve real Mimo/OpenRouter connectivity diagnostics and surface model errors in Brain page.
-2. Add real image upload with model-created image summaries.
-3. Add audio upload/recording and transcription.
+2. Curious Mode continuous audio: optional 3-minute recording, auto-split every 30 seconds, transcribe each chunk into `audio_transcript` segments, then feed them into the same attention session audit.
+3. Add real image upload with model-created image summaries.
 4. Add stronger browser visual QA with mobile screenshots.
 5. Add a guided 4-minute investor demo seed/reset flow.
+
+Demo material rule:
+
+- Default inputs and Demo Mode scenarios should use ordinary user-life material.
+- Do not use our development notes, product planning text, or investor-pitch wording as the creature's interaction material.
 
 ## Verification Checklist
 

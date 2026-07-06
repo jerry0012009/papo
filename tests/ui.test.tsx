@@ -38,6 +38,10 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "脑态" }));
     expect(screen.getByText("最近变化")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "演示" }));
+    expect(screen.getByText("演示模式")).toBeInTheDocument();
+    expect(screen.getByText("场景 1：填入 8 段信息流")).toBeInTheDocument();
   });
 });
 
@@ -71,6 +75,17 @@ function profileFixture() {
       }
     ],
     feedbackHistory: [],
-    stateChanges: []
+    stateChanges: [],
+    policyProfile: {
+      preferDepth: 45,
+      preferProactivity: 45,
+      privacySensitivity: 55,
+      saveThreshold: 70,
+      askThreshold: 58,
+      recallTendency: 50,
+      quietTendency: 35
+    },
+    memoryCandidates: [],
+    emergenceHistory: []
   };
 }

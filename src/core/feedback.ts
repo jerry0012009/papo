@@ -1,5 +1,6 @@
 import { makeId } from "./ids";
 import { updatePolicyFromFeedback } from "./drive";
+import { createLearningNote } from "./experience";
 import { adjustMemoryWeight, createMemoryCandidateFromEpisode, forgetMemory, promoteEpisode } from "./memory";
 import { applyStateDelta, deltaForFeedback } from "./state";
 import type { CreatureProfile, FeedbackKind, FeedbackRecord, LongTermMemory } from "./types";
@@ -12,13 +13,15 @@ export function applyFeedback(
   const targetEpisode = profile.episodes.find((item) => item.id === input.targetId);
   const targetLongTerm = profile.longTermMemories.find((item) => item.id === input.targetId);
   const tags = targetEpisode?.tags ?? targetLongTerm?.tags ?? [];
+  const learningNote = createLearningNote(input.kind, tags);
   const effect = `${effectText(input.kind)} ${updatePolicyFromFeedback(profile, input.kind, tags)}`;
   const record: FeedbackRecord = {
     id: makeId("feedback"),
     at: now,
     kind: input.kind,
     targetId: input.targetId,
-    effect
+    effect,
+    learningNote
   };
 
   profile.feedbackHistory.unshift(record);

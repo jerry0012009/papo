@@ -385,6 +385,24 @@ meter {
   gap: 9px;
 }
 
+.episode-experience {
+  display: grid;
+  gap: 8px;
+}
+
+.episode-experience p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.learning-note {
+  border-radius: 8px;
+  background: #1f2421;
+  color: #fffaf0;
+  padding: 12px;
+  line-height: 1.55;
+}
+
 .episode-card h3 {
   font-size: 1rem;
   line-height: 1.45;
@@ -449,7 +467,7 @@ meter {
   transform: translateX(-50%);
   width: min(calc(100% - 24px), 680px);
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 6px;
   padding: 7px;
   border-radius: 16px;
