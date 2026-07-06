@@ -24,11 +24,13 @@ body {
 button,
 input,
 select,
-textarea {
+textarea,
+.upload-button {
   font: inherit;
 }
 
-button {
+button,
+.upload-button {
   min-height: 42px;
   border: 1px solid rgba(31, 36, 33, 0.12);
   border-radius: 8px;
@@ -45,6 +47,10 @@ button {
 button:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+.upload-button input {
+  display: none;
 }
 
 textarea,

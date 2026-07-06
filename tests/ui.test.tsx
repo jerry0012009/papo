@@ -51,6 +51,8 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "陪我" }));
     expect(screen.getByText("Curious Mode")).toBeInTheDocument();
     expect(screen.getByText("语音陪伴实验")).toBeInTheDocument();
+    expect(screen.getByText("上传截图生成摘要")).toBeInTheDocument();
+    expect(screen.getByText("上传录音转写")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "记忆" }));
     expect(screen.getByText("长期记忆")).toBeInTheDocument();

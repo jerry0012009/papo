@@ -4,8 +4,10 @@ import {
   CircleOff,
   Eye,
   History,
+  ImagePlus,
   Lightbulb,
   MessageCircle,
+  Mic,
   Plus,
   RefreshCcw,
   Save,
@@ -34,6 +36,8 @@ import {
   listProfiles,
   makeSegment,
   sendFeedback,
+  summarizeImage,
+  transcribeAudio,
   updateLongTermMemory,
   wakeProfile,
   type ProfileSummary,
@@ -203,6 +207,34 @@ export function App() {
       setProfile(result.profile);
       setLearningNote(undefined);
       setTab("home");
+    });
+  }
+
+  async function uploadImageSummary(file?: File) {
+    if (!file) return;
+    await run(async () => {
+      const dataUrl = await readFileAsDataUrl(file);
+      const result = await summarizeImage(dataUrl, file.name || "上传截图");
+      setSegments((current) => [
+        ...current,
+        makeSegment(`image-${Date.now()}`, "image_summary", file.name || `截图 ${current.length + 1}`, result.summary)
+      ]);
+      setDemoNote(result.semanticSource === "llm" ? "视觉语义脑已经把截图压成一段 image_summary。" : "当前没有真实视觉模型，已加入一段可手动修改的图片摘要。");
+      setTab("curious");
+    });
+  }
+
+  async function uploadAudioTranscript(file?: File) {
+    if (!file) return;
+    await run(async () => {
+      const dataUrl = await readFileAsDataUrl(file);
+      const result = await transcribeAudio(dataUrl, file.name || "上传录音");
+      setSegments((current) => [
+        ...current,
+        makeSegment(`audio-${Date.now()}`, "audio_transcript", file.name || `录音 ${current.length + 1}`, result.transcript)
+      ]);
+      setDemoNote(result.semanticSource === "llm" ? "音频语义脑已经把录音转成一段 audio_transcript。" : "当前没有真实音频模型，已加入一段可手动修改的录音转写。");
+      setTab("curious");
     });
   }
 
@@ -462,6 +494,8 @@ export function App() {
           busy={busy}
           listening={listening}
           listeningElapsed={listeningElapsed}
+          onUploadImage={uploadImageSummary}
+          onUploadAudio={uploadAudioTranscript}
           onStartListening={startListening}
           onStopListening={stopListening}
         />
@@ -595,6 +629,8 @@ function CuriousView(props: {
   busy: boolean;
   listening: boolean;
   listeningElapsed: number;
+  onUploadImage: (file?: File) => void;
+  onUploadAudio: (file?: File) => void;
   onStartListening: () => void;
   onStopListening: () => void;
 }) {
@@ -625,6 +661,32 @@ function CuriousView(props: {
             {props.listening ? `停止 ${formatListeningTime(props.listeningElapsed)}` : "开始听 3 分钟"}
           </button>
         </section>
+        <label className="upload-button">
+          <ImagePlus size={18} />
+          上传截图生成摘要
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={(event) => {
+              props.onUploadImage(event.currentTarget.files?.[0]);
+              event.currentTarget.value = "";
+            }}
+            disabled={props.busy}
+          />
+        </label>
+        <label className="upload-button">
+          <Mic size={18} />
+          上传录音转写
+          <input
+            type="file"
+            accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg"
+            onChange={(event) => {
+              props.onUploadAudio(event.currentTarget.files?.[0]);
+              event.currentTarget.value = "";
+            }}
+            disabled={props.busy}
+          />
+        </label>
         {props.segments.map((segment, index) => (
           <div className="segment-editor" key={segment.id}>
             <div className="segment-row">
@@ -1089,6 +1151,15 @@ function policyLabel(key: string) {
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "发生未知错误";
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result ?? ""));
+    reader.onerror = () => reject(new Error("文件读取失败"));
+    reader.readAsDataURL(file);
+  });
 }
 
 function getSpeechRecognition(): SpeechRecognitionConstructor | undefined {

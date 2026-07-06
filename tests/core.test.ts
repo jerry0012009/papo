@@ -145,6 +145,8 @@ describe("creature core", () => {
       available: true,
       usesRealModel: true,
       generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
       generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
         const id = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "";
         return {

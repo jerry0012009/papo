@@ -75,4 +75,27 @@ describe("api", () => {
         expect(response.body.emergence.whyNow ?? response.body.emergence.text).toBeTruthy();
       });
   });
+
+  it("creates fallback visual and audio sensing material", async () => {
+    const app = createApp({ store: new MemoryProfileStore(), provider: createModelProvider({}) });
+    const base64 = "A".repeat(80);
+
+    await request(app)
+      .post("/api/image-summary")
+      .send({ dataUrl: `data:image/png;base64,${base64}`, label: "截图" })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.semanticSource).toBe("fallback");
+        expect(response.body.summary).toContain("图片");
+      });
+
+    await request(app)
+      .post("/api/audio-transcript")
+      .send({ dataUrl: `data:audio/webm;base64,${base64}`, label: "录音" })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.semanticSource).toBe("fallback");
+        expect(response.body.transcript).toContain("音频");
+      });
+  });
 });

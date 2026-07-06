@@ -107,6 +107,8 @@ describe("creature brain v0.2", () => {
       available: true,
       usesRealModel: true,
       generate: async () => "not-json",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
       generateJson: async <T,>() => ({ nope: true }) as T
     };
     const profile = createCreatureProfile();
@@ -127,6 +129,8 @@ describe("creature brain v0.2", () => {
       available: true,
       usesRealModel: true,
       generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
       generateJson: async <T,>(prompt: string) => {
         const ids = [...prompt.matchAll(/"id":"(attention_[^"]+)"/g)].map((match) => match[1]);
         return {
@@ -167,6 +171,8 @@ describe("creature brain v0.2", () => {
       available: true,
       usesRealModel: true,
       generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
       generateJson: async <T,>() =>
         ({
           learningNote: "我学到：妈妈复查这件事你希望我多停一下，之后遇到相似担心时，我会先陪你把它放稳。",
@@ -196,6 +202,8 @@ describe("creature brain v0.2", () => {
       available: true,
       usesRealModel: true,
       generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
       generateJson: async <T,>() =>
         ({
           message: "我刚才自己又想起妈妈复查这件事。它现在冒出来，是因为我的好奇心还在轻轻推我：下次你给我新的片段时，我会先找哪些东西能帮你提前准备。",

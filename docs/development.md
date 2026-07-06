@@ -31,14 +31,14 @@ Stage 1 must deliver:
 - Active emergence: "what is it thinking now?"
 - Provider layer: Mimo, OpenRouter, generic OpenAI-compatible API, fallback.
 - Provider config from environment or local config file.
+- Separate provider config for text, vision, and audio model ids.
 - Fallback mode that can demonstrate the full loop without API keys.
 - Mobile-first UI.
 - Basic tests for the life loop.
 
 Deferred:
 
-- Real image understanding.
-- Real audio transcription.
+- Continuous MediaRecorder chunk upload for Curious Mode.
 - Vector database / Mem0 integration.
 - PWA and native Android.
 - Background sensing and notifications.
@@ -63,6 +63,7 @@ Rules own:
 LLM owns:
 
 - Rich semantic interpretation.
+- Visual/audio sensing adapters that compress raw screenshots or recordings into editable life-context segments.
 - Better explanation of why something drew attention.
 - Possible user intent.
 - More natural creature response.
@@ -71,6 +72,7 @@ LLM owns:
 
 Guardrails always run after LLM suggestions. LLM output cannot directly mutate state values, delete memory, bypass privacy, or write cross-user data.
 LLM narration cannot change state, policy, action, memory ids, or persistence. Emergence narration is accepted only when it stays anchored to a real memory already selected by rules.
+Visual and audio models are treated as `sense` adapters only: they may create `image_summary` and `audio_transcript` text, but they do not choose memories, actions, or state changes. Those generated segments remain user-editable before entering Curious Mode.
 
 Harness stages:
 
@@ -112,6 +114,13 @@ ClawRouter:
 
 - Keep provider selection separate from product logic.
 - Prefer OpenAI-compatible boundaries for easy routing.
+
+OpenRouter multimodal routing:
+
+- Keep text, vision, and audio model ids separately configurable.
+- Default text model remains low-cost and stable for the semantic brain.
+- Default vision/audio model ids prefer a Flash-class multimodal model for cost-effective sensing; deployments can override them per account capability.
+- Provider failures return editable fallback segments so the life loop stays demonstrable without raw model success.
 
 ## Code Map
 
@@ -167,10 +176,12 @@ Done:
   - Demo Mode includes Curious stream loading, A/B feedback conditioning, and active emergence.
   - Demo Mode now has a guided 4-minute run that creates a fresh main creature, runs the 8-part Curious script, applies remember/continue feedback, creates A/B conditioned creatures, and surfaces a real emergence summary without exposing a public reset endpoint.
   - Experimental voice companionship in Curious Mode: browser speech recognition can listen up to 3 minutes and split transcripts every 30 seconds into `audio_transcript` segments.
+  - OpenRouter/OpenAI-compatible visual sensing endpoint: uploaded screenshots are summarized into editable `image_summary` segments.
+  - OpenRouter/OpenAI-compatible audio sensing endpoint: uploaded recordings are transcribed into editable `audio_transcript` segments.
 
 Verified:
 
-- `npm test`: 27 tests passing across core, v0.2 brain behavior, Goal 3 experience, API, and UI.
+- `npm test`: 28 tests passing across core, v0.2 brain behavior, Goal 3 experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -199,8 +210,8 @@ Verified:
 
 Next:
 
-1. Replace browser-only speech recognition with a robust transcription backend for audio chunks where needed.
-2. Add real image upload with model-created image summaries.
+1. Add a Papo speech/chat timeline so user-facing creature utterances are visible as notifications and history, not only as analysis panels.
+2. Wire continuous MediaRecorder chunks to `/api/audio-transcript` for 3-minute Curious Mode sessions when browser speech recognition is unavailable or low quality.
 3. Add stronger browser visual QA with mobile screenshots.
 
 Demo material rule:

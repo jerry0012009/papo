@@ -9,6 +9,8 @@ export interface ModelProvider {
   usesRealModel: boolean;
   generate(prompt: string): Promise<string>;
   generateJson<T>(prompt: string): Promise<T | undefined>;
+  summarizeImage(dataUrl: string, prompt: string): Promise<string>;
+  transcribeAudio(dataUrl: string, prompt: string): Promise<string>;
 }
 
 export function createModelProvider(env: NodeJS.ProcessEnv = process.env): ModelProvider {
@@ -21,7 +23,9 @@ export function createModelProvider(env: NodeJS.ProcessEnv = process.env): Model
       name: "Local Mimo",
       endpoint: merged.MIMO_ENDPOINT ?? "http://localhost:11434/v1/chat/completions",
       apiKey: merged.MIMO_API_KEY,
-      model: merged.MIMO_MODEL ?? "mimo"
+      model: merged.MIMO_MODEL ?? "mimo",
+      visionModel: merged.MIMO_VISION_MODEL ?? merged.MIMO_MODEL ?? "mimo",
+      audioModel: merged.MIMO_AUDIO_MODEL ?? merged.MIMO_MODEL ?? "mimo"
     });
   }
   if (merged.OPENROUTER_API_KEY) {
@@ -30,7 +34,9 @@ export function createModelProvider(env: NodeJS.ProcessEnv = process.env): Model
       name: "OpenRouter",
       endpoint: "https://openrouter.ai/api/v1/chat/completions",
       apiKey: merged.OPENROUTER_API_KEY,
-      model: merged.OPENROUTER_MODEL ?? "openai/gpt-4.1-mini"
+      model: merged.OPENROUTER_MODEL ?? "openai/gpt-4.1-mini",
+      visionModel: merged.OPENROUTER_VISION_MODEL ?? "google/gemini-2.0-flash-001",
+      audioModel: merged.OPENROUTER_AUDIO_MODEL ?? merged.OPENROUTER_VISION_MODEL ?? "google/gemini-2.0-flash-001"
     });
   }
   if (merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY) {
@@ -41,7 +47,9 @@ export function createModelProvider(env: NodeJS.ProcessEnv = process.env): Model
         ? `${merged.OPENAI_BASE_URL.replace(/\/$/, "")}/chat/completions`
         : "https://api.openai.com/v1/chat/completions",
       apiKey: merged.OPENAI_API_KEY ?? merged.GENERIC_MODEL_API_KEY,
-      model: merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-4.1-mini"
+      model: merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-4.1-mini",
+      visionModel: merged.OPENAI_VISION_MODEL ?? merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-4.1-mini",
+      audioModel: merged.OPENAI_AUDIO_MODEL ?? merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-4.1-mini"
     });
   }
   return staticProvider("fallback", "Fallback demo brain", true);
@@ -78,6 +86,12 @@ function staticProvider(kind: ProviderKind, name: string, available: boolean): M
     },
     async generateJson() {
       return undefined;
+    },
+    async summarizeImage() {
+      return "图片已上传，但当前 fallback brain 不能真实看图。请把截图里你希望我注意的地方补成一句摘要。";
+    },
+    async transcribeAudio() {
+      return "音频已上传，但当前 fallback brain 不能真实转写。请把录音里你希望我注意的内容补成一句话。";
     }
   };
 }
@@ -88,6 +102,8 @@ function openAiCompatibleProvider(input: {
   endpoint: string;
   apiKey?: string;
   model: string;
+  visionModel?: string;
+  audioModel?: string;
 }): ModelProvider {
   return {
     kind: input.kind,
@@ -101,6 +117,14 @@ function openAiCompatibleProvider(input: {
     async generateJson<T>(prompt: string) {
       const payload = await callChatCompletions(input, prompt, true);
       return parseJson<T>(payload.content);
+    },
+    async summarizeImage(dataUrl: string, prompt: string) {
+      const payload = await callVisionSummary(input, dataUrl, prompt);
+      return payload.content;
+    },
+    async transcribeAudio(dataUrl: string, prompt: string) {
+      const payload = await callAudioTranscript(input, dataUrl, prompt);
+      return payload.content;
     }
   };
 }
@@ -144,6 +168,116 @@ async function callChatCompletions(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function callVisionSummary(
+  input: { endpoint: string; apiKey?: string; model: string; visionModel?: string; kind: ProviderKind },
+  dataUrl: string,
+  prompt: string
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25_000);
+  try {
+    const response = await fetch(input.endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {}),
+        ...(input.kind === "openrouter" ? { "HTTP-Referer": "http://localhost:5173", "X-Title": "Papo Demo" } : {})
+      },
+      body: JSON.stringify({
+        model: input.visionModel ?? input.model,
+        temperature: 0.2,
+        messages: [
+          {
+            role: "system",
+            content:
+              "你是 Papo 的视觉摘要器。只描述图片里和用户生活片段有关的可见事实，不要决定状态、记忆或行动。不要输出开发过程或产品说明。"
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: dataUrl } }
+            ]
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Vision provider failed: ${response.status}`);
+    }
+    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    return { content: data.choices?.[0]?.message?.content?.trim() ?? "" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function callAudioTranscript(
+  input: { endpoint: string; apiKey?: string; model: string; audioModel?: string; kind: ProviderKind },
+  dataUrl: string,
+  prompt: string
+) {
+  const audio = parseAudioDataUrl(dataUrl);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  try {
+    const response = await fetch(input.endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {}),
+        ...(input.kind === "openrouter" ? { "HTTP-Referer": "http://localhost:5173", "X-Title": "Papo Demo" } : {})
+      },
+      body: JSON.stringify({
+        model: input.audioModel ?? input.model,
+        temperature: 0.1,
+        messages: [
+          {
+            role: "system",
+            content:
+              "你是 Papo 的音频转写器。只转写和摘要用户生活片段中的可听内容，不要决定状态、记忆或行动。不要输出开发过程或产品说明。"
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "input_audio", input_audio: { data: audio.data, format: audio.format } }
+            ]
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Audio provider failed: ${response.status}`);
+    }
+    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    return { content: data.choices?.[0]?.message?.content?.trim() ?? "" };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function parseAudioDataUrl(dataUrl: string) {
+  const match = dataUrl.match(/^data:(audio\/[^;]+);base64,([A-Za-z0-9+/=]+)$/);
+  if (!match) throw new Error("Invalid audio data URL");
+  const mime = match[1].toLowerCase();
+  const format = audioFormatFromMime(mime);
+  return { data: match[2], format };
+}
+
+function audioFormatFromMime(mime: string) {
+  if (mime.includes("mpeg") || mime.includes("mp3")) return "mp3";
+  if (mime.includes("wav")) return "wav";
+  if (mime.includes("webm")) return "webm";
+  if (mime.includes("ogg")) return "ogg";
+  if (mime.includes("m4a") || mime.includes("mp4")) return "mp4";
+  return "webm";
 }
 
 function parseJson<T>(text: string): T | undefined {

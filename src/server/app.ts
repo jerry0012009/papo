@@ -34,6 +34,20 @@ const curiousSchema = z.object({
     .max(12)
 });
 
+const imageSummarySchema = z.object({
+  dataUrl: z.string().min(64).max(6_000_000).regex(/^data:image\/(png|jpe?g|webp);base64,/),
+  label: z.string().min(1).max(80).optional()
+});
+
+const audioTranscriptSchema = z.object({
+  dataUrl: z
+    .string()
+    .min(64)
+    .max(10_000_000)
+    .regex(/^data:audio\/(webm|wav|mpeg|mp3|mp4|m4a|x-m4a|ogg);base64,/),
+  label: z.string().min(1).max(80).optional()
+});
+
 const feedbackSchema = z.object({
   kind: z.enum(["understood", "continue", "not_now", "remember", "forget"]),
   targetId: z.string().optional()
@@ -49,7 +63,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
   const app = express();
 
   app.use(cors());
-  app.use(express.json({ limit: "2mb" }));
+  app.use(express.json({ limit: "12mb" }));
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, provider: provider.kind });
@@ -57,6 +71,44 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
 
   app.get("/api/provider", (_req, res) => {
     res.json({ kind: provider.kind, name: provider.name, available: provider.available, usesRealModel: provider.usesRealModel });
+  });
+
+  app.post("/api/image-summary", async (req, res, next) => {
+    try {
+      const body = imageSummarySchema.parse(req.body);
+      const prompt = `请用中文把这张图片压缩成一段 80 字以内的生活场景摘要，给 Curious Mode 当 image_summary。标签：${body.label ?? "截图"}`;
+      try {
+        const summary = (await provider.summarizeImage(body.dataUrl, prompt)).slice(0, 600);
+        res.json({ summary, provider: provider.kind, semanticSource: provider.usesRealModel ? "llm" : "fallback" });
+      } catch (error) {
+        res.json({
+          summary: `图片已上传，但视觉模型暂时没有返回摘要。请手动补充这张截图里值得注意的生活信息。${error instanceof Error ? ` (${error.message})` : ""}`,
+          provider: provider.kind,
+          semanticSource: "fallback"
+        });
+      }
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/audio-transcript", async (req, res, next) => {
+    try {
+      const body = audioTranscriptSchema.parse(req.body);
+      const prompt = `请把这段音频转写成中文。只保留用户生活片段里值得 Papo 注意的内容，最多 400 字，给 Curious Mode 当 audio_transcript。标签：${body.label ?? "录音"}`;
+      try {
+        const transcript = (await provider.transcribeAudio(body.dataUrl, prompt)).slice(0, 1200);
+        res.json({ transcript, provider: provider.kind, semanticSource: provider.usesRealModel ? "llm" : "fallback" });
+      } catch (error) {
+        res.json({
+          transcript: `音频已上传，但音频模型暂时没有返回转写。请手动补充这段录音里值得注意的生活信息。${error instanceof Error ? ` (${error.message})` : ""}`,
+          provider: provider.kind,
+          semanticSource: "fallback"
+        });
+      }
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get("/api/profiles", async (_req, res, next) => {

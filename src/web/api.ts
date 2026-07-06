@@ -43,6 +43,22 @@ export async function wakeProfile(userId: string): Promise<{ profile: CreaturePr
   return request<{ profile: CreatureProfile; wake: WakeEvent }>(`/api/profiles/${userId}/wake`, { method: "POST" });
 }
 
+export async function summarizeImage(dataUrl: string, label: string): Promise<{ summary: string; provider: string; semanticSource: "llm" | "fallback" }> {
+  return request<{ summary: string; provider: string; semanticSource: "llm" | "fallback" }>("/api/image-summary", {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({ dataUrl, label })
+  });
+}
+
+export async function transcribeAudio(dataUrl: string, label: string): Promise<{ transcript: string; provider: string; semanticSource: "llm" | "fallback" }> {
+  return request<{ transcript: string; provider: string; semanticSource: "llm" | "fallback" }>("/api/audio-transcript", {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({ dataUrl, label })
+  });
+}
+
 export async function buttonCapture(userId: string, text: string): Promise<CaptureResult> {
   return request(`/api/profiles/${userId}/button`, {
     method: "POST",
