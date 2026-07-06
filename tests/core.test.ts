@@ -48,7 +48,10 @@ describe("creature core", () => {
         id: "s2",
         kind: "text",
         label: "核心",
-        content: "我担心投资人觉得它只是记忆库，所以要展示注意、反馈和小脑袋。"
+        content: "我担心投资人觉得它只是记忆库，所以要展示注意、反馈和小脑袋。",
+        batchId: "batch-core",
+        observedAt: "2026-07-06T10:00:30.000Z",
+        location: { latitude: 52.52, longitude: 13.405, accuracy: 20, label: "演示现场" }
       },
       { id: "s3", kind: "text", label: "未来", content: "下次演示要生成提醒草稿和复盘。" }
     ]);
@@ -56,6 +59,9 @@ describe("creature core", () => {
     expect(result.events.length).toBeGreaterThanOrEqual(1);
     expect(result.events.length).toBeLessThanOrEqual(3);
     expect(result.events[0].triggerLabel).toBe("核心");
+    expect(result.events[0].triggerBatchId).toBe("batch-core");
+    expect(result.episodes[0].sourceBatchId).toBe("batch-core");
+    expect(result.episodes[0].sourceLocation?.label).toBe("演示现场");
   });
 
   it("feedback changes state and keeps values clamped", () => {

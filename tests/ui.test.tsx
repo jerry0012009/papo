@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/web/App";
@@ -58,7 +58,10 @@ describe("App", () => {
     expect(screen.getByText("我醒来时自己又想到妈妈复查这件事。")).toBeInTheDocument();
     expect(screen.getByText("Papo 新说")).toBeInTheDocument();
     expect(screen.getByText("桌面提醒")).toBeInTheDocument();
-    expect(screen.queryByText("日历照片：妈妈周五复查，需要提前准备病历。")).not.toBeInTheDocument();
+    const papoNotice = screen.getByText("Papo 新说").closest("section");
+    expect(papoNotice).toBeTruthy();
+    expect(within(papoNotice as HTMLElement).queryByText("日历照片：妈妈周五复查，需要提前准备病历。")).not.toBeInTheDocument();
+    expect(screen.getByText("来自30秒共同片段")).toBeInTheDocument();
     expect(screen.getByText("单次输入")).toBeInTheDocument();
     expect(screen.getByText("陪我一会儿")).toBeInTheDocument();
 
@@ -89,6 +92,8 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "记忆" }));
     expect(screen.getByText("长期记忆")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("搜索旧记忆")).toBeInTheDocument();
+    expect(screen.getAllByText("来自30秒共同片段").length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/批次 manual-1/).length).toBeGreaterThan(0);
 
     await userEvent.click(screen.getByRole("button", { name: "脑态" }));
     expect(screen.getByText("最近变化")).toBeInTheDocument();
@@ -120,7 +125,37 @@ function profileFixture() {
       confidence: 48,
       mood: "curious"
     },
-    episodes: [],
+    episodes: [
+      {
+        id: "episode1",
+        createdAt: new Date().toISOString(),
+        source: "curious_stream",
+        sourceSegmentId: "segment-photo",
+        sourceBatchId: "manual-1",
+        sourceObservedAt: "2026-07-06T10:00:00.000Z",
+        sourceLocation: { latitude: 52.52, longitude: 13.405, accuracy: 30, label: "上传时的位置" },
+        inputSummary: "日历照片：妈妈周五复查，需要提前准备病历。",
+        noticed: "我注意到妈妈复查需要提前准备病历。",
+        possibleIntent: "你可能希望我帮你把重要家事提前放进注意里。",
+        importanceReason: "这段有未来价值，也带着一点担心。",
+        relatedMemoryIds: ["m2"],
+        stateSnapshot: {
+          curiosity: 66,
+          attachment: 42,
+          energy: 72,
+          arousal: 45,
+          safety: 58,
+          confidence: 48,
+          mood: "curious"
+        },
+        creatureResponse: "我会先把它当作一段共同经历记下来。",
+        feedback: [],
+        promotedToLongTerm: false,
+        memoryCandidateIds: [],
+        weight: 78,
+        tags: ["妈妈复查", "病历"]
+      }
+    ],
     longTermMemories: [
       {
         id: "m1",

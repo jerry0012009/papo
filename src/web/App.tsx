@@ -806,7 +806,12 @@ function HomeView(props: {
       ) : null}
 
       {props.selectedEpisode ? (
-        <EpisodeCard episode={props.selectedEpisode} onFeedback={props.onFeedback} compact={false} />
+        <EpisodeCard
+          episode={props.selectedEpisode}
+          sourceMessages={episodeSourceMessages(props.profile, props.selectedEpisode)}
+          onFeedback={props.onFeedback}
+          compact={false}
+        />
       ) : null}
     </section>
   );
@@ -1110,7 +1115,13 @@ function MemoryView(props: {
       <div className="panel">
         <PanelTitle icon={Eye} title="情景记忆" />
         {props.profile.episodes.map((episode) => (
-          <EpisodeCard key={episode.id} episode={episode} onFeedback={props.onFeedback} compact />
+          <EpisodeCard
+            key={episode.id}
+            episode={episode}
+            sourceMessages={episodeSourceMessages(props.profile, episode)}
+            onFeedback={props.onFeedback}
+            compact
+          />
         ))}
       </div>
     </section>
@@ -1319,6 +1330,7 @@ function AttentionCard({ event }: { event: AttentionEvent }) {
 
 function EpisodeCard(props: {
   episode: EpisodeMemory;
+  sourceMessages?: ConversationMessage[];
   compact: boolean;
   onFeedback: (kind: FeedbackKind, targetId?: string) => void;
 }) {
@@ -1340,6 +1352,7 @@ function EpisodeCard(props: {
           <p><strong>要不要长期记：</strong>{props.episode.creatureExperience?.saveFeeling ?? "先作为情景记忆，等你的反馈决定。"}</p>
         </div>
       ) : null}
+      <EpisodeSourceMoment episode={props.episode} messages={props.sourceMessages ?? []} compact={props.compact} />
       {props.episode.decisionTrace?.length && !props.compact ? (
         <details className="brain-details">
           <summary>开发者 trace</summary>
@@ -1356,6 +1369,46 @@ function EpisodeCard(props: {
       </div>
     </article>
   );
+}
+
+function EpisodeSourceMoment({ episode, messages, compact }: { episode: EpisodeMemory; messages: ConversationMessage[]; compact: boolean }) {
+  if (!messages.length && !episode.sourceBatchId && !episode.sourceObservedAt && !episode.sourceLocation) return null;
+  const title = episode.sourceBatchId ? "来自30秒共同片段" : "来自当时的输入";
+  return (
+    <div className={`episode-source ${compact ? "compact" : ""}`}>
+      <strong>{title}</strong>
+      <small>
+        {[
+          episode.sourceBatchId ? `批次 ${episode.sourceBatchId}` : "",
+          episode.sourceObservedAt ? `观察 ${new Date(episode.sourceObservedAt).toLocaleString("zh-CN")}` : "",
+          episode.sourceLocation ? locationText(episode.sourceLocation) : ""
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      </small>
+      {!compact && messages.length ? (
+        <div className="episode-source-list">
+          {messages.map((message) => (
+            <p key={message.id}>
+              <span>{messageTitle(message)}</span>
+              {message.text}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function episodeSourceMessages(profile: CreatureProfile, episode: EpisodeMemory) {
+  const messages = profile.conversation ?? [];
+  const matched = messages.filter((message) => {
+    if (message.role === "papo") return false;
+    if (episode.sourceBatchId && message.batchId === episode.sourceBatchId) return true;
+    if (episode.sourceSegmentId && message.sourceId === episode.sourceSegmentId) return true;
+    return false;
+  });
+  return matched.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 }
 
 function episodeStateText(episode: EpisodeMemory) {

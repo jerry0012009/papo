@@ -57,6 +57,8 @@ describe("api", () => {
       .expect(200)
       .expect((response) => {
         expect(response.body.events.length).toBeGreaterThan(0);
+        expect(response.body.episodes[0].sourceBatchId).toBe("manual-1");
+        expect(response.body.episodes[0].sourceObservedAt).toBeTruthy();
         expect(response.body.profile.conversation[0].channel).toBe("curious");
         expect(response.body.profile.conversation.some((message: { role: string; modality?: string; batchId?: string }) => message.role === "world" && message.modality === "image_summary" && message.batchId === "manual-1")).toBe(true);
       });

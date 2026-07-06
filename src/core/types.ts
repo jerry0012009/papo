@@ -133,6 +133,9 @@ export interface AttentionEvent {
   id: string;
   source: AttentionSource;
   triggerSegmentId?: string;
+  triggerBatchId?: string;
+  triggerObservedAt?: string;
+  triggerLocation?: StreamSegment["location"];
   triggerLabel: string;
   triggerContent: string;
   noticed: string;
@@ -155,6 +158,10 @@ export interface EpisodeMemory {
   id: string;
   createdAt: string;
   source: AttentionSource;
+  sourceSegmentId?: string;
+  sourceBatchId?: string;
+  sourceObservedAt?: string;
+  sourceLocation?: StreamSegment["location"];
   inputSummary: string;
   noticed: string;
   possibleIntent: string;

@@ -796,6 +796,41 @@ meter {
   line-height: 1.45;
 }
 
+.episode-source {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(233, 243, 235, 0.7);
+  border: 1px solid rgba(79, 139, 118, 0.14);
+}
+
+.episode-source.compact {
+  background: rgba(255, 250, 240, 0.7);
+}
+
+.episode-source small,
+.episode-source-list span {
+  color: #69756c;
+  font-size: 0.78rem;
+}
+
+.episode-source-list {
+  display: grid;
+  gap: 6px;
+}
+
+.episode-source-list p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.episode-source-list span {
+  display: block;
+  margin-bottom: 2px;
+}
+
 .feedback-row {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }

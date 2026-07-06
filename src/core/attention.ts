@@ -95,6 +95,9 @@ export function handleCuriousStream(
     buildAttentionEvent(profile, {
       source: "curious_stream",
       triggerSegmentId: segment.id,
+      triggerBatchId: segment.batchId,
+      triggerObservedAt: segment.observedAt,
+      triggerLocation: segment.location,
       triggerLabel: segment.label,
       triggerContent: segment.content,
       reasonPrefix: explainScore(score),
@@ -202,6 +205,9 @@ function buildAttentionEvent(
   input: {
     source: AttentionEvent["source"];
     triggerSegmentId?: string;
+    triggerBatchId?: string;
+    triggerObservedAt?: string;
+    triggerLocation?: StreamSegment["location"];
     triggerLabel: string;
     triggerContent: string;
     reasonPrefix: string;
@@ -230,6 +236,9 @@ function buildAttentionEvent(
     id: makeId("attention"),
     source: input.source,
     triggerSegmentId: input.triggerSegmentId,
+    triggerBatchId: input.triggerBatchId,
+    triggerObservedAt: input.triggerObservedAt,
+    triggerLocation: input.triggerLocation,
     triggerLabel: input.triggerLabel,
     triggerContent: input.triggerContent,
     noticed: buildNoticed(input.triggerContent, related.length),
