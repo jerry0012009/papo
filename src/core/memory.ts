@@ -161,7 +161,7 @@ function inferIntent(text: string): string {
   if (/提醒|待办|deadline|todo/i.test(text)) return "用户可能希望把这件事变成之后可回来的提醒。";
   if (/复盘|总结|review|why/i.test(text)) return "用户可能正在整理一次经历，希望我帮它形成可复盘的片段。";
   if (/不像工具|活物|小脑袋|companion|生命/.test(text)) return "用户可能在校准这个小动物应该长成什么样。";
-  return "用户主动把这个片段交给我，可能希望我认真理解并判断是否值得记住。";
+  return "你把这一小段递给我，我先把它当成我们刚一起经过的情景来听。";
 }
 
 function classifyLongTermKind(episode: EpisodeMemory): LongTermMemory["kind"] {

@@ -278,11 +278,35 @@ function composeCreatureResponse(profile: CreatureProfile, event: AttentionEvent
       : "我会把这次你叫我说话的小片段先记成一段情景记忆。";
     return `我在，听见了。${memoryLine}`;
   }
-  const confidence = profile.state.confidence > 62 ? "我比较确定地感觉到" : "我先试着理解";
+  const posture = profile.state.confidence > 62 ? "我比较稳地接住了这一小段" : "我先把这一小段轻轻抱住";
   const memoryLine = event.relatedMemoryIds.length
-    ? "我想起了之前的一件事，所以会把旧记忆放进当前工作区。"
-    : "我还没有强烈联想到旧记忆，所以先把它作为新的情景片段。";
-  return `${confidence}：${event.noticed} ${memoryLine} ${event.actionDecision.reason}`;
+    ? "这一小段碰到我以前抱着的一点记忆，我会把旧片段和现在一起听。"
+    : "这像一段新的共同经历，我会先把它放进情景里。";
+  return `${posture}：${trimSentence(event.noticed)}。${memoryLine}${actionResponseLine(event.actionDecision.action)}`;
+}
+
+function actionResponseLine(action: AttentionEvent["actionDecision"]["action"]): string {
+  switch (action) {
+    case "ask":
+      return "我想轻轻问一句，确认我有没有听对。";
+    case "save_episode":
+      return "我会先把它写成我们刚一起经历过的一小段。";
+    case "save_long_term":
+      return "我感觉它可能值得长久留下，但会等你的意思更清楚。";
+    case "recall":
+      return "我想把旧片段拉近一点，和现在这件事一起看。";
+    case "review":
+      return "我想陪你把它整理成一小段复盘。";
+    case "quiet":
+      return "我会先安静一点，只把重点抱住。";
+    case "draft_reminder":
+      return "我会先把它当成一张以后可能会回来的提醒草稿。";
+    case "draft_question_list":
+      return "我会先把里面没想完的地方拆成几个小问题。";
+    case "observe":
+    default:
+      return "我先不急着打扰你，只继续看这一小段会不会变重要。";
+  }
 }
 
 function composeStreamSummary(events: AttentionEvent[], session: CuriousSessionAudit): string {
@@ -306,9 +330,13 @@ function buildNoticed(text: string, relatedCount: number): string {
     return `我注意到这段里有情绪强度，不应该只把它当作普通信息：${summarizeText(text, 88)}`;
   }
   if (relatedCount > 0) {
-    return `我注意到它和过去的记忆相连：${summarizeText(text, 88)}`;
+    return `我注意到这一小段和过去的记忆相连：${summarizeText(text, 88)}`;
   }
-  return `我注意到这个片段可能是你想让我认真理解的当前事件：${summarizeText(text, 88)}`;
+  return `我接住你刚递来的这一小段：${summarizeText(text, 88)}`;
+}
+
+function trimSentence(text: string) {
+  return text.trim().replace(/[。！？.!?]+$/, "");
 }
 
 function contentWithObservationContext(segment: StreamSegment) {

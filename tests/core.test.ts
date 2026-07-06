@@ -38,6 +38,20 @@ describe("creature core", () => {
     expect(result.events[0].source).toBe("button");
     expect(result.events[0].attentionStrength).toBeGreaterThan(50);
     expect(profile.episodes[0].noticed).toContain("小动物");
+    expect(result.response).not.toContain("我先试着理解");
+    expect(result.response).not.toContain("当前工作区");
+  });
+
+  it("rule fallback responds to ordinary shared moments without analysis-template wording", () => {
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "刚刚医生确认复查时间改到周六上午。");
+
+    expect(result.events[0].noticed).toContain("我接住你刚递来的这一小段");
+    expect(result.response).toContain("这像一段新的共同经历");
+    expect(result.episodes[0].possibleIntent).toContain("我们刚一起经过的情景");
+    expect(result.response).not.toContain("我先试着理解");
+    expect(result.response).not.toContain("我注意到这个片段可能");
+    expect(result.episodes[0].possibleIntent).not.toContain("认真理解并判断");
   });
 
   it("fallback repair can respond to a direct call when the semantic model is unavailable", async () => {
@@ -213,6 +227,7 @@ describe("creature core", () => {
     expect(result.events[0].semanticSource).toBe("rules");
     expect(result.harnessTrace?.join(" ")).toContain("fallback");
     expect(profile.semanticBrainHistory[0].status).toBe("skipped");
+    expect(result.response).not.toContain("我先试着理解");
   });
 
   it("generic provider sends audio sensing through the transcription endpoint", async () => {

@@ -70,7 +70,7 @@ describe("App", () => {
           profile: profileWithChatInput(),
           events: [],
           episodes: [],
-          response: "我先试着理解：你刚才说的这件事会和这一小段放在一起。",
+          response: "我接住了这件刚发生的小事，会先和这一小段放在一起。",
           memoryCandidates: [],
           harnessTrace: ["sense: button", "semantic: fallback/rules only"],
           provider: "fallback"
@@ -440,7 +440,7 @@ function profileWithChatInput() {
         at: new Date().toISOString(),
         role: "papo",
         channel: "button",
-        text: "我先试着理解：你刚才说的这件事会和这一小段放在一起。",
+        text: "我接住了这件刚发生的小事，会先和这一小段放在一起。",
         sourceId: "episode-chat",
         relatedMemoryIds: []
       },

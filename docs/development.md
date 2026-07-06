@@ -152,6 +152,7 @@ OpenRouter multimodal routing:
 - Model call timeouts are configurable with `PAPO_MODEL_TIMEOUT_MS`, `PAPO_VISION_TIMEOUT_MS`, and `PAPO_AUDIO_TIMEOUT_MS`; default semantic/vision/audio limits are 45 seconds so real Curious Mode prompts do not silently degrade to fallback after a short wait.
 - Provider failures return editable fallback segments so the life loop stays demonstrable without raw model success.
 Fallback provider is a degradation path only. It must be visible in health/provider diagnostics and should never be treated as proof that Papo truly understood the user.
+Even in rule/fallback mode, Papo's user-facing response should describe what it is doing next with the shared moment. Avoid analysis-template phrasing such as "我先试着理解", "这个片段可能是...", or "放进当前工作区" on user surfaces; those belong in diagnostics, not creature speech.
 
 ## Code Map
 
@@ -261,6 +262,7 @@ Done:
   - Feedback controls and feedback impact now read as Papo being raised in first person: buttons use "再想一会儿/先安静点/帮我记住", typed or voice feedback is framed as something Papo hears, and visible impact lines say "我会..." instead of third-person product summaries.
   - Home presence, body signals, active emergence labels, and dialogue feedback context now use first-person creature voice instead of observer phrases such as "它已经接住" or "你在教它".
   - Curious result, Episode detail, memory feeling, and Demo entry copy now avoid report-style observer phrases such as "Papo 放过了", "它刚才怎么理解", and "它以后可能".
+  - Rule/fallback creature responses now use action-oriented shared-moment language instead of analysis-template wording such as "我先试着理解" or "这个片段可能是".
 
 Verified:
 
@@ -324,6 +326,7 @@ Verified:
 - UI smoke protects feedback surfaces from third-person product-summary language after the user teaches Papo.
 - UI smoke protects Home and dialogue context from third-person observer phrases when Papo should be speaking from inside the experience.
 - UI smoke protects Curious ignored-result and memory feeling copy from report-style observer phrases.
+- Core tests protect rule/fallback creature responses from analysis-template wording.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`
