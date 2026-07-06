@@ -69,11 +69,15 @@ describe("creature core", () => {
     handleButtonCapture(profile, "请继续想这个小动物为什么会注意。");
     const before = profile.state.curiosity;
 
-    applyFeedback(profile, { kind: "continue", targetId: profile.episodes[0].id });
+    const feedback = applyFeedback(profile, { kind: "continue", targetId: profile.episodes[0].id, content: "这块请多想一点，不要只轻轻带过。" });
 
     expect(profile.state.curiosity).toBeGreaterThan(before);
     expect(inRange(profile.state)).toBe(true);
     expect(profile.feedbackHistory[0].kind).toBe("continue");
+    expect(feedback.inputText).toContain("多想一点");
+    expect(feedback.learningNote).toContain("你还补充说");
+    expect(feedback.stateDeltas?.some((item) => item.key === "curiosity" && item.delta > 0)).toBe(true);
+    expect(feedback.policyDeltas?.some((item) => item.key === "preferDepth" && item.delta > 0)).toBe(true);
   });
 
   it("wake rhythm applies time-based state recovery and records a presence event", () => {
@@ -114,12 +118,14 @@ describe("creature core", () => {
     expect(profile.episodes[0].promotedToLongTerm).toBe(true);
   });
 
-  it("forget removes long-term memory or downranks episode", () => {
+  it("forget downranks memory to zero before purging on a second forget", () => {
     const profile = createCreatureProfile();
     const targetId = profile.longTermMemories[0].id;
 
     applyFeedback(profile, { kind: "forget", targetId });
 
+    expect(profile.longTermMemories.find((memory) => memory.id === targetId)?.weight).toBe(0);
+    applyFeedback(profile, { kind: "forget", targetId });
     expect(profile.longTermMemories.find((memory) => memory.id === targetId)).toBeUndefined();
     expect(profile.state.safety).toBeGreaterThan(58);
   });

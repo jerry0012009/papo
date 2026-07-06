@@ -66,11 +66,18 @@ describe("api", () => {
     const episodeId = button.body.episodes[0].id;
     await request(app)
       .post(`/api/profiles/${userId}/feedback`)
-      .send({ kind: "remember", targetId: episodeId })
+      .send({ kind: "remember", targetId: episodeId, content: "语音里说：这件事确实要记住，下次可以主动提起。", modality: "audio_transcript" })
       .expect(200)
       .expect((response) => {
         expect(response.body.profile.longTermMemories.length).toBeGreaterThan(1);
+        expect(response.body.feedback.inputText).toContain("确实要记住");
+        expect(response.body.feedback.inputModality).toBe("audio_transcript");
+        expect(response.body.feedback.policyDeltas.length).toBeGreaterThan(0);
         expect(response.body.profile.conversation[0].channel).toBe("feedback");
+        expect(response.body.profile.conversation[0].role).toBe("papo");
+        expect(response.body.profile.conversation[1].role).toBe("user");
+        expect(response.body.profile.conversation[1].text).toContain("这件事确实要记住");
+        expect(response.body.profile.conversation[1].modality).toBe("audio_transcript");
       });
 
     const profileResponse = await request(app).get(`/api/profiles/${userId}`).expect(200);

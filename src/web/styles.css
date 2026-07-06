@@ -689,6 +689,35 @@ meter {
   line-height: 1.55;
 }
 
+.feedback-impact {
+  display: grid;
+  gap: 8px;
+  border-radius: 8px;
+  background: #fff0cf;
+  border: 1px solid rgba(169, 87, 45, 0.18);
+  padding: 12px;
+}
+
+.feedback-impact p {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.feedback-impact div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.feedback-impact span {
+  border-radius: 999px;
+  background: rgba(255, 250, 240, 0.82);
+  border: 1px solid rgba(31, 36, 33, 0.08);
+  padding: 5px 8px;
+  color: #465248;
+  font-size: 0.78rem;
+}
+
 .papo-notice {
   display: grid;
   gap: 10px;
@@ -829,6 +858,16 @@ meter {
 .episode-source-list span {
   display: block;
   margin-bottom: 2px;
+}
+
+.feedback-input {
+  display: grid;
+  gap: 8px;
+}
+
+.compact-upload {
+  min-height: 36px;
+  justify-content: center;
 }
 
 .feedback-row {

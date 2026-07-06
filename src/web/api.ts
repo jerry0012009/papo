@@ -75,11 +75,16 @@ export async function curiousCapture(userId: string, segments: StreamSegment[]):
   });
 }
 
-export async function sendFeedback(userId: string, kind: FeedbackKind, targetId?: string): Promise<{ profile: CreatureProfile; feedback: FeedbackRecord }> {
+export async function sendFeedback(
+  userId: string,
+  kind: FeedbackKind,
+  targetId?: string,
+  input: { content?: string; modality?: "text" | "audio_transcript" | "button" } = {}
+): Promise<{ profile: CreatureProfile; feedback: FeedbackRecord }> {
   return request<{ profile: CreatureProfile; feedback: FeedbackRecord }>(`/api/profiles/${userId}/feedback`, {
     method: "POST",
     headers: jsonHeaders,
-    body: JSON.stringify({ kind, targetId })
+    body: JSON.stringify({ kind, targetId, ...input })
   });
 }
 

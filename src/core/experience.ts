@@ -61,19 +61,20 @@ export function createCuriousCreatureReport(session: CuriousSessionAudit): strin
   return parts.join(" ");
 }
 
-export function createLearningNote(kind: FeedbackKind, tags: string[] = []): string {
+export function createLearningNote(kind: FeedbackKind, tags: string[] = [], feedbackText?: string): string {
   const topic = tags.length ? "这个主题" : "这类内容";
+  const userLine = feedbackText?.trim() ? ` 你还补充说：${summarizeText(feedbackText, 72)}。` : "";
   switch (kind) {
     case "understood":
-      return `我学到：这次理解方向是对的。以后遇到${topic}，我会更相信这种注意方式。`;
+      return `我学到：这次理解方向是对的。以后遇到${topic}，我会更相信这种注意方式。${userLine}`;
     case "continue":
-      return `我学到：${topic}你希望我不要浅浅带过。以后我会更愿意联想旧记忆，并展开一点。`;
+      return `我学到：${topic}你希望我不要浅浅带过。以后我会更愿意联想旧记忆，并展开一点。${userLine}`;
     case "not_now":
-      return `我学到：不是每次注意到东西都要打扰你。以后遇到${topic}，我会更安静。`;
+      return `我学到：不是每次注意到东西都要打扰你。以后遇到${topic}，我会更安静。${userLine}`;
     case "remember":
-      return `我学到：${topic}值得成为我们之间更稳定的长期记忆。`;
+      return `我学到：${topic}值得成为我们之间更稳定的长期记忆。${userLine}`;
     case "forget":
-      return `我学到：${topic}要更谨慎。以后我会先问你，不会直接长期保存。`;
+      return `我学到：${topic}要更谨慎。以后我会先问你，不会直接长期保存。${userLine}`;
   }
 }
 

@@ -3,23 +3,28 @@ import { updatePolicyFromFeedback } from "./drive";
 import { createLearningNote } from "./experience";
 import { adjustMemoryWeight, createMemoryCandidateFromEpisode, forgetMemory, promoteEpisode } from "./memory";
 import { applyStateDelta, deltaForFeedback } from "./state";
-import type { CreatureProfile, FeedbackKind, FeedbackRecord, LongTermMemory } from "./types";
+import type { CreatureProfile, CreatureState, FeedbackKind, FeedbackPolicyProfile, FeedbackRecord, LongTermMemory, SegmentKind } from "./types";
 
 export function applyFeedback(
   profile: CreatureProfile,
-  input: { kind: FeedbackKind; targetId?: string; now?: string }
+  input: { kind: FeedbackKind; targetId?: string; content?: string; modality?: SegmentKind | "button"; now?: string }
 ): FeedbackRecord {
   const now = input.now ?? new Date().toISOString();
+  const inputText = input.content?.trim();
   const targetEpisode = profile.episodes.find((item) => item.id === input.targetId);
   const targetLongTerm = profile.longTermMemories.find((item) => item.id === input.targetId);
   const tags = targetEpisode?.tags ?? targetLongTerm?.tags ?? [];
-  const learningNote = createLearningNote(input.kind, tags);
+  const stateBefore = structuredClone(profile.state);
+  const policyBefore = structuredClone(profile.policyProfile);
+  const learningNote = createLearningNote(input.kind, tags, inputText);
   const effect = `${effectText(input.kind)} ${updatePolicyFromFeedback(profile, input.kind, tags)}`;
   const record: FeedbackRecord = {
     id: makeId("feedback"),
     at: now,
     kind: input.kind,
     targetId: input.targetId,
+    inputText,
+    inputModality: input.modality ?? (inputText ? "text" : "button"),
     effect,
     learningNote
   };
@@ -29,19 +34,33 @@ export function applyFeedback(
 
   if (targetEpisode) targetEpisode.feedback.push(input.kind);
 
-  applyStateDelta(profile, deltaForFeedback(input.kind), effect, now);
+  const stateChange = applyStateDelta(profile, deltaForFeedback(input.kind), effect, now);
+  record.stateDeltas = stateDeltas(stateBefore, stateChange.after);
+  record.policyDeltas = policyDeltas(policyBefore, profile.policyProfile);
 
   if (input.kind === "remember" && input.targetId) promoteEpisode(profile, input.targetId, now);
-  if (input.kind === "forget") forgetMemory(profile, input.targetId);
+  const forgetResult = input.kind === "forget" ? forgetMemory(profile, input.targetId) : undefined;
   if (input.kind === "understood") adjustMemoryWeight(profile, input.targetId, 8);
   if (input.kind === "continue") {
     adjustMemoryWeight(profile, input.targetId, 12);
     if (targetEpisode) createMemoryCandidateFromEpisode(profile, targetEpisode, { feedback: "continue", now });
   }
   if (input.kind === "not_now") adjustMemoryWeight(profile, input.targetId, -8);
-  if (input.kind === "forget") createSafetyMemoryFromForget(profile, targetEpisode, targetLongTerm, now);
+  if (input.kind === "forget" && forgetResult?.changed && !forgetResult.purged) createSafetyMemoryFromForget(profile, targetEpisode, targetLongTerm, now);
 
   return record;
+}
+
+function stateDeltas(before: CreatureState, after: CreatureState): FeedbackRecord["stateDeltas"] {
+  return (["curiosity", "attachment", "energy", "arousal", "safety", "confidence"] as const)
+    .map((key) => ({ key, before: before[key], after: after[key], delta: after[key] - before[key] }))
+    .filter((item) => item.delta !== 0);
+}
+
+function policyDeltas(before: FeedbackPolicyProfile, after: FeedbackPolicyProfile): FeedbackRecord["policyDeltas"] {
+  return (["preferDepth", "preferProactivity", "privacySensitivity", "saveThreshold", "askThreshold", "recallTendency", "quietTendency"] as const)
+    .map((key) => ({ key, before: before[key], after: after[key], delta: after[key] - before[key] }))
+    .filter((item) => item.delta !== 0);
 }
 
 function effectText(kind: FeedbackKind): string {

@@ -76,6 +76,8 @@ Visual and audio models are treated as `sense` adapters only: they may create `i
 Attention is a conversation phase, not a separate product mode: user/world multimodal inputs enter the conversation timeline first, then the harness decides what Papo attends to, remembers, says, or ignores.
 The user-facing conversation unit should often be a short shared moment, not a single database row: text, photo summaries, and audio transcripts with the same 30-second `batchId` are presented together before Papo's attention response.
 Episode memories keep provenance back to their source segment/batch/time/location when available, so a memory card can show the shared moment that gave birth to it.
+Feedback is also conversation input: button taps, typed feedback, and audio-transcribed feedback are recorded in the same timeline before Papo's learning response, then rule-owned state/policy/memory changes apply.
+Forget is two-stage for memories: first feedback lowers the target weight to zero and teaches caution; a later forget on the zero-weight target purges it.
 Local notifications are a perception layer for new Papo utterances, not an action planner: rules decide which persisted `papo` conversation message is newest, the browser permission gate decides whether to notify, and no LLM output can bypass that gate.
 
 Harness stages:
@@ -190,6 +192,9 @@ Done:
   - Conversation and attention are unified in the UI: the dialogue page shows user/world inputs as attention material and Papo utterances as outputs in one timeline.
   - Dialogue inputs with the same 30-second batch are grouped as one shared moment, so multimodal fragments feel like one thing Papo experienced with the user.
   - Episode memories preserve source segment/batch/time/location metadata and memory cards can show the exact shared moment that created them.
+  - Feedback is integrated into the conversation timeline: buttons, typed notes, and audio-transcribed notes become user feedback inputs before Papo replies with a learning note.
+  - Feedback records expose rule-owned state and policy deltas so users can see how they are raising Papo.
+  - Forget feedback is staged: it first downranks memory weight to zero, then a repeated forget purges the zero-weight target.
   - Optional browser notifications can be enabled for newly persisted Papo utterances; historical messages and user/world inputs do not trigger "Papo new said" notifications.
 
 Verified:
@@ -221,6 +226,8 @@ Verified:
 - The dialogue page presents one attention/conversation timeline with counts for attention material and Papo responses.
 - The dialogue page groups same-batch multimodal inputs into a "30-second shared moment" before Papo's response.
 - Episode cards can trace a memory back to the source shared moment, including batch, observed time, location, and matching conversation input when present.
+- Feedback text and audio transcript content are persisted as conversation input, and Papo's learning response follows it in the same timeline.
+- Feedback responses include visible state/policy deltas, and forget feedback requires a second click to purge a zero-weight memory.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
@@ -231,9 +238,9 @@ Verified:
 
 Next:
 
-1. Add stronger browser visual QA with mobile screenshots for the Shiba Inu avatar, conversation timeline, notification prompt, and Curious recording flow.
-2. Tune OpenRouter audio model defaults after testing real account model availability.
-3. Add visual QA screenshots for the Shiba Inu avatar, conversation timeline, source-linked episode cards, notification prompt, and Curious recording flow.
+1. Replace the CSS-only Shiba with a cuter, more standard Shiba visual system after collecting suitable references or generating a small raster/vector asset set.
+2. Add stronger browser visual QA with mobile screenshots for the Shiba Inu avatar, conversation timeline, source-linked episode cards, notification prompt, feedback input, and Curious recording flow.
+3. Tune OpenRouter audio model defaults after testing real account model availability.
 
 Demo material rule:
 
@@ -263,3 +270,5 @@ Demo material rule:
 - Conversation timeline treats attention as part of dialogue, and browser notifications only fire for new Papo utterances after explicit permission.
 - Same-batch multimodal inputs are visible as one shared moment in the conversation timeline.
 - Episode memory provenance links back to the source shared moment where available.
+- Feedback itself is dialogue input, including text and audio transcript feedback, and visible raising deltas are shown after feedback.
+- Forget downranks to zero before purge.

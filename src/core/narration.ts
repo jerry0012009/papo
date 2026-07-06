@@ -36,7 +36,7 @@ export async function enrichFeedbackNarration(
 {"learningNote":"...","trace":["..."]}
 
 feedback:
-${JSON.stringify({ kind: feedback.kind, effect: feedback.effect, ruleLearningNote: feedback.learningNote })}
+${JSON.stringify({ kind: feedback.kind, inputText: feedback.inputText, inputModality: feedback.inputModality, effect: feedback.effect, ruleLearningNote: feedback.learningNote })}
 
 target_episode_or_memory:
 ${JSON.stringify(

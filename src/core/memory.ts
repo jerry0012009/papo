@@ -113,21 +113,32 @@ export function promoteEpisode(profile: CreatureProfile, episodeId: string, now 
   return memory;
 }
 
-export function forgetMemory(profile: CreatureProfile, targetId?: string): boolean {
-  if (!targetId) return false;
+export function forgetMemory(profile: CreatureProfile, targetId?: string): { changed: boolean; purged: boolean } {
+  if (!targetId) return { changed: false, purged: false };
 
-  const longTermBefore = profile.longTermMemories.length;
-  profile.longTermMemories = profile.longTermMemories.filter((memory) => memory.id !== targetId);
-  if (profile.longTermMemories.length !== longTermBefore) return true;
+  const longTerm = profile.longTermMemories.find((memory) => memory.id === targetId);
+  if (longTerm) {
+    if (longTerm.weight <= 0) {
+      profile.longTermMemories = profile.longTermMemories.filter((memory) => memory.id !== targetId);
+      return { changed: true, purged: true };
+    }
+    longTerm.weight = 0;
+    return { changed: true, purged: false };
+  }
 
   const episode = profile.episodes.find((item) => item.id === targetId);
-  if (!episode) return false;
-  episode.weight = Math.max(0, episode.weight - 35);
+  if (!episode) return { changed: false, purged: false };
+  if (episode.weight <= 0) {
+    profile.episodes = profile.episodes.filter((item) => item.id !== targetId);
+    profile.memoryCandidates = profile.memoryCandidates.filter((item) => item.sourceEpisodeId !== targetId);
+    return { changed: true, purged: true };
+  }
+  episode.weight = 0;
   episode.feedback.push("forget");
   for (const candidate of profile.memoryCandidates.filter((item) => item.sourceEpisodeId === episode.id)) {
     candidate.status = "dismissed";
   }
-  return true;
+  return { changed: true, purged: false };
 }
 
 export function updateLongTermMemory(profile: CreatureProfile, memoryId: string, text: string) {

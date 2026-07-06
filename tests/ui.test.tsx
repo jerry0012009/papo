@@ -44,6 +44,23 @@ describe("App", () => {
           }
         });
       }
+      if (url.endsWith("/api/profiles/u1/feedback")) {
+        return json({
+          profile: profileWithFeedback(),
+          feedback: {
+            id: "feedback1",
+            at: new Date().toISOString(),
+            kind: "continue",
+            targetId: "episode1",
+            inputText: "这里请多想一点",
+            inputModality: "text",
+            effect: "用户让我继续想，所以我以后会更愿意展开关联和推理。",
+            learningNote: "我学到：这个主题你希望我不要浅浅带过。你还补充说：这里请多想一点。",
+            stateDeltas: [{ key: "curiosity", before: 66, after: 74, delta: 8 }],
+            policyDeltas: [{ key: "preferDepth", before: 45, after: 53, delta: 8 }]
+          }
+        });
+      }
       if (url.endsWith("/api/profiles")) return json({ profiles: [] });
       return json({ profile: profileFixture() });
     });
@@ -65,6 +82,13 @@ describe("App", () => {
     expect(screen.getByText("单次输入")).toBeInTheDocument();
     expect(screen.getByText("陪我一会儿")).toBeInTheDocument();
 
+    await userEvent.type(screen.getByPlaceholderText("也可以告诉 Papo：为什么对、为什么不想要、要怎么记"), "这里请多想一点");
+    await userEvent.click(screen.getByRole("button", { name: "继续想" }));
+    expect(await screen.findByText("这次养成变化")).toBeInTheDocument();
+    expect(screen.getByText("你还补充了：这里请多想一点")).toBeInTheDocument();
+    expect(screen.getByText("好奇心 +8")).toBeInTheDocument();
+    expect(screen.getByText("深入倾向 +8")).toBeInTheDocument();
+
     await userEvent.click(screen.getByRole("button", { name: "桌面提醒" }));
     expect(requestPermission).toHaveBeenCalledOnce();
     expect(await screen.findByText("已开提醒")).toBeInTheDocument();
@@ -80,12 +104,14 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "对话" }));
     expect(screen.getByText("对话和注意流")).toBeInTheDocument();
-    expect(screen.getByText("1 条注意素材")).toBeInTheDocument();
-    expect(screen.getByText("1 条 Papo 回应")).toBeInTheDocument();
+    expect(screen.getByText("2 条注意素材")).toBeInTheDocument();
+    expect(screen.getByText("2 条 Papo 回应")).toBeInTheDocument();
     expect(screen.getByText("30秒共同片段")).toBeInTheDocument();
     expect(screen.getByText("manual-1 · 1 条素材")).toBeInTheDocument();
     expect(screen.getByText(/进入30秒注意批次/)).toBeInTheDocument();
-    expect(screen.getByText(/Papo 输出/)).toBeInTheDocument();
+    expect(screen.getByText("你给 Papo 反馈")).toBeInTheDocument();
+    expect(screen.getByText(/反馈也是对话输入/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Papo 输出/).length).toBeGreaterThan(1);
     expect(screen.getByText("你给 Papo 看了照片")).toBeInTheDocument();
     expect(screen.getByText("我刚刚醒着，你一打开我就还在这里。")).toBeInTheDocument();
 
@@ -223,6 +249,52 @@ function profileFixture() {
         sourceId: "wake1",
         relatedMemoryIds: []
       }
+    ]
+  };
+}
+
+function profileWithFeedback() {
+  const profile = profileFixture();
+  return {
+    ...profile,
+    state: { ...profile.state, curiosity: 74 },
+    policyProfile: { ...profile.policyProfile, preferDepth: 53 },
+    feedbackHistory: [
+      {
+        id: "feedback1",
+        at: new Date().toISOString(),
+        kind: "continue",
+        targetId: "episode1",
+        inputText: "这里请多想一点",
+        inputModality: "text",
+        effect: "用户让我继续想，所以我以后会更愿意展开关联和推理。",
+        learningNote: "我学到：这个主题你希望我不要浅浅带过。你还补充说：这里请多想一点。",
+        stateDeltas: [{ key: "curiosity", before: 66, after: 74, delta: 8 }],
+        policyDeltas: [{ key: "preferDepth", before: 45, after: 53, delta: 8 }]
+      }
+    ],
+    conversation: [
+      {
+        id: "msg4",
+        at: new Date().toISOString(),
+        role: "papo",
+        channel: "feedback",
+        text: "我学到：这个主题你希望我不要浅浅带过。你还补充说：这里请多想一点。",
+        sourceId: "feedback1",
+        relatedMemoryIds: []
+      },
+      {
+        id: "msg3",
+        at: new Date().toISOString(),
+        role: "user",
+        channel: "feedback",
+        text: "继续想：这里请多想一点",
+        sourceId: "feedback1:input",
+        relatedMemoryIds: [],
+        modality: "text",
+        observedAt: new Date().toISOString()
+      },
+      ...profile.conversation
     ]
   };
 }

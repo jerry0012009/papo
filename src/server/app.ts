@@ -61,7 +61,9 @@ const audioTranscriptSchema = z.object({
 
 const feedbackSchema = z.object({
   kind: z.enum(["understood", "continue", "not_now", "remember", "forget"]),
-  targetId: z.string().optional()
+  targetId: z.string().optional(),
+  content: z.string().max(1200).optional(),
+  modality: z.enum(["text", "audio_transcript", "button"]).optional()
 });
 
 const updateMemorySchema = z.object({
@@ -222,6 +224,15 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const body = feedbackSchema.parse(req.body);
       const feedback = applyFeedback(profile, body);
       await enrichFeedbackNarration(profile, feedback, provider);
+      appendInputMessage(profile, {
+        channel: "feedback",
+        role: "user",
+        text: feedbackInputText(feedback.kind, body.content),
+        sourceId: `${feedback.id}:input`,
+        modality: body.modality ?? (body.content?.trim() ? "text" : "button"),
+        observedAt: feedback.at,
+        at: feedback.at
+      });
       appendPapoMessage(profile, { channel: "feedback", text: feedback.learningNote, sourceId: feedback.id });
       await store.saveProfile(profile);
       res.json({ profile, feedback });
@@ -292,6 +303,18 @@ async function requireProfile(store: ProfileStore, userId: string) {
   const profile = await store.getProfile(userId);
   if (!profile) throw new HttpError(404, "Profile not found");
   return profile;
+}
+
+function feedbackInputText(kind: string, content?: string) {
+  const label = {
+    understood: "理解对了",
+    continue: "继续想",
+    not_now: "这次不用",
+    remember: "记住",
+    forget: "忘掉"
+  }[kind] ?? kind;
+  const note = content?.trim();
+  return note ? `${label}：${note}` : label;
 }
 
 class HttpError extends Error {

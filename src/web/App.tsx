@@ -24,6 +24,7 @@ import type {
   CreatureProfile,
   CreatureState,
   EpisodeMemory,
+  FeedbackRecord,
   FeedbackKind,
   SegmentKind,
   StreamSegment
@@ -128,6 +129,7 @@ export function App() {
   const [lastResult, setLastResult] = useState<CaptureResult>();
   const [emergence, setEmergence] = useState<string>();
   const [learningNote, setLearningNote] = useState<string>();
+  const [lastFeedback, setLastFeedback] = useState<FeedbackRecord>();
   const [wakeMessage, setWakeMessage] = useState<string>();
   const [wakeThought, setWakeThought] = useState<string>();
   const [demoNote, setDemoNote] = useState<string>();
@@ -280,14 +282,30 @@ export function App() {
     });
   }
 
-  async function giveFeedback(kind: FeedbackKind, targetId?: string) {
+  async function giveFeedback(kind: FeedbackKind, targetId?: string, content?: string, modality: "text" | "audio_transcript" | "button" = content ? "text" : "button") {
     if (!profile) return;
     await run(async () => {
-      const { profile: next, feedback } = await sendFeedback(profile.userId, kind, targetId);
+      const { profile: next, feedback } = await sendFeedback(profile.userId, kind, targetId, { content, modality });
       setProfile(next);
       setLearningNote(feedback.learningNote);
+      setLastFeedback(feedback);
       setLastResult((current) => (current ? { ...current, profile: next } : current));
     });
+  }
+
+  async function transcribeFeedbackAudio(file: File) {
+    setBusy(true);
+    setError(undefined);
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const result = await transcribeAudio(dataUrl, file.name || "反馈录音");
+      return result.transcript;
+    } catch (caught) {
+      setError(errorMessage(caught));
+      return "";
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function editLongTermMemory(memoryId: string, text: string) {
@@ -641,12 +659,14 @@ export function App() {
           selectedEpisode={selectedEpisode}
           emergence={emergence}
           learningNote={learningNote}
+          lastFeedback={lastFeedback}
           wakeMessage={wakeMessage}
           wakeThought={wakeThought}
           latestPapoMessage={latestPapoMessage}
           notificationStatus={notificationStatus}
           busy={busy}
           onFeedback={giveFeedback}
+          onTranscribeFeedbackAudio={transcribeFeedbackAudio}
           onGoCapture={() => setTab("capture")}
           onGoCurious={() => setTab("curious")}
           onGoChat={() => setTab("chat")}
@@ -674,7 +694,7 @@ export function App() {
       ) : null}
 
       {tab === "chat" ? <ChatView profile={profile} /> : null}
-      {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onEditMemory={editLongTermMemory} /> : null}
+      {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onTranscribeFeedbackAudio={transcribeFeedbackAudio} onEditMemory={editLongTermMemory} /> : null}
       {tab === "brain" ? <BrainView profile={profile} /> : null}
       {tab === "profile" ? <ProfileView profiles={profiles} activeId={profile.userId} onSelect={selectProfile} onAdd={addProfile} /> : null}
       {tab === "demo" ? (
@@ -708,12 +728,14 @@ function HomeView(props: {
   selectedEpisode?: EpisodeMemory;
   emergence?: string;
   learningNote?: string;
+  lastFeedback?: FeedbackRecord;
   wakeMessage?: string;
   wakeThought?: string;
   latestPapoMessage?: CreatureProfile["conversation"][number];
   notificationStatus: NotificationStatus;
   busy: boolean;
-  onFeedback: (kind: FeedbackKind, targetId?: string) => void;
+  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_transcript" | "button") => void;
+  onTranscribeFeedbackAudio: (file: File) => Promise<string>;
   onGoCapture: () => void;
   onGoCurious: () => void;
   onGoChat: () => void;
@@ -777,6 +799,7 @@ function HomeView(props: {
       ) : null}
       {props.emergence ? <section className="memory-surface active">{props.emergence}</section> : null}
       {props.learningNote ? <section className="learning-note">{props.learningNote}</section> : null}
+      {props.lastFeedback ? <FeedbackImpactCard feedback={props.lastFeedback} /> : null}
 
       <StateGrid state={props.profile.state} />
 
@@ -810,6 +833,7 @@ function HomeView(props: {
           episode={props.selectedEpisode}
           sourceMessages={episodeSourceMessages(props.profile, props.selectedEpisode)}
           onFeedback={props.onFeedback}
+          onTranscribeFeedbackAudio={props.onTranscribeFeedbackAudio}
           compact={false}
         />
       ) : null}
@@ -1045,7 +1069,8 @@ function groupConversationSections(messages: ConversationMessage[]): Conversatio
 
 function MemoryView(props: {
   profile: CreatureProfile;
-  onFeedback: (kind: FeedbackKind, targetId?: string) => void;
+  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_transcript" | "button") => void;
+  onTranscribeFeedbackAudio: (file: File) => Promise<string>;
   onEditMemory: (memoryId: string, text: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -1120,6 +1145,7 @@ function MemoryView(props: {
             episode={episode}
             sourceMessages={episodeSourceMessages(props.profile, episode)}
             onFeedback={props.onFeedback}
+            onTranscribeFeedbackAudio={props.onTranscribeFeedbackAudio}
             compact
           />
         ))}
@@ -1332,8 +1358,19 @@ function EpisodeCard(props: {
   episode: EpisodeMemory;
   sourceMessages?: ConversationMessage[];
   compact: boolean;
-  onFeedback: (kind: FeedbackKind, targetId?: string) => void;
+  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_transcript" | "button") => void;
+  onTranscribeFeedbackAudio: (file: File) => Promise<string>;
 }) {
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackModality, setFeedbackModality] = useState<"text" | "audio_transcript">("text");
+
+  function submitFeedback(kind: FeedbackKind) {
+    const content = feedbackText.trim();
+    props.onFeedback(kind, props.episode.id, content || undefined, content ? feedbackModality : "button");
+    setFeedbackText("");
+    setFeedbackModality("text");
+  }
+
   return (
     <article className="episode-card">
       <div className="episode-head">
@@ -1353,6 +1390,35 @@ function EpisodeCard(props: {
         </div>
       ) : null}
       <EpisodeSourceMoment episode={props.episode} messages={props.sourceMessages ?? []} compact={props.compact} />
+      <div className="feedback-input">
+        <textarea
+          value={feedbackText}
+          onChange={(event) => {
+            setFeedbackText(event.target.value);
+            setFeedbackModality("text");
+          }}
+          rows={props.compact ? 2 : 3}
+          placeholder="也可以告诉 Papo：为什么对、为什么不想要、要怎么记"
+        />
+        <label className="upload-button compact-upload">
+          <Mic size={16} />
+          语音反馈
+          <input
+            type="file"
+            accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg"
+            onChange={async (event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = "";
+              if (!file) return;
+              const transcript = await props.onTranscribeFeedbackAudio(file);
+              if (transcript.trim()) {
+                setFeedbackText(transcript.trim());
+                setFeedbackModality("audio_transcript");
+              }
+            }}
+          />
+        </label>
+      </div>
       {props.episode.decisionTrace?.length && !props.compact ? (
         <details className="brain-details">
           <summary>开发者 trace</summary>
@@ -1361,7 +1427,7 @@ function EpisodeCard(props: {
       ) : null}
       <div className="feedback-row">
         {feedbacks.map((item) => (
-          <button key={item.kind} onClick={() => props.onFeedback(item.kind, props.episode.id)} aria-label={item.label}>
+          <button key={item.kind} onClick={() => submitFeedback(item.kind)} aria-label={item.label}>
             <item.icon size={16} />
             {item.label}
           </button>
@@ -1421,6 +1487,30 @@ function episodeStateText(episode: EpisodeMemory) {
   return parts.length ? parts.join("；") : "状态稳定，适合认真观察这一段";
 }
 
+function FeedbackImpactCard({ feedback }: { feedback: FeedbackRecord }) {
+  const stateDeltas = feedback.stateDeltas ?? [];
+  const policyDeltas = feedback.policyDeltas ?? [];
+  if (!stateDeltas.length && !policyDeltas.length) return null;
+  return (
+    <section className="feedback-impact">
+      <strong>这次养成变化</strong>
+      {feedback.inputText ? <p>你还补充了：{feedback.inputText}</p> : null}
+      <div>
+        {stateDeltas.map((item) => (
+          <span key={`state-${item.key}`}>
+            {stateDriveLabel(item.key)} {deltaText(item.delta)}
+          </span>
+        ))}
+        {policyDeltas.map((item) => (
+          <span key={`policy-${item.key}`}>
+            {policyLabel(item.key)} {deltaText(item.delta)}
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function StateGrid({ state }: { state: CreatureState }) {
   const rows = useMemo(
     () => [
@@ -1446,6 +1536,22 @@ function StateGrid({ state }: { state: CreatureState }) {
       ))}
     </section>
   );
+}
+
+function stateDriveLabel(key: keyof Omit<CreatureState, "mood">) {
+  const map = {
+    curiosity: "好奇心",
+    attachment: "依恋度",
+    energy: "精力",
+    arousal: "唤醒度",
+    safety: "安全感",
+    confidence: "表达自信"
+  };
+  return map[key];
+}
+
+function deltaText(delta: number) {
+  return `${delta > 0 ? "+" : ""}${delta}`;
 }
 
 function PanelTitle({ icon: Icon, title }: { icon: typeof Brain; title: string }) {
@@ -1540,6 +1646,7 @@ function messageChannelText(channel: CreatureProfile["conversation"][number]["ch
 
 function messageTitle(message: CreatureProfile["conversation"][number]) {
   if (message.role === "papo") return messageChannelText(message.channel);
+  if (message.channel === "feedback") return "你给 Papo 反馈";
   if (message.modality === "image_summary") return "你给 Papo 看了照片";
   if (message.modality === "audio_transcript") return "Papo 听到一段声音";
   return "你告诉 Papo";
@@ -1547,6 +1654,7 @@ function messageTitle(message: CreatureProfile["conversation"][number]) {
 
 function messageFlowText(message: CreatureProfile["conversation"][number]) {
   if (message.role === "papo") return "Papo 输出";
+  if (message.channel === "feedback") return "反馈也是对话输入";
   if (message.channel === "curious") return "进入30秒注意批次";
   return "进入注意素材";
 }

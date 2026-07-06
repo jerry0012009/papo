@@ -219,8 +219,22 @@ export interface FeedbackRecord {
   at: string;
   kind: FeedbackKind;
   targetId?: string;
+  inputText?: string;
+  inputModality?: SegmentKind | "button";
   effect: string;
   learningNote: string;
+  stateDeltas?: Array<{
+    key: keyof Omit<CreatureState, "mood">;
+    before: number;
+    after: number;
+    delta: number;
+  }>;
+  policyDeltas?: Array<{
+    key: keyof FeedbackPolicyProfile;
+    before: number;
+    after: number;
+    delta: number;
+  }>;
 }
 
 export interface WakeEvent {
