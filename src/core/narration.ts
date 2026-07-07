@@ -91,13 +91,18 @@ export async function enrichEmergenceNarration(
   if (!memory) return withText(emergence);
 
   try {
+    const feedbackSelfMemory = memory.kind === "creature_self_memory" && memory.tags.includes("被你养成");
+    const narrationTarget = feedbackSelfMemory
+      ? "请把这条主动浮现改写得更像 Papo 摸到用户养出来的习惯或听法，不要写成普通旧事件。"
+      : "请把这条主动浮现改写得更像 Papo 自己突然想起了一段真实共同经历。";
     const raw = await provider.generateJson<unknown>(
-      `请把这条主动浮现改写得更像 Papo 自己突然想起了一段真实共同经历。
+      `${narrationTarget}
 
 约束：
 - 只改写 message，不要改变 state、driveSource、relatedMemoryIds、memoryId 或任何记忆内容。
 - 必须解释为什么这时想起，以及它接下来会怎样听/靠近新的片段。
 - 如果有 related memory，必须引用这条真实记忆里的具体内容，不要编造新事实。
+- 如果 related memory 是“被你养成”的自我记忆，只能写成被用户教出来的习惯、听法或边界感，不能写成普通旧事。
 - 不要提数据库、字段、开发过程、投资人、harness、GitHub、nginx。
 - 不要写成提醒事项，不要使用“我浮现的是”“不是提醒”“内在倾向”“下一次你给我信息流”。
 - 220 字以内。

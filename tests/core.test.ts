@@ -231,9 +231,26 @@ describe("creature core", () => {
 
     const emergence = createActiveEmergence(profile);
 
-    expect(emergence.memoryId).toBe(profile.longTermMemories.find((memory) => memory.sourceEpisodeId)?.id);
+    expect(emergence.memoryId).toBe(profile.longTermMemories.find((memory) => memory.kind !== "creature_self_memory" && memory.sourceEpisodeId)?.id);
     expect(emergence.text).toContain("我想起了");
     expect(emergence.text).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|我浮现的是/);
+  });
+
+  it("active emergence treats feedback-shaped self-memory as a raised habit, not an old event", () => {
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "我担心自己又把妈妈复查拖到睡前。");
+    applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id });
+    profile.state.curiosity = 86;
+
+    const emergence = createActiveEmergence(profile);
+    const memory = profile.longTermMemories.find((item) => item.id === emergence.relatedMemoryIds[0]);
+
+    expect(memory?.kind).toBe("creature_self_memory");
+    expect(memory?.tags).toContain("被你养成");
+    expect(emergence.message).toContain("你教过我的样子");
+    expect(emergence.message).toContain("不把它装成一段发生过的事");
+    expect(emergence.ruleTrace).toContain("memory_type=feedback_self_memory");
+    expect(emergence.message).not.toMatch(/我想起了|旧事|旧记忆|我浮现的是|下一次你给我信息流/);
   });
 
   it("active emergence does not resurface a memory after forget downranks it to zero", () => {

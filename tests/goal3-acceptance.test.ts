@@ -46,7 +46,7 @@ describe("goal 3 acceptance flow", () => {
     expect(contrast).toContain("养成差异");
     expect(contrast).toContain("它们的内在选择也不一样");
 
-    const promoted = main.longTermMemories.find((memory) => memory.sourceEpisodeId === targetEpisode.id);
+    const promoted = main.longTermMemories.find((memory) => memory.sourceEpisodeId === targetEpisode.id && !memory.tags.includes("被你养成"));
     expect(promoted).toBeTruthy();
     if (promoted) promoted.lastReferencedAt = "2026-07-01T00:00:00.000Z";
     for (const memory of main.longTermMemories.filter((memory) => memory.id !== promoted?.id)) {

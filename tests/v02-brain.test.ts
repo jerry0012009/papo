@@ -277,6 +277,40 @@ describe("creature brain v0.2", () => {
 
     expect(rejected.text).toBe(unsafeOriginal);
   });
+
+  it("LLM emergence narration treats feedback self-memory as a raised habit", async () => {
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "我担心自己又把妈妈复查拖到睡前。");
+    applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id });
+    profile.state.curiosity = 86;
+    const emergence = createActiveEmergence(profile);
+    let promptSeen = "";
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "self-memory narration model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(prompt?: string) => {
+        promptSeen = prompt ?? "";
+        return {
+          message:
+            "我先摸到被你养成的更愿意多想：妈妈复查这类担心不要浅浅带过。它现在冒出来，是因为我还想照着你教的方式多听一会儿。",
+          trace: ["llm: self-memory emergence narration"]
+        } as T;
+      }
+    };
+
+    const enriched = await enrichEmergenceNarration(profile, emergence, provider);
+
+    expect(promptSeen).toContain("被用户教出来的习惯");
+    expect(promptSeen).toContain("不能写成普通旧事");
+    expect(enriched.text).toContain("被你养成");
+    expect(enriched.text).toContain("更愿意多想");
+    expect(enriched.text).not.toMatch(/我想起了|旧事|我浮现的是|下一次你给我信息流/);
+  });
 });
 
 function segment(id: string, label: string, content: string, kind: "text" | "image_summary" | "audio_transcript" = "text") {

@@ -80,8 +80,12 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
 }
 
 export function createRhythmEmergence(profile: CreatureProfile, now = new Date().toISOString()): EmergenceRecord {
-  const stale = sharedMemories(profile)
-    .sort((a, b) => (a.lastReferencedAt ?? a.createdAt).localeCompare(b.lastReferencedAt ?? b.createdAt))[0];
+  const memories = sharedMemories(profile);
+  const stale =
+    memories
+      .filter((memory) => memory.kind !== "creature_self_memory")
+      .sort((a, b) => (a.lastReferencedAt ?? a.createdAt).localeCompare(b.lastReferencedAt ?? b.createdAt))[0] ??
+    memories.sort((a, b) => (a.lastReferencedAt ?? a.createdAt).localeCompare(b.lastReferencedAt ?? b.createdAt))[0];
   return buildRecord({
     profile,
     now,
@@ -117,16 +121,46 @@ function buildRecord(input: {
 
   input.memory.lastReferencedAt = input.now;
   const memoryText = emergenceMemoryText(input.memory.text, 100);
+  const feedbackSelfMemory = isFeedbackSelfMemory(input.memory);
   return {
     id: makeId("emergence"),
     at: input.now,
     kind: input.kind,
-    whyNow: input.whyNow,
+    whyNow: feedbackSelfMemory ? selfMemoryWhyNow(input.driveSource) : input.whyNow,
     relatedMemoryIds: input.memory ? [input.memory.id] : [],
     driveSource: input.driveSource,
-    message: memoryBackMessage(input.driveSource, input.messagePrefix, memoryText),
-    ruleTrace: [`kind=${input.kind}`, `drive=${input.driveSource}`, input.memory ? `memory=${input.memory.id}` : "memory=none"]
+    message: feedbackSelfMemory ? selfMemoryBackMessage(input.driveSource, input.messagePrefix, memoryText) : memoryBackMessage(input.driveSource, input.messagePrefix, memoryText),
+    ruleTrace: [
+      `kind=${input.kind}`,
+      `drive=${input.driveSource}`,
+      input.memory ? `memory=${input.memory.id}` : "memory=none",
+      feedbackSelfMemory ? "memory_type=feedback_self_memory" : `memory_type=${input.memory.kind}`
+    ]
   };
+}
+
+function selfMemoryWhyNow(driveSource: string) {
+  if (driveSource === "safety") return "我现在更在意边界，所以先碰到你教过我的养成记忆。";
+  if (driveSource === "curiosity") return "我还有一点没想完，所以先碰到你教我形成的听法。";
+  if (driveSource === "attachment") return "我现在更想靠近你，所以先摸到你养出来的那点习惯。";
+  if (driveSource === "rhythm") return "我安静了一会儿，先碰到你教过我的养成记忆。";
+  return "我先碰到你教过我的养成记忆。";
+}
+
+function selfMemoryBackMessage(driveSource: string, messagePrefix: string, memoryText: string) {
+  if (driveSource === "safety") {
+    return `我现在靠近得慢一点，先摸到你教过我的样子：${memoryText}。所以接下来我会先护住边界，再听你递来的这一小段。`;
+  }
+  if (driveSource === "curiosity") {
+    return `我还没把这件事想完，先摸到你教过我的样子：${memoryText}。所以接下来我会带着这个习惯多听一会儿，不把它装成一段发生过的事。`;
+  }
+  if (driveSource === "attachment") {
+    return `我有点想靠近你，先摸到你养出来的样子：${memoryText}。所以我会带着这点习惯听你真正放不下的地方。`;
+  }
+  if (driveSource === "rhythm") {
+    return `我安静了一会儿，先摸到你教过我的样子：${memoryText}。所以现在我会带着这个习惯听新的小片段，不把它装成一段发生过的事。`;
+  }
+  return `${messagePrefix}，先摸到你教过我的样子：${memoryText}。我会带着这个习惯继续听你。`;
 }
 
 function memoryBackMessage(driveSource: string, messagePrefix: string, memoryText: string) {
@@ -152,7 +186,13 @@ function emergenceMemoryText(text: string, max: number) {
 function topMemory(profile: CreatureProfile, kind?: LongTermMemory["kind"]) {
   return sharedMemories(profile)
     .filter((memory) => !kind || memory.kind === kind)
-    .sort((a, b) => b.weight - a.weight)[0];
+    .sort((a, b) => {
+      if (!kind && a.kind !== b.kind) {
+        if (a.kind === "creature_self_memory") return 1;
+        if (b.kind === "creature_self_memory") return -1;
+      }
+      return b.weight - a.weight;
+    })[0];
 }
 
 function availableMemories(profile: CreatureProfile) {
@@ -161,4 +201,8 @@ function availableMemories(profile: CreatureProfile) {
 
 function sharedMemories(profile: CreatureProfile) {
   return availableMemories(profile).filter((memory) => memory.kind !== "creature_self_memory" || Boolean(memory.sourceEpisodeId));
+}
+
+function isFeedbackSelfMemory(memory: LongTermMemory) {
+  return memory.kind === "creature_self_memory" && memory.tags.includes("被你养成");
 }

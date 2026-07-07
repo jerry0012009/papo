@@ -89,6 +89,7 @@ Feedback should also shape Papo's self-memory: repeated or meaningful teaching c
 Forget is two-stage for memories: first feedback lowers the target weight to zero and teaches caution; a later forget on the zero-weight target purges it.
 Active emergence treats zero-weight memories as unavailable: a memory that has been forgotten but not yet purged cannot be resurfaced as Papo's inner thought.
 Active emergence must not treat seed self-memory as a shared old experience. A memory produced from a real episode may support emergence even if its kind is `creature_self_memory`; if no positive-weight shared memory exists, Papo may express readiness or inner state, but it must not pretend to remember an old moment.
+Feedback-shaped `creature_self_memory` is allowed to support active emergence as "how you have raised me". Rule narration and LLM narration must describe it as a learned habit, listening style, or boundary sense, not as a normal old event.
 Unread dialogue state is a perception layer for new Papo utterances, not an action planner: rules decide persisted `papo` messages, while the UI only shows a small unread dot on the dialogue entry. Wake notes are presence state and do not create unread notifications.
 Internal channel names, memory kinds, batch ids, and numeric weights are developer facts. User-facing dialogue and memory pages should default to natural creature language; raw `channel`, `kind`, `batchId`, and `weight` belong in details or Brain views.
 The memory page is Papo's subjective remembering surface. It should use first-person creature language for what Papo is holding, how familiar the memory feels, why it kept the moment, and how the user can help it remember accurately or let go. Hiding technical fields is necessary but not sufficient UX.
@@ -255,6 +256,7 @@ Done:
   - Short wake gaps now use living presence language instead of "not a new experience" system-log wording.
   - Wake rhythm can now carry feedback-shaped self-memory when no shared life memory is available, so Papo can wake with the habits the user taught it without pretending it remembered an event.
   - Active emergence no longer uses seed self-memory as a fake shared memory. User-generated memories can still support emergence even when they are about Papo itself; with no real shared memory, it says it will wait for a real shared moment instead of claiming it remembered one.
+  - Active emergence now treats feedback-shaped self-memory as a raised habit rather than an old event, and LLM emergence narration receives the same constraint before rewriting.
   - Memory cards now combine familiarity and memory type into Papo's own subjective sentence, so the default memory page reads less like a database record.
   - Home presence copy no longer labels Papo as "current mood" or explains state as calculation. It now prioritizes the latest conversation, feedback, emergence, or wake context before falling back to body-state cues.
   - Home no longer shows raw state meters by default. It translates state into visible body signals such as ears, tail, little head, and boundaries, while Brain keeps numeric meters.
@@ -278,7 +280,7 @@ Done:
 
 Verified:
 
-- `npm test`: 41 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
+- `npm test`: 43 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -296,6 +298,7 @@ Verified:
 - Curious Mode creature report uses user-life material and explains selected/ignored segments.
 - Feedback returns a visible learning note.
 - Active emergence reads as inner resurfacing rather than a template reminder.
+- Active emergence prefers real shared memories over feedback-shaped self-memory; when it does surface feedback-shaped self-memory, it speaks as a raised habit rather than an old event.
 - Wake rhythm records an app-open presence event, applies rule-owned time-based state recovery, and can resurface a real user memory after absence.
 - Papo utterances are visible in persisted dialogue history, and new non-wake replies mark the dialogue tab unread.
 - Active emergence ignores zero-weight forgotten memories; it may use a derived safety rule, but it will not resurface the forgotten target itself.
