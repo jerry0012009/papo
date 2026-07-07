@@ -98,6 +98,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Active emergence has no rule-generated path. `/emergence` must call the model to decide quiet vs resurfacing and to choose a valid memory.
 - The old "rules create emergence, model polishes narration" path is removed; polishing a fake decision is still fake cognition.
 - Feedback capture records the user's teaching and executes explicit save/forget storage operations only. State, policy, learning language, memory weight changes for soft feedback, and creature self-memory must come from `semanticReflectFeedback`.
+- Feedback reflection may store internal learning notes and policy/state deltas, but ordinary chat only shows `replyText` when the model chooses a visible response.
 - If the model chooses a visible action such as `respond`, `ask`, `recall`, or `review`, a visible reply is required.
 - If the model chooses `observe` or `quiet`, the API may persist the user's input without adding a Papo reply.
 - Recent conversation, memories, and feedback are passed into model prompts through `model-context.ts`.

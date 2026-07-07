@@ -56,6 +56,7 @@ const semanticFeedbackSchema = z
     memoryWeightDelta: z.number().min(-30).max(30).optional(),
     learningNote: optionalText(260),
     followUpText: optionalText(180),
+    replyText: optionalText(260),
     effect: optionalText(260),
     creatureSelfMemory: z
       .object({
@@ -73,6 +74,7 @@ const semanticFeedbackSchema = z
           value.memoryWeightDelta ||
           value.learningNote ||
           value.followUpText ||
+          value.replyText ||
           value.effect ||
           value.creatureSelfMemory ||
           value.responseAction
@@ -143,7 +145,7 @@ export async function semanticReflectFeedback(
 }
 
 export function composeFeedbackReplyText(feedback: FeedbackRecord) {
-  return [feedback.learningNote, feedback.followUpText].filter(Boolean).join("\n");
+  return [feedback.replyText].filter(Boolean).join("\n");
 }
 
 function stateDeltas(before: CreatureState, after: CreatureState): FeedbackRecord["stateDeltas"] {
@@ -192,22 +194,28 @@ function applySemanticFeedbackSuggestion(profile: CreatureProfile, feedback: Fee
   const effect = safeCreatureText(suggestion.effect);
   if (effect) feedback.effect = effect;
   const learningNote = safeCreatureText(suggestion.learningNote);
-  if (learningNote && learningNote.startsWith("我学到")) feedback.learningNote = learningNote;
+  if (learningNote) feedback.learningNote = learningNote;
   const followUpText = safeCreatureText(suggestion.followUpText);
   if (followUpText) feedback.followUpText = followUpText;
+  const replyText = safeCreatureText(suggestion.replyText);
+  if (replyText && suggestion.responseAction !== "quiet") feedback.replyText = replyText;
   if (suggestion.responseAction) feedback.responseAction = suggestion.responseAction;
   if (suggestion.creatureSelfMemory) {
     upsertSemanticFeedbackSelfMemory(profile, feedback, suggestion.creatureSelfMemory, targetEpisode, targetLongTerm);
   }
 
-  feedback.replyText = composeFeedbackReplyText(feedback);
+  if (!feedback.replyText) feedback.replyText = "";
 }
 
 function assertSemanticFeedbackVisibleOutput(suggestion: SemanticFeedbackSuggestion) {
   const learningNote = safeCreatureText(suggestion.learningNote);
-  if (!learningNote || !learningNote.startsWith("我学到")) throw new Error("feedback model did not provide a usable learning note");
+  if (!learningNote) throw new Error("feedback model did not provide a usable learning note");
   const effect = safeCreatureText(suggestion.effect);
   if (!effect) throw new Error("feedback model did not provide a usable effect");
+  if (suggestion.responseAction && suggestion.responseAction !== "quiet") {
+    const replyText = safeCreatureText(suggestion.replyText);
+    if (!replyText) throw new Error("feedback model selected a visible feedback response without replyText");
+  }
 }
 
 function cleanNumberDeltas<T extends Record<string, number | undefined> | undefined>(deltas: T) {
@@ -313,8 +321,9 @@ function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: Feedbac
 - policyDeltas：preferDepth, preferProactivity, privacySensitivity, saveThreshold, askThreshold, recallTendency, quietTendency，每项 -15 到 15。
 - memoryWeightDelta：目标 episode 或 memory 的权重变化，-30 到 30。
 - responseAction：acknowledge, ask_follow_up, quiet, note_memory。
-- learningNote：用户可见的一句话，必须以“我学到”开头。
-- followUpText：如果确实需要，可以给一句短回应。
+- learningNote：内部学习记录，不给普通用户直接展示；不要写成前端说明或字段解释。
+- followUpText：内部追问意图记录，不给普通用户直接展示。
+- replyText：如果 responseAction 不是 quiet，写一句 Papo 可以直接对用户说的自然短回应；不要解释内部状态、字段、阈值或流程。
 - creatureSelfMemory：如果这次反馈体现了用户正在训练 Papo 的长期回应习惯，写成一条 Papo 自己的成长记忆。
 
 你不能：
@@ -327,8 +336,9 @@ function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: Feedbac
   "stateDeltas":{"curiosity":0},
   "policyDeltas":{"preferDepth":0},
   "memoryWeightDelta":0,
-  "learningNote":"我学到...",
+  "learningNote":"...",
   "followUpText":"...",
+  "replyText":"...",
   "effect":"...",
   "creatureSelfMemory":{"text":"...", "tags":["..."]},
   "trace":["..."]

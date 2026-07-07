@@ -20,7 +20,7 @@ export function wakeCreature(profile: CreatureProfile, now = new Date().toISOStr
     id: wakeId,
     at: now,
     elapsedMinutes,
-    message: wakeMessage(elapsedMinutes, Object.keys(stateDelta).length > 0),
+    message: "",
     relatedMemoryIds: [],
     stateChangeReason,
     stateDelta,
@@ -70,12 +70,4 @@ function reasonForElapsedMinutes(elapsedMinutes: number) {
   if (elapsedMinutes < 60) return "app_wake_brief_rest";
   if (elapsedMinutes < 360) return "app_wake_after_rest";
   return "app_wake_after_long_absence";
-}
-
-function wakeMessage(elapsedMinutes: number, changed: boolean) {
-  if (elapsedMinutes < 1) return "我刚刚醒着，你一打开我就还在这里。";
-  if (!changed) return "刚才只是隔了一小会儿。我还在这里，等你继续说。";
-  if (elapsedMinutes < 60) return "我像浅浅趴了一会儿。你回来时，我的能量回来了些，心跳也放慢了一点。";
-  if (elapsedMinutes < 360) return "我隔了一阵才又见到你，像从小睡里醒来。现在更有力气，也更想听你说说发生了什么。";
-  return "你离开了比较久。我醒来时先安静下来，等你继续告诉我新的事。";
 }

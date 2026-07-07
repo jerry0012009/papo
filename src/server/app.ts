@@ -5,7 +5,7 @@ import { appendInputMessage, appendPapoMessage } from "../core/conversation";
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
-import { enrichFeedbackNarration, narrateMemoryCorrection } from "../core/narration";
+import { narrateMemoryCorrection } from "../core/narration";
 import { createModelProvider, type ModelProvider } from "../core/provider";
 import { promoteEpisode, toCreatureMemoryVoice, updateLongTermMemory } from "../core/memory";
 import { wakeCreature } from "../core/rhythm";
@@ -222,7 +222,6 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const targetMemoryBefore = body.targetId ? profile.longTermMemories.find((memory) => memory.id === body.targetId) : undefined;
       const feedback = applyFeedback(profile, body);
       await semanticReflectFeedback(profile, feedback, provider);
-      await enrichFeedbackNarration(profile, feedback, provider);
       const relatedMemoryIds = feedbackRelatedMemoryIds(profile, body.targetId, targetMemoryBefore?.id);
       appendInputMessage(profile, {
         channel: "feedback",
@@ -234,7 +233,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         at: feedback.at,
         relatedMemoryIds
       });
-      appendPapoMessage(profile, { channel: "feedback", text: feedback.replyText ?? feedback.learningNote, sourceId: feedback.id, relatedMemoryIds });
+      appendPapoMessage(profile, { channel: "feedback", text: feedback.replyText, sourceId: feedback.id, relatedMemoryIds });
       await store.saveProfile(profile);
       res.json({ profile, feedback });
     } catch (error) {

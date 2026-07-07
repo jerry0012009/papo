@@ -231,7 +231,7 @@ export function App() {
     await run(async () => {
       const { profile: next, feedback } = await sendFeedback(profile.userId, kind, targetId, { content, modality });
       setProfile(next);
-      setLearningNote(feedback.replyText ?? feedback.learningNote);
+      setLearningNote(feedback.replyText);
       setLastFeedback(feedback);
       setLastResult((current) => (current ? { ...current, profile: next } : current));
     });
@@ -687,7 +687,7 @@ function ChatView(props: {
           <ShibaAvatar state={props.profile.state} />
           <div>
             <strong>{props.listening ? "Papo 正在旁边听" : "Papo 趴在旁边等你"}</strong>
-            <p>{props.listening ? `已经陪了 ${formatListeningTime(props.listeningElapsed)}。听不清的声音会被当成路过的背景。` : "你可以直接说一件事，也可以让它陪在旁边。"}</p>
+            <p>{props.listening ? `已经陪了 ${formatListeningTime(props.listeningElapsed)}。` : "你可以直接说一件事，也可以让它陪在旁边。"}</p>
           </div>
         </section>
         {messages.length ? (
@@ -1033,7 +1033,7 @@ function MemoryFeedbackBox(props: {
     <div className="feedback-input memory-feedback">
       <div className="feedback-teach">
         <strong>你想怎么补充</strong>
-        <span>你补的话会一起进入反馈；我会据此多想、安静、记稳或放下。</span>
+        <span>可以补一句，让 Papo 下次更贴近你的意思。</span>
       </div>
       <textarea
         value={feedbackText}
@@ -1265,7 +1265,7 @@ function EpisodeCard(props: {
       <div className="feedback-input">
         <div className="feedback-teach">
           <strong>你想怎么补充</strong>
-          <span>你补的一句话，也会作为反馈影响后面的回应。</span>
+          <span>还有想让 Papo 记准或放轻的地方吗？</span>
         </div>
         <textarea
           value={feedbackText}
@@ -1430,7 +1430,7 @@ function EmergenceCard({ emergence }: { emergence: EmergenceSurface }) {
 }
 
 function FeedbackImpactCard({ feedback }: { feedback: FeedbackRecord }) {
-  const learning = visibleCreatureText(feedback.replyText ?? feedback.learningNote);
+  const learning = visibleCreatureText(feedback.replyText ?? "");
   if (!learning) return null;
   return (
     <section className="feedback-impact">
