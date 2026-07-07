@@ -36,7 +36,9 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByLabel("有未读 Papo 回复")).toBeVisible();
   await expect(page.getByText(/轻问|存情景|存长期|以后回来/)).toHaveCount(0);
   await expect(page.getByPlaceholder("也可以补一句：哪里懂对了、哪里先放下、要怎么记准")).toBeVisible();
-  await expect(page.getByText("查看后台流程")).toBeVisible();
+  await expect(page.getByText("看看 Papo 怎么处理的").first()).toBeVisible();
+  await expect(page.getByText("查看后台流程")).toHaveCount(0);
+  await expect(page.getByText(/语义判断|状态约束|行动选择|记忆策略/)).toHaveCount(0);
   await expect(page.getByText("我刚才注意到：")).toHaveCount(0);
   await expect(page.getByText("我为什么注意：")).toHaveCount(0);
   await expect(page.getByText("来自同一次事件").first()).toBeVisible();

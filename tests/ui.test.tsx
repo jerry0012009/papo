@@ -190,7 +190,11 @@ describe("App", () => {
     expect(screen.queryByLabelText("有未读 Papo 回复")).not.toBeInTheDocument();
     expect(screen.getByText("来自同一次事件")).toBeInTheDocument();
     expect(screen.queryByText(/轻问|存情景|存长期|以后回来/)).not.toBeInTheDocument();
-    expect(screen.getByText("查看后台流程")).toBeInTheDocument();
+    expect(screen.getAllByText("看看 Papo 怎么处理的").length).toBeGreaterThan(0);
+    expect(screen.queryByText("查看后台流程")).not.toBeInTheDocument();
+    expect(screen.getAllByText("听见什么").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("怎么理解").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/语义判断|状态约束|行动选择|记忆策略/)).not.toBeInTheDocument();
     expect(screen.queryByText("我刚才注意到：")).not.toBeInTheDocument();
     expect(screen.queryByText("我为什么注意：")).not.toBeInTheDocument();
     expect(screen.getByText("跟 Papo 说")).toBeInTheDocument();

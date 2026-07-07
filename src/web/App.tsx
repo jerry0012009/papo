@@ -1398,14 +1398,14 @@ function AttentionCard({ event }: { event: AttentionEvent }) {
       </div>
       <p>{visibleCreatureText(event.noticed)}</p>
       <details className="episode-flow compact-flow">
-        <summary>查看后台流程</summary>
+        <summary>看看 Papo 怎么处理的</summary>
         <FlowSteps
           steps={[
-            { label: "输入", text: event.noticed },
-            { label: "语义判断", text: event.creatureExperience.earReason },
-            { label: "记忆关联", text: event.creatureExperience.rememberedScene ?? "这次没有关联到以前的事。" },
-            { label: "行动选择", text: event.creatureExperience.actionFeeling },
-            { label: "记忆策略", text: event.creatureExperience.saveFeeling }
+            { label: "听见什么", text: event.noticed },
+            { label: "怎么理解", text: event.creatureExperience.earReason },
+            { label: "想起什么", text: event.creatureExperience.rememberedScene ?? "这次没有关联到以前的事。" },
+            { label: "接下来做什么", text: event.creatureExperience.actionFeeling },
+            { label: "怎么留下", text: event.creatureExperience.saveFeeling }
           ]}
         />
       </details>
@@ -1491,16 +1491,16 @@ function EpisodeCard(props: {
 function EpisodeProcessDetails({ episode }: { episode: EpisodeMemory }) {
   return (
     <details className="episode-flow">
-      <summary>查看后台流程</summary>
+      <summary>看看 Papo 怎么处理的</summary>
       <FlowSteps
         steps={[
-          { label: "输入", text: noticedText(episode.noticed) },
-          { label: "语义判断", text: episode.creatureExperience?.earReason ?? episode.importanceReason },
-          { label: "记忆关联", text: episode.creatureExperience?.rememberedScene ?? "这次没有关联到以前的事。" },
-          { label: "意图估计", text: episode.possibleIntent },
-          { label: "状态约束", text: episodeStateText(episode) },
-          { label: "行动选择", text: episode.creatureExperience?.actionFeeling ?? episode.actionDecision?.reason },
-          { label: "记忆策略", text: episode.creatureExperience?.saveFeeling ?? "先作为这次经历保存，等你的反馈决定。" }
+          { label: "听见什么", text: noticedText(episode.noticed) },
+          { label: "怎么理解", text: episode.creatureExperience?.earReason ?? episode.importanceReason },
+          { label: "想起什么", text: episode.creatureExperience?.rememberedScene ?? "这次没有关联到以前的事。" },
+          { label: "你可能想说", text: episode.possibleIntent },
+          { label: "当时的影响", text: episodeStateText(episode) },
+          { label: "接下来做什么", text: episode.creatureExperience?.actionFeeling ?? episode.actionDecision?.reason },
+          { label: "怎么留下", text: episode.creatureExperience?.saveFeeling ?? "先作为这次经历保存，等你的反馈决定。" }
         ]}
       />
     </details>
@@ -1839,13 +1839,13 @@ function actionText(action: AttentionEvent["suggestedAction"]) {
   const map = {
     observe: "观察",
     respond: "回应",
-    ask: "轻问",
-    save_episode: "存情景",
-    save_long_term: "存长期",
+    ask: "提问确认",
+    save_episode: "保存本次经历",
+    save_long_term: "长期记忆",
     recall: "回忆",
     review: "复盘",
     quiet: "安静",
-    draft_reminder: "以后回来",
+    draft_reminder: "稍后回看",
     draft_question_list: "分开想想"
   };
   return map[action];
@@ -1856,8 +1856,8 @@ function visibleActionText(action: AttentionEvent["suggestedAction"]) {
     observe: "先听着",
     respond: "已经回应",
     ask: "想确认一下",
-    save_episode: "先记住这次",
-    save_long_term: "可能要留下",
+    save_episode: "认真放在心上",
+    save_long_term: "这件事很重要",
     recall: "想起旧事",
     review: "陪你整理",
     quiet: "少说一点",
