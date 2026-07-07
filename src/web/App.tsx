@@ -953,12 +953,16 @@ function ChatView(props: {
         )}
         <section className="listening-panel">
           <div>
-            <strong>{props.listening ? "Papo 正在听你周围发生的事" : "可以让 Papo 持续听一会儿"}</strong>
-            <p>最多 3 分钟，每 30 秒整理一次声音。听清的内容会自己进入 Papo 的注意；没有人声或太嘈杂时会自然略过。</p>
+            <strong>{props.listening ? "Papo 正在听这一会儿" : "Papo 可以陪你听一会儿"}</strong>
+            <p>
+              {props.listening
+                ? `已经陪了 ${formatListeningTime(props.listeningElapsed)}。听清的事会自己进对话，嘈杂时就轻轻放过去。`
+                : "听清的事会自己进对话，嘈杂时就轻轻放过去；你也可以继续打字或加照片。"}
+            </p>
           </div>
           <button onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
             <Sparkles size={18} />
-            {props.listening ? `停止 ${formatListeningTime(props.listeningElapsed)}` : "开始听 3 分钟"}
+            {props.listening ? `停下 ${formatListeningTime(props.listeningElapsed)}` : "开始陪我听"}
           </button>
         </section>
         <div className="chat-composer">

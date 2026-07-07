@@ -360,10 +360,10 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "陪我" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "陪我一会儿" }));
     expect(screen.getByText("和 Papo 的小日常")).toBeInTheDocument();
-    expect(screen.getByText("可以让 Papo 持续听一会儿")).toBeInTheDocument();
-    expect(screen.getByText(/最多 3 分钟，每 30 秒整理一次声音/)).toBeInTheDocument();
-    expect(screen.getByText(/没有人声或太嘈杂时会自然略过/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "开始听 3 分钟" })).toBeInTheDocument();
+    expect(screen.getByText("Papo 可以陪你听一会儿")).toBeInTheDocument();
+    expect(screen.getByText(/听清的事会自己进对话，嘈杂时就轻轻放过去/)).toBeInTheDocument();
+    expect(screen.queryByText(/最多 3 分钟|每 30 秒/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "开始陪我听" })).toBeInTheDocument();
     expect(screen.getByLabelText("加照片")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "说给 Papo" })).toBeInTheDocument();
     expect(screen.queryByText("刚才的对话")).not.toBeInTheDocument();
