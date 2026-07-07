@@ -158,19 +158,38 @@ export async function semanticReflectFeedback(
       if (attempt === 0) continue;
       throw new Error(lastError);
     }
+    const suggestion = normalizeUnavailableTargetMemoryOperation(profile, feedback, parsed.data);
     try {
-      assertSemanticFeedbackVisibleOutput(profile, feedback, parsed.data);
-      assertSemanticFeedbackMemoryOperation(profile, feedback, parsed.data);
+      assertSemanticFeedbackVisibleOutput(profile, feedback, suggestion);
+      assertSemanticFeedbackMemoryOperation(profile, feedback, suggestion);
     } catch (error) {
       lastError = error instanceof Error ? error.message : String(error);
       if (attempt === 0) continue;
       throw error;
     }
-    applySemanticFeedbackSuggestion(profile, feedback, parsed.data);
+    applySemanticFeedbackSuggestion(profile, feedback, suggestion);
     recordFeedbackSemanticRun(profile, provider, "applied", attempt ? "llm feedback reflection applied after repair" : "llm feedback reflection applied");
     return feedback;
   }
   throw new Error(lastError || "feedback model did not produce a valid result");
+}
+
+function normalizeUnavailableTargetMemoryOperation(profile: CreatureProfile, feedback: FeedbackRecord, suggestion: SemanticFeedbackSuggestion): SemanticFeedbackSuggestion {
+  const operation = suggestion.memoryOperation;
+  if (!operation || operation.type === "none" || operation.type === "dismiss_target") return suggestion;
+  const targetExists = Boolean(
+    profile.longTermMemories.some((item) => item.id === feedback.targetId) ||
+      profile.episodes.some((item) => item.id === feedback.targetId) ||
+      profile.memoryCandidates.some((item) => item.id === feedback.targetId)
+  );
+  if (targetExists || !feedback.targetSnapshot) return suggestion;
+
+  suggestion.memoryOperation = { type: feedback.kind === "forget" ? "dismiss_target" : "none" };
+  suggestion.trace = [
+    ...(suggestion.trace ?? []),
+    `blocked unavailable target operation: ${operation.type}`
+  ].slice(0, 8);
+  return suggestion;
 }
 
 export function composeFeedbackReplyText(feedback: FeedbackRecord) {
@@ -582,6 +601,7 @@ memoryOperation 使用口径：
 - promote_candidate 只能用于 target.type="candidate"。
 - update_memory 只能用于 target.type="memory"。
 - update_candidate 只能用于 target.type="candidate"。
+- 如果 target.unavailableAfterStorageOperation=true，说明按钮操作已经让目标不在当前存储里；不要使用 update_memory、promote_episode、promote_candidate 或 update_candidate。只能使用 none 或 dismiss_target，并在 effect 里准确说明目标已经被放下或当前无可修改对象。
 - 如果 target 带 attachments，说明这条经历或记忆有原始图片资产；当你把 episode 提升为长期记忆或改写记忆时，要结合图片内容、用户补充和可用时间地点，不要把照片当成一句普通文本。
 - 当 target.type="episode" 且用户要求 remember、important、remind 或 correct 时，如果需要产生或修改长期记忆，必须使用 memoryOperation.type="promote_episode"；即使你认为是在“更新记忆文字”，也不能对 episode 目标返回 update_memory。
 - 当 target.type="candidate" 且用户要求 remember 或 important 时，如果你判断应该长期留下，使用 memoryOperation.type="promote_candidate"；如果只是改准候选但继续等待，使用 update_candidate。

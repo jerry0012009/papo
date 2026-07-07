@@ -95,6 +95,7 @@ export function App() {
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
   const [quickRecording, setQuickRecording] = useState(false);
+  const [feedbackPendingKey, setFeedbackPendingKey] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -358,9 +359,13 @@ export function App() {
 
   async function giveFeedback(kind: FeedbackKind, targetId?: string, content?: string, modality: "text" | "audio_observation" | "button" = content ? "text" : "button") {
     if (!profile) return;
+    const pendingKey = feedbackActionKey(kind, targetId);
+    setFeedbackPendingKey(pendingKey);
     await run(async () => {
       const { profile: next } = await sendFeedback(profile.userId, kind, targetId, { content, modality });
       setProfile(next);
+    }).finally(() => {
+      setFeedbackPendingKey((current) => (current === pendingKey ? undefined : current));
     });
   }
 
@@ -765,7 +770,7 @@ export function App() {
           onStopListening={stopListening}
         />
       ) : null}
-      {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} onDream={runDreaming} busy={busy} /> : null}
+      {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} onDream={runDreaming} busy={busy} feedbackPendingKey={feedbackPendingKey} /> : null}
       {tab === "profile" ? (
         <ProfileView
           profiles={profiles}
@@ -993,6 +998,7 @@ function ChatView(props: {
   const [draft, setDraft] = useState("");
   const [visibleCount, setVisibleCount] = useState(INITIAL_CHAT_VISIBLE_COUNT);
   const composerRef = useRef<HTMLDivElement>(null);
+  const threadEndRef = useRef<HTMLDivElement>(null);
   const allMessages = useMemo(
     () => [...(props.profile.conversation ?? [])].filter((message) => message.channel !== "wake"),
     [props.profile.conversation]
@@ -1021,7 +1027,7 @@ function ChatView(props: {
 
   useLayoutEffect(() => {
     window.requestAnimationFrame(() => {
-      composerRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
+      threadEndRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
     });
   }, [props.profile.conversation?.[0]?.id, props.stagedSegments.length]);
 
@@ -1080,6 +1086,7 @@ function ChatView(props: {
         ) : (
           <p className="muted">还没有对话。第一件小事会从这里开始。</p>
         )}
+        <div ref={threadEndRef} aria-hidden="true" />
       </section>
       <div className="chat-composer" ref={composerRef}>
           {props.stagedSegments.length ? (
@@ -1685,6 +1692,7 @@ function MemoryView(props: {
   onEditMemory: (memoryId: string, text: string) => void;
   onDream: () => void;
   busy: boolean;
+  feedbackPendingKey?: string;
 }) {
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"all" | "candidate" | "long">("all");
@@ -1726,6 +1734,7 @@ function MemoryView(props: {
                 key={candidate.id}
                 onFeedback={props.onFeedback}
                 onObserveFeedbackAudio={props.onObserveFeedbackAudio}
+                feedbackPendingKey={props.feedbackPendingKey}
               />
             ))}
           </section>
@@ -1765,23 +1774,24 @@ function MemoryView(props: {
                 <MessageCircle size={16} />
                 改准
               </button>
-              <button onClick={() => props.onFeedback("important", memory.id, undefined, "button")}>
+              <button onClick={() => props.onFeedback("important", memory.id, undefined, "button")} disabled={props.busy || isFeedbackPending(props.feedbackPendingKey, "important", memory.id)}>
                 <Save size={16} />
-                很重要
+                {isFeedbackPending(props.feedbackPendingKey, "important", memory.id) ? "尝试中" : "很重要"}
               </button>
-              <button onClick={() => props.onFeedback("remind", memory.id, undefined, "button")}>
+              <button onClick={() => props.onFeedback("remind", memory.id, undefined, "button")} disabled={props.busy || isFeedbackPending(props.feedbackPendingKey, "remind", memory.id)}>
                 <Lightbulb size={16} />
-                提醒我
+                {isFeedbackPending(props.feedbackPendingKey, "remind", memory.id) ? "尝试中" : "提醒我"}
               </button>
-              <button onClick={() => props.onFeedback("forget", memory.id)}>
+              <button onClick={() => props.onFeedback("forget", memory.id)} disabled={props.busy || isFeedbackPending(props.feedbackPendingKey, "forget", memory.id)}>
                 <RefreshCcw size={16} />
-                {memory.weight <= 0 ? "彻底忘掉" : "忘掉"}
+                {isFeedbackPending(props.feedbackPendingKey, "forget", memory.id) ? "尝试中" : memory.weight <= 0 ? "彻底忘掉" : "忘掉"}
               </button>
             </div>
             <MemoryFeedbackBox
               targetId={memory.id}
               onFeedback={props.onFeedback}
               onObserveFeedbackAudio={props.onObserveFeedbackAudio}
+              pending={isFeedbackPending(props.feedbackPendingKey, "continue", memory.id)}
             />
             <MemoryTraceList memory={memory} profile={props.profile} />
           </article>
@@ -1799,6 +1809,7 @@ function MemoryCandidateCard(props: {
   profile: CreatureProfile;
   onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
   onObserveFeedbackAudio: (file: File) => Promise<string>;
+  feedbackPendingKey?: string;
 }) {
   const sourceEpisode = props.profile.episodes.find((episode) => episode.id === props.candidate.sourceEpisodeId);
   return (
@@ -1822,23 +1833,24 @@ function MemoryCandidateCard(props: {
         ) : null}
       </div>
       <div className="memory-actions">
-        <button onClick={() => props.onFeedback("remember", props.candidate.id, undefined, "button")}>
+        <button onClick={() => props.onFeedback("remember", props.candidate.id, undefined, "button")} disabled={isFeedbackPending(props.feedbackPendingKey, "remember", props.candidate.id)}>
           <Save size={16} />
-          长期记住
+          {isFeedbackPending(props.feedbackPendingKey, "remember", props.candidate.id) ? "尝试中" : "长期记住"}
         </button>
-        <button onClick={() => props.onFeedback("important", props.candidate.id, undefined, "button")}>
+        <button onClick={() => props.onFeedback("important", props.candidate.id, undefined, "button")} disabled={isFeedbackPending(props.feedbackPendingKey, "important", props.candidate.id)}>
           <Lightbulb size={16} />
-          很重要
+          {isFeedbackPending(props.feedbackPendingKey, "important", props.candidate.id) ? "尝试中" : "很重要"}
         </button>
-        <button onClick={() => props.onFeedback("forget", props.candidate.id, undefined, "button")}>
+        <button onClick={() => props.onFeedback("forget", props.candidate.id, undefined, "button")} disabled={isFeedbackPending(props.feedbackPendingKey, "forget", props.candidate.id)}>
           <RefreshCcw size={16} />
-          放下
+          {isFeedbackPending(props.feedbackPendingKey, "forget", props.candidate.id) ? "尝试中" : "放下"}
         </button>
       </div>
       <MemoryFeedbackBox
         targetId={props.candidate.id}
         onFeedback={props.onFeedback}
         onObserveFeedbackAudio={props.onObserveFeedbackAudio}
+        pending={isFeedbackPending(props.feedbackPendingKey, "continue", props.candidate.id)}
       />
     </article>
   );
@@ -1926,12 +1938,13 @@ function MemoryFeedbackBox(props: {
   targetId: string;
   onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
   onObserveFeedbackAudio: (file: File) => Promise<string>;
+  pending?: boolean;
 }) {
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackModality, setFeedbackModality] = useState<"text" | "audio_observation">("text");
   function submit() {
     const content = feedbackText.trim();
-    if (!content) return;
+    if (!content || props.pending) return;
     props.onFeedback("continue", props.targetId, content, feedbackModality);
     setFeedbackText("");
     setFeedbackModality("text");
@@ -1968,9 +1981,9 @@ function MemoryFeedbackBox(props: {
             }}
           />
         </label>
-        <button className="primary" onClick={submit} disabled={!feedbackText.trim()}>
+        <button className="primary" onClick={submit} disabled={!feedbackText.trim() || props.pending}>
           <MessageCircle size={16} />
-          发送反馈
+          {props.pending ? "发送中" : "发送反馈"}
         </button>
       </div>
     </details>
@@ -2161,6 +2174,14 @@ function HermesTaskNotice({ profile }: { profile: CreatureProfile }) {
       <small>{activeTasks[0].title ?? "外部任务处理中"}</small>
     </div>
   );
+}
+
+function feedbackActionKey(kind: FeedbackKind, targetId?: string) {
+  return `${kind}:${targetId ?? ""}`;
+}
+
+function isFeedbackPending(pendingKey: string | undefined, kind: FeedbackKind, targetId?: string) {
+  return pendingKey === feedbackActionKey(kind, targetId);
 }
 
 function countUnreadPapoMessages(profile: CreatureProfile | undefined) {

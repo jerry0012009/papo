@@ -310,11 +310,14 @@ select {
 }
 
 .home-brain-peek .state-policy-snapshot {
-  position: absolute;
-  z-index: 8;
-  top: 36px;
-  left: 0;
-  width: min(82vw, 360px);
+  position: fixed;
+  z-index: 40;
+  top: max(78px, env(safe-area-inset-top, 0px) + 16px);
+  left: 50%;
+  width: min(calc(100vw - 24px), 420px);
+  max-height: min(72dvh, calc(100dvh - 132px));
+  overflow: auto;
+  transform: translateX(-50%);
   padding: 12px;
   border-radius: 8px;
   border: 1px solid rgba(70, 82, 72, 0.18);
@@ -876,6 +879,7 @@ select {
   width: 100%;
   max-height: none;
   overflow: visible;
+  transform: none;
   box-shadow: none;
   background: var(--surface-strong);
 }
@@ -1199,13 +1203,14 @@ select {
 }
 
 .developer-trace-body {
-  position: absolute;
-  z-index: 10;
-  top: 34px;
-  left: 0;
-  width: min(82vw, 420px);
-  max-height: 70vh;
+  position: fixed;
+  z-index: 45;
+  top: max(78px, env(safe-area-inset-top, 0px) + 16px);
+  left: 50%;
+  width: min(calc(100vw - 24px), 520px);
+  max-height: min(72dvh, calc(100dvh - 132px));
   overflow: auto;
+  transform: translateX(-50%);
   display: grid;
   gap: 12px;
   padding: 12px;
@@ -1218,8 +1223,8 @@ select {
 
 .chat-bubble.user .developer-trace-body,
 .chat-bubble.world .developer-trace-body {
-  left: auto;
-  right: 0;
+  left: 50%;
+  right: auto;
 }
 
 .developer-trace-body section {
@@ -1558,12 +1563,6 @@ select {
 
   .composer-tools .primary {
     grid-column: 1 / -1;
-  }
-
-  .home-brain-peek .state-policy-snapshot {
-    left: auto;
-    right: 0;
-    width: min(88vw, 360px);
   }
 
   .chat-screen {

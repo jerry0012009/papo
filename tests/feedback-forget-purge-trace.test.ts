@@ -18,6 +18,7 @@ profile.longTermMemories.unshift({
 await store.saveProfile(profile);
 
 let promptSawDeletedTarget = false;
+let promptWarnedUnavailableTarget = false;
 const provider: ModelProvider = {
   kind: "mimo",
   name: "Forget purge provider",
@@ -29,12 +30,13 @@ const provider: ModelProvider = {
   },
   async generateJson(prompt) {
     promptSawDeletedTarget = prompt.includes("游泳馆人太多") && prompt.includes("unavailableAfterStorageOperation");
+    promptWarnedUnavailableTarget = prompt.includes("不要使用 update_memory") && prompt.includes("当前无可修改对象");
     return {
       responseAction: "quiet",
       learningNote: "用户再次要求放下这条已经降权的长期记忆，Papo 应该尊重这次彻底删除。",
       effect: "这条长期记忆已经从存储中删除，反馈反思记录了用户的放下意图。",
-      memoryOperation: { type: "none" },
-      trace: ["saw pre-delete target snapshot"]
+      memoryOperation: { type: "update_memory", text: "这条已经被删除的记忆不应再保留。", kind: "habit" },
+      trace: ["saw pre-delete target snapshot", "model returned impossible update"]
     };
   },
   async summarizeImage() {
@@ -59,6 +61,7 @@ try {
   const payload = await response.json();
   assert.equal(response.status, 200, JSON.stringify(payload));
   assert.equal(promptSawDeletedTarget, true, "feedback model should see the pre-delete target snapshot");
+  assert.equal(promptWarnedUnavailableTarget, true, "feedback prompt should tell the model not to update unavailable targets");
 
   const current = await store.getProfile("forget-purge-user");
   assert.equal(current?.longTermMemories.some((memory) => memory.id === "ltm_drop"), false);
