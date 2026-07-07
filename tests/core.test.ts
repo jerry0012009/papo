@@ -126,6 +126,8 @@ describe("creature core", () => {
     expect(inRange(profile.state)).toBe(true);
     expect(profile.feedbackHistory[0].kind).toBe("continue");
     expect(feedback.inputText).toContain("多想一点");
+    expect(feedback.effect).toContain("你让我再想一会儿");
+    expect(feedback.effect).not.toMatch(/用户让我|用户说|策略改变/);
     expect(feedback.learningNote).toContain("你还补充说");
     expect(feedback.responseAction).toBe("ask_follow_up");
     expect(feedback.followUpText).toContain("下次再碰到");

@@ -76,6 +76,8 @@ describe("api", () => {
         expect(response.body.feedback.responseAction).toBe("note_memory");
         expect(response.body.feedback.replyText).toContain("我会把你刚补的这点贴到");
         expect(response.body.feedback.policyDeltas.length).toBeGreaterThan(0);
+        expect(response.body.feedback.effect).toContain("你让我帮你记住");
+        expect(response.body.feedback.effect).not.toMatch(/用户让我|用户说|策略改变/);
         expect(response.body.profile.conversation[0].channel).toBe("feedback");
         expect(response.body.profile.conversation[0].role).toBe("papo");
         expect(response.body.profile.conversation[0].text).toContain("我会把你刚补的这点贴到");

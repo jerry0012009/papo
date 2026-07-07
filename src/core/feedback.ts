@@ -110,15 +110,15 @@ function policyDeltas(before: FeedbackPolicyProfile, after: FeedbackPolicyProfil
 function effectText(kind: FeedbackKind): string {
   switch (kind) {
     case "understood":
-      return "用户说我理解对了，所以我的表达自信和依恋度上升。";
+      return "你说我这次懂对了，我会更敢把这种理解方式轻轻说出来。";
     case "continue":
-      return "用户让我继续想，所以我以后会更愿意展开关联和推理。";
+      return "你让我再想一会儿，我以后会更愿意把相近的小事连起来多停一下。";
     case "not_now":
-      return "用户说这次不用，所以我会降低打扰感，变得更克制。";
+      return "你说这次先不用，我会把声音收小一点，学会不急着打扰你。";
     case "remember":
-      return "用户让我记住，所以这段情景会升成长记忆。";
+      return "你让我帮你记住，我会把这段共同经历抱得更稳。";
     case "forget":
-      return "用户让我忘掉，所以我会删除或降权相关记忆，并提高隐私警觉。";
+      return "你让我放下它，我会让这段变轻，也更小心守住边界。";
   }
 }
 

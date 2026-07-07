@@ -57,22 +57,21 @@ export function describeStateInfluence(profile: CreatureProfile) {
 }
 
 function explainPolicyShift(policy: FeedbackPolicyProfile, kind: FeedbackKind, tags: string[]) {
-  const tagText = tags.length ? `相关主题：${tags.slice(0, 4).join("、")}。` : "";
+  const tagText = tags.length ? `我会把这个学法先贴近「${tags.slice(0, 3).join("、")}」这些小线索。` : "";
   switch (kind) {
     case "continue":
-      return `${tagText}策略改变：更愿意继续想、回忆旧主题和展开推理。`;
+      return `${tagText}之后遇到相近片段，我会更愿意继续想、想起旧小事，并多展开一点。`;
     case "not_now":
-      return `${tagText}策略改变：降低主动性，提高安静倾向。`;
+      return `${tagText}之后遇到相近片段，我会更会安静陪着，不把每次注意都变成打扰。`;
     case "remember":
-      return `${tagText}策略改变：类似内容更容易建议长期保存。`;
+      return `${tagText}之后遇到相近片段，我会更容易先问你要不要把它记稳。`;
     case "forget":
-      return `${tagText}策略改变：类似内容更谨慎，保存阈值提高。`;
+      return `${tagText}之后遇到相近片段，我会更谨慎，保存前先等你的意思。`;
     case "understood":
-      return `${tagText}策略改变：增强当前理解模式的自信。`;
+      return `${tagText}之后遇到相近片段，我会更相信这次被你确认过的听法。`;
   }
 }
 
 function clamp(value: number) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
-

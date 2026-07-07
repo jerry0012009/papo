@@ -106,7 +106,7 @@ describe("App", () => {
             targetId: "episode1",
             inputText: "这里请多想一点",
             inputModality: "text",
-            effect: "用户让我继续想，所以我以后会更愿意展开关联和推理。",
+            effect: "你让我再想一会儿，我以后会更愿意把相近的小事连起来多停一下。",
             learningNote: "我学到：这个主题你希望我不要浅浅带过。你还补充说：这里请多想一点。",
             stateDeltas: [
               { key: "curiosity", before: 66, after: 74, delta: 8 },
@@ -535,7 +535,7 @@ function profileWithFeedback() {
         targetId: "episode1",
         inputText: "这里请多想一点",
         inputModality: "text",
-        effect: "用户让我继续想，所以我以后会更愿意展开关联和推理。",
+        effect: "你让我再想一会儿，我以后会更愿意把相近的小事连起来多停一下。",
         learningNote: "我学到：这个主题你希望我不要浅浅带过。你还补充说：这里请多想一点。",
         stateDeltas: [{ key: "curiosity", before: 66, after: 74, delta: 8 }],
         policyDeltas: [{ key: "preferDepth", before: 45, after: 53, delta: 8 }]
