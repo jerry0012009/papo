@@ -49,13 +49,13 @@ export function selectAction(input: ActionSelectionInput): ActionDecision {
     action = "observe";
   }
 
-  if (input.relatedMemoryIds.length && policy.recallTendency > 62 && input.privacyRisk < 60 && input.profile.state.energy > 32) {
+  if (!input.llmSuggestedAction && input.relatedMemoryIds.length && policy.recallTendency > 62 && input.privacyRisk < 60 && input.profile.state.energy > 32) {
     action = "recall";
     confidence += 10;
     trace.push("policy_recall_boost");
   }
 
-  if ((input.score?.futureValue ?? 0) >= 16 && input.privacyRisk < 55 && input.profile.state.energy > 35) {
+  if (!input.llmSuggestedAction && (input.score?.futureValue ?? 0) >= 16 && input.privacyRisk < 55 && input.profile.state.energy > 35) {
     action = /问题|question|清单/.test(input.text) ? "draft_question_list" : "draft_reminder";
     confidence += 8;
     trace.push("future_value_action");

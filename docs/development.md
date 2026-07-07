@@ -74,7 +74,7 @@ LLM owns:
 - Candidate action suggestions.
 - More natural narration for feedback learning and active emergence.
 
-Guardrails always run after LLM suggestions. LLM output cannot directly mutate state values, delete memory, bypass privacy, or write cross-user data. LLM can propose actions such as `respond`, `ask`, `recall`, save, review, or reminders, but rules re-run action guardrails before persistence.
+Guardrails always run after LLM suggestions. LLM output cannot directly mutate state values, delete memory, bypass privacy, or write cross-user data. LLM can propose actions such as `respond`, `ask`, `recall`, save, review, or reminders, but rules re-run action guardrails before persistence. Positive rule heuristics such as memory resonance or future value must not override a valid LLM interaction flow; only boundary rules such as privacy, energy, safety, and learned quietness should calibrate it.
 In the normal production path, LLM structured interaction understanding decides which business flow should be proposed. Rule keywords are allowed only as fallback repair after model unavailability/failure, and that fallback status must be visible in diagnostics.
 LLM narration cannot change state, policy, action, memory ids, or persistence. Emergence narration is accepted only when it stays anchored to a real memory already selected by rules.
 Visual and audio models are treated as `sense` adapters only: they may create `image_summary` and `audio_transcript` text, but they do not choose memories, actions, or state changes. Those generated segments remain user-editable before entering Curious Mode.
@@ -254,6 +254,7 @@ Done:
   - Semantic brain output now includes structured interaction understanding and can update the episode response plus memory candidate text before rule-owned persistence completes.
   - Semantic brain can rewrite Curious Mode selected/ignored reasons and the session creature report, while rules still own the selected set, ignored set, scores, attention budget, and guardrails.
   - Direct-call keyword handling was moved out of the primary action selector and into fallback repair only; successful LLM runs own the proposed interaction/action path.
+  - Positive action heuristics no longer override a valid LLM-suggested interaction flow; for example, a future-value phrase cannot turn an LLM-chosen reply into a reminder draft unless a boundary guardrail requires it.
   - Provider defaults now prefer OpenRouter `openai/gpt-5.5` when configured, with `.env` support for local/production deployment and visible fallback diagnostics.
   - Provider diagnostics now expose non-secret model ids and the audio sensing route. Generic audio sensing uses `/audio/transcriptions`, so 30-second recording chunks can reach a real transcription model instead of failing through chat `input_audio`.
   - Provider diagnostics now also expose per-modality provider routing (`textProvider`, `visionProvider`, `audioProvider`). If OpenRouter is the semantic brain but generic credentials exist, audio sensing automatically routes through generic transcription unless `PAPO_AUDIO_PROVIDER=primary` is set.
@@ -306,6 +307,7 @@ Verified:
 - LLM invalid JSON falls back without breaking the life loop.
 - LLM invalid JSON is recorded in `semanticBrainHistory` and surfaced in Brain page diagnostics.
 - LLM action suggestions go through rule guardrails.
+- LLM action suggestions are not overwritten by positive keyword heuristics such as future value when no boundary guardrail applies.
 - LLM feedback narration cannot mutate rule-owned state.
 - LLM emergence narration must stay anchored to an existing long-term memory or it is rejected.
 - Curious Mode creature report uses user-life material and explains selected/ignored segments.

@@ -421,6 +421,44 @@ describe("creature core", () => {
     expect(result.memoryCandidates?.[0].candidateText).toContain("你曾经轻轻叫我说句话");
     expect(result.memoryCandidates?.[0].candidateText).not.toMatch(/用户|Papo|episode|candidate/);
   });
+
+  it("does not let positive rule heuristics override the LLM interaction flow", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "interaction model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          interaction: {
+            userIntent: "你在确认明天之前我是否会先回应你，而不是替你生成提醒。",
+            emotionalTone: "轻轻试探",
+            shouldReply: true,
+            suggestedAction: "respond",
+            reply: "我在，先回应你。明天这件事我会先当成我们正在说话的小片段来听。",
+            memoryCandidateText: "你曾经在提到明天之前先确认我会不会回应你，我先回答了你。",
+            memoryTags: ["回应", "明天"]
+          },
+          trace: ["llm: direct response beats future heuristic"]
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(profile, "明天早上之前，如果你能听见我，就先回答我一声。", provider);
+    const event = result.events[0];
+
+    expect(event).toBeDefined();
+    if (!event) throw new Error("expected an attention event");
+    expect(event.scoreBreakdown).toBeDefined();
+    if (!event.scoreBreakdown) throw new Error("expected score breakdown");
+    expect(event.scoreBreakdown.futureValue).toBeGreaterThanOrEqual(16);
+    expect(event.actionDecision.action).toBe("respond");
+    expect(event.actionDecision.ruleTrace).toContain("llm_suggested=respond");
+    expect(event.actionDecision.ruleTrace).not.toContain("future_value_action");
+    expect(result.response).toContain("我在，先回应你");
+  });
 });
 
 function inRange(state: CreatureState) {
