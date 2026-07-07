@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleButtonCapture, handleCuriousStream } from "../src/core/attention";
-import { createActiveEmergence } from "../src/core/emergence";
+import { createActiveEmergence, semanticDecideEmergence } from "../src/core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../src/core/feedback";
 import { runButtonHarness } from "../src/core/harness";
 import { memoryKeepReasonToCreatureVoice, promoteEpisode, toCreatureMemoryVoice } from "../src/core/memory";
@@ -409,6 +409,79 @@ describe("creature core", () => {
     expect(profile.longTermMemories.some((memory) => memory.id === emergence.memoryId && memory.kind !== "creature_self_memory" && memory.weight > 0)).toBe(true);
     expect(emergence.text).toContain("想起");
     expect(emergence.text).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|我浮现的是|旧记忆|节律/);
+  });
+
+  it("LLM emergence decision chooses whether and which real memory resurfaces", async () => {
+    const profile = createCreatureProfile();
+    const family = handleButtonCapture(profile, "妈妈周五复查这件事需要我提前准备病历。");
+    const familyMemory = promoteEpisode(profile, family.episodes[0].id);
+    const swim = handleButtonCapture(profile, "我最近每天游泳，喜欢运动后轻一点的感觉，但不喜欢游泳馆人太多。");
+    const swimMemory = promoteEpisode(profile, swim.episodes[0].id);
+    expect(familyMemory).toBeDefined();
+    expect(swimMemory).toBeDefined();
+    if (!swimMemory) throw new Error("expected swim memory");
+
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "emergence model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          shouldEmerge: true,
+          memoryId: swimMemory.id,
+          driveSource: "attachment",
+          whyNow: "我刚才更想靠近你，于是想起你说过游泳和人太多这件事。",
+          message: "我刚才想起你说过最近每天游泳，喜欢运动后轻一点的感觉，但游泳馆人太多会让你不舒服。我会把这件事放近一点听。",
+          proactiveLevel: "gentle",
+          trace: ["selected swimming memory"]
+        }) as T
+    };
+
+    const emergence = await semanticDecideEmergence(profile, provider, "2026-07-07T07:00:00.000Z");
+
+    expect(emergence.memoryId).toBe(swimMemory.id);
+    expect(emergence.driveSource).toBe("attachment");
+    expect(emergence.text).toContain("游泳");
+    expect(emergence.text).toContain("人太多");
+    expect(emergence.ruleTrace).toContain("llm: selected active emergence");
+    expect(profile.semanticBrainHistory[0]).toMatchObject({ source: "emergence", status: "applied" });
+  });
+
+  it("LLM emergence cannot reference a missing or forgotten memory", async () => {
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "妈妈周五复查这件事需要我提前准备病历。");
+    const memory = promoteEpisode(profile, result.episodes[0].id);
+    expect(memory).toBeDefined();
+    if (!memory) throw new Error("expected memory");
+
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "bad emergence model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          shouldEmerge: true,
+          memoryId: "ltm_missing",
+          driveSource: "curiosity",
+          whyNow: "我想起一条并不存在的事。",
+          message: "我想起一条并不存在的事。",
+          proactiveLevel: "active"
+        }) as T
+    };
+
+    const emergence = await semanticDecideEmergence(profile, provider, "2026-07-07T07:05:00.000Z");
+
+    expect(emergence.memoryId).toBe(memory.id);
+    expect(emergence.relatedMemoryIds).not.toContain("ltm_missing");
+    expect(profile.semanticBrainHistory[0]).toMatchObject({ source: "emergence", status: "invalid" });
   });
 
   it("active emergence speaks normalized creature memory instead of raw analysis text", () => {

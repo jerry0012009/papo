@@ -2,7 +2,7 @@ import cors from "cors";
 import express from "express";
 import { z } from "zod";
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
-import { createActiveEmergence } from "../core/emergence";
+import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { enrichEmergenceNarration, enrichFeedbackNarration } from "../core/narration";
@@ -318,8 +318,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
   app.post("/api/profiles/:userId/emergence", async (req, res, next) => {
     try {
       const profile = await requireProfile(store, req.params.userId);
-      const emergence = createActiveEmergence(profile);
-      await enrichEmergenceNarration(profile, emergence, provider);
+      const emergence = await semanticDecideEmergence(profile, provider);
       appendPapoMessage(profile, {
         channel: "emergence",
         text: emergence.text,
