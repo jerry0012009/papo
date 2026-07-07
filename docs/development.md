@@ -39,6 +39,7 @@ LLM owns semantic work:
 - Whether an episode should enter memory-candidate review.
 - Papo's visible reply.
 - Papo's visible behavior phrase when needed.
+- Structured action results for non-chat actions, such as reminder drafts and question-list drafts.
 - Candidate memory wording and tags.
 - Feedback reflection, learning language, and memory operations.
 - Active emergence message and why it is surfacing.
@@ -95,6 +96,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Attention candidate scores are structural pacing only. They must not contain fake semantic dimensions such as novelty, emotional charge, memory resonance, local tags, or local related-memory guesses.
 - Direct text and curious stream input start with zero attention events. `semanticDecideAttention` must select segments with the model and provide noticed content, user meaning, memory relation, valid related memory ids, and tags before episodes or memory candidates are created.
 - Action selection code is an enum executor, not a semantic classifier. It must not locally replace a model-selected visible action because of mood, energy, keywords, or confidence heuristics.
+- `draft_reminder` and `draft_question_list` are real action types, not alternate labels for a chat reply. The model must return `actionResult` with the reminder draft or question-list draft; otherwise the request fails loudly.
 - `semanticSelectAction` owns the persistence decision for attended input. It must explicitly return whether to keep an episode and whether to keep a memory candidate; rules may prune temporary structures but must not default every input into memory.
 - Memory candidates keep user text and provenance only. Initial kind, confidence, and write policy are storage placeholders, not cognition. Memory kind, tags, consolidation wording, write policy, and long-term meaning must come from `semanticDecideMemory` before they are treated as product cognition.
 - Long-term memory tags are copied from the model-decided memory candidate only. Rules must not synthesize fallback tags from user text.

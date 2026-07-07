@@ -11,6 +11,14 @@ export type ActionKind =
   | "draft_reminder"
   | "draft_question_list";
 
+export interface ActionResult {
+  kind: "none" | "visible_reply" | "reminder_draft" | "question_list_draft";
+  title?: string;
+  text?: string;
+  dueText?: string;
+  items?: string[];
+}
+
 export type FeedbackKind = "understood" | "continue" | "not_now" | "remember" | "forget";
 export type FeedbackResponseAction = "acknowledge" | "ask_follow_up" | "quiet" | "note_memory";
 export type SegmentKind = "text" | "image_summary" | "audio_observation";
@@ -123,6 +131,7 @@ export interface AttentionEvent {
   privacyRisk: number;
   suggestedAction: ActionKind;
   actionDecision: ActionDecision;
+  actionResult?: ActionResult;
   scoreBreakdown?: SegmentScore;
   creatureExperience: CreatureExperience;
   tags: string[];
@@ -150,6 +159,7 @@ export interface EpisodeMemory {
   promotedToLongTerm: boolean;
   memoryCandidateIds: string[];
   actionDecision?: ActionDecision;
+  actionResult?: ActionResult;
   creatureExperience?: CreatureExperience;
   weight: number;
   tags: string[];
@@ -261,6 +271,7 @@ export interface MessageCognitionTrace {
     noticed: string;
     reason: string;
     visibleReply?: string;
+    actionResult?: ActionResult;
     episodeKept: boolean;
     memoryCandidateKept: boolean;
     relatedMemoryIds: string[];

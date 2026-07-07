@@ -385,6 +385,7 @@ function captureCognitionTrace(
         noticed: event.noticed,
         reason: event.reason,
         visibleReply: event.id === result.events[0]?.id ? result.response : undefined,
+        actionResult: event.actionResult,
         episodeKept: Boolean(episode),
         memoryCandidateKept,
         relatedMemoryIds: event.relatedMemoryIds,

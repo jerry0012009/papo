@@ -17,6 +17,7 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toCreatureMemoryVoice } from "../core/memory";
 import type {
+  ActionResult,
   CreatureProfile,
   CreatureState,
   EpisodeMemory,
@@ -831,6 +832,7 @@ function DeveloperTrace({ trace, profile }: { trace: NonNullable<ConversationMes
                 </TraceBlock>
                 <TraceBlock title={`2. 行动 · ${actionLabel(event.action)}`}>
                   <p>{event.visibleReply ? `说出口：${event.visibleReply}` : "这一步没有外显回复。"}</p>
+                  <ActionResultView result={event.actionResult} />
                   <TraceList items={actionTraceItems(event.decisionTrace)} />
                 </TraceBlock>
                 <TraceBlock title="3. 记忆">
@@ -969,8 +971,38 @@ function RelatedMemories({ ids, profile }: { ids: string[]; profile: CreaturePro
   );
 }
 
+function ActionResultView({ result }: { result?: ActionResult }) {
+  if (!result || result.kind === "none" || result.kind === "visible_reply") return null;
+  if (result.kind === "reminder_draft") {
+    return (
+      <div className="trace-action-result">
+        <b>提醒草稿</b>
+        {result.title ? <p>{result.title}</p> : null}
+        {result.dueText ? <small>时间：{result.dueText}</small> : null}
+        {result.text ? <small>内容：{result.text}</small> : null}
+      </div>
+    );
+  }
+  if (result.kind === "question_list_draft") {
+    return (
+      <div className="trace-action-result">
+        <b>{result.title ?? "问题清单"}</b>
+        {result.text ? <small>{result.text}</small> : null}
+        {result.items?.length ? (
+          <ul className="trace-list">
+            {result.items.map((item, index) => (
+              <li key={`${item}-${index}`}>{item}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    );
+  }
+  return null;
+}
+
 function actionTraceItems(items: string[]) {
-  return items.filter((item) => /^(intent=|action_reason=|should_reply=|guardrail: action=)/.test(item));
+  return items.filter((item) => /^(intent=|action_reason=|should_reply=|action_result=|guardrail: action=)/.test(item));
 }
 
 function memoryTraceItems(items: string[]) {

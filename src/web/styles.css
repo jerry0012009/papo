@@ -874,6 +874,19 @@ select {
   border-top: 0;
 }
 
+.trace-action-result {
+  display: grid;
+  gap: 4px;
+  padding: 7px;
+  border: 1px solid rgba(70, 82, 72, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.trace-action-result p {
+  margin: 0;
+}
+
 .trace-list {
   color: #5d6a61;
   font-size: 0.78rem;
