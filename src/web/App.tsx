@@ -1677,9 +1677,10 @@ function noticedText(text: string) {
 }
 
 function EmergenceCard({ emergence }: { emergence: EmergenceSurface }) {
+  const hasMemory = Boolean(emergence.memoryId);
   return (
     <section className="memory-surface active">
-      <strong>Papo 想起一件事</strong>
+      <strong>{hasMemory ? "Papo 想起一件事" : "Papo 安静了一下"}</strong>
       <p>{visibleCreatureText(emergence.text)}</p>
       {emergence.whyNow ? <small>{visibleCreatureText(emergence.whyNow)}</small> : null}
       {emergence.driveSource ? <span>{emergenceDriveText(emergence.driveSource)}</span> : null}
@@ -1926,7 +1927,7 @@ function presenceHeadline(profile: CreatureProfile) {
     if (latest.channel === "button") return "有一句话给你";
     if (latest.channel === "curious") return "刚陪你听了一会儿";
     if (latest.channel === "feedback") return "刚学会一点你的意思";
-    if (latest.channel === "emergence") return "刚想起一件你们说过的事";
+    if (latest.channel === "emergence") return latest.relatedMemoryIds?.length ? "刚想起一件你们说过的事" : "刚安静了一下";
   }
   if (latest?.role === "user" || latest?.role === "world") return "收到了你刚给的事";
   return restingPresenceHeadline(profile);
@@ -1935,7 +1936,9 @@ function presenceHeadline(profile: CreatureProfile) {
 function presenceSentence(profile: CreatureProfile) {
   const latest = profile.conversation?.[0];
   if (latest?.role === "papo" && latest.channel === "feedback") return "你刚才教过我的那一点，已经放进后面的回应里。";
-  if (latest?.role === "papo" && latest.channel === "emergence") return "那件事已经在对话里，你可以点进去继续说。";
+  if (latest?.role === "papo" && latest.channel === "emergence") {
+    return latest.relatedMemoryIds?.length ? "那件事已经在对话里，你可以点进去继续说。" : "它先安静等着，等你给它新的生活片段。";
+  }
   if (latest?.role === "papo" && latest.channel === "curious") return "刚才听到的内容已经整理进对话，你可以接着补文字、照片或声音。";
   if (latest?.role === "papo" && latest.channel === "button") return "Papo 刚回了你一句，在对话里可以继续接上。";
   if (latest?.role === "user" || latest?.role === "world") return "文字、照片或声音会留在同一次对话里，让 Papo 接着回应。";

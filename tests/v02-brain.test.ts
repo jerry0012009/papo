@@ -328,6 +328,35 @@ describe("creature brain v0.2", () => {
     expect(profile.state).toEqual(stateAfterRules);
   });
 
+  it("rejects internal LLM wording in feedback narration", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "leaky feedback narration model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>() =>
+        ({
+          learningNote: "我学到：用户希望系统进入继续想流程，后续写入长期记忆。",
+          followUpText: "后台流程要不要继续？",
+          trace: ["llm: leaky feedback narration"]
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "我有点担心自己又把妈妈复查这件事拖到睡前。");
+    const feedback = applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id });
+    const ruleLearning = feedback.learningNote;
+    const ruleFollowUp = feedback.followUpText;
+
+    await enrichFeedbackNarration(profile, feedback, provider);
+
+    expect(feedback.learningNote).toBe(ruleLearning);
+    expect(feedback.followUpText).toBe(ruleFollowUp);
+    expect(feedback.replyText).not.toMatch(/用户|系统|后台|流程|写入|长期记忆/);
+  });
+
   it("LLM emergence narration must stay anchored to an existing memory", async () => {
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "妈妈复查这件事对我很重要，我希望提前准备。");
@@ -397,11 +426,39 @@ describe("creature brain v0.2", () => {
 
     const enriched = await enrichEmergenceNarration(profile, emergence, provider);
 
-    expect(promptSeen).toContain("被用户教出来的习惯");
+    expect(promptSeen).toContain("被你教出来的习惯");
     expect(promptSeen).toContain("不能写成普通旧事");
     expect(enriched.text).toContain("你教过");
     expect(enriched.text).toContain("多听一会儿");
     expect(enriched.text).not.toMatch(/我想起了|旧事|我浮现的是|下一次你给我信息流/);
+  });
+
+  it("rejects internal LLM wording in emergence narration", async () => {
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "妈妈复查这件事对我很重要，我希望提前准备。");
+    applyFeedback(profile, { kind: "remember", targetId: result.episodes[0].id });
+    profile.state.curiosity = 86;
+    const emergence = createActiveEmergence(profile);
+    const original = emergence.text;
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "leaky emergence narration model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>() =>
+        ({
+          message: "用户的妈妈复查 episode 触发了语义流程，所以系统准备写入长期记忆。",
+          trace: ["llm: leaky emergence narration"]
+        }) as T
+    };
+
+    const enriched = await enrichEmergenceNarration(profile, emergence, provider);
+
+    expect(enriched.text).toBe(original);
+    expect(enriched.text).not.toMatch(/用户|episode|语义|流程|系统|写入|长期记忆/);
   });
 });
 

@@ -364,6 +364,8 @@ Verified:
 - Papo utterances are visible in the default dialogue history except wake records, and new non-wake replies mark the dialogue tab unread.
 - Active emergence ignores zero-weight forgotten memories; it may use a derived safety rule, but it will not resurface the forgotten target itself.
 - Active emergence with no shared memories does not say "I remembered"; it records no related memory ids and waits for real shared material.
+- Active emergence surfaces must match the data: if `memoryId` / `relatedMemoryIds` are empty, Home labels it as Papo quietly waiting rather than "Papo remembered something".
+- LLM feedback/emergence narration is rejected if it leaks process or product language such as "用户", "系统", "语义", "后台", "流程", `episode`, or `candidate` into creature-facing text.
 - Goal 3 acceptance flow is covered by an end-to-end core test: wake, 8-part Curious stream, selected/ignored reasons, remember/continue feedback, A/B conditioned creatures, and active emergence from a real promoted memory.
 - Curious Mode can create `audio_transcript` segments from real 30-second audio chunks without storing raw audio.
 - Curious Mode can preserve photo upload time/place and batch text/photo/audio as one stream before attention selection.

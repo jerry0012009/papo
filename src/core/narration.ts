@@ -94,7 +94,7 @@ export async function enrichEmergenceNarration(
   try {
     const feedbackSelfMemory = memory.kind === "creature_self_memory" && memory.tags.includes("被你养成");
     const narrationTarget = feedbackSelfMemory
-      ? "请把这条主动浮现改写成 Papo 想起用户教过的回应习惯或边界感，不要写成普通旧事件。"
+      ? "请把这条主动浮现改写成 Papo 想起你教过它的回应习惯或边界感，不要写成普通旧事件。"
       : "请把这条主动浮现改写得更像 Papo 自己突然想起了一段真实共同经历。";
     const raw = await provider.generateJson<unknown>(
       `${narrationTarget}
@@ -103,7 +103,7 @@ export async function enrichEmergenceNarration(
 - 只改写 message，不要改变 state、driveSource、relatedMemoryIds、memoryId 或任何记忆内容。
 - 必须解释为什么这时想起，以及它接下来会怎样听/靠近新的片段。
 - 如果有 related memory，必须引用这条真实记忆里的具体内容，不要编造新事实。
-- 如果 related memory 是“被你养成”的自我记忆，只能写成被用户教出来的习惯、听法或边界感，不能写成普通旧事。
+- 如果 related memory 是“被你养成”的自我记忆，只能写成被你教出来的习惯、听法或边界感，不能写成普通旧事。
 - 不要提数据库、字段、开发过程、投资人、harness、GitHub、nginx。
 - 不要写成提醒事项，不要使用“我浮现的是”“不是提醒”“内在倾向”“下一次你给我信息流”“不装作”“装成”。
 - 220 字以内。
@@ -154,7 +154,7 @@ function withText<T extends EmergenceRecord & { text?: string; memoryId?: string
 }
 
 function isSafeCreatureText(text: string) {
-  return !/(投资人|开发|harness|GitHub|nginx|prompt|数据库字段|字段)/i.test(text);
+  return !/(投资人|开发|harness|GitHub|nginx|prompt|数据库字段|字段|用户|小动物|语义|系统|后台|流程|candidate|episode|fallback|score|阈值|写入|长期记忆|情景记忆)/i.test(text);
 }
 
 function hasTemplatedEmergenceText(text: string) {
