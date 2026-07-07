@@ -129,7 +129,7 @@ function wakeWhyNow(memory: LongTermMemory, elapsedMinutes: number) {
 
 function wakeEmergenceMessage(memory: LongTermMemory) {
   if (memory.kind === "creature_self_memory") {
-    return `我醒来时先摸到你教过我的样子：${wakeMemoryText(memory.text)}。所以现在我会带着这种习惯听你下一段，不把它装成旧事件。`;
+    return `我醒来时先摸到你教过我的样子：${wakeMemoryText(memory.text)}。所以现在我会带着这种习惯听你下一段，等新的小事真的发生。`;
   }
   return `我醒来时又碰到这件小事，我想起了：${wakeMemoryText(memory.text)}。它像刚闻到的一点旧气味，让我现在更容易留意相似的生活细节。`;
 }

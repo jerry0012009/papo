@@ -91,6 +91,7 @@ Forget is two-stage for memories: first feedback lowers the target weight to zer
 Active emergence treats zero-weight memories as unavailable: a memory that has been forgotten but not yet purged cannot be resurfaced as Papo's inner thought.
 Active emergence must not treat seed self-memory as a shared old experience. A memory produced from a real episode may support emergence even if its kind is `creature_self_memory`; if no positive-weight shared memory exists, Papo may express readiness or inner state, but it must not pretend to remember an old moment.
 Feedback-shaped `creature_self_memory` is allowed to support active emergence as "how you have raised me". Rule narration and LLM narration must describe it as a learned habit, listening style, or boundary sense, not as a normal old event.
+Active emergence should prove honesty through structure, not self-explanation. If no memory is related, keep `relatedMemoryIds` empty and say Papo is waiting for the next real fragment; do not show user-facing phrases such as "不装作" or "装成".
 Unread dialogue state is a perception layer for new Papo utterances, not an action planner: rules decide persisted `papo` messages, while the UI only shows a small unread dot on the dialogue entry. Wake notes are presence state and do not create unread notifications.
 Internal channel names, memory kinds, batch ids, and numeric weights are developer facts. User-facing dialogue and memory pages should default to natural creature language; raw `channel`, `kind`, `batchId`, and `weight` belong in details or Brain views.
 The memory page is Papo's subjective remembering surface. It should use first-person creature language for what Papo is holding, how familiar the memory feels, why it kept the moment, and how the user can help it remember accurately or let go. Hiding technical fields is necessary but not sufficient UX; raw phrases such as "用户希望小动物..." must become subjective memory such as "你希望我...".
@@ -268,6 +269,7 @@ Done:
   - Wake rhythm can now carry feedback-shaped self-memory when no shared life memory is available, so Papo can wake with the habits the user taught it without pretending it remembered an event.
   - Active emergence no longer uses seed self-memory as a fake shared memory. User-generated memories can still support emergence even when they are about Papo itself; with no real shared memory, it says it will wait for a real shared moment instead of claiming it remembered one.
   - Active emergence now treats feedback-shaped self-memory as a raised habit rather than an old event, and LLM emergence narration receives the same constraint before rewriting.
+  - Active emergence and wake self-memory fallback no longer use "不装作" / "装成" self-audit wording on user surfaces; the data model proves honesty by leaving unrelated memory ids empty or by marking raised self-memory explicitly.
   - Memory cards now combine familiarity and memory type into Papo's own subjective sentence, so the default memory page reads less like a database record.
   - Home presence copy no longer labels Papo as "current mood" or explains state as calculation. It now prioritizes the latest conversation, feedback, emergence, or wake context before falling back to body-state cues.
   - Home idle copy now uses real shared memory, raised self-memory, or an explicit "waiting for first real life fragment" state instead of falling back to static mood labels.
@@ -356,7 +358,7 @@ Verified:
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Guided Demo Mode's two-creature section displays how feedback changed their behavior and personality on the same input without exposing policy numbers.
 - `npm run test:e2e`: Playwright Chromium desktop/mobile visual smoke passes for the Shiba avatar, conversation timeline, source-linked episode card, unread dialogue dot, feedback input, and Curious recording entry.
-- Tests protect active emergence and wake resurfacing from template-reminder phrases such as "不是提醒", "内在倾向", and "下一次你给我信息流".
+- Tests protect active emergence and wake resurfacing from template-reminder or self-audit phrases such as "不是提醒", "内在倾向", "下一次你给我信息流", "不装作", and "装成".
 - UI and visual smoke protect the memory page's first-person creature voice and ensure raw memory diagnostics stay out of the default surface.
 - UI and visual smoke protect the companionship path from raw source ids and type dropdowns on user-facing pages.
 - UI smoke protects the demo entry from "一键准备" and numbered-scene copy.

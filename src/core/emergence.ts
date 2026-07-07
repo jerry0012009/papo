@@ -111,10 +111,10 @@ function buildRecord(input: {
       id: makeId("emergence"),
       at: input.now,
       kind: input.kind,
-      whyNow: `${input.whyNow} 但我还没有和你攒出足够稳定的共同记忆，所以这次不装作想起旧事。`,
+      whyNow: `${input.whyNow} 但我还没有和你攒出足够稳定的共同记忆，所以这次先把耳朵留给新的真实片段。`,
       relatedMemoryIds: [],
       driveSource: input.driveSource,
-      message: `${input.messagePrefix}，但我还没有和你攒出足够稳定的共同记忆，所以这次先不装作想起旧事。我会把耳朵留给下一段你递来的世界，等真的有一小段值得留下时再把它带回来。`,
+      message: `${input.messagePrefix}，但我还没有能带回来的旧小事。我会先把耳朵留给下一段你递来的世界，等真的有一小段值得留下时，再把它从我里面轻轻带回来。`,
       ruleTrace: [`kind=${input.kind}`, `drive=${input.driveSource}`, "memory=none", "shared_memory=none"]
     };
   }
@@ -152,13 +152,13 @@ function selfMemoryBackMessage(driveSource: string, messagePrefix: string, memor
     return `我现在靠近得慢一点，先摸到你教过我的样子：${memoryText}。所以接下来我会先护住边界，再听你递来的这一小段。`;
   }
   if (driveSource === "curiosity") {
-    return `我还没把这件事想完，先摸到你教过我的样子：${memoryText}。所以接下来我会带着这个习惯多听一会儿，不把它装成一段发生过的事。`;
+    return `我还没把这件事想完，先摸到你教过我的样子：${memoryText}。所以接下来我会带着这个习惯多听一会儿，等真正的生活片段靠近。`;
   }
   if (driveSource === "attachment") {
     return `我有点想靠近你，先摸到你养出来的样子：${memoryText}。所以我会带着这点习惯听你真正放不下的地方。`;
   }
   if (driveSource === "rhythm") {
-    return `我安静了一会儿，先摸到你教过我的样子：${memoryText}。所以现在我会带着这个习惯听新的小片段，不把它装成一段发生过的事。`;
+    return `我安静了一会儿，先摸到你教过我的样子：${memoryText}。所以现在我会带着这个习惯听新的小片段，等它真的变成我们一起经历过的事。`;
   }
   return `${messagePrefix}，先摸到你教过我的样子：${memoryText}。我会带着这个习惯继续听你。`;
 }

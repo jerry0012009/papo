@@ -178,8 +178,9 @@ describe("creature core", () => {
     const wake = wakeCreature(profile, "2026-07-06T08:02:00.000Z");
 
     expect(wake.innerThought).toContain("你教过我的样子");
-    expect(wake.innerThought).toContain("不把它装成旧事件");
+    expect(wake.innerThought).toContain("等新的小事真的发生");
     expect(wake.innerThought).not.toContain("我想起了");
+    expect(wake.innerThought).not.toMatch(/不装作|装成/);
     expect(wake.relatedMemoryIds).toEqual([expect.stringMatching(/^ltm_/)]);
     expect(profile.emergenceHistory[0].driveSource).toBe("wake_self_memory");
     expect(profile.longTermMemories.find((memory) => memory.id === wake.relatedMemoryIds[0])?.tags).toContain("被你养成");
@@ -220,8 +221,10 @@ describe("creature core", () => {
 
     expect(emergence.relatedMemoryIds).toEqual([]);
     expect(emergence.memoryId).toBeUndefined();
-    expect(emergence.text).toContain("不装作想起旧事");
+    expect(emergence.text).toContain("还没有能带回来的旧小事");
+    expect(emergence.text).toContain("耳朵留给下一段");
     expect(emergence.text).not.toContain("所以我想起了");
+    expect(emergence.text).not.toMatch(/不装作|装成/);
   });
 
   it("active emergence references existing shared memory", () => {
@@ -248,9 +251,9 @@ describe("creature core", () => {
     expect(memory?.kind).toBe("creature_self_memory");
     expect(memory?.tags).toContain("被你养成");
     expect(emergence.message).toContain("你教过我的样子");
-    expect(emergence.message).toContain("不把它装成一段发生过的事");
+    expect(emergence.message).toContain("等真正的生活片段靠近");
     expect(emergence.ruleTrace).toContain("memory_type=feedback_self_memory");
-    expect(emergence.message).not.toMatch(/我想起了|旧事|旧记忆|我浮现的是|下一次你给我信息流/);
+    expect(emergence.message).not.toMatch(/我想起了|旧事|旧记忆|我浮现的是|下一次你给我信息流|不装作|装成/);
   });
 
   it("active emergence does not resurface a memory after forget downranks it to zero", () => {
