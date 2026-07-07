@@ -96,7 +96,7 @@ describe("api", () => {
       .expect((response) => {
         expect(response.body.memory.text).toContain("为什么注意");
         expect(response.body.profile.conversation[0].role).toBe("papo");
-        expect(response.body.profile.conversation[0].text).toContain("我把这条记忆改准了");
+        expect(response.body.profile.conversation[0].text).toContain("我记准了");
         expect(response.body.profile.conversation[0].text).toContain("你那时希望我解释自己为什么注意到重点");
         expect(response.body.profile.conversation[0].text).not.toMatch(/用户|小动物/);
         expect(response.body.profile.conversation[0].relatedMemoryIds).toContain(memoryId);
@@ -295,6 +295,9 @@ function testProvider(): ModelProvider {
       }
       if (prompt.includes("反馈学习结果")) {
         return { learningNote: "我学到这件事要记得更稳一点。", followUpText: "我会把你补的这点和原来的事放在一起。" } as T;
+      }
+      if (prompt.includes("改准了一条记忆")) {
+        return { replyText: "我记准了：你那时希望我解释自己为什么注意到重点。之后想起这件事时，我会按这个版本接上。" } as T;
       }
       if (prompt.includes("主动浮现大脑")) {
         return {

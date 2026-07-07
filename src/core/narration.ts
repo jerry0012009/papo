@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { composeFeedbackReplyText } from "./feedback";
+import { modelConversationContext, modelMemoryItem } from "./model-context";
 import { normalizeSharedMemoryText } from "./memory";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
@@ -31,6 +32,11 @@ const feedbackNarrationSchema = z.object({
 
 const emergenceNarrationSchema = z.object({
   message: requiredText(16, 460),
+  trace: optionalTextArray(5, 120)
+});
+
+const memoryCorrectionNarrationSchema = z.object({
+  replyText: requiredText(8, 260),
   trace: optionalTextArray(5, 120)
 });
 
@@ -181,6 +187,47 @@ ${JSON.stringify(profile.state)}
   }
   emergence.ruleTrace = [...emergence.ruleTrace, "llm: emergence narration enriched"];
   return withText(emergence);
+}
+
+export async function narrateMemoryCorrection(
+  profile: CreatureProfile,
+  input: { memory: LongTermMemory; previousText: string; correctedText: string },
+  provider: ModelProvider
+) {
+  if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for memory correction narration.");
+  const privacyHigh = hasHighPrivacyText(`${input.previousText} ${input.correctedText} ${input.memory.tags.join(" ")}`);
+  const raw = await provider.generateJson<unknown>(
+    `请作为 Papo，回应用户刚刚帮你改准了一条记忆这件事。
+
+约束：
+- 只生成 Papo 对用户说的一句短回复，不要输出内部过程。
+- 你可以承认自己刚才记得不够准，并说明之后会按用户改准的版本想起。
+- 如果 contentHiddenForPrivacy=true，不要复述具体内容，只说会按刚改准的版本处理。
+- 不要提数据库、字段、开发过程、harness、prompt、语义、后台、流程、长期记忆、写入。
+- 不要说“用户希望”“用户说”，要用“你/我”的自然对话。
+
+返回严格 JSON：
+{"replyText":"...","trace":["..."]}
+
+memory_after_correction:
+${JSON.stringify(modelMemoryItem(input.memory, true))}
+
+correction:
+${JSON.stringify({
+  previousText: textForModel(input.previousText, privacyHigh),
+  correctedText: textForModel(input.correctedText, privacyHigh),
+  contentHiddenForPrivacy: privacyHigh
+})}
+
+recent_conversation_newest_first:
+${JSON.stringify(modelConversationContext(profile, 8))}
+`
+  );
+  const parsed = memoryCorrectionNarrationSchema.safeParse(raw);
+  if (!parsed.success || !isSafeCreatureText(parsed.data.replyText)) {
+    throw new Error("invalid memory correction narration");
+  }
+  return parsed.data.replyText;
 }
 
 function withText<T extends EmergenceRecord & { text?: string; memoryId?: string }>(emergence: T): T & { text: string; memoryId?: string } {

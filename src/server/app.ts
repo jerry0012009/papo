@@ -5,7 +5,7 @@ import { appendInputMessage, appendPapoMessage } from "../core/conversation";
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
-import { enrichEmergenceNarration, enrichFeedbackNarration } from "../core/narration";
+import { enrichEmergenceNarration, enrichFeedbackNarration, narrateMemoryCorrection } from "../core/narration";
 import { createModelProvider, type ModelProvider } from "../core/provider";
 import { promoteEpisode, toCreatureMemoryVoice, updateLongTermMemory } from "../core/memory";
 import { wakeCreature } from "../core/rhythm";
@@ -264,11 +264,13 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const body = updateMemorySchema.parse(req.body);
+      const previousMemory = profile.longTermMemories.find((item) => item.id === req.params.memoryId);
+      const previousText = previousMemory?.text ?? "";
       const memory = updateLongTermMemory(profile, req.params.memoryId, body.text);
       if (!memory) throw new HttpError(404, "Memory not found");
       const at = new Date().toISOString();
       const taughtText = memoryCorrectionDialogueText(body.text, 140);
-      const rememberedText = memoryCorrectionDialogueText(memory.text, 120);
+      const replyText = await narrateMemoryCorrection(profile, { memory, previousText, correctedText: body.text }, provider);
       appendInputMessage(profile, {
         channel: "feedback",
         role: "user",
@@ -281,7 +283,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       });
       appendPapoMessage(profile, {
         channel: "feedback",
-        text: `我把这条记忆改准了：${rememberedText}。之后它再从我里面回来时，我会按你刚教的版本想起。`,
+        text: replyText,
         sourceId: `${memory.id}:edit`,
         relatedMemoryIds: [memory.id],
         at
