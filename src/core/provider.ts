@@ -261,7 +261,7 @@ async function callChatCompletions(
           {
             role: "system",
             content:
-              "你是一个生命体 agent harness 的语义脑。只输出用户要求的内容。不要决定持久状态数值，不要越过隐私护栏。"
+              "你是一个生命体 agent harness 的语义脑。按用户请求输出内容，并遵守调用方给出的 JSON 结构。"
           },
           { role: "user", content: prompt }
         ]
@@ -440,12 +440,6 @@ function parseJson<T>(text: string): T | undefined {
   try {
     return JSON.parse(text) as T;
   } catch {
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return undefined;
-    try {
-      return JSON.parse(match[0]) as T;
-    } catch {
-      return undefined;
-    }
+    return undefined;
   }
 }

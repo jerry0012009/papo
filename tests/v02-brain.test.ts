@@ -76,19 +76,20 @@ describe("creature brain v0.2", () => {
 
   it("memory consolidation creates candidates before long-term promotion", () => {
     const profile = createCreatureProfile();
-    const result = handleButtonCapture(profile, "用户更重视我解释为什么注意，而不是只总结。");
+    const result = handleButtonCapture(profile, "我更希望你解释为什么注意，而不是只总结。");
 
     expect(result.memoryCandidates?.[0].status).toBe("candidate");
-    expect(result.memoryCandidates?.[0].candidateText).toContain("你当时告诉我");
+    expect(result.memoryCandidates?.[0].candidateText).toContain("我更希望你解释为什么注意");
+    expect(result.memoryCandidates?.[0].candidateText).not.toContain("你当时告诉我");
     expect(result.memoryCandidates?.[0].candidateText).not.toContain("当时我回应你");
     expect(result.memoryCandidates?.[0].whyConsolidate).toBe("");
     expect(profile.longTermMemories.some((memory) => memory.sourceEpisodeId === result.episodes[0].id)).toBe(false);
 
     applyFeedback(profile, { kind: "remember", targetId: result.episodes[0].id });
 
-    const promoted = profile.longTermMemories.find((memory) => memory.sourceEpisodeId === result.episodes[0].id && memory.text.includes("你当时告诉我"));
+    const promoted = profile.longTermMemories.find((memory) => memory.sourceEpisodeId === result.episodes[0].id && memory.text.includes("我更希望你解释为什么注意"));
     expect(promoted).toBeTruthy();
-    expect(promoted?.text).toContain("你当时告诉我");
+    expect(promoted?.text).not.toContain("你当时告诉我");
     expect(promoted?.consolidatedBecause).toBe("");
   });
 

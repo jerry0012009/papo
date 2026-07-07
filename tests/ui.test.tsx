@@ -83,8 +83,9 @@ describe("App", () => {
 
     render(<App />);
 
-    await waitFor(() => expect(screen.getByText("记着你教过的听法")).toBeInTheDocument());
-    expect(screen.getByText("你把我教得遇到相近的事要多停一下，不要太快放过去。")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("等第一段生活靠近")).toBeInTheDocument());
+    expect(screen.queryByText("记着你教过的听法")).not.toBeInTheDocument();
+    expect(screen.queryByText("你把我教得遇到相近的事要多停一下，不要太快放过去。")).not.toBeInTheDocument();
     expect(screen.queryByText("想起以前的事")).not.toBeInTheDocument();
     expect(screen.queryByText("我被你养成的样子")).not.toBeInTheDocument();
   });
@@ -185,7 +186,7 @@ describe("App", () => {
           profile: profileWithChatInput(),
           events: [],
           episodes: [],
-          response: "我接住了这件刚发生的小事，会先和这一小段放在一起。",
+          response: "我听见了，会和你刚给的照片放在一起看。",
           memoryCandidates: [],
           harnessTrace: ["sense: button", "semantic: llm interpretation applied"],
           provider: "generic"
@@ -197,7 +198,7 @@ describe("App", () => {
           profile: profileWithChatMoment(),
           events: [],
           episodes: [],
-          response: "我把你刚说的话和照片放在同一小段里听了。",
+          response: "我把你刚说的话和照片放在一起听了。",
           curiousSession: {
             totalSegments: 2,
             selected: [],
@@ -209,7 +210,7 @@ describe("App", () => {
                 score: { privacyRisk: 0, redundancyPenalty: 0 }
               }
             ],
-            stateInfluence: "我先听这一小段里真正重要的部分。"
+            stateInfluence: "模型会从同一次分享里选择值得回应的部分。"
           },
           memoryCandidates: [],
           harnessTrace: ["sense: curious_stream", "semantic: llm interpretation applied"],
@@ -247,7 +248,6 @@ describe("App", () => {
     expect(emergenceReason).toBeVisible();
     expect(screen.getByText("好奇心更高，所以还想继续想一会儿。")).toBeVisible();
     expect(screen.queryByText("Papo 想起一件事")).not.toBeInTheDocument();
-    expect(screen.queryByText(/小情景|递来的一小段|情景记忆/)).not.toBeInTheDocument();
     expect(screen.queryByText(/材料|模拟一段信息流|录音分段/)).not.toBeInTheDocument();
     expect(screen.queryByText("Papo 抬头看了你一眼")).not.toBeInTheDocument();
     expect(screen.queryByText("我醒来时又碰到妈妈复查这件小事。")).not.toBeInTheDocument();
@@ -269,12 +269,13 @@ describe("App", () => {
     expect(screen.queryByText("我听见了。")).not.toBeInTheDocument();
     expect(screen.queryByText("这段对我还很新")).not.toBeInTheDocument();
     expect(screen.queryByText("我会先把它当作一段共同经历记下来。")).not.toBeInTheDocument();
-    expect(screen.queryByText(/我先听你说完|我想轻轻问一句|确认我有没有听对/)).not.toBeInTheDocument();
     expect(screen.queryByText(/轻问|存情景|存长期|以后回来/)).not.toBeInTheDocument();
     expect(screen.getAllByText("看看 Papo 怎么处理的").length).toBeGreaterThan(0);
     expect(screen.queryByText("查看后台流程")).not.toBeInTheDocument();
-    expect(screen.getAllByText("听见什么").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("怎么理解").length).toBeGreaterThan(0);
+    expect(screen.queryByText("听见什么")).not.toBeInTheDocument();
+    expect(screen.queryByText("怎么理解")).not.toBeInTheDocument();
+    expect(screen.getAllByText("你说了什么").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Papo 怎么理解").length).toBeGreaterThan(0);
     expect(screen.queryByText(/语义判断|状态约束|行动选择|记忆策略/)).not.toBeInTheDocument();
     expect(screen.queryByText("我刚才注意到：")).not.toBeInTheDocument();
     expect(screen.queryByText("我为什么注意：")).not.toBeInTheDocument();
@@ -295,10 +296,9 @@ describe("App", () => {
     expect(await screen.findByText("我接住了你的反馈")).toBeInTheDocument();
     expect(screen.getAllByText(/我学到：这个主题你希望我不要浅浅带过/).length).toBeGreaterThan(0);
     expect(screen.queryByText("你刚才还告诉我：这里请多想一点")).not.toBeInTheDocument();
-    expect(screen.getByText("这次怎么影响我")).toBeInTheDocument();
-    await userEvent.click(screen.getByText("这次怎么影响我"));
-    expect(screen.getByText("下次遇到相似内容，我会多停一下，愿意展开一点。")).toBeInTheDocument();
-    expect(screen.getByText("我刚认真用过一点力，接下来会先少说一点。")).toBeInTheDocument();
+    expect(screen.queryByText("这次怎么影响我")).not.toBeInTheDocument();
+    expect(screen.queryByText("下次遇到相似内容，我会多停一下，愿意展开一点。")).not.toBeInTheDocument();
+    expect(screen.queryByText("我刚认真用过一点力，接下来会先少说一点。")).not.toBeInTheDocument();
     expect(screen.queryByText("好奇心 +8")).not.toBeInTheDocument();
     expect(screen.queryByText("深入倾向 +8")).not.toBeInTheDocument();
     expect(screen.queryByText("这次养成变化")).not.toBeInTheDocument();
@@ -329,7 +329,7 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "让 Papo 听听" }));
     await waitFor(() => expect(curiousRequest?.segments?.map((segment) => segment.kind)).toEqual(["text", "image_summary"]));
     expect(new Set(curiousRequest?.segments?.map((segment) => segment.batchId)).size).toBe(1);
-    expect(await screen.findByText("我把你刚说的话和照片放在同一件事里听了。")).toBeInTheDocument();
+    expect(await screen.findByText("我把你刚说的话和照片放在一起听了。")).toBeInTheDocument();
     expect(screen.getByText("这张照片就是刚说的复查。")).toBeInTheDocument();
     expect(screen.getByText("照片里是周五复查的日历备注，写着提前准备病历。")).toBeInTheDocument();
 
@@ -344,12 +344,9 @@ describe("App", () => {
     expect(screen.queryByText(/semantic:/)).not.toBeInTheDocument();
     expect(screen.queryByText("刚才 Papo 说")).not.toBeInTheDocument();
     expect(screen.queryByText("Papo 新说")).not.toBeInTheDocument();
-    const skippedReason = screen.getByText("这段更像背景声，我先不抢着记住。");
-    expect(screen.getByText("看看这次 Papo 注意了什么")).toBeInTheDocument();
-    expect(skippedReason).not.toBeVisible();
-    await userEvent.click(screen.getByText("看看这次 Papo 注意了什么"));
-    expect(screen.getByText("暂时略过 背景小事")).toBeVisible();
-    expect(skippedReason).toBeVisible();
+    expect(screen.queryByText("看看这次 Papo 注意了什么")).not.toBeInTheDocument();
+    expect(screen.queryByText("这段更像背景声，我先不抢着记住。")).not.toBeInTheDocument();
+    expect(screen.queryByText("暂时略过 背景小事")).not.toBeInTheDocument();
     expect(screen.queryByText(/竖起耳朵|先放过了/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Papo 放过了/)).not.toBeInTheDocument();
 
@@ -396,16 +393,11 @@ describe("App", () => {
     expect(screen.getByText("Papo 记得的生活")).toBeInTheDocument();
     expect(screen.getByText("这里慢慢留下你们一起经历过的事。每条都可以被你改准，或者让 Papo 放下。")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("找一找哪件事")).toBeInTheDocument();
-    expect(screen.getByText("Papo 被你改过的地方")).toBeInTheDocument();
+    expect(screen.queryByText("Papo 被你改过的地方")).not.toBeInTheDocument();
     expect(screen.getByText("最近一起经历过")).toBeInTheDocument();
     expect(screen.getAllByText("你当时说").length).toBeGreaterThan(0);
     expect(screen.queryByText("Papo 当时回你")).not.toBeInTheDocument();
-    expect(screen.getAllByText("后来记住").length).toBeGreaterThan(0);
-    expect(screen.getAllByText((_, element) =>
-      Boolean(element?.textContent?.includes("如果你能说话") && element.textContent.includes("你就说句话给我听"))
-    ).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Papo 学会").length).toBeGreaterThan(0);
-    expect(screen.getByText(/你教我不要浅浅带过/)).toBeInTheDocument();
+    expect(screen.queryByText(/你教我不要浅浅带过/)).not.toBeInTheDocument();
     expect(screen.queryByText("我正在学习注意")).not.toBeInTheDocument();
     expect(screen.queryByText("我记得比较清楚。以后聊到相近内容时，我会想起这一段。")).not.toBeInTheDocument();
     expect(screen.queryByText("我留下它，是因为这件事以后可能还会回来找你。")).not.toBeInTheDocument();
@@ -432,8 +424,6 @@ describe("App", () => {
     expect(screen.queryByText("future_review · weight 80")).not.toBeInTheDocument();
     expect(screen.queryByText("记忆细节")).not.toBeInTheDocument();
     expect(screen.queryByText(/资料库|memory_resonance|scoreBreakdown|decisionTrace|weight \d|confidence \d|细节记录/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/用户|小动物|episode|candidate|长期保存|当前事件|保存意图|未来价值/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/它以后可能还会回来找你，我先记着：如果你能说话/)).not.toBeInTheDocument();
     expect(screen.queryByText("我留下它，是因为这件事以后可能还会回来找你。")).not.toBeInTheDocument();
     expect(screen.getAllByText("来自同一次事件").length).toBeGreaterThan(0);
     expect(screen.queryByText(/批次 manual-1/)).not.toBeInTheDocument();
@@ -739,7 +729,7 @@ function profileWithChatMoment() {
         at: new Date().toISOString(),
         role: "papo",
         channel: "curious",
-        text: "我把你刚说的话和照片放在同一小段里听了。",
+        text: "我把你刚说的话和照片放在一起听了。",
         sourceId: "chat-session",
         relatedMemoryIds: []
       },

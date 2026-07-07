@@ -159,7 +159,6 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const wake = wakeCreature(profile);
-      appendPapoMessage(profile, { channel: "wake", text: wake.message, sourceId: wake.id, relatedMemoryIds: wake.relatedMemoryIds, at: wake.at });
       await store.saveProfile(profile);
       res.json({ profile, wake });
     } catch (error) {

@@ -62,7 +62,8 @@ describe("creature core", () => {
     expect(result.response).toBe("");
     expect(result.episodes[0].creatureResponse).toBe("");
     expect(result.episodes[0].possibleIntent).toBe("");
-    expect(result.memoryCandidates?.[0].candidateText).toContain("你当时告诉我：刚刚医生确认复查时间改到周六上午");
+    expect(result.memoryCandidates?.[0].candidateText).toContain("刚刚医生确认复查时间改到周六上午");
+    expect(result.memoryCandidates?.[0].candidateText).not.toContain("你当时告诉我");
     expect(result.memoryCandidates?.[0].whyConsolidate).toBe("");
   });
 
@@ -71,7 +72,6 @@ describe("creature core", () => {
     const result = handleButtonCapture(profile, "我准备去游泳最近每天我都游泳游泳是一个消耗卡路里效率很高的运动我很喜欢但是我不喜欢游泳馆人太多");
 
     expect(result.response).toBe("");
-    expect(result.response).not.toMatch(/我听见了|喜欢的部分|我先听你说完|我注意到这段|刚发生的对话|确认我有没有听对|情景记忆|长期记忆/);
     expect(result.episodes[0].creatureResponse).toBe(result.response);
   });
 
@@ -409,17 +409,13 @@ describe("creature core", () => {
     ]);
   });
 
-  it("renders old memory material in Papo's subjective voice", () => {
+  it("does not disguise old internal memory material as Papo's voice", () => {
     const text = toCreatureMemoryVoice(
       "用户希望小动物解释自己为什么注意到重点。我还没有强烈联想到旧记忆，所以先把它作为新的情景片段。这段需要用户确认，尤其是隐私、情绪或保存意图还不够明确。"
     );
     const reason = memoryKeepReasonToCreatureVoice("这条 episode 有未来价值。");
 
-    expect(text).toContain("你那时希望我解释自己为什么注意到重点");
-    expect(text).toContain("我当时还没和旧事连起来");
-    expect(text).toContain("我当时决定先放轻一点");
-    expect(text).not.toMatch(/用户|小动物|当前事件|保存意图|情景片段|旧记忆/);
-    expect(reason).toBe("这件事以后可能还会回来找你");
+    expect(reason).toBe("这条 episode 有未来价值");
   });
 
   it("remember promotes an episode to long-term memory", () => {
@@ -525,9 +521,9 @@ describe("creature core", () => {
 
     expect(emergence.relatedMemoryIds).toEqual([]);
     expect(emergence.memoryId).toBeUndefined();
-    expect(emergence.text).toContain("安静陪着");
-    expect(emergence.ruleTrace).toContain("llm: chose quiet emergence");
-    expect(profile.emergenceHistory[0].id).toBe(emergence.id);
+    expect(emergence.text).toBe("");
+    expect(profile.emergenceHistory).toHaveLength(0);
+    expect(profile.semanticBrainHistory[0].message).toBe("llm emergence chose quiet");
   });
 
   it("LLM emergence decision chooses whether and which real memory resurfaces", async () => {

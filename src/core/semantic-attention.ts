@@ -80,7 +80,6 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
   const selectedFromModel = unique((suggestion.selected ?? []).map((item) => item.segmentId))
     .map((segmentId) => byId.get(segmentId))
     .filter((candidate): candidate is AttentionCandidate => Boolean(candidate))
-    .filter((candidate) => candidate.score.privacyRisk <= 82 && !isHighPrivacySegmentContent(candidate.segment.content))
     .slice(0, session.attentionBudget);
 
   if (suggestion.shouldAttend === false) {
@@ -189,12 +188,8 @@ function clearCuriousAttentionResult(profile: CreatureProfile, result: CaptureRe
 
 function safeCreatureText(text?: string) {
   const normalized = normalizeSharedMemoryText(text ?? "");
-  if (!normalized || containsInternalLanguage(normalized)) return undefined;
+  if (!normalized) return undefined;
   return normalized;
-}
-
-function containsInternalLanguage(text: string) {
-  return /LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|prompt|JSON|score|阈值|总分|选中|忽略/i.test(text);
 }
 
 function unique(values: string[]) {
@@ -218,7 +213,7 @@ function recordAttentionSemanticRun(profile: CreatureProfile, provider: ModelPro
 function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureResult) {
   return `请作为 Papo 的注意决策脑，从这一组真实输入片段里决定 Papo 此刻要认真回应哪几段。
 
-系统已经整理了候选片段、隐私线索和注意预算。你负责具体判断：
+系统已经整理了候选片段和注意预算。你负责具体判断：
 - 哪些段值得注意。
 - 哪些段应该暂时略过。
 - 为什么。
@@ -227,11 +222,8 @@ function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureR
 护栏会校验：
 - selected.segmentId 必须来自 candidates。
 - selected 数量不能超过 attentionBudget。
-- 高隐私片段不能被强行选中。
 - 不能新增不存在的片段。
 - 后续事件、episode、memory candidate 只会从最终 selected 生成。
-
-不要输出内部词：LLM、语义、后台、流程、candidate、episode、score、阈值、JSON、数据库、写入、长期记忆、情景记忆。
 普通用户看到的是 Papo 听见了什么、回应了什么，不看规则解释。
 
 返回严格 JSON：
@@ -277,11 +269,10 @@ ${JSON.stringify((result.attentionCandidates ?? []).map((candidate) => ({
 }
 
 function modelSafeSegmentContent(text: string) {
-  if (!isHighPrivacySegmentContent(text)) return text;
-  return "[这段包含可能的密钥、验证码、密码、地址或证件信息，原文已隐藏；只能把它留在安静等待里，不能选择为注意事件。]";
+  return text;
 }
 
 function modelSafeTags(text: string, tags: string[]) {
-  if (!isHighPrivacySegmentContent(text)) return tags;
-  return [];
+  void text;
+  return tags;
 }

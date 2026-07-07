@@ -122,11 +122,8 @@ export async function narrateMemoryCorrection(
     `请作为 Papo，回应用户刚刚帮你改准了一条记忆这件事。
 
 约束：
-- 只生成 Papo 对用户说的一句短回复，不要输出内部过程。
+- 只生成 Papo 对用户说的一句短回复。
 - 你可以承认自己刚才记得不够准，并说明之后会按用户改准的版本想起。
-- 如果 contentHiddenForPrivacy=true，不要复述具体内容，只说会按刚改准的版本处理。
-- 不要提数据库、字段、开发过程、harness、prompt、语义、后台、流程、长期记忆、写入。
-- 不要说“用户希望”“用户说”，要用“你/我”的自然对话。
 
 返回严格 JSON：
 {"replyText":"...","trace":["..."]}
@@ -153,6 +150,5 @@ ${JSON.stringify(modelConversationContext(profile, 8))}
 }
 
 function isSafeCreatureText(text: string) {
-  if (hasHighPrivacyText(text)) return false;
-  return !/(投资人|开发|harness|GitHub|nginx|prompt|数据库字段|字段|用户|小动物|语义|系统|后台|流程|candidate|episode|score|阈值|写入|长期记忆|情景记忆)/i.test(text);
+  return Boolean(text.trim());
 }

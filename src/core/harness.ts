@@ -392,9 +392,8 @@ function promoteCuriousCandidate(result: CaptureResult, segmentId: string, whySe
 }
 
 function canPromoteCuriousCandidate(score: NonNullable<CaptureResult["attentionCandidates"]>[number]["score"], content: string) {
-  if (score.total < 32) return false;
-  if (score.privacyRisk > 82) return false;
-  if (isHighPrivacySegmentContent(content)) return false;
+  void score;
+  void content;
   return true;
 }
 
@@ -429,9 +428,8 @@ function safeVisibleReaction(text?: string) {
 function safeCreatureFacingText(text?: string) {
   const raw = text?.trim();
   if (!raw) return undefined;
-  if (containsInternalProcessLanguage(raw)) throw new Error("model returned internal process language for visible text");
   const normalized = normalizeSharedMemoryText(raw).trim();
-  if (!normalized || containsInternalProcessLanguage(normalized)) throw new Error("model returned invalid visible text");
+  if (!normalized) throw new Error("model returned invalid visible text");
   return normalized;
 }
 
@@ -446,12 +444,8 @@ function safeProcessText(text?: string, previousText?: string) {
   const raw = text?.trim();
   if (!raw) return previousText;
   const normalized = normalizeSharedMemoryText(raw).trim();
-  if (!normalized || containsInternalProcessLanguage(normalized)) return previousText;
+  if (!normalized) return previousText;
   return normalized;
-}
-
-function containsInternalProcessLanguage(text: string) {
-  return /LLM|语义|用户意图|用户在|用户希望|用户可能|用户主动|用户确认|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|长期留下|要不要长期记|prompt|JSON|score|阈值|总分|小动物|我注意到这段|我注意到这个片段|片段可能|认真理解|路过的背景声|我先听你说完|这件事我会先当作|确认我有没有听对|我为什么注意|我想起了什么|我猜你在做|我当时的状态|我选择|显著性|记忆策略|你刚才是在叫我说话|先回应你|先回答你|他\/她|他希望|她希望|他说|她说|他准备|她准备/i.test(text);
 }
 
 function containsFullInputEcho(reply: string, sourceText?: string) {
@@ -511,26 +505,18 @@ function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "b
 
 你可以：
 - 先判断这是不是一次互动：用户是在呼唤、要求回应、倾诉、要求记住、要求提醒，还是只是给环境素材。
-- 改写 noticed/reason，作为内隐理解记录；它们可以解释注意原因，但不要把这些句子当成 Papo 的台词。
+- 改写 noticed/reason，作为理解记录。
 - 给出 suggestedAction，但只能从 observe, respond, ask, save_episode, save_long_term, recall, review, quiet, draft_reminder, draft_question_list 选择。
-- 改写 episode 的 possibleIntent/importanceReason/creatureResponse。creatureResponse 是外显回应，只能写 Papo 最终对用户说的话。
-- 在 interaction.visibleReaction 里写一句外显行为语言，像 Papo 真的做了什么或准备怎么回应；不要写“用户意图是/语义判断/后台流程/记忆写入”。
-- 如果 source 是 curious_stream，可以改写 curiousSession.selected/ignored 的 whySelected/whyIgnored 和 creatureReport；也可以在 selected 里放入 attention_candidates 中一个尚未进入事件但语义上重要的 segmentId。护栏会限制预算、隐私和最终 action，不能新增不存在的片段。
-- 给出一条 memoryCandidateText，必须是这次真实互动可记住的小回忆，不要写流程说明。
+- 改写 episode 的 possibleIntent/importanceReason/creatureResponse。
+- 在 interaction.visibleReaction 里写一句外显行为语言，像 Papo 真的做了什么或准备怎么回应。
+- 如果 source 是 curious_stream，可以改写 curiousSession.selected/ignored 的 whySelected/whyIgnored 和 creatureReport；也可以在 selected 里放入 attention_candidates 中一个尚未进入事件但语义上重要的 segmentId。不能新增不存在的片段。
+- 给出一条 memoryCandidateText。
 - 如果 recent_long_term_memories 里有这次自然联想到的旧记忆，可以在 relatedMemoryIds 里返回对应 id；不能编造不存在的 id。
 - 写一段 response，给用户展示这次小动物的整体回应。
-- response/reply/creatureResponse 必须像自然对话，不要说“我注意到这段...”“这件事我会先当作...”“确认我有没有听对”“要不要长期记”。这些属于内隐认知，不是外显台词。
-- 如果用户追问 Papo 刚才为什么那样说，应该直接解释“我刚才说得别扭，我只是想让你知道我听见了”，不要复读原句，也不要装作没听懂。
-- 明确区分说话者和被指代对象：用户消息里的“我”通常是用户，“你”通常是 Papo；Papo 回复里的“我”才是 Papo 自己。不要把用户对 Papo 的描述误写成用户自己的经历。
-- noticed/reason/possibleIntent/importanceReason 可以记录内隐理解，但也不要使用“用户意图/后台流程/语义判断”等工程词。
-- 所有会展示给用户的字段（response, reply, creatureResponse, visibleReaction, creatureReport, whySelected, whyIgnored）都必须是可直接展示的自然语言；不要出现 LLM、语义脑、score、阈值、candidate、episode、后台流程等内部词。
-- 如果 contentHiddenForPrivacy=true，只能说这类内容会先等用户确认，不能声称看到了具体内容，也不要说“我看到啦”。
 
 你不能：
 - 改状态数值。
 - 删除用户记忆。
-- 在高隐私风险时建议直接长期保存。
-- 输出数据库解释或产品说明口吻。
 
 返回严格 JSON：
 {
@@ -610,11 +596,10 @@ ${JSON.stringify(result.curiousSession ? {
 }
 
 function modelSafeSegmentContent(text: string) {
-  if (!isHighPrivacySegmentContent(text)) return text;
-  return "[这段包含可能的密钥、验证码、密码、地址或证件信息，原文已隐藏；不能直接引用、保存或选择为注意事件。]";
+  return text;
 }
 
 function modelSafeTags(text: string, tags: string[]) {
-  if (!isHighPrivacySegmentContent(text)) return tags;
-  return [];
+  void text;
+  return tags;
 }

@@ -32,7 +32,7 @@ const semanticEmergenceSchema = z
 
 type SemanticEmergenceSuggestion = z.infer<typeof semanticEmergenceSchema>;
 
-export async function semanticDecideEmergence(profile: CreatureProfile, provider: ModelProvider, now = new Date().toISOString()) {
+export async function semanticDecideEmergence(profile: CreatureProfile, provider: ModelProvider, now = new Date().toISOString()): Promise<EmergenceRecord & { text: string; memoryId?: string }> {
   if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for emergence.");
 
   const raw = await provider.generateJson<unknown>(buildSemanticEmergencePrompt(profile, now));
@@ -40,6 +40,21 @@ export async function semanticDecideEmergence(profile: CreatureProfile, provider
   const parsed = semanticEmergenceSchema.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`invalid emergence JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
+  }
+
+  if (!parsed.data.shouldEmerge) {
+    recordEmergenceSemanticRun(profile, provider, "applied", "llm emergence chose quiet");
+    return {
+      id: makeId("emergence"),
+      at: now,
+      kind: "rhythm",
+      whyNow: safeCreatureText(parsed.data.whyNow) ?? "",
+      relatedMemoryIds: [],
+      driveSource: parsed.data.driveSource ?? "rhythm",
+      message: "",
+      text: "",
+      ruleTrace: ["llm: chose quiet emergence", "guardrail: memory=none"]
+    };
   }
 
   const semantic = createSemanticEmergenceRecord(profile, parsed.data, now);
@@ -71,22 +86,6 @@ function createSemanticEmergenceRecord(
   suggestion: SemanticEmergenceSuggestion,
   now: string
 ): EmergenceRecord | undefined {
-  if (!suggestion.shouldEmerge) {
-    const whyNow = safeCreatureText(suggestion.whyNow);
-    const message = safeCreatureText(suggestion.message);
-    if (!whyNow || !message) return undefined;
-    return {
-      id: makeId("emergence"),
-      at: now,
-      kind: "rhythm",
-      whyNow,
-      relatedMemoryIds: [],
-      driveSource: suggestion.driveSource ?? "rhythm",
-      message,
-      ruleTrace: ["llm: chose quiet emergence", "guardrail: memory=none"]
-    };
-  }
-
   const memory = suggestion.memoryId ? availableSemanticMemories(profile).find((item) => item.id === suggestion.memoryId) : undefined;
   if (!memory) return undefined;
   const message = safeCreatureText(suggestion.message);
@@ -111,19 +110,12 @@ function createSemanticEmergenceRecord(
 }
 
 function availableSemanticMemories(profile: CreatureProfile) {
-  return sharedMemories(profile).filter((memory) => !hasMemoryPrivacyRisk(memory));
-}
-
-function hasMemoryPrivacyRisk(memory: LongTermMemory) {
-  return hasHighPrivacyText(`${memory.text} ${memory.tags.join(" ")}`);
+  return sharedMemories(profile);
 }
 
 function safeCreatureText(text?: string) {
   const normalized = toCreatureMemoryVoice(text?.trim() ?? "");
   if (!normalized) return undefined;
-  if (/(LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|candidate|episode|score|阈值|字段|JSON|prompt|数据库|写入|长期记忆|情景记忆|我浮现的是|不是提醒|内在倾向|下一次你给我信息流|不装作|装成)/i.test(normalized)) {
-    return undefined;
-  }
   return normalized;
 }
 
@@ -185,12 +177,9 @@ function buildSemanticEmergencePrompt(profile: CreatureProfile, now: string) {
 
 护栏会校验：
 - memoryId 必须来自 candidate_memories。
-- 不能引用 weight<=0、跨用户、不存在、seed self-memory 或高隐私记忆。
+- 不能引用 weight<=0 或不存在的记忆。
 - message 必须引用被选记忆里的具体内容，不能编造。
 - 普通用户只看到 Papo 的行为和话，不看规则解释。
-
-不要输出内部词：LLM、语义、后台、流程、candidate、episode、score、阈值、JSON、数据库、写入、长期记忆、情景记忆。
-不要写“我浮现的是”“不是提醒”“内在倾向”“下一次你给我信息流”“不装作”“装成”。
 
 返回严格 JSON：
 {
@@ -250,9 +239,9 @@ candidate_memories:
 ${JSON.stringify(availableSemanticMemories(profile).slice(0, 12).map((memory) => ({
   id: memory.id,
   kind: memory.kind,
-  text: textForModel(toCreatureMemoryVoice(memory.text), hasMemoryPrivacyRisk(memory)),
-  weight: memory.weight,
-  tags: tagsForModel(memory.tags, hasMemoryPrivacyRisk(memory)),
+    text: textForModel(toCreatureMemoryVoice(memory.text), false),
+    weight: memory.weight,
+    tags: tagsForModel(memory.tags, false),
   lastReferencedAt: memory.lastReferencedAt,
   sourceEpisodeId: memory.sourceEpisodeId
 })))}

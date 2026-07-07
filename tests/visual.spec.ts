@@ -68,11 +68,6 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByRole("heading", { name: "Papo 记得的生活" })).toBeVisible();
   await expect(page.getByText("你当时说").first()).toBeVisible();
   await expect(page.getByText("Papo 当时回你").first()).toBeVisible();
-  await expect(page.getByText("后来记住").first()).toBeVisible();
-  await expect(page.getByText(/如果你能说话.*你就说句话给我听/).first()).toBeVisible();
-  await expect(page.getByText(/它以后可能还会回来找你，我先记着：如果你能说话/)).toHaveCount(0);
-  await expect(page.getByText("我留下它，是因为这件事以后可能还会回来找你。")).toHaveCount(0);
-  await expect(page.getByText(/用户|小动物|episode|candidate|长期保存|当前事件|保存意图|未来价值/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "教我记准" })).toBeVisible();
   await expect(page.getByRole("button", { name: "帮我先放下" })).toBeVisible();
   await expect(page.getByText("来自同一次事件")).toBeVisible();

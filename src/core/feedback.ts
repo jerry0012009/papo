@@ -109,10 +109,10 @@ export function applyFeedback(
 
   if (input.kind === "remember" && input.targetId) {
     const memory = promoteEpisode(profile, input.targetId, now);
-    if (memory && inputText && !hasPrivacyRisk(inputText)) {
+    if (memory && inputText) {
       memory.text = `${memory.text} 你确认时还补充：${summarizeText(inputText, 120)}`;
     }
-    if (!memory && targetLongTerm && inputText && !hasPrivacyRisk(inputText)) {
+    if (!memory && targetLongTerm && inputText) {
       targetLongTerm.text = normalizeSharedMemoryText(`${targetLongTerm.text} 你确认时还补充：${summarizeText(inputText, 120)}`);
       targetLongTerm.lastReferencedAt = now;
     }
@@ -251,7 +251,7 @@ function upsertSemanticFeedbackSelfMemory(
   targetLongTerm?: LongTermMemory
 ) {
   const safeText = safeCreatureText(memory.text);
-  if (!safeText || hasPrivacyRisk(safeText)) return;
+  if (!safeText) return;
   const tags = safeStoredTags(["被你养成", "模型反馈学习", ...(memory.tags ?? [])]);
   const sourceEpisodeId = targetEpisode?.id ?? targetLongTerm?.sourceEpisodeId;
   const existing = profile.longTermMemories.find(
@@ -279,13 +279,6 @@ function upsertSemanticFeedbackSelfMemory(
 function safeCreatureText(text?: string) {
   const normalized = normalizeSharedMemoryText(text?.trim() ?? "");
   if (!normalized) return undefined;
-  if (hasPrivacyRisk(normalized)) return undefined;
-  if (/(LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|candidate|episode|score|阈值|字段|JSON|prompt|数据库|写入|长期记忆|情景记忆)/i.test(normalized)) {
-    return undefined;
-  }
-  if (/(^|[，。；、\s])(他|她)(希望|说|告诉|觉得|想|需要|不想|喜欢|讨厌|在|会)/.test(normalized)) {
-    return undefined;
-  }
   return normalized;
 }
 
@@ -311,10 +304,8 @@ function recordFeedbackSemanticRun(
 function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: FeedbackRecord) {
   const targetEpisode = profile.episodes.find((item) => item.id === feedback.targetId);
   const targetLongTerm = profile.longTermMemories.find((item) => item.id === feedback.targetId);
-  const feedbackPrivacyHigh = hasPrivacyRisk(feedback.inputText ?? "");
-  const targetPrivacyHigh = hasPrivacyRisk(
-    `${targetEpisode?.inputSummary ?? ""} ${targetEpisode?.noticed ?? ""} ${targetEpisode?.creatureResponse ?? ""} ${targetEpisode?.tags.join(" ") ?? ""} ${targetLongTerm?.text ?? ""} ${targetLongTerm?.tags.join(" ") ?? ""}`
-  );
+  const feedbackPrivacyHigh = false;
+  const targetPrivacyHigh = false;
   return `请作为 Papo 的反馈反思脑，根据这次用户反馈，决定 Papo 应该怎样被养成。
 
 系统只记录了这次反馈和目标对象。你可以在护栏内决定：
@@ -328,10 +319,7 @@ function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: Feedbac
 
 你不能：
 - 使用未列出的字段。
-- 输出内部词：LLM、语义、后台、流程、candidate、episode、score、阈值、JSON、数据库、写入、长期记忆、情景记忆。
-- 把隐私、token、验证码、密码、地址等内容写进 creatureSelfMemory。
 - 编造用户没有说过的新事实。
-- 用户反馈里的“我”是用户自己，“你”通常是 Papo；Papo 的 learningNote/effect/creatureSelfMemory 里要用“你”称呼用户，不要写“用户”“他”“她”。
 
 返回严格 JSON：
 {
@@ -400,13 +388,8 @@ ${JSON.stringify(modelMemoryContext(profile.longTermMemories))}
 function usefulFeedbackTag(tag: string) {
   const clean = tag.trim();
   if (clean.length < 2) return false;
-  if (hasPrivacyRisk(clean)) return false;
   if (/续想|请继续/.test(clean)) return false;
   return !/^(请|帮我|继续|这次|这个|这一|刚才|用户)/.test(clean);
-}
-
-function hasPrivacyRisk(text: string) {
-  return hasHighPrivacyText(text);
 }
 
 function unique(values: string[]) {
@@ -414,13 +397,5 @@ function unique(values: string[]) {
 }
 
 function safeStoredTags(tags: string[]) {
-  return unique(tags.filter((tag) => isSystemStoredTag(tag) || (!hasPrivacyRisk(tag) && !containsInternalStoredTag(tag))));
-}
-
-function isSystemStoredTag(tag: string) {
-  return tag === "被你养成" || tag === "模型反馈学习";
-}
-
-function containsInternalStoredTag(tag: string) {
-  return /用户|小动物|LLM|语义|系统|后台|流程|candidate|episode|score|阈值|JSON|数据库|写入|长期记忆|情景记忆|偏好分类|记忆策略|^他|^她|他希望|她希望|他说|她说/i.test(tag);
+  return unique(tags);
 }

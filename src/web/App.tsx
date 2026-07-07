@@ -16,7 +16,7 @@ import {
   UserRound
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { memoryKeepReasonToCreatureVoice, toCreatureMemoryVoice } from "../core/memory";
+import { toCreatureMemoryVoice } from "../core/memory";
 import type {
   AttentionEvent,
   CaptureResult,
@@ -565,12 +565,6 @@ function HomeView(props: {
       {props.lastFeedback ? <FeedbackImpactCard feedback={props.lastFeedback} /> : null}
       {!props.lastFeedback && props.learningNote ? <section className="learning-note">{visibleCreatureText(props.learningNote)}</section> : null}
 
-      {props.lastResult?.curiousSession ? (
-        <section className="panel quiet-detail-panel">
-          <ResultReflectionDetails result={props.lastResult} />
-        </section>
-      ) : null}
-
       {props.selectedEpisode ? (
         <div className="home-episode-slot">
           <EpisodeCard
@@ -583,31 +577,6 @@ function HomeView(props: {
         </div>
       ) : null}
     </section>
-  );
-}
-
-function ResultReflectionDetails({ result }: { result: CaptureResult }) {
-  const curiousSteps = result.curiousSession
-    ? [
-        { label: "这次陪伴", text: result.curiousSession.creatureReport },
-        ...result.curiousSession.ignored.slice(0, 4).map((item) => ({
-          label: `暂时略过 ${item.label}`,
-          text: item.whyIgnored
-        }))
-      ]
-    : [];
-  const noticedSteps = result.events.flatMap((event) => [
-    { label: `Papo 接住 ${event.triggerLabel}`, text: summarizeForEpisode(visibleCreatureText(event.triggerContent)) },
-    { label: "为什么回应", text: event.creatureExperience.earReason }
-  ]);
-  const steps = [...curiousSteps, ...noticedSteps];
-  if (!steps.length) return null;
-
-  return (
-    <details className="episode-flow compact-flow">
-      <summary>{result.curiousSession ? "看看这次 Papo 注意了什么" : "看看这次怎么被听见"}</summary>
-      <FlowSteps steps={steps} />
-    </details>
   );
 }
 
@@ -916,7 +885,6 @@ function MemoryView(props: {
   const memories = props.profile.longTermMemories.filter((memory) =>
     `${memory.text} ${memory.kind} ${memory.tags.join(" ")}`.toLowerCase().includes(query.toLowerCase())
   );
-  const selfMemories = memories.filter(isRaisedSelfMemory);
   const otherMemories = memories.filter((memory) => memory.kind !== "creature_self_memory");
 
   return (
@@ -969,18 +937,6 @@ function MemoryView(props: {
         {otherMemories.length ? null : <p className="muted">我还没有真正记下一件和你有关的事。</p>}
       </div>
       <div className="panel">
-        <PanelTitle icon={Brain} title="Papo 被你改过的地方" />
-        {selfMemories.map((memory) => (
-          <article className="memory-surface" key={memory.id}>
-            <div className="memory-main">
-              <span>Papo 学会</span>
-              <p>{memoryResultLine(memory)}</p>
-            </div>
-          </article>
-        ))}
-        {selfMemories.length ? null : <p className="muted">你还没有把 Papo 改出稳定的偏好。</p>}
-      </div>
-      <div className="panel">
         <PanelTitle icon={Eye} title="最近一起经历过" />
         {props.profile.episodes.map((episode) => (
           <EpisodeCard
@@ -1022,10 +978,12 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
           <p>{episodePapoLine(sourceEpisode)}</p>
         </div>
       ) : null}
-      <div>
-        <span>后来记住</span>
-        <strong>{memoryResultLine(memory)}</strong>
-      </div>
+      {memoryResultLine(memory) ? (
+        <div>
+          <span>后来记住</span>
+          <strong>{memoryResultLine(memory)}</strong>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1033,16 +991,16 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
 function MemoryProcessDetails({ memory, profile }: { memory: CreatureProfile["longTermMemories"][number]; profile: CreatureProfile }) {
   const sourceEpisode = memorySourceEpisode(memory, profile);
   const sourceSteps = sourceEpisode ? [{ label: "你当时说", text: episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode)) }] : [];
+  const response = sourceEpisode ? episodePapoLine(sourceEpisode) : "";
   return (
     <details className="episode-flow compact-flow">
       <summary>看看怎么留下的</summary>
       <FlowSteps
         steps={[
           ...sourceSteps,
-          sourceEpisode ? { label: "当时回应", text: episodePapoLine(sourceEpisode) } : { label: "当时回应", text: undefined },
-          { label: "记忆结果", text: memoryResultLine(memory) },
-          { label: "为什么留下", text: memory.consolidatedBecause ? memoryKeptBecauseText(memory.consolidatedBecause) : sourceEpisode?.importanceReason },
-          { label: "之后怎么用", text: memoryUseLine(memory) }
+          { label: "Papo 当时回你", text: response },
+          { label: "后来记住", text: memoryResultLine(memory) },
+          { label: "模型理由", text: memory.consolidatedBecause || sourceEpisode?.importanceReason }
         ]}
       />
     </details>
@@ -1359,18 +1317,9 @@ function episodeUserLine(episode: EpisodeMemory, messages: ConversationMessage[]
 
 function episodePapoLine(episode: EpisodeMemory) {
   const cleaned = visiblePapoReplyText(episode.creatureResponse || "")
-    .replace(/^我先听你说完[：:，,]?\s*/g, "")
-    .replace(/^我接住你刚告诉来的这件事[：:，,]?\s*/g, "")
-    .replace(/^我接住你刚告诉来的这一件事[：:，,]?\s*/g, "")
-    .replace(/^我接住你刚告诉来的.*?[：:，,]\s*/g, "")
-    .replace(/^我接住你刚递来的.*?[：:，,]\s*/g, "")
-    .replace(/这件事我会先当作刚发生的对话来回应。?/g, "")
-    .replace(/我想轻轻问一句，确认我有没有听对。?/g, "")
-    .replace(/我会先把它当作一段共同经历记下来。?/g, "")
-    .replace(/我会记住这次发生了什么，但不会擅自长期保存。?/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  if (cleaned && !looksLikeInternalEpisodeText(cleaned) && !looksLikeInputEcho(cleaned, episode)) return summarizeForEpisode(cleaned);
+  if (cleaned) return summarizeForEpisode(cleaned);
   return "";
 }
 
@@ -1378,41 +1327,25 @@ function summarizeForEpisode(text: string) {
   return text.length > 52 ? `${text.slice(0, 52)}...` : text;
 }
 
-function looksLikeInternalEpisodeText(text: string) {
-  return /情景|长期|流程|语义|意图|记忆策略|确认我有没有听对|共同经历|刚发生的对话/.test(text);
-}
-
-function looksLikeInputEcho(text: string, episode: EpisodeMemory) {
-  const reply = comparableEpisodeText(text);
-  const input = comparableEpisodeText(episode.inputSummary || noticedText(episode.noticed));
-  return Boolean(reply && input && (reply.includes(input) || input.includes(reply)));
-}
-
-function comparableEpisodeText(text: string) {
-  return visibleCreatureText(text).replace(/[，。！？、\s:：,.!?]/g, "");
-}
-
 function EpisodeProcessDetails({ episode }: { episode: EpisodeMemory }) {
+  const steps = [
+    { label: "你说了什么", text: episode.inputSummary },
+    { label: "Papo 怎么理解", text: episode.possibleIntent || episode.importanceReason },
+    { label: "Papo 回了什么", text: episodePapoLine(episode) },
+    { label: "动作选择", text: episode.actionDecision?.reason }
+  ];
   return (
     <details className="episode-flow">
       <summary>看看 Papo 怎么处理的</summary>
-      <FlowSteps
-        steps={[
-          { label: "听见什么", text: episode.inputSummary },
-          { label: "怎么理解", text: episode.creatureExperience?.earReason ?? episode.importanceReason },
-          { label: "想起什么", text: episode.creatureExperience?.rememberedScene ?? "这次没有关联到以前的事。" },
-          { label: "你可能想说", text: episode.possibleIntent },
-          { label: "当时的影响", text: episodeStateText(episode) },
-          { label: "接下来做什么", text: episode.creatureExperience?.actionFeeling ?? episode.actionDecision?.reason },
-          { label: "会不会留下", text: episode.creatureExperience?.saveFeeling ?? "我会先等你的反馈。" }
-        ]}
-      />
+      <FlowSteps steps={steps} />
     </details>
   );
 }
 
 function FlowSteps({ steps }: { steps: Array<{ label: string; text?: string }> }) {
-  const visibleSteps = steps.filter((step) => step.text?.trim());
+  const visibleSteps = steps
+    .map((step) => ({ ...step, text: productDetailText(step.text) }))
+    .filter((step) => step.text?.trim());
   return (
     <ol>
       {visibleSteps.map((step, index) => (
@@ -1426,6 +1359,10 @@ function FlowSteps({ steps }: { steps: Array<{ label: string; text?: string }> }
       ))}
     </ol>
   );
+}
+
+function productDetailText(text?: string) {
+  return visibleCreatureText(text);
 }
 
 function EpisodeSourceMoment({ episode, messages, compact }: { episode: EpisodeMemory; messages: ConversationMessage[]; compact: boolean }) {
@@ -1464,16 +1401,6 @@ function episodeSourceMessages(profile: CreatureProfile, episode: EpisodeMemory)
   return matched.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 }
 
-function episodeStateText(episode: EpisodeMemory) {
-  const state = episode.stateSnapshot;
-  const parts = [];
-  if (state.curiosity > 70) parts.push("好奇心比较高，所以更容易被新主题吸引");
-  if (state.attachment > 60) parts.push("依恋度较高，所以更愿意想起以前的小事");
-  if (state.energy < 35) parts.push("精力偏低，所以会短一点回应");
-  if (state.safety > 70) parts.push("安全感偏谨慎，所以不会急着保存隐私内容");
-  return parts.length ? parts.join("；") : "状态稳定，适合认真观察这一段";
-}
-
 function noticedText(text: string) {
   return text
     .replace(/^我刚才注意到[:：]?\s*/, "")
@@ -1502,25 +1429,12 @@ function EmergenceCard({ emergence }: { emergence: EmergenceSurface }) {
 }
 
 function FeedbackImpactCard({ feedback }: { feedback: FeedbackRecord }) {
-  const stateDeltas = feedback.stateDeltas ?? [];
-  const policyDeltas = feedback.policyDeltas ?? [];
-  const changes = feedbackChangeLines(stateDeltas, policyDeltas);
   const learning = visibleCreatureText(feedback.replyText ?? feedback.learningNote);
   if (!learning) return null;
   return (
     <section className="feedback-impact">
       <strong>我接住了你的反馈</strong>
       <p>{learning}</p>
-      {changes.length ? (
-        <details className="episode-flow compact-flow">
-          <summary>这次怎么影响我</summary>
-          <div>
-            {changes.map((line) => (
-              <span key={line}>{line}</span>
-            ))}
-          </div>
-        </details>
-      ) : null}
     </section>
   );
 }
@@ -1552,35 +1466,6 @@ function StateGrid({ state }: { state: CreatureState }) {
   );
 }
 
-function feedbackChangeLines(
-  stateDeltas: NonNullable<FeedbackRecord["stateDeltas"]>,
-  policyDeltas: NonNullable<FeedbackRecord["policyDeltas"]>
-) {
-  const lines: string[] = [];
-  const state = new Map(stateDeltas.map((item) => [item.key, item.delta]));
-  const policy = new Map(policyDeltas.map((item) => [item.key, item.delta]));
-
-  if ((state.get("curiosity") ?? 0) > 0 || (policy.get("preferDepth") ?? 0) > 0) {
-    lines.push("下次遇到相似内容，我会多停一下，愿意展开一点。");
-  }
-  if ((policy.get("recallTendency") ?? 0) > 0 || (state.get("attachment") ?? 0) > 0) {
-    lines.push("我会更容易把这段和你们以前的小事连起来。");
-  }
-  if ((policy.get("quietTendency") ?? 0) > 0 || (state.get("arousal") ?? 0) < 0) {
-    lines.push("我学会少打扰一点，不是每次听见都追问你。");
-  }
-  if ((policy.get("privacySensitivity") ?? 0) > 0 || (state.get("safety") ?? 0) > 0) {
-    lines.push("我会更小心守住边界，留下前多等你的意思。");
-  }
-  if ((state.get("confidence") ?? 0) > 0) {
-    lines.push("我会更敢把自己的理解轻轻说出来。");
-  }
-  if ((state.get("energy") ?? 0) < 0) {
-    lines.push("我刚认真用过一点力，接下来会先少说一点。");
-  }
-  return [...new Set(lines)];
-}
-
 function emergenceDriveText(drive: string) {
   const map: Record<string, string> = {
     safety: "谨慎感更高，所以先轻轻碰一下这段。",
@@ -1592,37 +1477,12 @@ function emergenceDriveText(drive: string) {
   return map[drive] ?? "当前状态把这段带了回来。";
 }
 
-function memorySourceLine(memory: CreatureProfile["longTermMemories"][number], profile: CreatureProfile) {
-  const sourceEpisode = memorySourceEpisode(memory, profile);
-  if (sourceEpisode) return episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode));
-  return extractRememberedMoment(memory.text);
-}
-
 function memorySourceEpisode(memory: CreatureProfile["longTermMemories"][number], profile: CreatureProfile) {
   return memory.sourceEpisodeId ? profile.episodes.find((episode) => episode.id === memory.sourceEpisodeId) : undefined;
 }
 
 function memoryResultLine(memory: CreatureProfile["longTermMemories"][number]) {
   return extractRememberedMoment(memory.text);
-}
-
-function memoryUseLine(memory: CreatureProfile["longTermMemories"][number]) {
-  if (memory.weight <= 0) return "这件事已经放轻，除非你再提起。";
-  const map = {
-    user_preference: "以后遇到相近时刻，我会按这个偏好靠近你。",
-    long_theme: "以后聊到相近主题，我会更容易想起它。",
-    creature_self_memory: "这是你教我的一种回应习惯。",
-    safety_rule: "以后碰到相近边界，我会先放慢一点。",
-    future_review: "以后这件事回来时，我会更容易接上。",
-    relationship: "它会帮助我更认识你一点。",
-    habit: "以后类似习惯再次出现时，我会更容易听出来。",
-    open_question: "以后你继续说这件事时，我会从这里接着想。"
-  };
-  return map[memory.kind];
-}
-
-function memoryKeptBecauseText(reason: string) {
-  return memoryKeepReasonToCreatureVoice(reason);
 }
 
 function normalizeMemoryText(text: string) {
@@ -1648,7 +1508,7 @@ function extractRememberedMoment(text: string) {
     .replace(/^[：:，,。.\s]+/, "")
     .replace(/[。！？.!?]+$/, "")
     .trim();
-  return cleaned || "这件事";
+  return cleaned;
 }
 
 function visibleMessageText(message: ConversationMessage) {
@@ -1656,42 +1516,12 @@ function visibleMessageText(message: ConversationMessage) {
 }
 
 function visiblePapoReplyText(text: string | undefined) {
-  const normalized = visibleCreatureText(text)
-    .replace(/^我先听你说完[：:，,]?\s*/g, "")
-    .replace(/^我听见了[：:]\s*/g, "我听见了。")
-    .replace(/这件事我会先当作刚发生的对话来回应。?/g, "")
-    .replace(/我想轻轻问一句，确认我有没有听对。?/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  if (normalized && !looksLikeInternalPapoText(normalized)) return normalized;
-  const firstVisibleSentence = visibleCreatureText(text)
-    .split(/[。！？.!?]/)
-    .map((part) => part.trim())
-    .find((part) => part && !looksLikeInternalPapoText(part));
-  return firstVisibleSentence ? `${firstVisibleSentence}。` : "";
-}
-
-function looksLikeInternalPapoText(text: string) {
-  return /我注意到这段|我注意到这个片段|片段可能|我先试着理解|我先听你说完|这件事我会先当作|确认我有没有听对|情景|长期记|保存|要不要留下|用户|流程|语义|意图|后台|显著性|记忆策略|我为什么注意|我想起了什么|我猜你在做|我当时的状态|我选择|你刚才是在叫我说话|先回应你|先回答你/.test(text);
+  return visibleCreatureText(text).replace(/\s+/g, " ").trim();
 }
 
 function visibleCreatureText(text: string | undefined) {
   if (!text) return "";
-  return text
-    .replace(/长期保存/g, "一直留下")
-    .replace(/情景记忆/g, "这次经历")
-    .replace(/长期记忆/g, "一直记得的事")
-    .replace(/小片段/g, "这件事")
-    .replace(/这一小段/g, "这件事")
-    .replace(/一小段/g, "一件事")
-    .replace(/递给/g, "告诉")
-    .replace(/放进同一个小情景里听/g, "放在同一次对话里理解")
-    .replace(/放进情景里/g, "当作这次对话来理解")
-    .replace(/进到我心里/g, "进入反馈")
-    .replace(/当前事件/g, "这件事")
-    .replace(/保存意图/g, "要不要保存")
-    .replace(/用户/g, "你")
-    .replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, "$1$2");
+  return text.replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, "$1$2").trim();
 }
 
 function PanelTitle({ icon: Icon, title }: { icon: typeof Brain; title: string }) {
@@ -1724,7 +1554,8 @@ function presenceHeadline(profile: CreatureProfile) {
     if (latest.channel === "emergence") return latest.relatedMemoryIds?.length ? "刚想起一件你们说过的事" : "刚安静了一下";
   }
   if (latest?.role === "user" || latest?.role === "world") return "收到了你刚给的事";
-  return restingPresenceHeadline(profile);
+  if (!profile.episodes.length) return "等第一段生活靠近";
+  return "等你继续说";
 }
 
 function presenceSentence(profile: CreatureProfile) {
@@ -1736,43 +1567,8 @@ function presenceSentence(profile: CreatureProfile) {
   if (latest?.role === "papo" && latest.channel === "curious") return "刚才听到的内容已经整理进对话，你可以接着补文字、照片或声音。";
   if (latest?.role === "papo" && latest.channel === "button") return "Papo 刚回了你一句，在对话里可以继续接上。";
   if (latest?.role === "user" || latest?.role === "world") return "文字、照片或声音会留在同一次对话里，让 Papo 接着回应。";
-  const memory = strongestSharedMemory(profile);
-  if (memory) return `我还记得这件旧事：${normalizeMemoryText(memory.text)}。如果之后聊到相近内容，我会想起它。`;
-  const raisedHabit = strongestRaisedHabit(profile);
-  if (raisedHabit) return raisedHabitSentence(raisedHabit);
   if (!profile.episodes.length) return "我还没有和你经历过多少事。你可以直接跟我说话，也可以给我照片或声音。";
   return "你可以继续说，也可以传照片、录音，或让 Papo 听一会儿。";
-}
-
-function restingPresenceHeadline(profile: CreatureProfile) {
-  if (strongestSharedMemory(profile)) return "想起以前的事";
-  if (strongestRaisedHabit(profile)) return "记着你教过的听法";
-  if (!profile.episodes.length) return "等第一段生活靠近";
-  return "等你继续说";
-}
-
-function strongestSharedMemory(profile: CreatureProfile) {
-  return profile.longTermMemories
-    .filter((memory) => memory.weight > 0 && memory.kind !== "creature_self_memory" && Boolean(memory.sourceEpisodeId))
-    .sort((a, b) => b.weight - a.weight)[0];
-}
-
-function strongestRaisedHabit(profile: CreatureProfile) {
-  return profile.longTermMemories
-    .filter((memory) => memory.weight > 0 && isRaisedSelfMemory(memory))
-    .sort((a, b) => b.weight - a.weight)[0];
-}
-
-function isRaisedSelfMemory(memory: CreatureProfile["longTermMemories"][number]) {
-  return memory.kind === "creature_self_memory" && memory.tags.includes("被你养成");
-}
-
-function raisedHabitSentence(memory: CreatureProfile["longTermMemories"][number]) {
-  if (memory.tags.includes("更愿意多想")) return "你把我教得遇到相近的事要多停一下，不要太快放过去。";
-  if (memory.tags.includes("更安静")) return "你把我教得更会收住声音，先陪着，不急着打扰你。";
-  if (memory.tags.includes("更小心边界")) return "你把我教得更小心边界，保存或展开前先等你的意思。";
-  if (memory.tags.includes("更愿意记住")) return "你把我教得更愿意把重要的小事记稳一点。";
-  return `你教过我：${normalizeMemoryText(memory.text)}。`;
 }
 
 function actionText(action: AttentionEvent["suggestedAction"]) {

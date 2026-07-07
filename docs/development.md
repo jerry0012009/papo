@@ -13,23 +13,22 @@ The product should feel like raising a small creature, not watching a database, 
 The current goal is "LLM as Papo's brain".
 
 - Real model calls are required for cognition, action selection, memory decisions, feedback reflection, emergence, vision, and audio sensing.
-- If a required model call fails, returns empty output, returns invalid JSON, leaks internal process language, or selects a visible action without a visible reply, the system must fail loudly.
+- If a required model call fails, returns empty output, returns invalid JSON, or selects a visible action without a visible reply, the system must fail loudly.
 - Quiet listening is valid only when the model explicitly chooses it. It is not a degraded local substitute for understanding.
 - No local semantic keyword rule should pretend to understand what the user meant. Rules may create candidates and enforce boundaries; the model owns meaning and wording.
 
 ## Harness Contract
 
-Rules own engineering boundaries:
+Rules own only engineering structure:
 
 - State initialization and clamping.
 - Multi-user isolation.
 - Candidate event creation.
 - Attention budgets and source ids.
-- Privacy boundaries and high-risk redaction.
-- Action enum whitelists and guardrails.
+- Action enum whitelists.
 - Memory persistence, deletion, and cross-user safety.
 - Feedback bounds and numeric state/policy limits.
-- Diagnostics and tests for invariants.
+- Diagnostics for real provider failures.
 
 LLM owns semantic work:
 
@@ -42,7 +41,7 @@ LLM owns semantic work:
 - Active emergence message and why it is surfacing.
 - Vision summaries and audio transcripts.
 
-The boundary is strict: internal thinking, decision traces, scores, ids, and memory-write reasoning can exist in Brain/debug surfaces, but they are not Papo's speech.
+The boundary is strict: rules do not judge user meaning or wording. LLM output is not locally rewritten with keyword filters.
 
 ## Product Shape
 
@@ -50,10 +49,10 @@ The boundary is strict: internal thinking, decision traces, scores, ids, and mem
 - Text, photo, uploaded audio, and continuous listening chunks enter the same conversation timeline.
 - Continuous listening is internally batched around 30 seconds for up to 3 minutes, but the user should experience it as Papo listening with them.
 - Continuous listening records audio chunks and sends them to the configured audio model. Browser/local speech recognition output must not bypass the model into the life stream.
-- Empty audio, silence, noise, and unclear speech are ordinary non-events. They should not create fake life content.
+- Empty audio, silence, noise, and unclear speech are ordinary inputs for the model to ignore or use.
 - Photo input records upload time and available browser location so memory can later keep natural provenance.
-- Papo replies are short external behavior, not cognitive reports.
-- Memory cards default to what the user shared and what Papo remembered. Attention rationale and flow details belong behind an expandable detail or Brain.
+- Papo replies are model-written external behavior, not frontend templates.
+- Memory cards default to what the user shared and what the model decided to remember.
 - Feedback text/audio/buttons are all interaction input and may trigger learning, memory updates, or new dialogue.
 
 ## Provider Policy
@@ -63,22 +62,22 @@ The boundary is strict: internal thinking, decision traces, scores, ids, and mem
 - `PAPO_PROVIDER` may explicitly select `openrouter`, `mimo`, or `generic`.
 - Model ids are configurable per modality.
 - Default semantic models should prefer the strongest available configured model, currently `openai/gpt-5.5` for OpenRouter or `gpt-5.5` for generic.
-- Generic/OpenAI-compatible audio sensing should use `/audio/transcriptions`, defaulting to `gpt-4o-mini-transcribe` unless configured.
+- Audio sensing should move toward native audio-capable multimodal models when price/latency/quality are acceptable; transcription endpoints are only a temporary provider route.
 - Mixed routing is allowed: for example, OpenRouter can be the semantic provider while generic audio handles transcription.
 - Provider errors are product errors. They should be visible through API errors and diagnostics instead of being hidden behind local wording.
 
 ## Code Map
 
 - `src/core/provider.ts`: real provider selection and OpenAI-compatible calls.
-- `src/core/attention.ts`: structural input candidates, privacy guardrails, and pacing primitives; no semantic scoring.
+- `src/core/attention.ts`: structural input candidates and pacing primitives; no semantic scoring.
 - `src/core/harness.ts`: semantic cognition loop and visible-output contract.
 - `src/core/semantic-action.ts`: model action selection.
 - `src/core/semantic-attention.ts`: model attention selection for stream inputs.
 - `src/core/semantic-memory.ts`: model memory decisions.
 - `src/core/feedback.ts`: feedback application plus model reflection.
 - `src/core/emergence.ts`: active resurfacing through model decisions.
-- `src/core/narration.ts`: guarded model narration.
-- `src/core/model-context.ts`: shared redacted model context.
+- `src/core/narration.ts`: model narration.
+- `src/core/model-context.ts`: shared model context.
 - `src/core/conversation.ts`: user/world/Papo timeline.
 - `src/server/app.ts`: API orchestration.
 - `src/web/App.tsx`: mobile-first interaction UI.
@@ -87,12 +86,12 @@ The boundary is strict: internal thinking, decision traces, scores, ids, and mem
 ## Current Implementation Notes
 
 - The provider layer throws when credentials are missing.
-- Sensing endpoints call real model providers directly. Image/audio failures return errors; empty real audio transcripts are non-events.
+- Sensing endpoints call real model providers directly. Image/audio failures return errors.
 - The semantic harness strips rule-created visible drafts before model action/wording. Papo's final visible reply must come from a model.
 - `attention.ts` creates neutral candidates only. It must not write creature-facing replies, semantic "noticed" explanations, keyword tags, related-memory guesses, curious reports, or mixed-preference dialogue.
 - Curious stream input starts with zero attention events. `semanticDecideAttention` must select segments with the model before episodes or memory candidates are created.
 - Action selection code is a guardrail baseline, not a semantic classifier. Without an LLM suggestion it should stay at observe/quiet/ask safety behavior and avoid keyword-driven review/reminder/recall decisions.
-- Memory candidates keep user text and provenance only. Memory kind, tags, consolidation wording, and long-term meaning must be rewritten by `semanticDecideMemory` before they are treated as product cognition.
+- Memory candidates keep user text and provenance only. Memory kind, tags, consolidation wording, and long-term meaning must come from `semanticDecideMemory` before they are treated as product cognition.
 - The web UI must not fill empty Papo replies with "我听见了" or other local placeholder speech. If the model chose quiet or failed to provide a visible reply, the product should show no forged reply.
 - The product UI should not ship seeded demo loops or fake life-material buttons. Tests may use fixtures, but the user-facing flow starts from real user text, photos, audio, or continuous listening.
 - Wake rhythm only updates presence/state. It must not pick memories, write emergence records, or feed wake text back into model conversation context.
@@ -101,13 +100,13 @@ The boundary is strict: internal thinking, decision traces, scores, ids, and mem
 - Feedback capture records the user's teaching and executes explicit save/forget storage operations only. State, policy, learning language, memory weight changes for soft feedback, and creature self-memory must come from `semanticReflectFeedback`.
 - If the model chooses a visible action such as `respond`, `ask`, `recall`, or `review`, a visible reply is required.
 - If the model chooses `observe` or `quiet`, the API may persist the user's input without adding a Papo reply.
-- Recent conversation, memories, and feedback are passed into model prompts through `model-context.ts`, with high-privacy text redacted.
+- Recent conversation, memories, and feedback are passed into model prompts through `model-context.ts`.
 - Development planning text must not be used as creature interaction material.
 
 ## Verification Checklist
 
-- `npm test`
 - `npm run build`
+- Public provider and page checks after deploy.
 - `npm run test:e2e`
 - Public provider check returns a real provider with `usesRealModel=true`.
 - Real online smoke: direct dialogue should produce a context-specific reply, not repeated template wording.

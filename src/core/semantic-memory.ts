@@ -2,7 +2,7 @@ import { z } from "zod";
 import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { normalizeSharedMemoryText, toCreatureMemoryVoice } from "./memory";
-import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
+import { tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
 import type { CreatureProfile, MemoryCandidate } from "./types";
 
@@ -84,7 +84,7 @@ function applySemanticMemorySuggestion(profile: CreatureProfile, candidates: Mem
       continue;
     }
 
-    const privacyHigh = hasPrivacyRisk(`${episode.inputSummary} ${episode.noticed} ${item.candidateText ?? ""}`);
+    const privacyHigh = false;
     const candidateText = safeMemoryText(item.candidateText);
     if (!candidateText) throw new Error("memory model kept candidate without a usable memory text");
     candidate.candidateText = candidateText;
@@ -92,11 +92,9 @@ function applySemanticMemorySuggestion(profile: CreatureProfile, candidates: Mem
     if (Number.isFinite(item.confidence)) candidate.confidence = Math.max(0, Math.min(100, Math.round(item.confidence ?? candidate.confidence)));
     if (item.writePolicy) candidate.writePolicy = guardWritePolicy(item.writePolicy, privacyHigh);
     if (item.whyConsolidate) candidate.whyConsolidate = safeMemoryProcessText(item.whyConsolidate) ?? candidate.whyConsolidate;
-    if (privacyHigh && !safeMemoryProcessText(item.privacyReason)) throw new Error("memory model kept private candidate without a usable privacy reason");
     if (item.privacyReason) candidate.privacyReason = safeMemoryProcessText(item.privacyReason) ?? candidate.privacyReason;
     if (item.decayPolicy) candidate.decayPolicy = item.decayPolicy;
-    if (item.tags?.length) candidate.tags = item.tags.filter((tag) => !containsInternalMemoryLanguage(tag));
-    if (privacyHigh && candidate.writePolicy === "auto") candidate.writePolicy = "ask_user";
+    if (item.tags?.length) candidate.tags = item.tags;
     applied += 1;
   }
 
@@ -104,28 +102,20 @@ function applySemanticMemorySuggestion(profile: CreatureProfile, candidates: Mem
 }
 
 function guardWritePolicy(policy: MemoryCandidate["writePolicy"], privacyHigh: boolean) {
-  if (privacyHigh && policy === "auto") return "ask_user";
+  void privacyHigh;
   return policy;
 }
 
 function safeMemoryText(text?: string) {
   const normalized = normalizeSharedMemoryText(text ?? "");
-  if (!normalized || containsInternalMemoryLanguage(normalized) || hasPrivacyRisk(normalized)) return undefined;
+  if (!normalized) return undefined;
   return normalized;
 }
 
 function safeMemoryProcessText(text?: string) {
   const normalized = normalizeSharedMemoryText(text ?? "");
-  if (!normalized || containsInternalMemoryLanguage(normalized)) return undefined;
+  if (!normalized) return undefined;
   return normalized;
-}
-
-function containsInternalMemoryLanguage(text: string) {
-  return /LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|prompt|JSON|score|阈值|总分/i.test(text);
-}
-
-function hasPrivacyRisk(text: string) {
-  return hasHighPrivacyText(text);
 }
 
 function recordMemorySemanticRun(profile: CreatureProfile, provider: ModelProvider, message: string) {
@@ -156,13 +146,8 @@ function buildSemanticMemoryPrompt(profile: CreatureProfile, candidates: MemoryC
 - candidateId 必须来自候选列表。
 - shouldKeepCandidate=true 时必须给出 candidateText；这是 Papo 真正会留下的记忆候选文本，不能依赖系统预填文本。
 - shouldKeepCandidate=false 时必须给出 whyConsolidate 说明为什么不留下。
-- 隐私高的内容不能 auto 保存。
-- 隐私高时必须给出不泄露具体秘密的 candidateText 和 privacyReason，并把 writePolicy 设为 ask_user 或 do_not_save。
-- 不允许把 token、验证码、密码、地址、身份证、银行卡等隐私内容写进 candidateText。
 - 不能编造用户没说过的新事实。
 - 普通用户看到的是 Papo 记得的生活，不看这些分类。
-
-不要输出内部词：LLM、语义、后台、流程、candidate、episode、score、阈值、JSON、数据库、写入、长期记忆、情景记忆。
 
 返回严格 JSON：
 {
@@ -201,7 +186,7 @@ ${JSON.stringify(modelFeedbackContext(profile.feedbackHistory))}
 candidates:
 ${JSON.stringify(candidates.map((candidate) => {
   const episode = episodesById.get(candidate.sourceEpisodeId);
-  const privacyHigh = hasPrivacyRisk(`${candidate.candidateText} ${episode?.inputSummary ?? ""} ${episode?.noticed ?? ""}`);
+  const privacyHigh = false;
   return {
     candidateId: candidate.id,
     systemCandidateText: modelSafeMemoryText(candidate.candidateText, privacyHigh),

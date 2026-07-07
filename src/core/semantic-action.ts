@@ -110,7 +110,6 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
 }
 
 function safeExternalText(text?: string, sourceText?: string) {
-  if (text?.trim() && containsInternalProcessLanguage(text)) throw new Error("model returned internal process language for visible text");
   const normalized = safeProcessText(text);
   if (!normalized) {
     if (text?.trim()) throw new Error("model returned invalid visible text");
@@ -124,12 +123,8 @@ function safeProcessText(text?: string, previousText?: string) {
   const raw = text?.trim();
   if (!raw) return previousText;
   const normalized = normalizeSharedMemoryText(raw).trim();
-  if (!normalized || containsInternalProcessLanguage(normalized)) return previousText;
+  if (!normalized) return previousText;
   return normalized;
-}
-
-function containsInternalProcessLanguage(text: string) {
-  return /LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|长期保存|长期记忆|prompt|JSON|score|阈值|行动选择脑|决策脑|你刚才是在叫我说话|先回应你|先回答你/i.test(text);
 }
 
 function containsFullInputEcho(reply: string, sourceText?: string) {
@@ -179,8 +174,6 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 
 护栏会再次校验：
 - action 必须在白名单内。
-- 高隐私内容不能自动长期保存、提醒或直接引用。
-- 低精力、安静倾向、隐私敏感度会限制动作。
 - 你不能改状态数值或直接写记忆。
 
 返回严格 JSON：
@@ -198,11 +191,7 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
   ]
 }
 
-不要输出内部词：LLM、语义、后台、流程、candidate、episode、score、阈值、JSON、数据库、写入、长期记忆、情景记忆。
-reply 和 visibleReaction 是可能给用户看的外显语言，只写 Papo 真实会说/会做的短句。
-如果 contentHiddenForPrivacy=true，reply 不能声称看到了具体内容，也不要说“我看到啦”；只能表达“这类内容我先不直接留下，等你确认怎么处理”。
-如果用户追问 Papo 刚才为什么那样说，应该直接解释“我刚才说得别扭，我只是想让你知道我听见了”，不要复读原句，也不要装作没听懂。
-明确区分说话者和被指代对象：用户消息里的“我”通常是用户，“你”通常是 Papo；Papo 回复里的“我”才是 Papo 自己。不要把用户对 Papo 的描述误写成用户自己的经历。
+reply 和 visibleReaction 是可能给用户看的外显语言。
 
 current_state:
 ${JSON.stringify(profile.state)}
@@ -240,6 +229,5 @@ ${JSON.stringify(result.events.map((event) => ({
 }
 
 function modelSafeEventContent(text: string) {
-  if (!isHighPrivacySegmentContent(text)) return text;
-  return "[这段包含可能的密钥、验证码、密码、地址或证件信息，原文已隐藏；行动上只能先询问或安静等待，不能直接引用或保存。]";
+  return text;
 }
