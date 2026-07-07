@@ -93,6 +93,12 @@ describe("api", () => {
       .expect(200)
       .expect((response) => {
         expect(response.body.memory.text).toContain("为什么注意");
+        expect(response.body.profile.conversation[0].role).toBe("papo");
+        expect(response.body.profile.conversation[0].text).toContain("我把这条记忆改准了");
+        expect(response.body.profile.conversation[0].relatedMemoryIds).toContain(memoryId);
+        expect(response.body.profile.conversation[1].role).toBe("user");
+        expect(response.body.profile.conversation[1].text).toContain("帮我记准");
+        expect(response.body.profile.conversation[1].relatedMemoryIds).toContain(memoryId);
       });
 
     await request(app)

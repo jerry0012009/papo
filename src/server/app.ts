@@ -9,6 +9,7 @@ import { enrichEmergenceNarration, enrichFeedbackNarration } from "../core/narra
 import { createModelProvider, type ModelProvider } from "../core/provider";
 import { promoteEpisode, updateLongTermMemory } from "../core/memory";
 import { wakeCreature } from "../core/rhythm";
+import { summarizeText } from "../core/text";
 import type { CreatureProfile, StreamSegment } from "../core/types";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
@@ -269,6 +270,24 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const body = updateMemorySchema.parse(req.body);
       const memory = updateLongTermMemory(profile, req.params.memoryId, body.text);
       if (!memory) throw new HttpError(404, "Memory not found");
+      const at = new Date().toISOString();
+      appendInputMessage(profile, {
+        channel: "feedback",
+        role: "user",
+        text: `帮我记准：${summarizeText(body.text, 140)}`,
+        sourceId: `${memory.id}:edit:input`,
+        modality: "text",
+        observedAt: at,
+        at,
+        relatedMemoryIds: [memory.id]
+      });
+      appendPapoMessage(profile, {
+        channel: "feedback",
+        text: `我把这条记忆改准了：${summarizeText(memory.text, 120)}。之后它再从我里面回来时，我会按你刚教的版本想起。`,
+        sourceId: `${memory.id}:edit`,
+        relatedMemoryIds: [memory.id],
+        at
+      });
       await store.saveProfile(profile);
       res.json({ profile, memory });
     } catch (error) {
