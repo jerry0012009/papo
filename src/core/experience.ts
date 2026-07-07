@@ -99,7 +99,7 @@ export function createLearningNote(kind: FeedbackKind, tags: string[] = [], feed
     case "understood":
       return `我学到：这次理解方向是对的。以后遇到${topic}，我会更相信这种注意方式。${userLine}`;
     case "continue":
-      return `我学到：${topic}你希望我不要浅浅带过。以后我会更愿意联想旧记忆，并展开一点。${userLine}`;
+      return `我学到：${topic}你希望我不要浅浅带过。以后我会更愿意想起以前的小事，并展开一点。${userLine}`;
     case "not_now":
       return `我学到：不是每次注意到东西都要打扰你。以后遇到${topic}，我会更安静。${userLine}`;
     case "remember":
@@ -124,7 +124,7 @@ function baseActionFeeling(action: ActionKind, profile: CreatureProfile) {
         ? "我更想先轻轻问你一句，确认我有没有理解错。"
         : "我想先问你一句，因为直接保存或展开还不够稳。";
     case "recall":
-      return "我更想把旧片段拉回来一起看，而不是把它当成孤立的新消息。";
+      return "我更想把以前那段小事拉回来一起看，而不是把它当成孤立的新消息。";
     case "review":
       return "我想把它整理成一次小复盘，帮你看清这件事为什么重要。";
     case "quiet":
@@ -148,7 +148,7 @@ function raisedActionFeeling(action: ActionKind, profile: CreatureProfile) {
     return "你把我养得更会收住声音，所以我会把话放轻，不急着追问你。";
   }
   if ((policy.preferDepth >= 65 || policy.recallTendency >= 65) && ["ask", "recall", "review", "save_episode", "observe", "respond", "draft_reminder", "draft_question_list"].includes(action)) {
-    return "你把我养得愿意多停一下，所以我会把这段和旧片段贴近一点，不浅浅放过。";
+    return "你把我养得愿意多停一下，所以我会把这段和以前的小事贴近一点，不浅浅放过。";
   }
   return "";
 }

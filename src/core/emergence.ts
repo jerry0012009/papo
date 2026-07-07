@@ -25,10 +25,10 @@ export function createMemoryResonanceEmergence(
     id: makeId("emergence"),
     at: now,
     kind: "memory_resonance",
-    whyNow: "刚才的新片段碰到了这条旧记忆。",
+    whyNow: "刚才的新片段碰到了我还抱着的一小段。",
     relatedMemoryIds: [memory.id],
     driveSource: "memory_resonance",
-    message: `你刚递来的这一小段碰到了旧气味，我又想起了：${emergenceMemoryText(memory.text, 96)}。我没有急着把它当成新事，而是先把旧片段和现在放在一起听。`,
+    message: `你刚递来的这一小段碰到了熟悉气味，我又想起了：${emergenceMemoryText(memory.text, 96)}。我没有急着把它当成新事，而是先把那段和现在放在一起听。`,
     ruleTrace: [`event=${event.id}`, `memory=${memory.id}`, "trigger=related_memory"]
   };
   profile.emergenceHistory.unshift(record);
@@ -47,7 +47,7 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
       now,
       kind: "drive_based",
       memory: safetyMemory ?? generalMemory,
-      whyNow: "我现在更在意边界，所以先碰到需要小心保存的旧事。",
+      whyNow: "我现在更在意边界，所以先碰到以前那段需要小心保存的小事。",
       driveSource: "safety",
       messagePrefix: "我现在比较谨慎"
     });
@@ -59,7 +59,7 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
       now,
       kind: "drive_based",
       memory: futureMemory ?? generalMemory,
-      whyNow: "我还有一点没想完，所以这条旧记忆先从脑袋里冒出来。",
+      whyNow: "我还有一点没想完，所以先摸到一段还没放下的小事。",
       driveSource: "curiosity",
       messagePrefix: "我有点想继续想"
     });
@@ -71,7 +71,7 @@ export function createDriveBasedEmergence(profile: CreatureProfile, now = new Da
       now,
       kind: "drive_based",
       memory: generalMemory,
-      whyNow: "我现在更想靠近你，所以先贴近一条我们一起留下的旧事。",
+      whyNow: "我现在更想靠近你，所以先贴近一条我们一起留下的小事。",
       driveSource: "attachment",
       messagePrefix: "我想靠近我们之前反复提过的主题"
     });
@@ -92,9 +92,9 @@ export function createRhythmEmergence(profile: CreatureProfile, now = new Date()
     now,
     kind: "rhythm",
     memory: stale,
-    whyNow: "你来看我在想什么时，我安静的节律先碰到一条很久没回来的旧记忆。",
+    whyNow: "你来看我在想什么时，我安静了一会儿，先摸到一条很久没回来的小事。",
     driveSource: "rhythm",
-    messagePrefix: "我刚才安静地翻到一条旧记忆"
+    messagePrefix: "我刚才安静地摸到一小段以前的事"
   });
 }
 
@@ -112,10 +112,10 @@ function buildRecord(input: {
       id: makeId("emergence"),
       at: input.now,
       kind: input.kind,
-      whyNow: `${input.whyNow} 但我还没有和你攒出足够稳定的共同记忆，所以这次先把耳朵留给新的真实片段。`,
+      whyNow: `${input.whyNow} 但我还没有和你攒出足够稳定的共同小事，所以这次先把耳朵留给新的真实片段。`,
       relatedMemoryIds: [],
       driveSource: input.driveSource,
-      message: `${input.messagePrefix}，但我还没有能带回来的旧小事。我会先把耳朵留给下一段你递来的世界，等真的有一小段值得留下时，再把它从我里面轻轻带回来。`,
+      message: `${input.messagePrefix}，但我还没有能自己回来的小事。我会先把耳朵留给下一段你递来的世界，等真的有一小段值得留下时，再把它从我里面轻轻带回来。`,
       ruleTrace: [`kind=${input.kind}`, `drive=${input.driveSource}`, "memory=none", "shared_memory=none"]
     };
   }
@@ -141,11 +141,11 @@ function buildRecord(input: {
 }
 
 function selfMemoryWhyNow(driveSource: string) {
-  if (driveSource === "safety") return "我现在更在意边界，所以先碰到你教过我的养成记忆。";
+  if (driveSource === "safety") return "我现在更在意边界，所以先碰到你教过我的小心听法。";
   if (driveSource === "curiosity") return "我还有一点没想完，所以先碰到你教我形成的听法。";
   if (driveSource === "attachment") return "我现在更想靠近你，所以先摸到你养出来的那点习惯。";
-  if (driveSource === "rhythm") return "我安静了一会儿，先碰到你教过我的养成记忆。";
-  return "我先碰到你教过我的养成记忆。";
+  if (driveSource === "rhythm") return "我安静了一会儿，先碰到你教过我的听法。";
+  return "我先碰到你教过我的听法。";
 }
 
 function selfMemoryBackMessage(driveSource: string, messagePrefix: string, memoryText: string) {
@@ -177,7 +177,7 @@ function memoryBackMessage(driveSource: string, messagePrefix: string, memoryTex
   if (driveSource === "rhythm") {
     return `我安静了一会儿，脑袋里先碰到这件小事，我想起了：${memoryText}。它像一小块旧气味，让我现在更容易注意相似的生活细节。`;
   }
-  return `${messagePrefix}，所以我想起了：${memoryText}。我会把这段旧小事贴近一点，再听你接下来递来的东西。`;
+  return `${messagePrefix}，所以我想起了：${memoryText}。我会把这段以前的小事贴近一点，再听你接下来递来的东西。`;
 }
 
 function emergenceMemoryText(text: string, max: number) {

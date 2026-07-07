@@ -138,7 +138,7 @@ function createFeedbackFollowUp(
 ) {
   const topic = feedbackTopic(context);
   if (action === "ask_follow_up") {
-    return `我还想轻轻问一句：下次再碰到${topic}时，我先帮你联想旧片段，还是先问你一句确认？`;
+    return `我还想轻轻问一句：下次再碰到${topic}时，我先帮你想起以前的小事，还是先问你一句确认？`;
   }
   if (action === "note_memory") {
     if (kind === "remember") {
@@ -155,7 +155,7 @@ function createFeedbackFollowUp(
       return `我已经把${topic}从一直记着的地方拿掉，只留下边界：下次类似内容先问你。`;
     }
     if (kind === "forget") {
-      return `我先把${topic}放轻到最低，之后不把它当成会主动冒出来的旧事。`;
+      return `我先把${topic}放轻到最低，之后不把它当成会自己冒出来的小事。`;
     }
     return `我会先安静，把${topic}放轻一点；下次类似内容不急着追问。`;
   }
@@ -259,7 +259,7 @@ function selfMemoryTrait(kind: FeedbackKind) {
     case "continue":
       return {
         tag: "更愿意多想",
-        text: (topic: string) => `你教我不要浅浅带过。以后遇到${topic}，我会多停一下，先联想旧片段再回应。`
+        text: (topic: string) => `你教我不要浅浅带过。以后遇到${topic}，我会多停一下，先想起以前的小事再回应。`
       };
     case "not_now":
       return {
@@ -269,7 +269,7 @@ function selfMemoryTrait(kind: FeedbackKind) {
     case "remember":
       return {
         tag: "更愿意记稳",
-        text: (topic: string) => `你教我被确认的小片段值得记稳。以后遇到${topic}，我会更愿意把它和旧记忆连起来。`
+        text: (topic: string) => `你教我被确认的小片段值得记稳。以后遇到${topic}，我会更愿意把它和以前的小事连起来。`
       };
     case "forget":
       return {

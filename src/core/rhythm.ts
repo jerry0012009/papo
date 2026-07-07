@@ -82,7 +82,7 @@ function reasonForElapsedMinutes(elapsedMinutes: number) {
 function wakeMessage(elapsedMinutes: number, changed: boolean) {
   if (elapsedMinutes < 1) return "我刚刚醒着，你一打开我就还在这里。";
   if (!changed) return "刚才只是隔了一小会儿。我还在这里，耳朵朝着你，等你继续把这一小段世界递给我。";
-  if (elapsedMinutes < 60) return `刚才过去了 ${elapsedMinutes} 分钟，我像浅浅休息了一下，能量回来了些，心跳也放慢了一点。`;
+  if (elapsedMinutes < 60) return "我像浅浅趴了一会儿。你回来时，我的能量回来了些，心跳也放慢了一点。";
   if (elapsedMinutes < 360) return "我隔了一阵才又见到你，像从小睡里醒来。现在更有力气，也更想看看这一小段世界。";
   return "你离开了比较久。我醒来时先稳住自己，再带着一点想靠近的感觉等你继续给我新的片段。";
 }
@@ -123,16 +123,16 @@ function createWakeEmergence(
 
 function wakeWhyNow(memory: LongTermMemory, elapsedMinutes: number) {
   if (memory.kind === "creature_self_memory") {
-    return `你离开了 ${elapsedMinutes} 分钟后回来，我醒来的节律先碰到你教过我的养成记忆。`;
+    return "我刚醒来时，先摸到你教过我的听法。";
   }
-  return `你离开了 ${elapsedMinutes} 分钟后回来，我醒来的节律先碰到这条真实旧记忆。`;
+  return "我刚醒来时，先碰到我还抱着的一小段。";
 }
 
 function wakeEmergenceMessage(memory: LongTermMemory) {
   if (memory.kind === "creature_self_memory") {
     return `我醒来时先摸到你教过我的样子：${wakeMemoryText(memory.text)}。所以现在我会带着这种习惯听你下一段，等新的小事真的发生。`;
   }
-  return `我醒来时又碰到这件小事，我想起了：${wakeMemoryText(memory.text)}。它像刚闻到的一点旧气味，让我现在更容易留意相似的生活细节。`;
+  return `我醒来时又碰到这件小事：${wakeMemoryText(memory.text)}。它像刚闻到的一点熟悉气味，让我现在更容易留意相似的生活细节。`;
 }
 
 function wakeMemoryText(text: string) {

@@ -19,7 +19,7 @@ export function createContrastSummary(input: {
 
 function deepProfileLine(deep: CreatureProfile, quiet: CreatureProfile) {
   const parts = ["被你鼓励多想的 Papo 更愿意停下来多想一点"];
-  if (deep.policyProfile.recallTendency > quiet.policyProfile.recallTendency) parts.push("更容易把旧片段带回来一起听");
+  if (deep.policyProfile.recallTendency > quiet.policyProfile.recallTendency) parts.push("更容易把以前的小事带回来一起听");
   if (deep.policyProfile.preferProactivity > quiet.policyProfile.preferProactivity) parts.push("也更可能轻轻接一句话");
   return parts.join("，");
 }
@@ -33,7 +33,7 @@ function quietProfileLine(quiet: CreatureProfile, deep: CreatureProfile) {
 
 function actionTone(action: string) {
   const map: Record<string, string> = {
-    recall: "把旧片段带回来",
+    recall: "把以前的小事带回来",
     review: "继续复盘",
     ask: "追问确认",
     save_episode: "写成共同经历",

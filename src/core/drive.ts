@@ -48,7 +48,7 @@ export function updatePolicyFromFeedback(profile: CreatureProfile, kind: Feedbac
 export function describeStateInfluence(profile: CreatureProfile) {
   const parts: string[] = [];
   if (profile.state.curiosity > 70) parts.push("好奇心高，提高新主题和提问倾向");
-  if (profile.state.attachment > 65) parts.push("依恋度高，更容易联想到旧记忆");
+  if (profile.state.attachment > 65) parts.push("依恋度高，更容易想起以前的小事");
   if (profile.state.energy < 35) parts.push("精力低，减少注意数量并偏向安静");
   if (profile.state.safety > 70 || profile.policyProfile.privacySensitivity > 70) parts.push("安全/隐私敏感度高，保存前更倾向询问");
   if (profile.policyProfile.preferDepth > 65) parts.push("用户反馈让它更愿意深入展开");
@@ -60,7 +60,7 @@ function explainPolicyShift(policy: FeedbackPolicyProfile, kind: FeedbackKind, t
   const tagText = tags.length ? `我会把这个学法先贴近「${tags.slice(0, 3).join("、")}」这些小线索。` : "";
   switch (kind) {
     case "continue":
-      return `${tagText}之后遇到相近片段，我会更愿意继续想、想起旧小事，并多展开一点。`;
+      return `${tagText}之后遇到相近片段，我会更愿意继续想、想起以前的小事，并多展开一点。`;
     case "not_now":
       return `${tagText}之后遇到相近片段，我会更会安静陪着，不把每次注意都变成打扰。`;
     case "remember":

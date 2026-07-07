@@ -167,7 +167,9 @@ describe("creature core", () => {
     expect(profile.wakeHistory[0].id).toBe(wake.id);
     expect(wake.message).toContain("醒来");
     expect(wake.innerThought).toContain("妈妈");
-    expect(wake.innerThought).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|新的信息流/);
+    expect(wake.message).not.toMatch(/刚才过去 \d+ 分钟|重新计算|当前状态/);
+    expect(wake.innerThought).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|新的信息流|旧记忆|节律/);
+    expect(profile.emergenceHistory[0].whyNow).not.toMatch(/旧记忆|节律/);
     expect(wake.relatedMemoryIds).toEqual(["ltm_family_review"]);
     expect(profile.emergenceHistory[0].id).toBe(wake.emergenceId);
     expect(profile.emergenceHistory[0].relatedMemoryIds).toEqual(["ltm_family_review"]);
@@ -195,7 +197,7 @@ describe("creature core", () => {
     expect(wake.innerThought).toContain("你教过我的样子");
     expect(wake.innerThought).toContain("等新的小事真的发生");
     expect(wake.innerThought).not.toContain("我想起了");
-    expect(wake.innerThought).not.toMatch(/不装作|装成/);
+    expect(wake.innerThought).not.toMatch(/不装作|装成|旧记忆|节律/);
     expect(wake.relatedMemoryIds).toEqual([expect.stringMatching(/^ltm_/)]);
     expect(profile.emergenceHistory[0].driveSource).toBe("wake_self_memory");
     expect(profile.longTermMemories.find((memory) => memory.id === wake.relatedMemoryIds[0])?.tags).toContain("被你养成");
@@ -321,10 +323,10 @@ describe("creature core", () => {
 
     expect(emergence.relatedMemoryIds).toEqual([]);
     expect(emergence.memoryId).toBeUndefined();
-    expect(emergence.text).toContain("还没有能带回来的旧小事");
+    expect(emergence.text).toContain("还没有能自己回来的小事");
     expect(emergence.text).toContain("耳朵留给下一段");
     expect(emergence.text).not.toContain("所以我想起了");
-    expect(emergence.text).not.toMatch(/不装作|装成/);
+    expect(emergence.text).not.toMatch(/不装作|装成|旧记忆|内在倾向|我浮现的是/);
   });
 
   it("active emergence references existing shared memory", () => {
@@ -336,7 +338,7 @@ describe("creature core", () => {
 
     expect(profile.longTermMemories.some((memory) => memory.id === emergence.memoryId && memory.kind !== "creature_self_memory" && memory.weight > 0)).toBe(true);
     expect(emergence.text).toContain("我想起了");
-    expect(emergence.text).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|我浮现的是/);
+    expect(emergence.text).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|我浮现的是|旧记忆|节律/);
   });
 
   it("active emergence speaks normalized creature memory instead of raw analysis text", () => {

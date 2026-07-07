@@ -86,7 +86,7 @@ describe("App", () => {
             at: new Date().toISOString(),
             elapsedMinutes: 0,
             message: "我刚刚醒着，你一打开我就还在这里。",
-            innerThought: "我醒来时自己又想到妈妈复查这件事。",
+            innerThought: "我醒来时又碰到妈妈复查这件小事。",
             relatedMemoryIds: ["m2"],
             emergenceId: "emergence1",
             stateChangeReason: "app_wake_short_gap",
@@ -173,11 +173,11 @@ describe("App", () => {
     expect(screen.queryByText("它已经接住这一小段，正在把文字、照片或声音放进同一个小情景里听。")).not.toBeInTheDocument();
     expect(screen.queryByText(/材料|模拟一段信息流|录音分段/)).not.toBeInTheDocument();
     expect(screen.getByText("Papo 抬头看了你一眼")).toBeInTheDocument();
-    expect(screen.getByText("我醒来时自己又想到妈妈复查这件事。")).toBeInTheDocument();
+    expect(screen.getByText("我醒来时又碰到妈妈复查这件小事。")).toBeInTheDocument();
     expect(screen.getByLabelText("Papo 的身体信号")).toBeInTheDocument();
     expect(screen.getByText("小脑袋")).toBeInTheDocument();
     expect(screen.getByText("我被你养成的样子")).toBeInTheDocument();
-    expect(screen.getByText("你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先联想旧片段再回应")).toBeInTheDocument();
+    expect(screen.getByText("你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先想起以前的小事再回应")).toBeInTheDocument();
     expect(screen.queryByText(/preferDepth|quietTendency|深入倾向|安静倾向/)).not.toBeInTheDocument();
     expect(screen.queryByText("依恋度")).not.toBeInTheDocument();
     expect(screen.queryByText("唤醒度")).not.toBeInTheDocument();
@@ -454,7 +454,7 @@ function profileFixture() {
         id: "m-raised",
         createdAt: new Date().toISOString(),
         kind: "creature_self_memory",
-        text: "你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先联想旧片段再回应。",
+        text: "你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先想起以前的小事再回应。",
         weight: 74,
         tags: ["被你养成", "更愿意多想", "妈妈复查"]
       },

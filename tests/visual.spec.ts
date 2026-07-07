@@ -20,7 +20,7 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByLabel("Papo 的身体信号")).toBeVisible();
   await expect(page.getByText("小脑袋")).toBeVisible();
   await expect(page.getByText("我被你养成的样子")).toBeVisible();
-  await expect(page.getByText("你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先联想旧片段再回应")).toBeVisible();
+  await expect(page.getByText("你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先想起以前的小事再回应")).toBeVisible();
   await expect(page.getByText(/preferDepth|quietTendency|深入倾向|安静倾向/)).toHaveCount(0);
   await expect(page.getByText("Papo 抬头看了你一眼")).toBeVisible();
   await expect(page.getByText("我醒来时又碰到妈妈复查这件小事。")).toBeVisible();
@@ -202,7 +202,7 @@ function profileFixture() {
         id: "memory-raised",
         createdAt: now,
         kind: "creature_self_memory",
-        text: "你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先联想旧片段再回应。",
+        text: "你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先想起以前的小事再回应。",
         weight: 74,
         tags: ["被你养成", "更愿意多想", "妈妈复查"]
       }

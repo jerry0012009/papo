@@ -639,7 +639,7 @@ export function App() {
         contrast,
         emergence: emerged.emergence.text
       });
-      setDemoNote("这只 Papo 已经走完一圈：先注意生活片段，再被你反馈养成，然后自己想起一条旧记忆。");
+      setDemoNote("这只 Papo 已经走完一圈：先注意生活片段，再被你反馈养成，然后自己想起一段抱着的小事。");
       setTab("demo");
     });
   }
@@ -1519,7 +1519,7 @@ function DemoView(props: {
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={Wand2} title="带 Papo 走一圈" />
-        <p className="response">用几段日常小事，让 Papo 先竖起耳朵，再被你养成，最后自己想起旧片段。</p>
+        <p className="response">用几段日常小事，让 Papo 先竖起耳朵，再被你养成，最后自己想起以前抱着的小事。</p>
         {props.note ? <section className="learning-note">{props.note}</section> : null}
         {props.summary ? (
           <section className="demo-checklist">
@@ -1561,7 +1561,7 @@ function AttentionCard({ event }: { event: AttentionEvent }) {
       <small>{event.creatureExperience.earReason}</small>
       <details className="brain-details">
         <summary>我刚才怎么理解</summary>
-        <p>{event.creatureExperience.rememberedScene ?? "这次还没有强烈拉起旧片段。"}</p>
+        <p>{event.creatureExperience.rememberedScene ?? "这次还没有拉起以前的小事。"}</p>
         <p>{event.creatureExperience.actionFeeling}</p>
         <p>{event.creatureExperience.saveFeeling}</p>
       </details>
@@ -1601,7 +1601,7 @@ function EpisodeCard(props: {
         <div className="episode-experience">
           <p><strong>我刚才注意到：</strong>{noticedText(props.episode.noticed)}</p>
           <p><strong>我为什么注意：</strong>{props.episode.creatureExperience?.earReason ?? props.episode.importanceReason}</p>
-          <p><strong>我想起了什么：</strong>{props.episode.creatureExperience?.rememberedScene ?? "这次还没有强烈拉起旧片段。"}</p>
+          <p><strong>我想起了什么：</strong>{props.episode.creatureExperience?.rememberedScene ?? "这次还没有拉起以前的小事。"}</p>
           <p><strong>我猜你在做：</strong>{props.episode.possibleIntent}</p>
           <p><strong>我当时的状态：</strong>{episodeStateText(props.episode)}</p>
           <p><strong>我选择：</strong>{props.episode.creatureExperience?.actionFeeling ?? props.episode.actionDecision?.reason}</p>
@@ -1694,7 +1694,7 @@ function episodeStateText(episode: EpisodeMemory) {
   const state = episode.stateSnapshot;
   const parts = [];
   if (state.curiosity > 70) parts.push("好奇心比较高，所以更容易被新主题吸引");
-  if (state.attachment > 60) parts.push("依恋度较高，所以更愿意联想旧记忆");
+  if (state.attachment > 60) parts.push("依恋度较高，所以更愿意想起以前的小事");
   if (state.energy < 35) parts.push("精力偏低，所以会短一点回应");
   if (state.safety > 70) parts.push("安全感偏谨慎，所以不会急着保存隐私内容");
   return parts.length ? parts.join("；") : "状态稳定，适合认真观察这一段";
@@ -1807,10 +1807,10 @@ function raisedShapeLines(profile: CreatureProfile) {
 
   const lines: string[] = [];
   const policy = profile.policyProfile;
-  if (policy.preferDepth >= 55) lines.push("你把我养得更愿意多停一下，再把旧片段连起来。");
+  if (policy.preferDepth >= 55) lines.push("你把我养得更愿意多停一下，再把以前的小事连起来。");
   if (policy.quietTendency >= 50) lines.push("你把我养得更会先安静陪着，不急着追问。");
   if (policy.privacySensitivity >= 65) lines.push("你把我养得更小心边界，保存前会多等你的意思。");
-  if (policy.recallTendency >= 58 && lines.length < 2) lines.push("你把我养得更容易从旧记忆里想起相近的小事。");
+  if (policy.recallTendency >= 58 && lines.length < 2) lines.push("你把我养得更容易从以前的小事里想起相近的片段。");
   if (!lines.length) lines.push("我还在慢慢学你的偏好，等你教我哪些要多想，哪些先放下。");
   return lines.slice(0, 2);
 }
@@ -1874,11 +1874,11 @@ function emergenceDriveText(drive: string) {
   const map: Record<string, string> = {
     safety: "因为我现在更谨慎",
     curiosity: "因为我还想继续想",
-    attachment: "因为我想靠近旧片段",
-    rhythm: "因为节律把旧记忆带回我这里",
-    wake_rhythm: "因为醒来时碰到我抱着的旧记忆",
-    wake_self_memory: "因为醒来时碰到你养出来的习惯",
-    memory_resonance: "因为新片段碰到我抱着的旧记忆"
+    attachment: "因为我想靠近以前那一小段",
+    rhythm: "因为安静时摸到我抱着的小事",
+    wake_rhythm: "因为醒来时碰到我抱着的小事",
+    wake_self_memory: "因为醒来时碰到你养出来的听法",
+    memory_resonance: "因为新片段碰到我抱着的小事"
   };
   return map[drive] ?? "因为我现在的状态把这段带了回来";
 }
@@ -1979,7 +1979,7 @@ function stateSentence(profile: CreatureProfile) {
   const latest = profile.conversation?.[0];
   const latestChange = profile.stateChanges?.[0];
   if (latest?.role === "papo" && latest.channel === "feedback") return "你刚刚教过我一次，我会把这种偏好带到后面相似的小片段里。";
-  if (latest?.role === "papo" && latest.channel === "emergence") return "那条旧记忆刚从我里面冒出来，我会带着这个方向继续听下一段。";
+  if (latest?.role === "papo" && latest.channel === "emergence") return "那段小事刚从我里面自己回来了一下，我会带着这个方向继续听下一段。";
   if (latest?.role === "papo" && latest.channel === "curious") return "我刚从一小段世界里挑出自己在意的地方，还没有把所有东西都吞下去。";
   if (latest?.role === "papo" && latest.channel === "button") return "刚才那句话让我竖起耳朵，我正在判断要回应、记住，还是先轻轻问一句。";
   if (latest?.role === "user" || latest?.role === "world") return "我已经接住这一小段，正在把文字、照片或声音放进同一个小情景里听。";
@@ -1987,7 +1987,7 @@ function stateSentence(profile: CreatureProfile) {
   if (latestChange?.reason.includes("feedback")) return "我刚被你养成了一点，之后遇到相似片段会更接近你的意思。";
   if (latestChange?.reason.includes("wake")) return "这次重新见到你以后，我先稳住自己，再把耳朵留给新的小片段。";
   const memory = strongestSharedMemory(profile);
-  if (memory) return `我还抱着这段旧小事：${normalizeMemoryText(memory.text)}。下一段相近的生活靠近时，我会先轻轻想起它。`;
+  if (memory) return `我还抱着这段以前的小事：${normalizeMemoryText(memory.text)}。下一段相近的生活靠近时，我会先轻轻想起它。`;
   const raisedMemory = strongestRaisedMemory(profile);
   if (raisedMemory) return `你教过我的这点还在身体里：${normalizeMemoryText(raisedMemory.text)}。我会带着这种听法等你下一段。`;
   if (!profile.episodes.length) return "我还没有和你攒下真实生活片段，所以先把耳朵留给你接下来递来的文字、照片或声音。";
@@ -1999,7 +1999,7 @@ function stateSentence(profile: CreatureProfile) {
 }
 
 function restingHeadline(profile: CreatureProfile) {
-  if (strongestSharedMemory(profile)) return "抱着一小段旧事";
+  if (strongestSharedMemory(profile)) return "抱着一小段以前的事";
   if (strongestRaisedMemory(profile)) return "带着你教过的听法";
   if (!profile.episodes.length) return "等第一段生活靠近";
   const state = profile.state;

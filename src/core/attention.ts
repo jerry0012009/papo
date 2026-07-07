@@ -249,7 +249,7 @@ export function buildAttentionEvent(
     triggerLabel: input.triggerLabel,
     triggerContent: input.triggerContent,
     noticed: buildNoticed(input.triggerContent, related.length),
-    reason: `${input.reasonPrefix}${related.length ? " 它还碰到了旧记忆，所以我把旧片段拉进了工作区。" : ""}`,
+    reason: `${input.reasonPrefix}${related.length ? " 它还碰到了我抱着的小事，所以我把那段拉近一起听。" : ""}`,
     relatedMemoryIds: related,
     stateSnapshot: structuredClone(profile.state),
     attentionStrength: Math.min(100, Math.round(strength)),
@@ -284,7 +284,7 @@ export function composeCreatureResponse(profile: CreatureProfile, event: Attenti
   }
   const posture = profile.state.confidence > 62 ? "我比较稳地接住了这一小段" : "我先把这一小段轻轻抱住";
   const memoryLine = event.relatedMemoryIds.length
-    ? "这一小段碰到我以前抱着的一点记忆，我会把旧片段和现在一起听。"
+    ? "这一小段碰到我以前抱着的一点记忆，我会把那段小事和现在一起听。"
     : "这像一段新的共同经历，我会先把它放进情景里。";
   return `${posture}：${trimSentence(event.noticed)}。${memoryLine}${actionResponseLine(event.actionDecision.action)}${raisedResponseLine(profile, event.actionDecision.action)}`;
 }
@@ -298,7 +298,7 @@ function actionResponseLine(action: AttentionEvent["actionDecision"]["action"]):
     case "save_long_term":
       return "我感觉它可能值得长久留下，但会等你的意思更清楚。";
     case "recall":
-      return "我想把旧片段拉近一点，和现在这件事一起看。";
+      return "我想把以前那段小事拉近一点，和现在这件事一起看。";
     case "review":
       return "我想陪你把它整理成一小段复盘。";
     case "quiet":
