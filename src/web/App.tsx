@@ -746,7 +746,7 @@ function HomeView(props: {
         </button>
       </div>
 
-      {props.emergence?.text || props.emergence?.cognitionTrace ? <EmergenceCard emergence={props.emergence} profile={props.profile} /> : null}
+      {props.emergence?.text ? <EmergenceCard emergence={props.emergence} profile={props.profile} /> : null}
     </section>
   );
 }
@@ -1849,13 +1849,6 @@ function noticedText(text: string) {
 }
 
 function EmergenceCard({ emergence, profile }: { emergence: EmergenceSurface; profile: CreatureProfile }) {
-  if (!emergence.text) {
-    return (
-      <section className="emergence-audit">
-        {emergence.cognitionTrace ? <DeveloperTrace trace={emergence.cognitionTrace} profile={profile} /> : null}
-      </section>
-    );
-  }
   return (
     <section className="memory-surface active">
       <div className="emergence-card-head">

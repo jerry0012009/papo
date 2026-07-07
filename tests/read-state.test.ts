@@ -6,6 +6,7 @@ import type { ModelProvider } from "../src/core/provider";
 
 const store = new MemoryProfileStore();
 const profile = await store.createProfile({ userId: "read-user", creatureName: "Papo" });
+const wake = appendPapoMessage(profile, { channel: "wake", text: "醒来时" });
 const first = appendPapoMessage(profile, { channel: "emergence", text: "第一条" });
 const second = appendPapoMessage(profile, { channel: "button", text: "第二条" });
 await store.saveProfile(profile);
@@ -53,6 +54,13 @@ try {
     body: JSON.stringify({ lastReadPapoMessageId: "missing" })
   });
   assert.equal(bad.status, 400);
+
+  const wakeRead = await fetch(`http://127.0.0.1:${address.port}/api/profiles/read-user/read-state`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ lastReadPapoMessageId: wake?.id })
+  });
+  assert.equal(wakeRead.status, 400);
   console.log(JSON.stringify({ ok: true }, null, 2));
 } finally {
   server.close();

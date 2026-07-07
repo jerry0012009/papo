@@ -340,7 +340,7 @@ export function createApp(input: {
       const body = readStateSchema.parse(req.body);
       const latestReadable = profile.conversation.find((message) => message.role === "papo" && message.channel !== "wake");
       const requested = body.lastReadPapoMessageId;
-      if (requested && !profile.conversation.some((message) => message.id === requested && message.role === "papo")) {
+      if (requested && !profile.conversation.some((message) => message.id === requested && message.role === "papo" && message.channel !== "wake")) {
         throw new HttpError(400, "Read message not found");
       }
       profile.readState = {
