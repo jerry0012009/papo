@@ -24,6 +24,15 @@ describe("App", () => {
         });
       }
       if (url.endsWith("/api/image-summary")) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as { label?: string };
+        if (body.label?.includes("坏照片")) {
+          return json({
+            summary: "图片已上传，但我暂时没有看清里面的内容。你可以补一句这张图里发生了什么。",
+            provider: "fallback",
+            semanticSource: "fallback",
+            error: "Vision provider failed: 403"
+          });
+        }
         return json({ summary: "照片里是周五复查的日历备注，写着提前准备病历。", provider: "fallback", semanticSource: "fallback" });
       }
       if (url.endsWith("/api/profiles") && init?.method === "POST") {
@@ -185,6 +194,14 @@ describe("App", () => {
     expect(await screen.findByText("我把你刚说的话和照片放在同一小段里听了。")).toBeInTheDocument();
     expect(screen.getByText("这张照片就是刚说的复查。")).toBeInTheDocument();
     expect(screen.getByText("照片里是周五复查的日历备注，写着提前准备病历。")).toBeInTheDocument();
+
+    await userEvent.upload(screen.getByLabelText("加照片"), new File(["bad"], "坏照片.png", { type: "image/png" }));
+    expect(await screen.findByDisplayValue("坏照片.png")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue(/暂时没有看清|Vision provider failed|403/)).not.toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText("直接告诉 Papo 一件刚发生的事"), "这张照片我稍后再补。");
+    await userEvent.click(screen.getByRole("button", { name: "让 Papo 听听" }));
+    await waitFor(() => expect(curiousRequest?.segments?.map((segment) => segment.kind)).toEqual(["text"]));
+    expect(curiousRequest?.segments?.[0]?.content).toContain("这张照片我稍后再补");
 
     await userEvent.click(screen.getByRole("button", { name: "首页" }));
     expect(screen.queryByText(/sense: button/)).not.toBeInTheDocument();

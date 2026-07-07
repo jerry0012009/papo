@@ -273,15 +273,16 @@ export function App() {
       const location = await currentLocationSnapshot();
       const dataUrl = await readFileAsDataUrl(file);
       const result = await summarizeImage(dataUrl, file.name || "对话照片");
+      const content = sensingSegmentContent(result.summary, result.error);
       setChatSegments((current) => [
         ...current,
-        makeSegment(`chat-image-${Date.now()}`, "image_summary", file.name || `照片 ${current.length + 1}`, result.summary, {
+        makeSegment(`chat-image-${Date.now()}`, "image_summary", file.name || `照片 ${current.length + 1}`, content, {
           observedAt,
           batchId: current[0]?.batchId ?? currentBatchId(),
           location
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "照片已经变成一段可改准的小片段，会和这半分钟里的话一起给我听。" : "照片先放进这一小段，对话提交时会一起给我听。");
+      setDemoNote(result.error ? "照片先留在这一小段里，等你补一句我再一起听。" : result.semanticSource === "llm" ? "照片已经变成一段可改准的小片段，会和这半分钟里的话一起给我听。" : "照片先放进这一小段，对话提交时会一起给我听。");
       setTab("chat");
     });
   }
@@ -291,14 +292,15 @@ export function App() {
     await run(async () => {
       const dataUrl = await readFileAsDataUrl(file);
       const result = await transcribeAudio(dataUrl, file.name || "对话录音");
+      const content = sensingSegmentContent(result.transcript, result.error);
       setChatSegments((current) => [
         ...current,
-        makeSegment(`chat-audio-${Date.now()}`, "audio_transcript", file.name || `录音 ${current.length + 1}`, result.transcript, {
+        makeSegment(`chat-audio-${Date.now()}`, "audio_transcript", file.name || `录音 ${current.length + 1}`, content, {
           observedAt: new Date().toISOString(),
           batchId: current[0]?.batchId ?? currentBatchId()
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "录音已经变成一段可改准的小片段，会和这半分钟里的话一起给我听。" : "录音先放进这一小段，对话提交时会一起给我听。");
+      setDemoNote(result.error ? "录音先留在这一小段里，等你补一句我再一起听。" : result.semanticSource === "llm" ? "录音已经变成一段可改准的小片段，会和这半分钟里的话一起给我听。" : "录音先放进这一小段，对话提交时会一起给我听。");
       setTab("chat");
     });
   }
@@ -310,15 +312,16 @@ export function App() {
       const location = await currentLocationSnapshot();
       const dataUrl = await readFileAsDataUrl(file);
       const result = await summarizeImage(dataUrl, file.name || "上传照片");
+      const content = sensingSegmentContent(result.summary, result.error);
       setSegments((current) => [
         ...current,
-        makeSegment(`image-${Date.now()}`, "image_summary", file.name || `照片 ${current.length + 1}`, result.summary, {
+        makeSegment(`image-${Date.now()}`, "image_summary", file.name || `照片 ${current.length + 1}`, content, {
           observedAt,
           batchId: currentBatchId(),
           location
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "我已经把照片看成一段可改准的小片段，并记下可用的时间和地点。" : "照片已经进入这一小段，你可以先改准再给我看。");
+      setDemoNote(result.error ? "照片已经留在这一小段里，先补一句再给我看。" : result.semanticSource === "llm" ? "我已经把照片看成一段可改准的小片段，并记下可用的时间和地点。" : "照片已经进入这一小段，你可以先改准再给我看。");
       setTab("curious");
     });
   }
@@ -328,14 +331,15 @@ export function App() {
     await run(async () => {
       const dataUrl = await readFileAsDataUrl(file);
       const result = await transcribeAudio(dataUrl, file.name || "上传录音");
+      const content = sensingSegmentContent(result.transcript, result.error);
       setSegments((current) => [
         ...current,
-        makeSegment(`audio-${Date.now()}`, "audio_transcript", file.name || `录音 ${current.length + 1}`, result.transcript, {
+        makeSegment(`audio-${Date.now()}`, "audio_transcript", file.name || `录音 ${current.length + 1}`, content, {
           observedAt: new Date().toISOString(),
           batchId: currentBatchId()
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "我已经把录音听成一段可改准的小片段。" : "录音已经进入这一小段，你可以先改准再给我听。");
+      setDemoNote(result.error ? "录音已经留在这一小段里，先补一句再给我听。" : result.semanticSource === "llm" ? "我已经把录音听成一段可改准的小片段。" : "录音已经进入这一小段，你可以先改准再给我听。");
       setTab("curious");
     });
   }
@@ -516,9 +520,10 @@ export function App() {
         try {
           const dataUrl = await blobToDataUrl(blob);
           const result = await transcribeAudio(dataUrl, `语音片段 ${index}`);
-          content = chooseAudioTranscript(result.transcript, localTranscript);
+          content = chooseAudioTranscript(result.transcript, localTranscript, Boolean(result.error));
         } catch (caught) {
-          content = localTranscript || `语音片段 ${index} 已录下，但暂时没有转写成功。${errorMessage(caught)}`;
+          content = localTranscript;
+          if (!content) setError(`第 ${index} 段声音没听清。你可以手动补一小段给我。${errorMessage(caught)}`);
         }
       }
     }
@@ -2157,12 +2162,17 @@ function preferredAudioMimeType(Recorder: typeof MediaRecorder) {
   return candidates.find((type) => Recorder.isTypeSupported(type)) ?? "";
 }
 
-function chooseAudioTranscript(modelTranscript: string, localTranscript: string) {
+function chooseAudioTranscript(modelTranscript: string, localTranscript: string, hasModelError = false) {
   const modelText = modelTranscript.trim();
   const localText = localTranscript.trim();
-  const modelIsFallback = /不能真实转写|暂时没有返回转写|请手动补充|没有转写成功/.test(modelText);
+  const modelIsFallback = /不能真实转写|暂时没有返回转写|请手动补充|没有转写成功|暂时没有听清|你可以补一句/.test(modelText);
+  if (hasModelError) return localText;
   if ((!modelText || modelIsFallback) && localText) return localText;
   return modelText || localText;
+}
+
+function sensingSegmentContent(text: string, error?: string) {
+  return error ? "" : text;
 }
 
 async function currentLocationSnapshot(): Promise<StreamSegment["location"] | undefined> {
