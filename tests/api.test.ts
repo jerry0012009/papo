@@ -20,7 +20,7 @@ describe("api", () => {
 
   it("runs profile, button, curious, feedback, and emergence endpoints", async () => {
     const app = createApp({ store: new MemoryProfileStore(), provider: testProvider() });
-    const created = await request(app).post("/api/profiles").send({ creatureName: "Demo" }).expect(201);
+    const created = await request(app).post("/api/profiles").send({ creatureName: "Papo" }).expect(201);
     const userId = created.body.profile.userId;
 
     await request(app)

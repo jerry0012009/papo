@@ -34,7 +34,7 @@ describe("creature core", () => {
 
   it("button capture creates an attention event and episode", () => {
     const profile = createCreatureProfile();
-    const result = handleButtonCapture(profile, "这个 demo 不能像普通工具，要有小脑袋和情景记忆。");
+    const result = handleButtonCapture(profile, "这个产品不能像普通工具，要有小脑袋和情景记忆。");
 
     expect(result.events).toHaveLength(1);
     expect(result.episodes).toHaveLength(1);

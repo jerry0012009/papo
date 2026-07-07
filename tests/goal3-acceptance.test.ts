@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import { handleButtonCapture } from "../src/core/attention";
-import { createContrastSummary } from "../src/core/demo";
 import { semanticDecideEmergence } from "../src/core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../src/core/feedback";
 import { createCreatureProfile } from "../src/core/profile";
@@ -41,7 +40,6 @@ describe("goal 3 acceptance flow", () => {
     ]);
     const deepNext = await runButtonHarness(deep, input, styleProvider("deep"), "2026-07-06T06:04:00.000Z");
     const quietNext = await runButtonHarness(quiet, input, styleProvider("quiet"), "2026-07-06T06:04:00.000Z");
-    const contrast = createContrastSummary({ deepProfile: deep, quietProfile: quiet, deepResult: deepNext, quietResult: quietNext });
 
     expect(deep.policyProfile.preferDepth).toBeGreaterThan(quiet.policyProfile.preferDepth);
     expect(deep.policyProfile.recallTendency).toBeGreaterThan(quiet.policyProfile.recallTendency);
@@ -49,9 +47,6 @@ describe("goal 3 acceptance flow", () => {
     expect(deepNext.events[0].actionDecision.action).not.toBe(quietNext.events[0].actionDecision.action);
     expect(deepNext.response).toMatch(/不要浅浅带过|多停一下/);
     expect(quietNext.response).toBe("");
-    expect(contrast).toContain("同一句担心，两只 Papo 的接法已经分开了");
-    expect(contrast).toContain("说出口的第一反应也不一样");
-    expect(contrast).not.toContain("内在选择");
 
     const promoted = main.longTermMemories.find((memory) => memory.sourceEpisodeId === targetEpisode.id && !memory.tags.includes("被你养成"));
     expect(promoted).toBeTruthy();

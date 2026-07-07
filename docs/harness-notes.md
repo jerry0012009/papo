@@ -1,6 +1,6 @@
 # Harness Notes
 
-This Demo borrows patterns from successful agent systems without importing a heavy orchestration framework.
+Papo borrows patterns from successful agent systems without importing a heavy orchestration framework.
 
 ## What We Borrow
 
@@ -31,4 +31,4 @@ Papo 1.0 uses a lightweight in-repo harness:
 - No hidden memory writes by the model.
 - No state mutation from unvalidated LLM JSON.
 
-This keeps the Demo easy to modify while preserving the shape needed for future upgrades.
+This keeps the harness easy to modify while preserving the shape needed for future upgrades.

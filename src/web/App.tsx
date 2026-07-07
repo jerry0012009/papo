@@ -13,11 +13,9 @@ import {
   RefreshCcw,
   Save,
   Sparkles,
-  Wand2,
   UserRound
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createContrastSummary } from "../core/demo";
 import { memoryKeepReasonToCreatureVoice, toCreatureMemoryVoice } from "../core/memory";
 import type {
   AttentionEvent,
@@ -48,7 +46,7 @@ import {
   type ProviderInfo
 } from "./api";
 
-type Tab = "home" | "chat" | "memory" | "brain" | "profile" | "demo";
+type Tab = "home" | "chat" | "memory" | "brain" | "profile";
 
 interface SpeechRecognitionLike {
   continuous: boolean;
@@ -67,24 +65,6 @@ interface SpeechRecognitionEventLike {
 }
 
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-interface DemoSummary {
-  attention?: string;
-  feedback?: string;
-  contrast?: string;
-  emergence?: string;
-  contrastDetail?: DemoContrastDetail;
-}
-
-interface DemoContrastDetail {
-  input: string;
-  deepName: string;
-  quietName: string;
-  deepRaised: string;
-  quietRaised: string;
-  deepReply: string;
-  quietReply: string;
-}
 
 interface EmergenceSurface {
   text: string;
@@ -107,35 +87,6 @@ const feedbacks: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }
   { kind: "forget", label: "帮我放下", icon: RefreshCcw }
 ];
 
-const starterSegments: Array<{ kind: SegmentKind; label: string; content: string }> = [
-  {
-    kind: "text",
-    label: "早晨记录",
-    content: "今天早上只是匆匆吃了面包，没发生什么特别的事。"
-  },
-  {
-    kind: "image_summary",
-    label: "日历截图",
-    content: "日历里标着周五 9:30 妈妈复查，旁边还有准备病历和医保卡的备注。"
-  },
-  {
-    kind: "audio_transcript",
-    label: "语音转写",
-    content: "我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要。"
-  }
-];
-
-const demoCuriousSegments: Array<{ kind: SegmentKind; label: string; content: string }> = [
-  { kind: "text", label: "背景 1", content: "今天早餐吃了面包，路上有点堵。" },
-  { kind: "image_summary", label: "日历截图", content: "周五 9:30 妈妈复查，备注写着提前准备病历、医保卡和上次检查单。" },
-  { kind: "text", label: "隐私片段", content: "短信里有一个验证码 4921 和缴费链接，这段不应该被长期保存。" },
-  { kind: "audio_transcript", label: "语音 1", content: "我有点担心自己又把妈妈复查这件事拖到最后，明明很重要。" },
-  { kind: "image_summary", label: "购物截图", content: "购物车里有洗衣液、纸巾和一个水杯。" },
-  { kind: "text", label: "朋友提醒", content: "朋友说我最近总是把重要家事压到睡前才处理，容易焦虑。" },
-  { kind: "audio_transcript", label: "语音 2", content: "下周想提前一天提醒自己准备资料，不要又临时找东西。" },
-  { kind: "text", label: "重复背景", content: "妈妈复查这件事刚才已经说过一次，这里只是重复提醒。" }
-];
-
 export function App() {
   const [tab, setTab] = useState<Tab>("home");
   const [provider, setProvider] = useState<ProviderInfo>();
@@ -146,8 +97,6 @@ export function App() {
   const [emergence, setEmergence] = useState<EmergenceSurface>();
   const [learningNote, setLearningNote] = useState<string>();
   const [lastFeedback, setLastFeedback] = useState<FeedbackRecord>();
-  const [demoNote, setDemoNote] = useState<string>();
-  const [demoSummary, setDemoSummary] = useState<DemoSummary>();
   const [readPapoMessageId, setReadPapoMessageId] = useState<string>();
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
@@ -274,7 +223,6 @@ export function App() {
           location
         })
       ]);
-      setDemoNote(result.semanticSource === "llm" ? "照片已经整理成可修改的描述，会和这次对话里的话一起给我看。" : "照片先留在这次对话里，提交时会一起给我看。");
       setTab("chat");
     });
   }
@@ -285,6 +233,7 @@ export function App() {
       const dataUrl = await readFileAsDataUrl(file);
       const result = await transcribeAudio(dataUrl, file.name || "对话录音");
       const content = sensingSegmentContent(result.transcript);
+      if (!content) return;
       setChatSegments((current) => [
         ...current,
         makeSegment(`chat-audio-${Date.now()}`, "audio_transcript", file.name || `录音 ${current.length + 1}`, content, {
@@ -292,7 +241,6 @@ export function App() {
           batchId: current[0]?.batchId ?? currentBatchId()
         })
       ]);
-      setDemoNote(!content ? "这段录音暂时没有清楚的话。你可以补一句，再给 Papo 听。" : result.semanticSource === "llm" ? "录音已经整理成可修改的文字，会和这次对话里的话一起给我听。" : "录音先留在这次对话里，提交时会一起给我听。");
       setTab("chat");
     });
   }
@@ -549,100 +497,6 @@ export function App() {
     mediaStreamRef.current = null;
   }
 
-  function loadDemoCurious() {
-    setChatSegments(demoCuriousSegments.map((segment, index) => makeSegment(`demo-${index + 1}`, segment.kind, segment.label, segment.content)));
-    setDemoNote("我把 8 段日常内容放进这次对话里了：有背景、有日历、有隐私内容、有声音，也有重复。现在可以让 Papo 自己挑出真正需要回应的地方。");
-    setDemoSummary(undefined);
-    setTab("chat");
-  }
-
-  async function runGuidedDemo() {
-    await run(async () => {
-      const main = await createProfile("Papo 小团");
-      const curiousResult = await curiousCapture(
-        main.userId,
-        demoCuriousSegments.map((segment, index) => makeSegment(`guided-${index + 1}`, segment.kind, segment.label, segment.content))
-      );
-      const targetEpisode = curiousResult.episodes[0];
-      let learned = "";
-      if (targetEpisode) {
-        await sendFeedback(main.userId, "remember", targetEpisode.id);
-        learned = (await sendFeedback(main.userId, "continue", targetEpisode.id)).feedback.learningNote;
-      }
-      const emerged = await activeEmergence(main.userId);
-
-      const input = "我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要。";
-      const deep = await createProfile("Papo 小想");
-      const quiet = await createProfile("Papo 小静");
-      const deepFirst = await buttonCapture(deep.userId, input);
-      const quietFirst = await buttonCapture(quiet.userId, input);
-      for (let index = 0; index < 3; index += 1) {
-        await sendFeedback(deep.userId, "continue", deepFirst.episodes[0]?.id);
-        await sendFeedback(quiet.userId, "not_now", quietFirst.episodes[0]?.id);
-      }
-      const deepResult = await buttonCapture(deep.userId, input);
-      const quietResult = await buttonCapture(quiet.userId, input);
-      const contrast = createContrastSummary({
-        deepProfile: deepResult.profile,
-        quietProfile: quietResult.profile,
-        deepResult,
-        quietResult
-      });
-      const contrastDetail = createDemoContrastDetail(input, deepResult.profile, quietResult.profile, deepResult, quietResult);
-
-      setProfiles(await listProfiles());
-      setProfile(emerged.profile);
-      setLastResult({ ...curiousResult, profile: emerged.profile });
-      setLearningNote(learned);
-      setEmergence(emerged.emergence);
-      setDemoSummary({
-        attention: `Papo 听过 ${curiousResult.curiousSession?.totalSegments ?? demoCuriousSegments.length} 段生活，只接住 ${curiousResult.events.length} 段真正需要回应的内容。`,
-        feedback: learned || "Papo 已经听见“帮我记住”和“再想一会儿”，这会影响它后面怎么接你的话。",
-        contrast,
-        contrastDetail,
-        emergence: emerged.emergence.text
-      });
-      setDemoNote("Papo 小团刚走完一圈：先听见生活内容，再被你的反馈养一下，之后在合适的时候把真实记住的事带回来。");
-      setTab("demo");
-    });
-  }
-
-  async function runDemoContrast() {
-    await run(async () => {
-      const input = "我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要。";
-      const a = await createProfile("Papo 小想");
-      const b = await createProfile("Papo 小静");
-      const aFirst = await buttonCapture(a.userId, input);
-      const bFirst = await buttonCapture(b.userId, input);
-      let aProfile = aFirst.profile;
-      let bProfile = bFirst.profile;
-      for (let i = 0; i < 3; i += 1) {
-        aProfile = (await sendFeedback(a.userId, "continue", aFirst.episodes[0]?.id)).profile;
-        bProfile = (await sendFeedback(b.userId, "not_now", bFirst.episodes[0]?.id)).profile;
-      }
-      const aResult = await buttonCapture(a.userId, input);
-      const bResult = await buttonCapture(b.userId, input);
-      const contrast = createContrastSummary({
-        deepProfile: aResult.profile,
-        quietProfile: bResult.profile,
-        deepResult: aResult,
-        quietResult: bResult
-      });
-      const contrastDetail = createDemoContrastDetail(input, aResult.profile, bResult.profile, aResult, bResult);
-      setProfiles(await listProfiles());
-      setProfile(aResult.profile);
-      setLastResult(aResult);
-      setLearningNote(undefined);
-      setDemoSummary({
-        feedback: `${aProfile.creatureName} 连续听见“再想一会儿”，${bProfile.creatureName} 连续听见“先安静点”。`,
-        contrast,
-        contrastDetail
-      });
-      setDemoNote(`${aProfile.creatureName} 和 ${bProfile.creatureName} 刚被你用不同反馈养了一小会儿。`);
-      setTab("demo");
-    });
-  }
-
   async function run(action: () => Promise<void>) {
     try {
       setBusy(true);
@@ -722,18 +576,6 @@ export function App() {
           onSelect={selectProfile}
           onAdd={addProfile}
           onOpenBrain={() => setTab("brain")}
-          onOpenDemo={() => setTab("demo")}
-        />
-      ) : null}
-      {tab === "demo" ? (
-        <DemoView
-          onRunGuided={runGuidedDemo}
-          onLoadCurious={loadDemoCurious}
-          onRunContrast={runDemoContrast}
-          onEmerge={askEmergence}
-          note={demoNote}
-          summary={demoSummary}
-          busy={busy}
         />
       ) : null}
 
@@ -1450,7 +1292,6 @@ function ProfileView(props: {
   onSelect: (userId: string) => void;
   onAdd: () => void;
   onOpenBrain: () => void;
-  onOpenDemo: () => void;
 }) {
   return (
     <section className="stack">
@@ -1480,113 +1321,8 @@ function ProfileView(props: {
             <Brain size={16} />
             脑态诊断
           </button>
-          <button onClick={props.onOpenDemo}>
-            <Wand2 size={16} />
-            演示回路
-          </button>
         </div>
       </details>
-    </section>
-  );
-}
-
-function DemoView(props: {
-  onRunGuided: () => void;
-  onLoadCurious: () => void;
-  onRunContrast: () => void;
-  onEmerge: () => void;
-  note?: string;
-  summary?: DemoSummary;
-  busy: boolean;
-}) {
-  return (
-    <section className="stack">
-      <div className="panel">
-        <PanelTitle icon={Wand2} title="带 Papo 走一圈" />
-        <p className="response">用几段日常内容，看 Papo 怎么听见、回应、被你养一下，再在合适的时候想起真实记住的事。</p>
-        {props.note ? <section className="learning-note">{props.note}</section> : null}
-        {props.summary ? (
-          <>
-            <section className="demo-checklist">
-              {props.summary.attention ? <p><Check size={16} /> {props.summary.attention}</p> : null}
-              {props.summary.feedback ? <p><Check size={16} /> {props.summary.feedback}</p> : null}
-              {props.summary.contrast ? <p><Check size={16} /> {props.summary.contrast}</p> : null}
-              {props.summary.emergence ? <p><Check size={16} /> {props.summary.emergence}</p> : null}
-            </section>
-            {props.summary.contrastDetail ? <DemoContrast detail={props.summary.contrastDetail} /> : null}
-          </>
-        ) : null}
-        <button className="primary" onClick={props.onRunGuided} disabled={props.busy}>
-          <Wand2 size={18} />
-          带 Papo 完整走一圈
-        </button>
-        <button onClick={props.onLoadCurious} disabled={props.busy}>
-          <Sparkles size={18} />
-          先递 8 段生活
-        </button>
-        <button onClick={props.onRunContrast} disabled={props.busy}>
-          <UserRound size={18} />
-          看两只 Papo 被养成不同样子
-        </button>
-        <button onClick={props.onEmerge} disabled={props.busy}>
-          <Lightbulb size={18} />
-          轻轻碰一下 Papo
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function createDemoContrastDetail(
-  input: string,
-  deepProfile: CreatureProfile,
-  quietProfile: CreatureProfile,
-  deepResult: CaptureResult,
-  quietResult: CaptureResult
-): DemoContrastDetail {
-  return {
-    input,
-    deepName: deepProfile.creatureName || "Papo 小想",
-    quietName: quietProfile.creatureName || "Papo 小静",
-    deepRaised: raisedStyleLine(deepProfile, "deep"),
-    quietRaised: raisedStyleLine(quietProfile, "quiet"),
-    deepReply: visiblePapoReplyText(deepResult.response),
-    quietReply: visiblePapoReplyText(quietResult.response)
-  };
-}
-
-function raisedStyleLine(profile: CreatureProfile, kind: "deep" | "quiet") {
-  const targetTags = kind === "deep" ? ["更愿意多想", "更愿意记稳", "被确认"] : ["更安静", "更小心边界"];
-  const memory = profile.longTermMemories.find(
-    (item) => item.kind === "creature_self_memory" && item.tags.includes("被你养成") && targetTags.some((tag) => item.tags.includes(tag))
-  );
-  if (memory) return summarizeForEpisode(extractRememberedMoment(memory.text));
-  return kind === "deep"
-    ? "你把我教得会多停一下，不要太快放过去。"
-    : "你把我教得先轻声陪着，不急着追问。";
-}
-
-function DemoContrast({ detail }: { detail: DemoContrastDetail }) {
-  return (
-    <section className="demo-contrast">
-      <div className="demo-input-line">
-        <span>同一句话</span>
-        <p>{detail.input}</p>
-      </div>
-      <div className="demo-contrast-grid">
-        <article>
-          <strong>{detail.deepName}</strong>
-          <span>连续收到“再想一会儿”</span>
-          <p>{detail.deepRaised}</p>
-          <p>{detail.deepReply}</p>
-        </article>
-        <article>
-          <strong>{detail.quietName}</strong>
-          <span>连续收到“先安静点”</span>
-          <p>{detail.quietRaised}</p>
-          <p>{detail.quietReply}</p>
-        </article>
-      </div>
     </section>
   );
 }

@@ -251,7 +251,7 @@ async function callChatCompletions(
       headers: {
         "Content-Type": "application/json",
         ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {}),
-        ...(input.kind === "openrouter" ? { "HTTP-Referer": "http://localhost:5173", "X-Title": "Papo Demo" } : {})
+        ...(input.kind === "openrouter" ? { "HTTP-Referer": "http://localhost:5173", "X-Title": "Papo" } : {})
       },
       body: JSON.stringify({
         model: input.model,
@@ -292,7 +292,7 @@ async function callVisionSummary(
       headers: {
         "Content-Type": "application/json",
         ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {}),
-        ...(input.kind === "openrouter" ? { "HTTP-Referer": "http://localhost:5173", "X-Title": "Papo Demo" } : {})
+        ...(input.kind === "openrouter" ? { "HTTP-Referer": "http://localhost:5173", "X-Title": "Papo" } : {})
       },
       body: JSON.stringify({
         model: input.visionModel ?? input.model,
@@ -339,7 +339,7 @@ async function callAudioTranscript(
       headers: {
         "Content-Type": "application/json",
         ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {}),
-        ...(input.kind === "openrouter" ? { "HTTP-Referer": "http://localhost:5173", "X-Title": "Papo Demo" } : {})
+        ...(input.kind === "openrouter" ? { "HTTP-Referer": "http://localhost:5173", "X-Title": "Papo" } : {})
       },
       body: JSON.stringify({
         model: input.audioModel ?? input.model,
