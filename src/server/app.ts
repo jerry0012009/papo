@@ -110,12 +110,14 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const body = imageSummarySchema.parse(req.body);
       const prompt = `请用中文把这张图片压缩成一段 80 字以内的生活场景摘要，给 Curious Mode 当 image_summary。标签：${body.label ?? "截图"}`;
       const summary = (await provider.summarizeImage(body.dataUrl, prompt)).slice(0, 600);
+      const trace = imageSensingTrace(provider, body.label ?? "截图", summary);
       res.json({
         summary,
         provider: sensingProvider(provider, "vision"),
         model: provider.diagnostics?.visionModel,
         route: "chat_completions",
-        semanticSource: "llm"
+        semanticSource: "llm",
+        sensingTrace: trace
       });
     } catch (error) {
       next(error);
@@ -621,6 +623,30 @@ function audioSensingTrace(
       "sensing: call audio-capable model",
       `status=${status}`,
       observation.text ? "route=curious_candidate" : "route=settle_audio_batch_only"
+    ]
+  };
+}
+
+function imageSensingTrace(provider: ModelProvider, label: string, summary: string): SensingTrace {
+  const observation = summary.trim();
+  const status: SensingTrace["status"] = observation ? "content" : "empty";
+  return {
+    at: new Date().toISOString(),
+    modality: "image",
+    label,
+    provider: sensingProvider(provider, "vision"),
+    model: provider.diagnostics?.visionModel,
+    route: "chat_completions",
+    semanticSource: "llm",
+    status,
+    decision: observation
+      ? "视觉模型读到了可用的图片信息；规则把它作为 image_summary 放入当前事件或 30 秒批次，交给注意 LLM 决定是否继续处理。"
+      : "视觉模型没有读到可用图片信息；规则不把它伪造成对话事件，也不进入注意、行动或记忆流程。",
+    observation: observation || undefined,
+    ruleTrace: [
+      "sensing: call vision-capable model",
+      `status=${status}`,
+      observation ? "route=curious_candidate" : "route=settle_image_only"
     ]
   };
 }

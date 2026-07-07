@@ -52,8 +52,8 @@ export async function wakeProfile(userId: string): Promise<{ profile: CreaturePr
   return request<{ profile: CreatureProfile; wake: WakeEvent }>(`/api/profiles/${userId}/wake`, { method: "POST" });
 }
 
-export async function summarizeImage(dataUrl: string, label: string): Promise<{ summary: string; provider: string; model?: string; route?: string; semanticSource: "llm" }> {
-  return request<{ summary: string; provider: string; model?: string; route?: string; semanticSource: "llm" }>("/api/image-summary", {
+export async function summarizeImage(dataUrl: string, label: string): Promise<{ summary: string; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }> {
+  return request<{ summary: string; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }>("/api/image-summary", {
     method: "POST",
     headers: jsonHeaders,
     body: JSON.stringify({ dataUrl, label })

@@ -207,6 +207,7 @@ export function App() {
         batchId: currentBatchId(),
         location
       });
+      segment.sensingTrace = result.sensingTrace;
       if (listening) {
         await submitLiveSegments([ensureSegmentContext(segment, 0)]);
       } else {
