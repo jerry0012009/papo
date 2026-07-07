@@ -807,10 +807,6 @@ function HomeView(props: {
           <p className="eyebrow">Papo 现在</p>
           <h2>{stateHeadline(props.profile)}</h2>
           <p>{stateSentence(props.profile)}</p>
-          <div className="dog-state-cues">
-            <span>{dogMotionText(props.profile.state)}</span>
-            <span>{dogSenseText(props.profile.state)}</span>
-          </div>
         </div>
       </div>
 
@@ -836,7 +832,6 @@ function HomeView(props: {
       {props.learningNote ? <section className="learning-note">{props.learningNote}</section> : null}
       {props.lastFeedback ? <FeedbackImpactCard feedback={props.lastFeedback} /> : null}
 
-      <BodySignals state={props.profile.state} />
       <RaisedShape profile={props.profile} />
 
       {props.lastResult ? (
@@ -894,14 +889,19 @@ function ShibaAvatar({ state, idle = false }: { state?: CreatureState; idle?: bo
     <div className={className} aria-label="Papo 是一只卡通柴犬">
       <svg className="shiba-svg" viewBox="0 0 160 150" role="img" aria-hidden="true">
         <g className="shiba-tail">
+          <path className="shiba-tail-shadow" d="M116 91c28-8 37-41 13-54-21-11-41 9-29 28 8 13 28 9 28-5" />
           <path className="shiba-tail-ring" d="M118 88c26-8 33-38 11-49-19-9-36 9-26 25 7 11 24 8 24-4" />
           <path className="shiba-tail-tip" d="M128 40c15 10 11 33-9 41" />
         </g>
         <g className="shiba-body">
-          <path className="shiba-body-fur" d="M39 88c10-24 53-30 76-9 18 16 16 44-8 53-22 8-57 6-72-8-11-11-10-25 4-36Z" />
-          <path className="shiba-chest" d="M59 91c9 9 31 9 40 0 7 15 1 32-20 33-20 1-29-16-20-33Z" />
-          <ellipse className="shiba-paw left" cx="55" cy="128" rx="16" ry="9" />
-          <ellipse className="shiba-paw right" cx="101" cy="128" rx="16" ry="9" />
+          <path className="shiba-body-fur" d="M35 91c11-27 55-33 82-11 20 16 18 44-7 54-23 9-62 7-77-8-11-11-9-24 2-35Z" />
+          <path className="shiba-back-leg left" d="M37 106c-12 9-9 25 8 27 13 1 22-7 21-19-8-1-18-3-29-8Z" />
+          <path className="shiba-back-leg right" d="M123 106c12 9 9 25-8 27-13 1-22-7-21-19 8-1 18-3 29-8Z" />
+          <path className="shiba-chest" d="M56 88c9 13 39 13 48 0 10 19 1 40-24 41-25 1-35-21-24-41Z" />
+          <path className="shiba-collar" d="M58 91c11 6 34 6 45 0" />
+          <circle className="shiba-tag" cx="81" cy="98" r="4" />
+          <ellipse className="shiba-paw left" cx="53" cy="128" rx="16" ry="9" />
+          <ellipse className="shiba-paw right" cx="103" cy="128" rx="16" ry="9" />
           <path className="shiba-toes left" d="M49 128c2 3 6 3 8 0M58 128c2 3 6 3 8 0" />
           <path className="shiba-toes right" d="M95 128c2 3 6 3 8 0M104 128c2 3 6 3 8 0" />
         </g>
@@ -914,6 +914,7 @@ function ShibaAvatar({ state, idle = false }: { state?: CreatureState; idle?: bo
           <path className="shiba-forehead" d="M70 23c5 7 15 7 20 0 4 16 0 31-10 38-10-7-14-22-10-38Z" />
           <path className="shiba-urajiro left" d="M43 65c0-18 11-32 27-36 2 20-6 39-21 50-4-3-6-8-6-14Z" />
           <path className="shiba-urajiro right" d="M117 65c0-18-11-32-27-36-2 20 6 39 21 50 4-3 6-8 6-14Z" />
+          <path className="shiba-face-mask" d="M56 73c3-15 45-15 48 0 4 20-7 34-24 34S52 93 56 73Z" />
           <ellipse className="shiba-brow left" cx="63" cy="50" rx="8" ry="4" />
           <ellipse className="shiba-brow right" cx="97" cy="50" rx="8" ry="4" />
           <ellipse className="shiba-eye left" cx="64" cy="62" rx="5.8" ry="7.2" />
@@ -922,9 +923,14 @@ function ShibaAvatar({ state, idle = false }: { state?: CreatureState; idle?: bo
           <circle className="shiba-eye-shine right" cx="94" cy="59" r="1.7" />
           <ellipse className="shiba-cheek left" cx="49" cy="78" rx="9" ry="5.5" />
           <ellipse className="shiba-cheek right" cx="111" cy="78" rx="9" ry="5.5" />
+          <circle className="shiba-whisker-dot left one" cx="67" cy="83" r="1.2" />
+          <circle className="shiba-whisker-dot left two" cx="64" cy="89" r="1" />
+          <circle className="shiba-whisker-dot right one" cx="93" cy="83" r="1.2" />
+          <circle className="shiba-whisker-dot right two" cx="96" cy="89" r="1" />
           <path className="shiba-muzzle" d="M59 76c5-11 37-11 42 0 5 13-5 25-21 25S54 89 59 76Z" />
           <path className="shiba-nose" d="M72 76c2-5 14-5 16 0 1 5-3 8-8 8s-9-3-8-8Z" />
           <path className="shiba-mouth" d="M80 84c0 8-10 11-15 5M80 84c0 8 10 11 15 5" />
+          <path className="shiba-tongue" d="M76 92c1 8 7 8 8 0" />
         </g>
       </svg>
     </div>
@@ -1558,12 +1564,17 @@ function AttentionCard({ event }: { event: AttentionEvent }) {
         <strong>{attentionStrengthText(event.attentionStrength)}</strong>
       </div>
       <p>{event.noticed}</p>
-      <small>{event.creatureExperience.earReason}</small>
-      <details className="brain-details">
-        <summary>我刚才怎么理解</summary>
-        <p>{event.creatureExperience.rememberedScene ?? "这次还没有拉起以前的小事。"}</p>
-        <p>{event.creatureExperience.actionFeeling}</p>
-        <p>{event.creatureExperience.saveFeeling}</p>
+      <details className="episode-flow compact-flow">
+        <summary>展开看看我怎么竖起耳朵</summary>
+        <FlowSteps
+          steps={[
+            { label: "听见", text: event.noticed },
+            { label: "停下", text: event.creatureExperience.earReason },
+            { label: "想起", text: event.creatureExperience.rememberedScene ?? "这次还没有拉起以前的小事。" },
+            { label: "行动", text: event.creatureExperience.actionFeeling },
+            { label: "留下", text: event.creatureExperience.saveFeeling }
+          ]}
+        />
       </details>
       <footer>
         <span>{actionText(event.actionDecision.action)}</span>
@@ -1597,17 +1608,7 @@ function EpisodeCard(props: {
         <strong>{memoryFamiliarityText(props.episode.weight)}</strong>
       </div>
       <h3>{props.episode.creatureResponse || props.episode.noticed}</h3>
-      {!props.compact ? (
-        <div className="episode-experience">
-          <p><strong>我刚才注意到：</strong>{noticedText(props.episode.noticed)}</p>
-          <p><strong>我为什么注意：</strong>{props.episode.creatureExperience?.earReason ?? props.episode.importanceReason}</p>
-          <p><strong>我想起了什么：</strong>{props.episode.creatureExperience?.rememberedScene ?? "这次还没有拉起以前的小事。"}</p>
-          <p><strong>我猜你在做：</strong>{props.episode.possibleIntent}</p>
-          <p><strong>我当时的状态：</strong>{episodeStateText(props.episode)}</p>
-          <p><strong>我选择：</strong>{props.episode.creatureExperience?.actionFeeling ?? props.episode.actionDecision?.reason}</p>
-          <p><strong>要不要长期记：</strong>{props.episode.creatureExperience?.saveFeeling ?? "先作为情景记忆，等你的反馈决定。"}</p>
-        </div>
-      ) : null}
+      {!props.compact ? <EpisodeProcessDetails episode={props.episode} /> : null}
       <EpisodeSourceMoment episode={props.episode} messages={props.sourceMessages ?? []} compact={props.compact} />
       <div className="feedback-input">
         <div className="feedback-teach">
@@ -1651,6 +1652,42 @@ function EpisodeCard(props: {
         ))}
       </div>
     </article>
+  );
+}
+
+function EpisodeProcessDetails({ episode }: { episode: EpisodeMemory }) {
+  return (
+    <details className="episode-flow">
+      <summary>展开看看我心里怎么走的</summary>
+      <FlowSteps
+        steps={[
+          { label: "听见", text: noticedText(episode.noticed) },
+          { label: "停下", text: episode.creatureExperience?.earReason ?? episode.importanceReason },
+          { label: "想起", text: episode.creatureExperience?.rememberedScene ?? "这次还没有拉起以前的小事。" },
+          { label: "猜测", text: episode.possibleIntent },
+          { label: "身体", text: episodeStateText(episode) },
+          { label: "行动", text: episode.creatureExperience?.actionFeeling ?? episode.actionDecision?.reason },
+          { label: "留下", text: episode.creatureExperience?.saveFeeling ?? "先作为情景记忆，等你的反馈决定。" }
+        ]}
+      />
+    </details>
+  );
+}
+
+function FlowSteps({ steps }: { steps: Array<{ label: string; text?: string }> }) {
+  const visibleSteps = steps.filter((step) => step.text?.trim());
+  return (
+    <ol>
+      {visibleSteps.map((step, index) => (
+        <li key={`${step.label}-${index}`}>
+          <span className="flow-dot">{index + 1}</span>
+          <div>
+            <strong>{step.label}</strong>
+            <p>{step.text}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -1763,25 +1800,6 @@ function StateGrid({ state }: { state: CreatureState }) {
   );
 }
 
-function BodySignals({ state }: { state: CreatureState }) {
-  const signals = [
-    ["耳朵", dogSenseText(state)],
-    ["尾巴", dogMotionText(state)],
-    ["小脑袋", mindSignalText(state)],
-    ["边界", boundarySignalText(state)]
-  ];
-  return (
-    <section className="body-signals" aria-label="Papo 的身体信号">
-      {signals.map(([label, text]) => (
-        <span key={label}>
-          <strong>{label}</strong>
-          {text}
-        </span>
-      ))}
-    </section>
-  );
-}
-
 function RaisedShape({ profile }: { profile: CreatureProfile }) {
   const lines = raisedShapeLines(profile);
   if (!lines.length) return null;
@@ -1813,19 +1831,6 @@ function raisedShapeLines(profile: CreatureProfile) {
   if (policy.recallTendency >= 58 && lines.length < 2) lines.push("你把我养得更容易从以前的小事里想起相近的片段。");
   if (!lines.length) lines.push("我还在慢慢学你的偏好，等你教我哪些要多想，哪些先放下。");
   return lines.slice(0, 2);
-}
-
-function mindSignalText(state: CreatureState) {
-  if (state.curiosity > 72) return "我会先找最让我在意的一小段";
-  if (state.confidence > 62) return "我更敢把自己的理解说出来";
-  if (state.energy < 35) return "我会先抱住重点，少说一点";
-  return "先听，再决定要不要回应";
-}
-
-function boundarySignalText(state: CreatureState) {
-  if (state.safety > 74) return "我会更小心处理隐私和保存";
-  if (state.arousal > 64) return "对突然出现的动静更敏感";
-  return "边界稳定，可以认真靠近";
 }
 
 function feedbackChangeLines(
@@ -2022,21 +2027,6 @@ function strongestRaisedMemory(profile: CreatureProfile) {
   return profile.longTermMemories
     .filter((memory) => memory.weight > 0 && memory.kind === "creature_self_memory" && memory.tags.includes("被你养成"))
     .sort((a, b) => b.weight - a.weight)[0];
-}
-
-function dogMotionText(state: CreatureState) {
-  if (state.energy < 35) return "尾巴慢下来，眼睛有点困";
-  if (state.curiosity > 72) return "耳朵竖起来，尾巴轻快地摆";
-  if (state.attachment > 68) return "身体往前靠，像想贴近你";
-  if (state.safety > 74) return "耳朵谨慎地转着，先闻一闻";
-  return "呼吸很稳，安静看着这一刻";
-}
-
-function dogSenseText(state: CreatureState) {
-  if (state.arousal > 64) return "现在对新动静很敏感";
-  if (state.confidence > 62) return "表达更确定一点";
-  if (state.safety > 74) return "我会先保护隐私和边界";
-  return "我会先观察，再决定要不要靠近";
 }
 
 function actionText(action: AttentionEvent["suggestedAction"]) {

@@ -191,6 +191,14 @@ select {
   animation: tail-wag var(--tail-speed) ease-in-out infinite;
 }
 
+.shiba-tail-shadow {
+  fill: none;
+  stroke: rgba(110, 54, 25, 0.22);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 17;
+}
+
 .shiba-tail-ring,
 .shiba-tail-tip {
   fill: none;
@@ -218,9 +226,17 @@ select {
 .shiba-paw,
 .shiba-forehead,
 .shiba-urajiro,
+.shiba-face-mask,
 .shiba-muzzle,
 .shiba-brow {
   fill: var(--cream);
+}
+
+.shiba-back-leg {
+  fill: #bd6c36;
+  stroke: var(--fur-dark);
+  stroke-linejoin: round;
+  stroke-width: 2.5;
 }
 
 .shiba-ear-inner {
@@ -259,11 +275,39 @@ select {
   opacity: 0.7;
 }
 
+.shiba-whisker-dot {
+  fill: rgba(90, 50, 28, 0.45);
+}
+
 .shiba-mouth {
   fill: none;
   stroke: var(--ink);
   stroke-linecap: round;
   stroke-width: 3;
+}
+
+.shiba-tongue {
+  fill: none;
+  stroke: #e97870;
+  stroke-linecap: round;
+  stroke-width: 4;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: top center;
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.shiba-collar {
+  fill: none;
+  stroke: #5f8f79;
+  stroke-linecap: round;
+  stroke-width: 5;
+}
+
+.shiba-tag {
+  fill: #e2b84e;
+  stroke: rgba(92, 61, 24, 0.35);
+  stroke-width: 1.2;
 }
 
 .shiba-toes {
@@ -288,6 +332,7 @@ select {
 .shiba.is-attached {
   --fur: #d98048;
   --tail-speed: 0.9s;
+  --blush: #ef927d;
 }
 
 .shiba-tired,
@@ -303,6 +348,12 @@ select {
   --tail-speed: 0.78s;
 }
 
+.shiba-bright .shiba-tongue,
+.shiba.is-attached .shiba-tongue {
+  opacity: 1;
+  transform: translateY(2px);
+}
+
 .shiba.is-alert .shiba-ear.left {
   transform: rotate(-7deg) translateY(-2px);
 }
@@ -314,6 +365,10 @@ select {
 .shiba.is-tired .shiba-eye {
   transform: scaleY(0.32);
   animation: none;
+}
+
+.shiba.is-tired .shiba-mouth {
+  transform: translateY(1px) scaleY(0.7);
 }
 
 .shiba.is-attached .shiba-head {
@@ -330,23 +385,6 @@ select {
 
 .shiba.is-careful .shiba-ear.right {
   transform: rotate(4deg);
-}
-
-.dog-state-cues {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
-}
-
-.dog-state-cues span {
-  border-radius: 999px;
-  background: rgba(255, 250, 240, 0.8);
-  border: 1px solid rgba(31, 36, 33, 0.08);
-  color: #465248;
-  padding: 5px 8px;
-  font-size: 0.76rem;
-  line-height: 1.25;
 }
 
 @keyframes breathe {
@@ -400,7 +438,6 @@ select {
 .episode-card,
 .attention-card,
 .state-item,
-.body-signals span,
 .wake-note,
 .memory-surface {
   border: 1px solid rgba(31, 36, 33, 0.1);
@@ -440,24 +477,6 @@ select {
 
 .state-item {
   padding: 10px;
-}
-
-.body-signals {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.body-signals span {
-  display: grid;
-  gap: 4px;
-  padding: 10px;
-  color: #4d5a51;
-}
-
-.body-signals strong {
-  color: #1f2421;
-  font-size: 0.86rem;
 }
 
 .state-item div {
@@ -575,16 +594,6 @@ meter {
   gap: 9px;
 }
 
-.episode-experience {
-  display: grid;
-  gap: 8px;
-}
-
-.episode-experience p {
-  margin: 0;
-  line-height: 1.55;
-}
-
 .learning-note {
   border-radius: 8px;
   background: #1f2421;
@@ -640,6 +649,78 @@ meter {
   line-height: 1.5;
   color: #465248;
   font-size: 0.88rem;
+}
+
+.episode-flow {
+  border-radius: 8px;
+  background: #f3f7f1;
+  border: 1px solid rgba(79, 139, 118, 0.18);
+  padding: 10px 12px;
+}
+
+.episode-flow summary {
+  cursor: pointer;
+  color: #37594d;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.episode-flow ol {
+  position: relative;
+  display: grid;
+  gap: 10px;
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.episode-flow ol::before {
+  content: "";
+  position: absolute;
+  top: 13px;
+  bottom: 13px;
+  left: 12px;
+  width: 2px;
+  background: rgba(79, 139, 118, 0.22);
+}
+
+.episode-flow li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  gap: 9px;
+  align-items: start;
+}
+
+.episode-flow .flow-dot {
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #4f8b76;
+  color: #fffaf0;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.episode-flow strong {
+  display: block;
+  color: #1f2421;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.episode-flow p {
+  margin: 3px 0 0;
+  color: #465248;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.compact-flow {
+  background: rgba(243, 247, 241, 0.72);
 }
 
 .chat-bubble span {

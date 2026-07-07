@@ -174,8 +174,10 @@ describe("App", () => {
     expect(screen.queryByText(/材料|模拟一段信息流|录音分段/)).not.toBeInTheDocument();
     expect(screen.getByText("Papo 抬头看了你一眼")).toBeInTheDocument();
     expect(screen.getByText("我醒来时又碰到妈妈复查这件小事。")).toBeInTheDocument();
-    expect(screen.getByLabelText("Papo 的身体信号")).toBeInTheDocument();
-    expect(screen.getByText("小脑袋")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Papo 的身体信号")).not.toBeInTheDocument();
+    expect(screen.queryByText("我会先保护隐私和边界")).not.toBeInTheDocument();
+    expect(screen.queryByText("耳朵竖起来，尾巴轻快地摆")).not.toBeInTheDocument();
+    expect(screen.queryByText("我会先找最让我在意的一小段")).not.toBeInTheDocument();
     expect(screen.getByText("我被你养成的样子")).toBeInTheDocument();
     expect(screen.getByText("你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先想起以前的小事再回应")).toBeInTheDocument();
     expect(screen.queryByText(/preferDepth|quietTendency|深入倾向|安静倾向/)).not.toBeInTheDocument();
@@ -185,6 +187,9 @@ describe("App", () => {
     expect(screen.queryByText("桌面提醒")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("有未读 Papo 回复")).not.toBeInTheDocument();
     expect(screen.getByText("来自半分钟里的一小段")).toBeInTheDocument();
+    expect(screen.getByText("展开看看我心里怎么走的")).toBeInTheDocument();
+    expect(screen.queryByText("我刚才注意到：")).not.toBeInTheDocument();
+    expect(screen.queryByText("我为什么注意：")).not.toBeInTheDocument();
     expect(screen.getByText("跟 Papo 说")).toBeInTheDocument();
     expect(screen.getByText("陪我一会儿")).toBeInTheDocument();
 

@@ -295,7 +295,10 @@ Done:
   - Rule/fallback Curious explanations now use creature observation language for selected and ignored fragments. Raw score wording such as `future_value`, "总分", "阈值", and `redundancy` stays in Brain diagnostics instead of default user-facing reports.
   - Feedback `effect` and policy-shift records are now written as Papo's first-person learning memory ("你让我...我会..."), not third-person audit copy such as "用户让我..." or "策略改变..."; numeric deltas remain available separately for Brain diagnostics.
   - Wake and active-emergence user text no longer speaks like a scheduler or retrieval system. Exact elapsed-minute logs, "节律", and "旧记忆" stay in trace/diagnostics; Home says Papo woke, touched a held small moment, or found a listening habit the user taught.
-  - Home presence, body signals, active emergence labels, and dialogue feedback context now use first-person creature voice instead of observer phrases such as "它已经接住" or "你在教它".
+  - Papo's Shiba body now carries stronger creature identity: curled tail, urajiro face/chest, brow dots, small paws, collar/tag, and state-dependent tongue/ear/tail signals are rendered in the first viewport, with visual tests protecting the key dog parts.
+  - Low-value body-signal chips such as ears/tail/head/boundary text are no longer shown on Home. Creature state should drive avatar motion, action choice, and diagnostics, not become decorative explanation text in the main experience.
+  - Episode reasoning is no longer laid out as report paragraphs on the main surface. Papo's reply stays primary, while the attention/recall/action/save path lives behind a click-to-expand flow view.
+  - Home presence, active emergence labels, and dialogue feedback context now use first-person creature voice instead of observer phrases such as "它已经接住" or "你在教它".
   - Curious result, Episode detail, memory feeling, and Demo entry copy now avoid report-style observer phrases such as "Papo 放过了", "它刚才怎么理解", and "它以后可能".
   - Rule/fallback creature responses now use action-oriented shared-moment language instead of analysis-template wording such as "我先试着理解" or "这个片段可能是".
   - Memory candidate text, promoted long-term memory text, and consolidation reasons now use shared-moment language instead of internal phrases such as "这条 episode", "用户反馈这段", "我和用户", or "forget feedback".
