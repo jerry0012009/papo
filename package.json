@@ -16,6 +16,7 @@
   "dependencies": {
     "concurrently": "^9.1.2",
     "cors": "^2.8.5",
+    "discord.js": "^14.26.4",
     "express": "^4.21.2",
     "lucide-react": "^0.468.0",
     "nanoid": "^5.0.9",

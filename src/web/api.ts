@@ -48,6 +48,15 @@ export async function getProfile(userId: string): Promise<CreatureProfile> {
   return data.profile;
 }
 
+export async function markPapoRead(userId: string, lastReadPapoMessageId?: string): Promise<CreatureProfile> {
+  const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/read-state`, {
+    method: "PATCH",
+    headers: jsonHeaders,
+    body: JSON.stringify({ lastReadPapoMessageId })
+  });
+  return data.profile;
+}
+
 export async function wakeProfile(userId: string): Promise<{ profile: CreatureProfile; wake: WakeEvent }> {
   return request<{ profile: CreatureProfile; wake: WakeEvent }>(`/api/profiles/${userId}/wake`, { method: "POST" });
 }

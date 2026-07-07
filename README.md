@@ -77,10 +77,22 @@ Provider 配置来自环境变量、`.env`、`papo.config.json` 或 `.papo/provi
 
 OpenRouter 音频默认使用已验证的 `xiaomi/mimo-v2.5` multimodal chat route。Generic provider 仍可使用 `/audio/transcriptions` provider route，但那只是供应商兼容路径，不是 Papo 的业务语义。
 
+## Hermes
+
+`use_hermes` 是 LLM 行动选择的一种真实外部任务动作。常用配置：
+
+- `PAPO_HERMES_DISPATCH=discord|cli`
+- `PAPO_DISCORD_BOT_TOKEN`
+- `PAPO_DISCORD_GUILD_ID`
+- `PAPO_DISCORD_PARENT_CHANNEL_ID`
+
+Discord 模式需要使用 Hermes Gateway 会当作用户输入处理的独立 Papo bot。复用 Hermes 自己的 bot token 只能发消息，不能触发 Hermes 处理自己的消息。当前服务器可用 `PAPO_HERMES_DISPATCH=cli` 走本机 Hermes 执行器。
+
 ## 校验
 
 ```bash
 npm test
+PAPO_HERMES_DISPATCH=cli RUN_REAL_HERMES_SMOKE=1 npx tsx tests/real-hermes-smoke.ts
 ```
 
 `npm test` 当前只执行 TypeScript 和生产构建校验。旧 mock UI/验收测试已删除，避免把模板话术当成真实智能验收。

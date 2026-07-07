@@ -35,6 +35,7 @@ import {
   getProfile,
   listProfiles,
   makeSegment,
+  markPapoRead,
   resolveAssetUrl,
   sendFeedback,
   summarizeImage,
@@ -87,7 +88,6 @@ export function App() {
   const [profile, setProfile] = useState<CreatureProfile>();
   const [chatSegments, setChatSegments] = useState<StreamSegment[]>([]);
   const [emergence, setEmergence] = useState<EmergenceSurface>();
-  const [readPapoMessageId, setReadPapoMessageId] = useState<string>();
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -111,7 +111,7 @@ export function App() {
     () => profile?.conversation?.find((message) => message.role === "papo" && message.channel !== "wake"),
     [profile?.conversation]
   );
-  const unreadPapoCount = useMemo(() => countUnreadPapoMessages(profile, readPapoMessageId), [profile?.conversation, readPapoMessageId]);
+  const unreadPapoCount = useMemo(() => countUnreadPapoMessages(profile), [profile?.conversation, profile?.readState?.lastReadPapoMessageId]);
   const hasUnreadPapoMessage = unreadPapoCount > 0;
 
   useEffect(() => {
@@ -120,8 +120,14 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (tab === "chat" && latestPapoMessage) setReadPapoMessageId(latestPapoMessage.id);
-  }, [latestPapoMessage?.id, tab]);
+    if (tab !== "chat" || !profile?.userId || !latestPapoMessage) return;
+    if (profile.readState?.lastReadPapoMessageId === latestPapoMessage.id) return;
+    void markPapoRead(profile.userId, latestPapoMessage.id)
+      .then(setProfile)
+      .catch(() => {
+        // Read cursor sync is best-effort; the next profile poll will retry if needed.
+      });
+  }, [latestPapoMessage?.id, profile?.userId, profile?.readState?.lastReadPapoMessageId, tab]);
 
   useEffect(() => {
     profileRef.current = profile;
@@ -891,6 +897,7 @@ function ChatView(props: {
             {props.listening ? `停下 ${formatListeningTime(props.listeningElapsed)}` : "开始陪我听"}
           </button>
         </section>
+        <HermesTaskNotice profile={props.profile} />
         <div className="chat-composer" ref={composerRef}>
           <textarea
             value={draft}
@@ -1328,6 +1335,16 @@ function ActionResultView({ result }: { result?: ActionResult }) {
       </div>
     );
   }
+  if (result.kind === "hermes_task") {
+    return (
+      <div className="trace-action-result">
+        <b>虾虾任务</b>
+        {result.title ? <p>{result.title}</p> : null}
+        {result.text ? <small>{result.text}</small> : null}
+        {result.hermesTaskId ? <small>taskId：{result.hermesTaskId}</small> : null}
+      </div>
+    );
+  }
   return null;
 }
 
@@ -1415,7 +1432,8 @@ function actionLabel(action: string) {
     review: "整理",
     quiet: "安静",
     draft_reminder: "提醒草稿",
-    draft_question_list: "问题清单"
+    draft_question_list: "问题清单",
+    use_hermes: "问虾虾"
   };
   return labels[action] ?? action;
 }
@@ -1936,9 +1954,22 @@ function NavButton(props: { active: boolean; icon: typeof Check; label: string; 
   );
 }
 
-function countUnreadPapoMessages(profile: CreatureProfile | undefined, readMessageId: string | undefined) {
+function HermesTaskNotice({ profile }: { profile: CreatureProfile }) {
+  const activeTasks = (profile.hermes?.tasks ?? []).filter((task) => task.status === "pending" || task.status === "sent");
+  if (!activeTasks.length) return null;
+  return (
+    <div className="hermes-notice">
+      <Sparkles size={16} />
+      <span>正在召唤好朋友虾虾...</span>
+      <small>{activeTasks[0].title ?? "外部任务处理中"}</small>
+    </div>
+  );
+}
+
+function countUnreadPapoMessages(profile: CreatureProfile | undefined) {
   const messages = (profile?.conversation ?? []).filter((message) => message.role === "papo" && message.channel !== "wake");
   if (!messages.length) return 0;
+  const readMessageId = profile?.readState?.lastReadPapoMessageId;
   const count = readMessageId ? messages.findIndex((message) => message.id === readMessageId) : Math.min(messages.length, 3);
   if (count < 0) return Math.min(messages.length, 3);
   return Math.min(count, 3);

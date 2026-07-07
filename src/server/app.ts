@@ -13,6 +13,7 @@ import { createModelProvider, type ModelProvider } from "../core/provider";
 import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
 import { wakeCreature } from "../core/rhythm";
 import type { CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, MediaAttachment, MessageCognitionTrace, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
+import { createHermesBridge, type HermesBridge } from "./hermes";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
 const createProfileSchema = z.object({
@@ -101,9 +102,19 @@ const updateMemorySchema = z.object({
   text: z.string().min(1).max(1000)
 });
 
-export function createApp(input: { store?: ProfileStore; provider?: ModelProvider; proactive?: { enabled?: boolean; intervalMs?: number } } = {}) {
+const readStateSchema = z.object({
+  lastReadPapoMessageId: z.string().min(1).optional()
+});
+
+export function createApp(input: {
+  store?: ProfileStore;
+  provider?: ModelProvider;
+  proactive?: { enabled?: boolean; intervalMs?: number };
+  hermes?: { enabled?: boolean; bridge?: HermesBridge };
+} = {}) {
   const store = input.store ?? new JsonProfileStore();
   const provider = input.provider ?? createModelProvider();
+  const hermesBridge = input.hermes?.bridge ?? (input.hermes?.enabled ? createHermesBridge({ store, provider }) : undefined);
   const app = express();
 
   app.use(cors());
@@ -221,6 +232,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       markProactiveUserResponse(profile);
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runButtonHarness(profile, body.text, provider);
+      await hermesBridge?.enqueueTasks(profile, result);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const cognitionTrace = captureCognitionTrace(result, provider, "button", modelRuns);
       appendInputMessage(profile, {
@@ -252,6 +264,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       markProactiveUserResponse(profile);
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
+      await hermesBridge?.enqueueTasks(profile, result);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const sensingTraces = body.segments.flatMap((segment) => segment.sensingTrace ? [segment.sensingTrace as SensingTrace] : []);
       const cognitionTrace = captureCognitionTrace(result, provider, "curious_stream", modelRuns, sensingTraces);
@@ -316,6 +329,26 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       });
       await store.saveProfile(profile);
       res.json({ profile, feedback });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch("/api/profiles/:userId/read-state", async (req, res, next) => {
+    try {
+      const profile = await requireProfile(store, req.params.userId);
+      const body = readStateSchema.parse(req.body);
+      const latestReadable = profile.conversation.find((message) => message.role === "papo" && message.channel !== "wake");
+      const requested = body.lastReadPapoMessageId;
+      if (requested && !profile.conversation.some((message) => message.id === requested && message.role === "papo")) {
+        throw new HttpError(400, "Read message not found");
+      }
+      profile.readState = {
+        lastReadPapoMessageId: requested ?? latestReadable?.id,
+        lastReadAt: new Date().toISOString()
+      };
+      await store.saveProfile(profile);
+      res.json({ profile });
     } catch (error) {
       next(error);
     }
@@ -416,7 +449,10 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
   });
 
   if (input.proactive?.enabled) {
-    startProactiveEmergenceLoop(store, provider, input.proactive.intervalMs);
+    startProactiveEmergenceLoop(store, provider, input.proactive.intervalMs, hermesBridge);
+  }
+  if (input.hermes?.enabled) {
+    hermesBridge?.start();
   }
 
   return app;
@@ -436,13 +472,14 @@ function isUnreadableAudioInputError(error: unknown) {
   return /Audio input conversion failed|invalid_request_audio|Failed to load audio file|Invalid data found when processing input|EBML header parsing failed/i.test(message);
 }
 
-export function startProactiveEmergenceLoop(store: ProfileStore, provider: ModelProvider, intervalMs = 60_000) {
+export function startProactiveEmergenceLoop(store: ProfileStore, provider: ModelProvider, intervalMs = 60_000, hermesBridge?: HermesBridge) {
   let running = false;
   const tick = async () => {
     if (running) return;
     running = true;
     try {
       await runAutomaticDreamingSweep(store, provider);
+      await hermesBridge?.checkTimeouts();
       await runProactiveEmergenceSweep(store, provider);
     } catch (error) {
       console.error("Background cognition sweep failed", error);

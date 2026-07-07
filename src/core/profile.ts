@@ -26,7 +26,9 @@ export function createCreatureProfile(input: {
     dreamHistory: [],
     semanticBrainHistory: [],
     conversation: [],
-    proactive: initialProactiveState(now)
+    proactive: initialProactiveState(now),
+    readState: {},
+    hermes: { tasks: [] }
   };
   return profile;
 }
@@ -53,6 +55,10 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.semanticBrainHistory ??= [];
   profile.conversation ??= [];
   profile.proactive ??= initialProactiveState(new Date().toISOString());
+  profile.readState ??= {};
+  profile.hermes ??= { tasks: [] };
+  profile.hermes.tasks ??= [];
+  profile.hermes.tasks = profile.hermes.tasks.slice(0, 30);
   profile.proactive.pendingCount = Math.max(0, Math.min(3, Math.round(profile.proactive.pendingCount ?? 0)));
   profile.proactive.paused = Boolean(profile.proactive.paused);
   profile.episodes ??= [];

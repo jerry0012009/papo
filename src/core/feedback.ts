@@ -6,7 +6,7 @@ import { modelConversationContext, modelFeedbackContext, modelMemoryContext } fr
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
 import { applyStateDelta } from "./state";
-import type { CreatureProfile, CreatureState, FeedbackKind, FeedbackPolicyProfile, FeedbackRecord, LongTermMemory, MemoryCandidate, SegmentKind } from "./types";
+import type { CreatureProfile, CreatureState, FeedbackKind, FeedbackPolicyProfile, FeedbackRecord, FeedbackTargetSnapshot, LongTermMemory, MemoryCandidate, SegmentKind } from "./types";
 
 const memoryKindSchema = z.enum(["user_preference", "long_theme", "creature_self_memory", "safety_rule", "future_review", "relationship", "habit", "open_question"]);
 
@@ -115,11 +115,13 @@ export function applyFeedback(
   const inputText = input.content?.trim();
   const targetEpisode = profile.episodes.find((item) => item.id === input.targetId);
   const targetCandidate = profile.memoryCandidates.find((item) => item.id === input.targetId);
+  const targetLongTerm = profile.longTermMemories.find((item) => item.id === input.targetId);
   const record: FeedbackRecord = {
     id: makeId("feedback"),
     at: now,
     kind: input.kind,
     targetId: input.targetId,
+    targetSnapshot: snapshotFeedbackTarget(targetEpisode, targetLongTerm, targetCandidate),
     inputText,
     inputModality: input.modality ?? (inputText ? "text" : "button"),
     effect: "",
@@ -185,6 +187,50 @@ function policyDeltas(before: FeedbackPolicyProfile, after: FeedbackPolicyProfil
   return (["preferDepth", "preferProactivity", "privacySensitivity", "saveThreshold", "askThreshold", "recallTendency", "quietTendency"] as const)
     .map((key) => ({ key, before: before[key], after: after[key], delta: after[key] - before[key] }))
     .filter((item) => item.delta !== 0);
+}
+
+function snapshotFeedbackTarget(
+  episode?: CreatureProfile["episodes"][number],
+  memory?: LongTermMemory,
+  candidate?: MemoryCandidate
+): FeedbackTargetSnapshot | undefined {
+  if (memory) {
+    return {
+      id: memory.id,
+      type: "memory",
+      text: memory.text,
+      kind: memory.kind,
+      weight: memory.weight,
+      sourceEpisodeId: memory.sourceEpisodeId,
+      tags: memory.tags,
+      attachments: memory.attachments ?? []
+    };
+  }
+  if (candidate) {
+    return {
+      id: candidate.id,
+      type: "candidate",
+      text: candidate.candidateText,
+      kind: candidate.memoryKind,
+      weight: candidate.confidence,
+      status: candidate.status,
+      sourceEpisodeId: candidate.sourceEpisodeId,
+      tags: candidate.tags,
+      attachments: candidate.attachments ?? []
+    };
+  }
+  if (episode) {
+    return {
+      id: episode.id,
+      type: "episode",
+      text: episode.inputSummary,
+      weight: episode.weight,
+      sourceEpisodeId: episode.id,
+      tags: episode.tags,
+      attachments: episode.attachments ?? []
+    };
+  }
+  return undefined;
 }
 
 function applySemanticFeedbackSuggestion(profile: CreatureProfile, feedback: FeedbackRecord, suggestion: SemanticFeedbackSuggestion) {
@@ -485,7 +531,15 @@ function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: Feedbac
       ? hasHighPrivacyText(targetLongTerm.text)
       : targetCandidate
         ? hasHighPrivacyText(`${targetCandidate.candidateText} ${candidateEpisode?.inputSummary ?? ""}`)
-        : false;
+        : hasHighPrivacyText(feedback.targetSnapshot?.text);
+  const targetContext = feedbackTargetPromptContext({
+    targetEpisode,
+    targetLongTerm,
+    targetCandidate,
+    candidateEpisode,
+    snapshot: feedback.targetSnapshot,
+    targetPrivacyHigh
+  });
   return `请作为 Papo 的反馈反思脑，根据这次用户反馈，决定 Papo 应该怎样被养成。
 
 系统只记录了这次反馈和目标对象。你可以在护栏内决定：
@@ -563,83 +617,19 @@ ${JSON.stringify({
   learningNote: textForModel(feedback.learningNote, feedbackPrivacyHigh),
   followUpText: textForModel(feedback.followUpText, feedbackPrivacyHigh),
   replyText: textForModel(feedback.replyText, feedbackPrivacyHigh),
+  targetSnapshot: feedback.targetSnapshot
+    ? {
+        ...feedback.targetSnapshot,
+        text: textForModel(feedback.targetSnapshot.text, targetPrivacyHigh),
+        tags: tagsForModel(feedback.targetSnapshot.tags ?? [], targetPrivacyHigh),
+        attachments: attachmentPromptMetadata(feedback.targetSnapshot.attachments)
+      }
+    : undefined,
   contentHiddenForPrivacy: feedbackPrivacyHigh
 })}
 
 target:
-${JSON.stringify(
-  targetEpisode
-    ? {
-        type: "episode",
-        id: targetEpisode.id,
-        inputSummary: textForModel(targetEpisode.inputSummary, targetPrivacyHigh),
-        possibleIntent: textForModel(targetEpisode.possibleIntent, targetPrivacyHigh),
-        importanceReason: textForModel(targetEpisode.importanceReason, targetPrivacyHigh),
-        creatureResponse: textForModel(targetEpisode.creatureResponse, targetPrivacyHigh),
-        promotedToLongTerm: targetEpisode.promotedToLongTerm,
-        attachments: (targetEpisode.attachments ?? []).map((attachment) => ({
-          id: attachment.id,
-          kind: attachment.kind,
-          label: attachment.label,
-          mime: attachment.mime,
-          observedAt: attachment.observedAt,
-          location: attachment.location
-        })),
-        tags: tagsForModel(targetEpisode.tags, targetPrivacyHigh),
-        feedback: targetEpisode.feedback,
-        contentHiddenForPrivacy: targetPrivacyHigh
-      }
-    : targetLongTerm
-      ? {
-          type: "memory",
-          id: targetLongTerm.id,
-          kind: targetLongTerm.kind,
-          text: textForModel(targetLongTerm.text, targetPrivacyHigh),
-          weight: targetLongTerm.weight,
-          attachments: (targetLongTerm.attachments ?? []).map((attachment) => ({
-            id: attachment.id,
-            kind: attachment.kind,
-            label: attachment.label,
-            mime: attachment.mime,
-            observedAt: attachment.observedAt,
-            location: attachment.location
-          })),
-          tags: tagsForModel(targetLongTerm.tags, targetPrivacyHigh),
-          contentHiddenForPrivacy: targetPrivacyHigh
-        }
-      : targetCandidate
-        ? {
-            type: "candidate",
-            id: targetCandidate.id,
-            candidateText: textForModel(targetCandidate.candidateText, targetPrivacyHigh),
-            memoryKind: targetCandidate.memoryKind,
-            confidence: targetCandidate.confidence,
-            writePolicy: targetCandidate.writePolicy,
-            whyConsolidate: textForModel(targetCandidate.whyConsolidate, targetPrivacyHigh),
-            decayPolicy: targetCandidate.decayPolicy,
-            status: targetCandidate.status,
-            tags: tagsForModel(targetCandidate.tags, targetPrivacyHigh),
-            sourceEpisode: candidateEpisode
-              ? {
-                  id: candidateEpisode.id,
-                  inputSummary: textForModel(candidateEpisode.inputSummary, targetPrivacyHigh),
-                  creatureResponse: textForModel(candidateEpisode.creatureResponse, targetPrivacyHigh),
-                  sourceObservedAt: candidateEpisode.sourceObservedAt,
-                  sourceLocation: candidateEpisode.sourceLocation
-                }
-              : undefined,
-            attachments: (targetCandidate.attachments ?? []).map((attachment) => ({
-              id: attachment.id,
-              kind: attachment.kind,
-              label: attachment.label,
-              mime: attachment.mime,
-              observedAt: attachment.observedAt,
-              location: attachment.location
-            })),
-            contentHiddenForPrivacy: targetPrivacyHigh
-          }
-        : { type: "none" }
-)}
+${JSON.stringify(targetContext)}
 
 current_state:
 ${JSON.stringify(profile.state)}
@@ -656,6 +646,97 @@ ${JSON.stringify(modelConversationContext(profile))}
 recent_memories:
 ${JSON.stringify(modelMemoryContext(profile.longTermMemories))}
 `;
+}
+
+function feedbackTargetPromptContext(input: {
+  targetEpisode?: CreatureProfile["episodes"][number];
+  targetLongTerm?: LongTermMemory;
+  targetCandidate?: MemoryCandidate;
+  candidateEpisode?: CreatureProfile["episodes"][number];
+  snapshot?: FeedbackTargetSnapshot;
+  targetPrivacyHigh: boolean;
+}) {
+  const { targetEpisode, targetLongTerm, targetCandidate, candidateEpisode, snapshot, targetPrivacyHigh } = input;
+  if (targetEpisode) {
+    return {
+      type: "episode",
+      id: targetEpisode.id,
+      inputSummary: textForModel(targetEpisode.inputSummary, targetPrivacyHigh),
+      possibleIntent: textForModel(targetEpisode.possibleIntent, targetPrivacyHigh),
+      importanceReason: textForModel(targetEpisode.importanceReason, targetPrivacyHigh),
+      creatureResponse: textForModel(targetEpisode.creatureResponse, targetPrivacyHigh),
+      promotedToLongTerm: targetEpisode.promotedToLongTerm,
+      attachments: attachmentPromptMetadata(targetEpisode.attachments),
+      tags: tagsForModel(targetEpisode.tags, targetPrivacyHigh),
+      feedback: targetEpisode.feedback,
+      contentHiddenForPrivacy: targetPrivacyHigh
+    };
+  }
+  if (targetLongTerm) {
+    return {
+      type: "memory",
+      id: targetLongTerm.id,
+      kind: targetLongTerm.kind,
+      text: textForModel(targetLongTerm.text, targetPrivacyHigh),
+      weight: targetLongTerm.weight,
+      sourceEpisodeId: targetLongTerm.sourceEpisodeId,
+      attachments: attachmentPromptMetadata(targetLongTerm.attachments),
+      tags: tagsForModel(targetLongTerm.tags, targetPrivacyHigh),
+      contentHiddenForPrivacy: targetPrivacyHigh
+    };
+  }
+  if (targetCandidate) {
+    return {
+      type: "candidate",
+      id: targetCandidate.id,
+      candidateText: textForModel(targetCandidate.candidateText, targetPrivacyHigh),
+      memoryKind: targetCandidate.memoryKind,
+      confidence: targetCandidate.confidence,
+      writePolicy: targetCandidate.writePolicy,
+      whyConsolidate: textForModel(targetCandidate.whyConsolidate, targetPrivacyHigh),
+      decayPolicy: targetCandidate.decayPolicy,
+      status: targetCandidate.status,
+      tags: tagsForModel(targetCandidate.tags, targetPrivacyHigh),
+      sourceEpisode: candidateEpisode
+        ? {
+            id: candidateEpisode.id,
+            inputSummary: textForModel(candidateEpisode.inputSummary, targetPrivacyHigh),
+            creatureResponse: textForModel(candidateEpisode.creatureResponse, targetPrivacyHigh),
+            sourceObservedAt: candidateEpisode.sourceObservedAt,
+            sourceLocation: candidateEpisode.sourceLocation
+          }
+        : undefined,
+      attachments: attachmentPromptMetadata(targetCandidate.attachments),
+      contentHiddenForPrivacy: targetPrivacyHigh
+    };
+  }
+  if (snapshot) {
+    return {
+      type: snapshot.type,
+      id: snapshot.id,
+      text: textForModel(snapshot.text, targetPrivacyHigh),
+      kind: snapshot.kind,
+      weight: snapshot.weight,
+      status: snapshot.status,
+      sourceEpisodeId: snapshot.sourceEpisodeId,
+      tags: tagsForModel(snapshot.tags ?? [], targetPrivacyHigh),
+      attachments: attachmentPromptMetadata(snapshot.attachments),
+      unavailableAfterStorageOperation: true,
+      contentHiddenForPrivacy: targetPrivacyHigh
+    };
+  }
+  return { type: "none" };
+}
+
+function attachmentPromptMetadata(attachments?: FeedbackTargetSnapshot["attachments"]) {
+  return (attachments ?? []).map((attachment) => ({
+    id: attachment.id,
+    kind: attachment.kind,
+    label: attachment.label,
+    mime: attachment.mime,
+    observedAt: attachment.observedAt,
+    location: attachment.location
+  }));
 }
 
 function unique(values: string[]) {

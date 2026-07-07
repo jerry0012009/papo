@@ -8,8 +8,8 @@ import type { ModelProvider } from "./provider";
 import { applyStateDelta } from "./state";
 import type { ActionResult, CaptureResult, CreatureProfile, SemanticBrainRecord } from "./types";
 
-const actionSchema = z.enum(["observe", "respond", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list"]);
-const actionResultKindSchema = z.enum(["none", "visible_reply", "memory_intent", "reminder_draft", "question_list_draft"]);
+const actionSchema = z.enum(["observe", "respond", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list", "use_hermes"]);
+const actionResultKindSchema = z.enum(["none", "visible_reply", "memory_intent", "reminder_draft", "question_list_draft", "hermes_task"]);
 const stateDeltaSchema = z
   .object({
     curiosity: z.number().min(-12).max(12).optional(),
@@ -190,6 +190,11 @@ function validatePersistenceDecision(decision: ActionDecisionSuggestion) {
     if (decision.actionResult?.kind !== "question_list_draft") throw new Error("action model selected draft_question_list without a question_list_draft actionResult");
     if (!decision.actionResult.items?.length) throw new Error("question_list_draft actionResult requires items");
   }
+  if (decision.action === "use_hermes") {
+    if (decision.actionResult?.kind !== "hermes_task") throw new Error("action model selected use_hermes without a hermes_task actionResult");
+    if (!decision.actionResult.title || !decision.actionResult.text) throw new Error("hermes_task actionResult requires title and text");
+    if (!decision.reply || decision.shouldReply === false) throw new Error("use_hermes requires a visible reply so the user knows Papo handed the task off");
+  }
 }
 
 function normalizeActionResult(decision: ActionDecisionSuggestion): ActionResult {
@@ -214,6 +219,18 @@ function normalizeActionResult(decision: ActionDecisionSuggestion): ActionResult
   }
   if (raw?.kind === "reminder_draft" || raw?.kind === "question_list_draft") {
     throw new Error("action model returned a draft actionResult for a non-draft action");
+  }
+  if (decision.action === "use_hermes") {
+    return {
+      kind: "hermes_task",
+      title: safeProcessText(raw?.title) ?? "",
+      text: safeProcessText(raw?.text) ?? "",
+      dueText: undefined,
+      items: undefined
+    };
+  }
+  if (raw?.kind === "hermes_task") {
+    throw new Error("action model returned a hermes_task actionResult for a non-hermes action");
   }
   if ((decision.action === "save_episode" || decision.action === "save_long_term") && raw?.kind === "memory_intent") {
     return {
@@ -347,6 +364,7 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - quiet：安静陪着。
 - draft_reminder：形成提醒草稿。
 - draft_question_list：形成问题清单草稿。
+- use_hermes：把 Papo 自己无法完成、但外部 Hermes/虾虾可能能完成的任务交出去。
 
 护栏会再次校验：
 - action 必须在白名单内。
@@ -365,6 +383,7 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - 如果你只是想当下陪用户聊一句，不要把它送进记忆候选；如果这段输入没有可用生活信息，也可以选择不说话。
 - observe 和 quiet 表示不说话，不能同时填写 reply 或 shouldReply=true；如果要说话，请选择 respond、ask、recall、review、draft_reminder 或 draft_question_list。
 - draft_reminder 和 draft_question_list 是有结构化产物的动作，不能只写 reply。必须在 actionResult 里返回草稿内容；reply 是 Papo 对用户说出口的自然短回应。
+- use_hermes 是外部任务动作。当用户需要实时搜索、查网页/论文/新闻/天气、执行服务器或文件任务、定时发邮件、查询外部系统、长时间研究，且 Papo 内置 LLM 无法可靠完成时使用。必须在 actionResult 里返回 hermes_task，title 写任务标题，text 写给虾虾/Hermes 的清晰任务说明；reply 写 Papo 对用户说出口的短句，例如“我去问问虾虾，稍等哦”。不要把 Hermes 的任务说明直接当成 Papo 对用户说的话。
 - 不要默认复述整段用户输入；但如果用户明确要求重复、确认原话或询问上一句话，可以自然引用必要原文。
 
 返回严格 JSON：
@@ -406,11 +425,13 @@ actionResult 是这一步行动真实产出的结构化结果：
 - action=save_episode 或 save_long_term 时，可以返回 {"kind":"memory_intent","text":"为什么交给记忆流程"}；不能返回 memory_saved，因为真正是否写入长期记忆由后续 memory stage 决定。save_long_term 只是行动脑的强建议，不会绕过记忆脑的 writePolicy。
 - action=draft_reminder 时，必须返回 {"kind":"reminder_draft","title":"...","text":"...","dueText":"..."}；title 和 text 必填，dueText 不确定时可以省略。
 - action=draft_question_list 时，必须返回 {"kind":"question_list_draft","title":"...","items":["..."]}；items 至少一条。
+- action=use_hermes 时，必须返回 {"kind":"hermes_task","title":"...","text":"..."}，title 和 text 必填。
 - observe/quiet 应省略 actionResult，或返回 {"kind":"none"}。
 shouldCreateEpisode 决定这次是否应该留下为一条经历。
 shouldConsiderMemory 决定这次是否进入后续记忆判断；只有值得被之后记住、反馈、回忆或整理的事件才为 true。shouldConsiderMemory=true 时 shouldCreateEpisode 必须为 true。
 如果 action 是 save_episode 或 save_long_term，shouldCreateEpisode 必须为 true；如果 action 是 save_long_term，shouldConsiderMemory 必须为 true。
 如果 action 是 observe 或 quiet，shouldReply 必须为 false 或省略，reply 必须省略。
+如果 action 是 use_hermes，shouldReply 必须为 true，reply 必须是给用户看的短回复，actionResult.text 才是给 Hermes 的任务。
 如果 recent_memories 里有自然联想到的旧记忆，可以在 relatedMemoryIds 里返回对应 id；不能编造不存在的 id。
 
 current_state:

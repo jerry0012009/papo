@@ -6,6 +6,9 @@ const app = createApp({
   proactive: {
     enabled: process.env.PAPO_PROACTIVE_ENABLED !== "0",
     intervalMs: Number(process.env.PAPO_PROACTIVE_INTERVAL_MS ?? 60_000)
+  },
+  hermes: {
+    enabled: process.env.PAPO_HERMES_ENABLED !== "0"
   }
 });
 

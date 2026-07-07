@@ -9,14 +9,16 @@ export type ActionKind =
   | "review"
   | "quiet"
   | "draft_reminder"
-  | "draft_question_list";
+  | "draft_question_list"
+  | "use_hermes";
 
 export interface ActionResult {
-  kind: "none" | "visible_reply" | "memory_intent" | "reminder_draft" | "question_list_draft";
+  kind: "none" | "visible_reply" | "memory_intent" | "reminder_draft" | "question_list_draft" | "hermes_task";
   title?: string;
   text?: string;
   dueText?: string;
   items?: string[];
+  hermesTaskId?: string;
 }
 
 export type FeedbackKind = "understood" | "continue" | "not_now" | "remember" | "important" | "remind" | "correct" | "forget";
@@ -256,11 +258,51 @@ export interface MemoryCandidate {
   attachments?: MediaAttachment[];
 }
 
+export interface FeedbackTargetSnapshot {
+  id: string;
+  type: "memory" | "episode" | "candidate";
+  text?: string;
+  kind?: LongTermMemory["kind"];
+  weight?: number;
+  status?: MemoryCandidate["status"];
+  sourceEpisodeId?: string;
+  tags?: string[];
+  attachments?: MediaAttachment[];
+}
+
+export interface ReadState {
+  lastReadPapoMessageId?: string;
+  lastReadAt?: string;
+}
+
+export interface HermesTaskRecord {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  status: "pending" | "sent" | "completed" | "timeout" | "failed";
+  task: string;
+  title?: string;
+  channelId?: string;
+  channelName?: string;
+  sentMessageId?: string;
+  sourceEventId?: string;
+  sourceMessageId?: string;
+  resultMessageId?: string;
+  error?: string;
+}
+
+export interface HermesProfileState {
+  channelId?: string;
+  channelName?: string;
+  tasks: HermesTaskRecord[];
+}
+
 export interface FeedbackRecord {
   id: string;
   at: string;
   kind: FeedbackKind;
   targetId?: string;
+  targetSnapshot?: FeedbackTargetSnapshot;
   inputText?: string;
   inputModality?: SegmentKind | "button";
   effect: string;
@@ -418,6 +460,8 @@ export interface CreatureProfile {
   semanticBrainHistory: SemanticBrainRecord[];
   conversation: CreatureMessage[];
   proactive: ProactiveEmergenceState;
+  readState: ReadState;
+  hermes: HermesProfileState;
 }
 
 export interface ProactiveEmergenceState {
