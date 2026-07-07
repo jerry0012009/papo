@@ -143,16 +143,30 @@ export async function semanticReflectFeedback(
 ): Promise<FeedbackRecord> {
   if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for feedback reflection.");
 
-  const raw = await provider.generateJson<unknown>(buildSemanticFeedbackPrompt(profile, feedback));
-  if (!raw) throw new Error("empty feedback model result");
-  const parsed = semanticFeedbackSchema.safeParse(raw);
-  if (!parsed.success) {
-    throw new Error(`invalid feedback JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
+  const basePrompt = buildSemanticFeedbackPrompt(profile, feedback);
+  let lastError = "";
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const raw = await provider.generateJson<unknown>(lastError ? `${basePrompt}\n\n上一次输出没有通过结构护栏，错误是：${lastError}\n请只返回修正后的严格 JSON。` : basePrompt);
+    if (!raw) throw new Error("empty feedback model result");
+    const parsed = semanticFeedbackSchema.safeParse(raw);
+    if (!parsed.success) {
+      lastError = `invalid feedback JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`;
+      if (attempt === 0) continue;
+      throw new Error(lastError);
+    }
+    try {
+      assertSemanticFeedbackVisibleOutput(profile, feedback, parsed.data);
+      assertSemanticFeedbackMemoryOperation(profile, feedback, parsed.data);
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : String(error);
+      if (attempt === 0) continue;
+      throw error;
+    }
+    applySemanticFeedbackSuggestion(profile, feedback, parsed.data);
+    recordFeedbackSemanticRun(profile, provider, "applied", attempt ? "llm feedback reflection applied after repair" : "llm feedback reflection applied");
+    return feedback;
   }
-  assertSemanticFeedbackVisibleOutput(profile, feedback, parsed.data);
-  applySemanticFeedbackSuggestion(profile, feedback, parsed.data);
-  recordFeedbackSemanticRun(profile, provider, "applied", "llm feedback reflection applied");
-  return feedback;
+  throw new Error(lastError || "feedback model did not produce a valid result");
 }
 
 export function composeFeedbackReplyText(feedback: FeedbackRecord) {
@@ -243,6 +257,19 @@ function assertSemanticFeedbackVisibleOutput(profile: CreatureProfile, feedback:
     if (targetEpisode && operation?.type !== "promote_episode") {
       throw new Error("feedback model received an episode correction without promote_episode");
     }
+  }
+}
+
+function assertSemanticFeedbackMemoryOperation(profile: CreatureProfile, feedback: FeedbackRecord, suggestion: SemanticFeedbackSuggestion) {
+  const operation = suggestion.memoryOperation;
+  if (!operation || operation.type === "none") return;
+  const targetLongTerm = profile.longTermMemories.find((item) => item.id === feedback.targetId);
+  const targetEpisode = profile.episodes.find((item) => item.id === feedback.targetId);
+  if (operation.type === "update_memory" && !targetLongTerm) {
+    throw new Error(`target.type=${targetEpisode ? "episode" : "none"} cannot use update_memory; use promote_episode for episode targets or none`);
+  }
+  if (operation.type === "promote_episode" && !targetEpisode) {
+    throw new Error(`target.type=${targetLongTerm ? "memory" : "none"} cannot use promote_episode; use update_memory for memory targets or none`);
   }
 }
 

@@ -428,6 +428,28 @@ select {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.proactive-nudge {
+  width: fit-content;
+  justify-self: center;
+  min-height: 34px;
+  padding: 7px 10px;
+  border-color: rgba(217, 75, 61, 0.2);
+  background: #fff7ef;
+}
+
+.proactive-nudge span {
+  min-width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: #d94b3d;
+  color: #fffaf0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
 .primary {
   background: #1f2421;
   color: #fffaf0;
@@ -1134,11 +1156,19 @@ select {
 }
 
 .unread-dot {
-  width: 7px;
-  height: 7px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
   border-radius: 999px;
   background: #d94b3d;
+  color: #fffaf0;
   box-shadow: 0 0 0 2px rgba(255, 250, 240, 0.94);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-style: normal;
+  font-size: 0.66rem;
+  line-height: 1;
 }
 
 @media (max-width: 430px) {

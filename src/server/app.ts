@@ -9,6 +9,7 @@ import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { createModelProvider, type ModelProvider } from "../core/provider";
+import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
 import { wakeCreature } from "../core/rhythm";
 import type { CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, MediaAttachment, MessageCognitionTrace, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
 import { JsonProfileStore, type ProfileStore } from "./store";
@@ -99,7 +100,7 @@ const updateMemorySchema = z.object({
   text: z.string().min(1).max(1000)
 });
 
-export function createApp(input: { store?: ProfileStore; provider?: ModelProvider } = {}) {
+export function createApp(input: { store?: ProfileStore; provider?: ModelProvider; proactive?: { enabled?: boolean; intervalMs?: number } } = {}) {
   const store = input.store ?? new JsonProfileStore();
   const provider = input.provider ?? createModelProvider();
   const app = express();
@@ -216,6 +217,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const profile = await requireProfile(store, req.params.userId);
       const body = buttonSchema.parse(req.body);
       const inputSourceId = `button-${Date.now()}`;
+      markProactiveUserResponse(profile);
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runButtonHarness(profile, body.text, provider);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
@@ -246,6 +248,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const body = curiousSchema.parse(req.body);
+      markProactiveUserResponse(profile);
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
@@ -284,6 +287,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const body = feedbackSchema.parse(req.body);
+      markProactiveUserResponse(profile, new Date().toISOString());
       const targetBefore = feedbackTargetSnapshot(profile, body.targetId);
       const feedback = applyFeedback(profile, body);
       const beforeSemanticIds = semanticRecordIds(profile);
@@ -322,6 +326,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const body = updateMemorySchema.parse(req.body);
       const previousMemory = profile.longTermMemories.find((item) => item.id === req.params.memoryId);
       if (!previousMemory) throw new HttpError(404, "Memory not found");
+      markProactiveUserResponse(profile, new Date().toISOString());
       const targetBefore = feedbackTargetSnapshot(profile, req.params.memoryId);
       const at = new Date().toISOString();
       const feedback = applyFeedback(profile, {
@@ -367,7 +372,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const beforeSemanticIds = semanticRecordIds(profile);
-      const emergence = await semanticDecideEmergence(profile, provider);
+      const emergence = await semanticDecideEmergence(profile, provider, new Date().toISOString(), { delivery: "manual" });
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const cognitionTrace = emergenceCognitionTrace(emergence, provider, modelRuns);
       appendPapoMessage(profile, {
@@ -397,7 +402,78 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     res.status(500).json({ error: sensingError(error) });
   });
 
+  if (input.proactive?.enabled) {
+    startProactiveEmergenceLoop(store, provider, input.proactive.intervalMs);
+  }
+
   return app;
+}
+
+export function startProactiveEmergenceLoop(store: ProfileStore, provider: ModelProvider, intervalMs = 60_000) {
+  let running = false;
+  const tick = async () => {
+    if (running) return;
+    running = true;
+    try {
+      await runProactiveEmergenceSweep(store, provider);
+    } catch (error) {
+      console.error("Proactive emergence sweep failed", error);
+    } finally {
+      running = false;
+    }
+  };
+  const timer = setInterval(tick, intervalMs);
+  timer.unref?.();
+  void tick();
+  return () => clearInterval(timer);
+}
+
+export async function runProactiveEmergenceSweep(store: ProfileStore, provider: ModelProvider, now = new Date().toISOString()) {
+  const summaries = await store.listProfiles();
+  let checked = 0;
+  let active = 0;
+  let quiet = 0;
+  let deferred = 0;
+  for (const summary of summaries) {
+    const profile = await store.getProfile(summary.userId);
+    if (!profile) continue;
+    const due = isProactiveEmergenceDue(profile, now);
+    if (!due.due) {
+      if (!profile.proactive.lastCheckedAt) {
+        profile.proactive.lastCheckedAt = now;
+        await store.saveProfile(profile);
+      }
+      continue;
+    }
+    checked += 1;
+    const beforeSemanticIds = semanticRecordIds(profile);
+    try {
+      const emergence = await semanticDecideEmergence(profile, provider, now, { delivery: "proactive" });
+      const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
+      const cognitionTrace = emergenceCognitionTrace(emergence, provider, modelRuns);
+      settleProactiveEmergence(profile, emergence, now);
+      if (emergence.text.trim()) {
+        appendPapoMessage(profile, {
+          channel: "emergence",
+          text: emergence.text,
+          sourceId: emergence.id,
+          relatedMemoryIds: emergence.relatedMemoryIds,
+          cognitionTrace,
+          at: now
+        });
+        active += 1;
+      } else {
+        quiet += 1;
+      }
+      await store.saveProfile(profile);
+    } catch (error) {
+      console.error(`Proactive emergence failed for ${summary.userId}`, error);
+      deferProactiveEmergence(profile, now, 30);
+      await store.saveProfile(profile);
+      deferred += 1;
+    }
+  }
+  return { checked, active, quiet, deferred };
 }
 
 function imageAssetDir() {

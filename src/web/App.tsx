@@ -110,7 +110,8 @@ export function App() {
     () => profile?.conversation?.find((message) => message.role === "papo" && message.channel !== "wake"),
     [profile?.conversation]
   );
-  const hasUnreadPapoMessage = Boolean(latestPapoMessage && latestPapoMessage.id !== readPapoMessageId);
+  const unreadPapoCount = useMemo(() => countUnreadPapoMessages(profile, readPapoMessageId), [profile?.conversation, readPapoMessageId]);
+  const hasUnreadPapoMessage = unreadPapoCount > 0;
 
   useEffect(() => {
     void bootstrap();
@@ -124,6 +125,19 @@ export function App() {
   useEffect(() => {
     profileRef.current = profile;
   }, [profile]);
+
+  useEffect(() => {
+    if (!profile?.userId) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const next = await getProfile(profile.userId);
+        setProfile(next);
+      } catch {
+        // Polling is only for passive proactive-message sync; user actions still surface errors.
+      }
+    }, 60_000);
+    return () => window.clearInterval(timer);
+  }, [profile?.userId]);
 
   async function bootstrap() {
     try {
@@ -631,9 +645,11 @@ export function App() {
         <HomeView
           profile={profile}
           emergence={emergence}
+          unreadPapoCount={unreadPapoCount}
           busy={busy}
           onGoCapture={() => setTab("chat")}
           onGoCurious={() => setTab("chat")}
+          onGoChat={() => setTab("chat")}
         />
       ) : null}
 
@@ -664,7 +680,7 @@ export function App() {
 
       <nav className="nav">
         <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => setTab("home")} />
-        <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" unread={hasUnreadPapoMessage} onClick={() => setTab("chat")} />
+        <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" unreadCount={hasUnreadPapoMessage ? unreadPapoCount : 0} onClick={() => setTab("chat")} />
         <NavButton active={tab === "memory"} icon={History} label="记忆" onClick={() => setTab("memory")} />
       </nav>
     </main>
@@ -674,9 +690,11 @@ export function App() {
 function HomeView(props: {
   profile: CreatureProfile;
   emergence?: EmergenceSurface;
+  unreadPapoCount: number;
   busy: boolean;
   onGoCapture: () => void;
   onGoCurious: () => void;
+  onGoChat: () => void;
 }) {
   const latestReply = latestVisiblePapoReply(props.profile);
   return (
@@ -689,6 +707,13 @@ function HomeView(props: {
           {latestReply ? <p>{latestReply}</p> : null}
         </div>
       </div>
+      {props.unreadPapoCount ? (
+        <button className="proactive-nudge" onClick={props.onGoChat}>
+          <MessagesSquare size={16} />
+          Papo 新说
+          <span>{Math.min(3, props.unreadPapoCount)}</span>
+        </button>
+      ) : null}
 
       <div className="action-row">
         <button onClick={props.onGoCapture}>
@@ -1789,16 +1814,24 @@ function PanelTitle({ icon: Icon, title }: { icon: typeof Check; title: string }
   );
 }
 
-function NavButton(props: { active: boolean; icon: typeof Check; label: string; unread?: boolean; onClick: () => void }) {
+function NavButton(props: { active: boolean; icon: typeof Check; label: string; unreadCount?: number; onClick: () => void }) {
   return (
     <button className={props.active ? "active" : ""} onClick={props.onClick}>
       <props.icon size={19} />
       <span>
         {props.label}
-        {props.unread ? <i className="unread-dot" aria-label="有未读 Papo 回复" /> : null}
+        {props.unreadCount ? <i className="unread-dot" aria-label={`${props.unreadCount} 条未读 Papo 回复`}>{Math.min(9, props.unreadCount)}</i> : null}
       </span>
     </button>
   );
+}
+
+function countUnreadPapoMessages(profile: CreatureProfile | undefined, readMessageId: string | undefined) {
+  const messages = (profile?.conversation ?? []).filter((message) => message.role === "papo" && message.channel !== "wake");
+  if (!messages.length) return 0;
+  const count = readMessageId ? messages.findIndex((message) => message.id === readMessageId) : Math.min(messages.length, 3);
+  if (count < 0) return Math.min(messages.length, 3);
+  return Math.min(count, 3);
 }
 
 function messageTitle(message: CreatureProfile["conversation"][number]) {

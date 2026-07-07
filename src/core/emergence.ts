@@ -3,6 +3,7 @@ import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext } from "./model-context";
 import { toCreatureMemoryVoice } from "./memory";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
+import { proactivePromptContext } from "./proactive";
 import type { ModelProvider } from "./provider";
 import type { CreatureProfile, EmergenceRecord } from "./types";
 
@@ -35,11 +36,17 @@ const semanticEmergenceSchema = z
 
 type SemanticEmergenceSuggestion = z.infer<typeof semanticEmergenceSchema>;
 
-export async function semanticDecideEmergence(profile: CreatureProfile, provider: ModelProvider, now = new Date().toISOString()): Promise<EmergenceRecord & { text: string; memoryId?: string }> {
+export async function semanticDecideEmergence(
+  profile: CreatureProfile,
+  provider: ModelProvider,
+  now = new Date().toISOString(),
+  input: { delivery?: "manual" | "proactive" } = {}
+): Promise<EmergenceRecord & { text: string; memoryId?: string }> {
   if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for emergence.");
 
   const cooldown = emergenceCooldown(profile, now);
-  const raw = await provider.generateJson<unknown>(buildSemanticEmergencePrompt(profile, now, cooldown));
+  const delivery = input.delivery ?? "manual";
+  const raw = await provider.generateJson<unknown>(buildSemanticEmergencePrompt(profile, now, cooldown, delivery));
   if (!raw) throw new Error("empty emergence model result");
   const parsed = semanticEmergenceSchema.safeParse(raw);
   if (!parsed.success) {
@@ -48,7 +55,7 @@ export async function semanticDecideEmergence(profile: CreatureProfile, provider
 
   if (cooldown.active && parsed.data.shouldEmerge) {
     recordEmergenceSemanticRun(profile, provider, "applied", "llm emergence blocked by cooldown");
-    return quietEmergence(now, parsed.data, [
+    return quietEmergence(now, parsed.data, delivery, [
       "llm: selected active emergence",
       `guardrail: cooldown_active minutes_since_last=${cooldown.minutesSinceLast}`,
       `guardrail: cooldown_remaining=${cooldown.remainingMinutes}`
@@ -57,14 +64,14 @@ export async function semanticDecideEmergence(profile: CreatureProfile, provider
 
   if (!parsed.data.shouldEmerge) {
     recordEmergenceSemanticRun(profile, provider, "applied", "llm emergence chose quiet");
-    return quietEmergence(now, parsed.data, [
+    return quietEmergence(now, parsed.data, delivery, [
       "llm: chose quiet emergence",
       cooldown.active ? `guardrail: cooldown_active minutes_since_last=${cooldown.minutesSinceLast}` : "guardrail: cooldown_clear",
       "guardrail: memory=none"
     ]);
   }
 
-  const semantic = createSemanticEmergenceRecord(profile, parsed.data, now);
+  const semantic = createSemanticEmergenceRecord(profile, parsed.data, now, delivery);
   if (!semantic) {
     throw new Error("emergence model selected unavailable memory or unsafe message");
   }
@@ -76,7 +83,7 @@ export async function semanticDecideEmergence(profile: CreatureProfile, provider
   return { ...semantic, text: semantic.message, memoryId: semantic.relatedMemoryIds[0] };
 }
 
-function quietEmergence(now: string, suggestion: SemanticEmergenceSuggestion, ruleTrace: string[]): EmergenceRecord & { text: string; memoryId?: string } {
+function quietEmergence(now: string, suggestion: SemanticEmergenceSuggestion, delivery: "manual" | "proactive", ruleTrace: string[]): EmergenceRecord & { text: string; memoryId?: string } {
   return {
     id: makeId("emergence"),
     at: now,
@@ -86,6 +93,7 @@ function quietEmergence(now: string, suggestion: SemanticEmergenceSuggestion, ru
     driveSource: suggestion.driveSource ?? "rhythm",
     proactiveLevel: suggestion.proactiveLevel ?? "quiet",
     message: "",
+    delivery,
     text: "",
     ruleTrace
   };
@@ -116,7 +124,8 @@ function sharedMemories(profile: CreatureProfile) {
 function createSemanticEmergenceRecord(
   profile: CreatureProfile,
   suggestion: SemanticEmergenceSuggestion,
-  now: string
+  now: string,
+  delivery: "manual" | "proactive"
 ): EmergenceRecord | undefined {
   const memory = suggestion.memoryId ? availableSemanticMemories(profile).find((item) => item.id === suggestion.memoryId) : undefined;
   if (!memory) return undefined;
@@ -133,6 +142,7 @@ function createSemanticEmergenceRecord(
     driveSource: suggestion.driveSource ?? "curiosity",
     proactiveLevel: suggestion.proactiveLevel ?? "gentle",
     message,
+    delivery,
     ruleTrace: [
       "llm: selected active emergence",
       `memory=${memory.id}`,
@@ -173,8 +183,9 @@ function recordEmergenceSemanticRun(
   profile.semanticBrainHistory = profile.semanticBrainHistory.slice(0, 30);
 }
 
-function buildSemanticEmergencePrompt(profile: CreatureProfile, now: string, cooldown: ReturnType<typeof emergenceCooldown>) {
+function buildSemanticEmergencePrompt(profile: CreatureProfile, now: string, cooldown: ReturnType<typeof emergenceCooldown>, delivery: "manual" | "proactive") {
   const candidateMemories = availableSemanticMemories(profile).slice(0, 12);
+  const proactiveContext = proactivePromptContext(profile);
   if (cooldown.active) {
     return `请作为 Papo 的主动浮现大脑，判断此刻是否要主动浮现。
 
@@ -194,6 +205,12 @@ ${now}
 
 current_state:
 ${JSON.stringify(profile.state)}
+
+delivery:
+${delivery}
+
+proactive_context:
+${JSON.stringify(proactiveContext)}
 
 recent_emergence:
 ${JSON.stringify(profile.emergenceHistory.slice(0, 5).map((item) => ({
@@ -219,6 +236,12 @@ ${now}
 
 current_state:
 ${JSON.stringify(profile.state)}
+
+delivery:
+${delivery}
+
+proactive_context:
+${JSON.stringify(proactiveContext)}
 `;
   }
 
@@ -230,6 +253,8 @@ ${JSON.stringify(profile.state)}
 - 为什么此刻想起它。
 - 这是 curiosity、attachment、safety、rhythm 还是 memory_resonance。
 - Papo 应该说什么，主动程度是 quiet/gentle/active。
+- 如果 delivery=proactive，这不是用户手动碰一下 Papo，而是后台 30 分钟节律触发的一次主动判断。你可以选择安静，很多时候安静是更自然的；如果要主动说话，应短、轻、不催促。
+- proactive_context.pendingUnansweredMessages 表示此前主动消息还没收到用户回应。数值越高越应该克制；规则会负责未回应上限和下次触发时间，你负责判断此刻是否真的值得开口。
 
 你必须返回一个 JSON object，不要输出解释性文字、Markdown 或空内容。
 JSON 字段名保持示例格式；枚举字段值必须使用示例里的英文原文，不要翻译。只有 whyNow/message/trace 等自然语言字段值使用中文。
@@ -264,6 +289,12 @@ ${now}
 
 current_state:
 ${JSON.stringify(profile.state)}
+
+delivery:
+${delivery}
+
+proactive_context:
+${JSON.stringify(proactiveContext)}
 
 current_policy:
 ${JSON.stringify(profile.policyProfile)}

@@ -401,6 +401,18 @@ export interface CreatureProfile {
   wakeHistory: WakeEvent[];
   semanticBrainHistory: SemanticBrainRecord[];
   conversation: CreatureMessage[];
+  proactive: ProactiveEmergenceState;
+}
+
+export interface ProactiveEmergenceState {
+  pendingCount: number;
+  paused: boolean;
+  nextCheckAt?: string;
+  lastCheckedAt?: string;
+  lastActiveAt?: string;
+  lastUserResponseAt?: string;
+  lastQuietAt?: string;
+  pauseReason?: string;
 }
 
 export interface EmergenceRecord {
@@ -412,6 +424,8 @@ export interface EmergenceRecord {
   driveSource: string;
   proactiveLevel?: "quiet" | "gentle" | "active";
   message: string;
+  delivery?: "manual" | "proactive";
+  pendingIndex?: number;
   ruleTrace: string[];
 }
 

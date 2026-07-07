@@ -24,7 +24,8 @@ export function createCreatureProfile(input: {
     emergenceHistory: [],
     wakeHistory: [],
     semanticBrainHistory: [],
-    conversation: []
+    conversation: [],
+    proactive: initialProactiveState(now)
   };
   return profile;
 }
@@ -49,6 +50,9 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.wakeHistory ??= [];
   profile.semanticBrainHistory ??= [];
   profile.conversation ??= [];
+  profile.proactive ??= initialProactiveState(new Date().toISOString());
+  profile.proactive.pendingCount = Math.max(0, Math.min(3, Math.round(profile.proactive.pendingCount ?? 0)));
+  profile.proactive.paused = Boolean(profile.proactive.paused);
   profile.episodes ??= [];
   profile.longTermMemories ??= [];
   profile.feedbackHistory ??= [];
@@ -72,4 +76,18 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   }
 
   return profile;
+}
+
+function initialProactiveState(now: string) {
+  return {
+    pendingCount: 0,
+    paused: false,
+    nextCheckAt: addMinutes(now, 30)
+  };
+}
+
+function addMinutes(iso: string, minutes: number) {
+  const base = Date.parse(iso);
+  const at = Number.isFinite(base) ? base : Date.now();
+  return new Date(at + minutes * 60_000).toISOString();
 }
