@@ -299,11 +299,12 @@ describe("App", () => {
     expect(screen.queryByText("认真注意后")).not.toBeInTheDocument();
 
     await userEvent.upload(screen.getByLabelText("加照片"), new File(["fake"], "复查照片.png", { type: "image/png" }));
-    expect(await screen.findByText("准备一起给我听的这一小段")).toBeInTheDocument();
+    expect(await screen.findByText("这次分享里还带着")).toBeInTheDocument();
+    expect(screen.queryByText(/准备一起给我听|这一小段/)).not.toBeInTheDocument();
     expect(screen.queryByText("准备一起交给 Papo 的这一小段")).not.toBeInTheDocument();
-    expect(screen.getByDisplayValue("复查照片.png")).toBeInTheDocument();
+    expect(screen.getByText("复查照片.png")).toBeInTheDocument();
     expect(screen.getByDisplayValue("照片里是周五复查的日历备注，写着提前准备病历。")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "照片" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("照片").length).toBeGreaterThan(0);
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText("直接告诉 Papo 一件刚发生的事"), "这张照片就是刚说的复查。");
     await userEvent.click(screen.getByRole("button", { name: "让 Papo 听听" }));
@@ -314,7 +315,7 @@ describe("App", () => {
     expect(screen.getByText("照片里是周五复查的日历备注，写着提前准备病历。")).toBeInTheDocument();
 
     await userEvent.upload(screen.getByLabelText("加照片"), new File(["bad"], "坏照片.png", { type: "image/png" }));
-    expect(await screen.findByDisplayValue("坏照片.png")).toBeInTheDocument();
+    expect(await screen.findByText("坏照片.png")).toBeInTheDocument();
     expect(screen.queryByDisplayValue(/暂时没有看清|Vision provider failed|403/)).not.toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText("直接告诉 Papo 一件刚发生的事"), "这张照片我稍后再补。");
     await userEvent.click(screen.getByRole("button", { name: "让 Papo 听听" }));
@@ -333,7 +334,7 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "陪我一会儿" }));
     expect(screen.getByText("和 Papo 的小日常")).toBeInTheDocument();
     expect(screen.getByText("可以让 Papo 持续听一会儿")).toBeInTheDocument();
-    expect(screen.getByText(/最多 3 分钟，每 30 秒听一小段/)).toBeInTheDocument();
+    expect(screen.getByText(/最多 3 分钟，每 30 秒整理一次声音/)).toBeInTheDocument();
     expect(screen.getByText(/没有人声或太嘈杂时会自然略过/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "开始听 3 分钟" })).toBeInTheDocument();
     expect(screen.getByLabelText("加照片")).toBeInTheDocument();

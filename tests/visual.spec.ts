@@ -54,7 +54,7 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByText("Papo", { exact: true }).first()).toBeVisible();
   await expect(page.getByLabel("有未读 Papo 回复")).toHaveCount(0);
   await expect(page.getByText("可以让 Papo 持续听一会儿")).toBeVisible();
-  await expect(page.getByText(/最多 3 分钟，每 30 秒听一小段/)).toBeVisible();
+  await expect(page.getByText(/最多 3 分钟，每 30 秒整理一次声音/)).toBeVisible();
   await expect(page.getByText(/没有人声或太嘈杂时会自然略过/)).toBeVisible();
   await expect(page.getByRole("button", { name: "开始听 3 分钟" })).toBeVisible();
   await expect(page.getByText("加照片", { exact: true })).toBeVisible();

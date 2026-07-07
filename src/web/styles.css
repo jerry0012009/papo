@@ -419,8 +419,7 @@ select {
 }
 
 .action-row,
-.feedback-row,
-.segment-row {
+.feedback-row {
   display: grid;
   gap: 10px;
 }
@@ -779,6 +778,33 @@ meter {
   padding: 8px;
 }
 
+.staged-attachment-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.staged-attachment-head strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.86rem;
+}
+
+.staged-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: #1f2421;
+  color: #fffaf0;
+  font-size: 0.74rem;
+}
+
 .staged-segment button {
   justify-self: start;
   min-height: 34px;
@@ -973,39 +999,6 @@ meter {
   font-size: 0.9rem;
 }
 
-.segment-row {
-  grid-template-columns: 1fr minmax(190px, 0.72fr);
-  align-items: center;
-}
-
-.segment-row input {
-  min-width: 0;
-}
-
-.segment-kind-picker {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
-  min-width: 0;
-}
-
-.segment-kind-picker button {
-  min-width: 0;
-  min-height: 36px;
-  padding: 6px 4px;
-  border-color: rgba(79, 139, 118, 0.18);
-  background: rgba(255, 250, 240, 0.78);
-  color: #465248;
-  font-size: 0.74rem;
-  gap: 4px;
-}
-
-.segment-kind-picker button.active {
-  background: #1f2421;
-  color: #fffaf0;
-  border-color: #1f2421;
-}
-
 .profile-list {
   display: grid;
   gap: 10px;
@@ -1092,10 +1085,6 @@ meter {
   }
 
   .composer-tools {
-    grid-template-columns: 1fr;
-  }
-
-  .segment-row {
     grid-template-columns: 1fr;
   }
 

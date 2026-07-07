@@ -884,8 +884,8 @@ function ChatView(props: {
   const sections = groupConversationSections(messages);
   const canSubmit = Boolean(draft.trim() || props.stagedSegments.some((segment) => segment.content.trim()));
 
-  function updateStagedSegment(index: number, patch: Partial<StreamSegment>) {
-    props.onChangeStagedSegments((current) => current.map((segment, currentIndex) => (currentIndex === index ? { ...segment, ...patch } : segment)));
+  function updateStagedSegmentContent(index: number, content: string) {
+    props.onChangeStagedSegments((current) => current.map((segment, currentIndex) => (currentIndex === index ? { ...segment, content } : segment)));
   }
 
   function removeStagedSegment(index: number) {
@@ -926,7 +926,7 @@ function ChatView(props: {
         <section className="listening-panel">
           <div>
             <strong>{props.listening ? "Papo 正在听你周围发生的事" : "可以让 Papo 持续听一会儿"}</strong>
-            <p>最多 3 分钟，每 30 秒听一小段。听清的内容会自己进入 Papo 的注意；没有人声或太嘈杂时会自然略过。</p>
+            <p>最多 3 分钟，每 30 秒整理一次声音。听清的内容会自己进入 Papo 的注意；没有人声或太嘈杂时会自然略过。</p>
           </div>
           <button onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
             <Sparkles size={18} />
@@ -974,17 +974,25 @@ function ChatView(props: {
           </div>
           {props.stagedSegments.length ? (
             <section className="staged-moment">
-              <strong>准备一起给我听的这一小段</strong>
+              <strong>这次分享里还带着</strong>
               {props.stagedSegments.map((segment, index) => (
                 <article className="staged-segment" key={segment.id}>
-                  <div className="segment-row">
-                    <input value={segment.label} onChange={(event) => updateStagedSegment(index, { label: event.target.value })} />
-                    <SegmentKindPicker value={segment.kind} onChange={(kind) => updateStagedSegment(index, { kind })} />
+                  <div className="staged-attachment-head">
+                    <span className="staged-kind">
+                      <StagedSegmentIcon kind={segment.kind} />
+                      {stagedSegmentKindText(segment.kind)}
+                    </span>
+                    <strong>{segment.label}</strong>
                   </div>
-                  <textarea value={segment.content} onChange={(event) => updateStagedSegment(index, { content: event.target.value })} rows={3} />
+                  <textarea
+                    value={segment.content}
+                    onChange={(event) => updateStagedSegmentContent(index, event.target.value)}
+                    rows={3}
+                    placeholder={stagedSegmentPlaceholder(segment.kind)}
+                  />
                   <button onClick={() => removeStagedSegment(index)} disabled={props.busy}>
                     <RefreshCcw size={16} />
-                    先不带这段
+                    这次先不带
                   </button>
                 </article>
               ))}
@@ -996,28 +1004,21 @@ function ChatView(props: {
   );
 }
 
-function SegmentKindPicker({ value, onChange }: { value: SegmentKind; onChange: (kind: SegmentKind) => void }) {
-  const options: Array<{ kind: SegmentKind; label: string; icon: typeof MessageCircle }> = [
-    { kind: "text", label: "文字", icon: MessageCircle },
-    { kind: "image_summary", label: "照片", icon: ImagePlus },
-    { kind: "audio_transcript", label: "录音", icon: Mic }
-  ];
-  return (
-    <div className="segment-kind-picker" aria-label="这一小段的样子">
-      {options.map((option) => (
-        <button
-          key={option.kind}
-          type="button"
-          className={value === option.kind ? "active" : ""}
-          aria-pressed={value === option.kind}
-          onClick={() => onChange(option.kind)}
-        >
-          <option.icon size={15} />
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
+function StagedSegmentIcon({ kind }: { kind: SegmentKind }) {
+  const Icon = kind === "image_summary" ? ImagePlus : kind === "audio_transcript" ? Mic : MessageCircle;
+  return <Icon size={15} />;
+}
+
+function stagedSegmentKindText(kind: SegmentKind) {
+  if (kind === "image_summary") return "照片";
+  if (kind === "audio_transcript") return "录音";
+  return "文字";
+}
+
+function stagedSegmentPlaceholder(kind: SegmentKind) {
+  if (kind === "image_summary") return "可以改成你想让 Papo 看见的照片内容";
+  if (kind === "audio_transcript") return "可以改成你想让 Papo 听见的话";
+  return "可以补充这件事";
 }
 
 function ChatBubble({ message }: { message: ConversationMessage }) {
