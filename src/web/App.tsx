@@ -1256,11 +1256,12 @@ function MemoryView(props: {
                 <MessageCircle size={16} />
                 帮我记准
               </button>
-              <button onClick={() => props.onFeedback("forget", memory.id)}>
-                <RefreshCcw size={16} />
-                {memory.weight <= 0 ? "这次真的忘掉" : "帮我先放下"}
-              </button>
             </div>
+            <MemoryFeedbackBox
+              memory={memory}
+              onFeedback={props.onFeedback}
+              onTranscribeFeedbackAudio={props.onTranscribeFeedbackAudio}
+            />
           </article>
         ))}
         {otherMemories.length ? null : <p className="muted">我还没有真正记下一段和你的事。</p>}
@@ -1289,6 +1290,72 @@ function MemoryView(props: {
         ))}
       </div>
     </section>
+  );
+}
+
+function MemoryFeedbackBox(props: {
+  memory: CreatureProfile["longTermMemories"][number];
+  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_transcript" | "button") => void;
+  onTranscribeFeedbackAudio: (file: File) => Promise<string>;
+}) {
+  const [feedbackText, setFeedbackText] = useState("");
+  const [feedbackModality, setFeedbackModality] = useState<"text" | "audio_transcript">("text");
+  const actions: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }> = [
+    { kind: "continue", label: "再想一会儿", icon: Lightbulb },
+    { kind: "not_now", label: "先安静点", icon: CircleOff },
+    { kind: "remember", label: "帮我记稳", icon: Save },
+    { kind: "forget", label: props.memory.weight <= 0 ? "这次真的忘掉" : "帮我先放下", icon: RefreshCcw }
+  ];
+
+  function submit(kind: FeedbackKind) {
+    const content = feedbackText.trim();
+    props.onFeedback(kind, props.memory.id, content || undefined, content ? feedbackModality : "button");
+    setFeedbackText("");
+    setFeedbackModality("text");
+  }
+
+  return (
+    <div className="feedback-input memory-feedback">
+      <div className="feedback-teach">
+        <strong>这条记忆你怎么养我</strong>
+        <span>你补的话会和这条记忆一起被我听进去，不只是按一个按钮。</span>
+      </div>
+      <textarea
+        value={feedbackText}
+        onChange={(event) => {
+          setFeedbackText(event.target.value);
+          setFeedbackModality("text");
+        }}
+        rows={2}
+        placeholder="也可以告诉我：这条记忆哪里要放轻、改准或继续想"
+      />
+      <label className="upload-button compact-upload">
+        <Mic size={16} />
+        说给我听
+        <input
+          type="file"
+          accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg"
+          onChange={async (event) => {
+            const file = event.currentTarget.files?.[0];
+            event.currentTarget.value = "";
+            if (!file) return;
+            const transcript = await props.onTranscribeFeedbackAudio(file);
+            if (transcript.trim()) {
+              setFeedbackText(transcript.trim());
+              setFeedbackModality("audio_transcript");
+            }
+          }}
+        />
+      </label>
+      <div className="feedback-row">
+        {actions.map((item) => (
+          <button key={item.kind} onClick={() => submit(item.kind)} aria-label={item.label}>
+            <item.icon size={16} />
+            {item.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

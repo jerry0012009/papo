@@ -93,6 +93,7 @@ Feedback-shaped `creature_self_memory` is allowed to support active emergence as
 Unread dialogue state is a perception layer for new Papo utterances, not an action planner: rules decide persisted `papo` messages, while the UI only shows a small unread dot on the dialogue entry. Wake notes are presence state and do not create unread notifications.
 Internal channel names, memory kinds, batch ids, and numeric weights are developer facts. User-facing dialogue and memory pages should default to natural creature language; raw `channel`, `kind`, `batchId`, and `weight` belong in details or Brain views.
 The memory page is Papo's subjective remembering surface. It should use first-person creature language for what Papo is holding, how familiar the memory feels, why it kept the moment, and how the user can help it remember accurately or let go. Hiding technical fields is necessary but not sufficient UX.
+Memory-page feedback is still interaction, not administration: when the user teaches Papo how to keep, soften, continue, or forget a memory, optional text/audio feedback should enter the same `learn` loop as episode feedback.
 Harness traces and implementation backlog belong to Brain/development docs, not the Home or Demo experience. The user-facing path should show what Papo noticed, remembered, learned, or wondered, not pipeline step names such as `sense` or `semantic`.
 User-facing pages should not label the companionship flow as `Curious Mode` or expose `image_summary` / `audio_transcript`; use "陪我看一小段世界", "照片", "录音转写", "小片段", and "这一小段" language instead. Keep the raw type names in code, API contracts, tests, and Brain diagnostics only.
 Demo entry copy should guide a person through Papo's life loop rather than sound like a script runner. Prefer "带 Papo 走一圈", "先递 8 段生活", and "问问 Papo 想到什么" over "一键", "场景 1/2/3", or setup-task language on user-facing surfaces.
@@ -277,6 +278,7 @@ Done:
   - Memory candidate text, promoted long-term memory text, and consolidation reasons now use shared-moment language instead of internal phrases such as "这条 episode", "用户反馈这段", "我和用户", or "forget feedback".
   - Memory page rendering now treats persisted memory text as raw material, not final copy: legacy/model phrases such as "用户确认", "episode", "candidate", or "长期保存" are translated away before the user sees Papo's subjective memory surface.
   - Long-term memory candidates now keep Papo's own response as part of the shared moment, and LLM-written candidate text is normalized before it can become a long-term memory.
+  - Memory-page feedback now accepts text or audio-transcribed teaching before the user asks Papo to keep thinking, quiet down, remember steadily, or let a memory go, so memory feedback flows through the same interaction loop as episode feedback.
 
 Verified:
 
@@ -318,6 +320,7 @@ Verified:
 - Episode cards can trace a memory back to the source shared moment, including batch, observed time, location, and matching conversation input when present.
 - Feedback text and audio transcript content are persisted as conversation input, and Papo's learning response follows it in the same timeline.
 - Feedback with substantive text can produce a rule-owned follow-up or memory note, and the persisted Papo reply includes that continuation.
+- Memory-page feedback can carry the user's written teaching into the same feedback endpoint with the target memory id, rather than acting as a bare management button.
 - Feedback records include state/policy deltas in diagnostics, user-facing feedback explains behavioral change, and forget feedback requires a second click to purge a zero-weight memory.
 - User-facing feedback impact explains how Papo will behave differently next time and does not show raw `+8` state/policy tuning.
 - The Home "single input" path opens the dialogue composer, and a submitted text message appears in the same attention/conversation timeline as Papo's response.

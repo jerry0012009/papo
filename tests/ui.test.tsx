@@ -11,6 +11,7 @@ describe("App", () => {
 
   it("renders the core mobile-first workbench", async () => {
     let curiousRequest: { segments?: Array<{ kind: string; batchId?: string; content: string }> } | undefined;
+    const feedbackRequests: Array<{ kind: string; targetId?: string; content?: string; modality?: string }> = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith("/api/provider")) {
@@ -46,6 +47,7 @@ describe("App", () => {
         });
       }
       if (url.endsWith("/api/profiles/u1/feedback")) {
+        feedbackRequests.push(JSON.parse(String(init?.body ?? "{}")));
         return json({
           profile: profileWithFeedback(),
           feedback: {
@@ -235,6 +237,18 @@ describe("App", () => {
     expect(screen.queryByText((_, element) => element?.textContent === "我记得比较清楚。它以后可能会轻轻拽我一下。")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "帮我记准" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "帮我先放下" })).toBeInTheDocument();
+    expect(screen.getByText("这条记忆你怎么养我")).toBeInTheDocument();
+    expect(screen.getByText("你补的话会和这条记忆一起被我听进去，不只是按一个按钮。")).toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText("也可以告诉我：这条记忆哪里要放轻、改准或继续想"), "这条先不要主动提起");
+    await userEvent.click(screen.getByRole("button", { name: "帮我先放下" }));
+    await waitFor(() =>
+      expect(feedbackRequests.at(-1)).toMatchObject({
+        kind: "forget",
+        targetId: "m2",
+        content: "这条先不要主动提起",
+        modality: "text"
+      })
+    );
     expect(screen.queryByText("future_review · 权重 80")).not.toBeInTheDocument();
     expect(screen.queryByText("future_review · weight 80")).not.toBeInTheDocument();
     expect(screen.queryByText("记忆细节")).not.toBeInTheDocument();
