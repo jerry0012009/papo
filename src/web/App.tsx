@@ -17,7 +17,6 @@ import {
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toCreatureMemoryVoice } from "../core/memory";
 import type {
-  CaptureResult,
   CreatureProfile,
   CreatureState,
   EpisodeMemory,
@@ -66,7 +65,6 @@ export function App() {
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [profile, setProfile] = useState<CreatureProfile>();
   const [chatSegments, setChatSegments] = useState<StreamSegment[]>([]);
-  const [lastResult, setLastResult] = useState<CaptureResult>();
   const [emergence, setEmergence] = useState<EmergenceSurface>();
   const [readPapoMessageId, setReadPapoMessageId] = useState<string>();
   const [listening, setListening] = useState(false);
@@ -84,7 +82,6 @@ export function App() {
   const segmentTimerRef = useRef<number | undefined>(undefined);
   const stopTimerRef = useRef<number | undefined>(undefined);
 
-  const selectedEpisode = lastResult?.episodes[0] ?? profile?.episodes[0];
   const latestPapoMessage = useMemo(
     () => profile?.conversation?.find((message) => message.role === "papo" && message.channel !== "wake"),
     [profile?.conversation]
@@ -144,7 +141,6 @@ export function App() {
     if (!profile || !cleanText) return;
     await run(async () => {
       const result = await buttonCapture(profile.userId, cleanText);
-      setLastResult(result);
       setProfile(result.profile);
       setTab(nextTab);
     });
@@ -167,7 +163,6 @@ export function App() {
         [...textSegment, ...chatSegments].filter((segment) => segment.content.trim()).map((segment, index) => ensureSegmentContext(segment, index))
       );
       setChatSegments([]);
-      setLastResult(result);
       setProfile(result.profile);
       setTab("chat");
     });
@@ -217,7 +212,6 @@ export function App() {
     await run(async () => {
       const { profile: next } = await sendFeedback(profile.userId, kind, targetId, { content, modality });
       setProfile(next);
-      setLastResult((current) => (current ? { ...current, profile: next } : current));
     });
   }
 
@@ -363,7 +357,6 @@ export function App() {
       const result = await curiousCapture(activeProfile.userId, [ensureSegmentContext(segment, 0)]);
       profileRef.current = result.profile;
       setProfile(result.profile);
-      setLastResult(result);
     } catch (caught) {
       setError(`Papo 刚才听到一点声音，但整理时断开了。${errorMessage(caught)}`);
     }
@@ -460,12 +453,8 @@ export function App() {
       {tab === "home" ? (
         <HomeView
           profile={profile}
-          lastResult={lastResult}
-          selectedEpisode={selectedEpisode}
           emergence={emergence}
           busy={busy}
-          onFeedback={giveFeedback}
-          onObserveFeedbackAudio={observeFeedbackAudio}
           onGoCapture={() => setTab("chat")}
           onGoCurious={() => setTab("chat")}
         />
@@ -507,12 +496,8 @@ export function App() {
 
 function HomeView(props: {
   profile: CreatureProfile;
-  lastResult?: CaptureResult;
-  selectedEpisode?: EpisodeMemory;
   emergence?: EmergenceSurface;
   busy: boolean;
-  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
-  onObserveFeedbackAudio: (file: File) => Promise<string>;
   onGoCapture: () => void;
   onGoCurious: () => void;
 }) {
@@ -539,18 +524,6 @@ function HomeView(props: {
       </div>
 
       {props.emergence?.text ? <EmergenceCard emergence={props.emergence} /> : null}
-
-      {props.selectedEpisode ? (
-        <div className="home-episode-slot">
-          <EpisodeCard
-            episode={props.selectedEpisode}
-            sourceMessages={episodeSourceMessages(props.profile, props.selectedEpisode)}
-            onFeedback={props.onFeedback}
-            onObserveFeedbackAudio={props.onObserveFeedbackAudio}
-            compact={false}
-          />
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -635,9 +608,14 @@ function ChatView(props: {
   onStopListening: () => void;
 }) {
   const [draft, setDraft] = useState("");
+  const composerRef = useRef<HTMLDivElement>(null);
   const messages = [...(props.profile.conversation ?? [])].filter((message) => message.channel !== "wake").slice(0, 50).reverse();
   const sections = groupConversationSections(messages);
   const canSubmit = Boolean(draft.trim() || props.stagedSegments.some((segment) => segment.content.trim()));
+
+  useEffect(() => {
+    composerRef.current?.scrollIntoView({ block: "end" });
+  }, [props.profile.conversation?.[0]?.id, props.stagedSegments.length]);
 
   function updateStagedSegmentContent(index: number, content: string) {
     props.onChangeStagedSegments((current) => current.map((segment, currentIndex) => (currentIndex === index ? { ...segment, content } : segment)));
@@ -699,7 +677,7 @@ function ChatView(props: {
             {props.listening ? `停下 ${formatListeningTime(props.listeningElapsed)}` : "开始陪我听"}
           </button>
         </section>
-        <div className="chat-composer">
+        <div className="chat-composer" ref={composerRef}>
           <textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
@@ -891,14 +869,29 @@ function DeveloperTrace({ trace, profile }: { trace: NonNullable<ConversationMes
                 <small>{trace.feedbackDecision.learningNote}</small>
               </TraceBlock>
               <TraceBlock title="3. 实际修改">
-                <TraceList items={feedbackDeltaItems(trace.feedbackDecision.stateDeltas, "state")} />
-                <TraceList items={feedbackDeltaItems(trace.feedbackDecision.policyDeltas, "policy")} />
-                {trace.feedbackDecision.memoryCandidateIds.length ? (
-                  <small>关联候选：{trace.feedbackDecision.memoryCandidateIds.join("、")}</small>
+                <TraceList items={feedbackDeltaItems(trace.feedbackDecision.stateDeltas ?? [], "state")} />
+                <TraceList items={feedbackDeltaItems(trace.feedbackDecision.policyDeltas ?? [], "policy")} />
+                {(trace.feedbackDecision.memoryCandidateIds ?? []).length ? (
+                  <small>关联候选：{(trace.feedbackDecision.memoryCandidateIds ?? []).join("、")}</small>
                 ) : null}
-                {!trace.feedbackDecision.stateDeltas.length &&
-                !trace.feedbackDecision.policyDeltas.length &&
-                !trace.feedbackDecision.memoryCandidateIds.length ? (
+                {(trace.feedbackDecision.memoryChanges ?? []).map((change) => (
+                  <div className="trace-memory-result" key={`${change.targetType}-${change.targetId}`}>
+                    <b>{feedbackMemoryChangeTitle(change)}</b>
+                    {change.beforeWeight !== undefined || change.afterWeight !== undefined ? (
+                      <small>权重：{change.beforeWeight ?? "无"} -&gt; {change.afterWeight ?? "已删除"}</small>
+                    ) : null}
+                    {change.beforeText !== change.afterText ? (
+                      <small>内容：{change.beforeText ?? "无"} -&gt; {change.afterText ?? "已删除"}</small>
+                    ) : null}
+                    {change.beforeKind !== change.afterKind ? (
+                      <small>类型：{change.beforeKind ?? "无"} -&gt; {change.afterKind ?? "已删除"}</small>
+                    ) : null}
+                  </div>
+                ))}
+                {!(trace.feedbackDecision.stateDeltas ?? []).length &&
+                !(trace.feedbackDecision.policyDeltas ?? []).length &&
+                !(trace.feedbackDecision.memoryCandidateIds ?? []).length &&
+                !(trace.feedbackDecision.memoryChanges ?? []).length ? (
                   <p>没有写入数值或记忆修改。</p>
                 ) : null}
               </TraceBlock>
@@ -909,12 +902,25 @@ function DeveloperTrace({ trace, profile }: { trace: NonNullable<ConversationMes
           </section>
         ) : null}
         {trace.emergenceDecision ? (
-          <section>
-            <strong>主动想起</strong>
-            <TraceBlock title={trace.emergenceDecision.kind}>
-              <p>{trace.emergenceDecision.whyNow}</p>
-              <RelatedMemories ids={trace.emergenceDecision.relatedMemoryIds} profile={profile} />
-            </TraceBlock>
+          <section className="cognition-flow">
+            <strong>浮现流程</strong>
+            <div className="flow-chain">
+              <TraceBlock title="1. 模型决定">
+                <p>{trace.emergenceDecision.shouldEmerge ? "决定主动浮现。" : "决定保持安静。"}</p>
+                <small>{trace.emergenceDecision.whyNow}</small>
+              </TraceBlock>
+              <TraceBlock title={`2. 选择记忆 · ${trace.emergenceDecision.driveSource}`}>
+                {trace.emergenceDecision.memoryId ? <small>memoryId：{trace.emergenceDecision.memoryId}</small> : null}
+                <RelatedMemories ids={trace.emergenceDecision.relatedMemoryIds} profile={profile} />
+                <small>主动程度：{trace.emergenceDecision.proactiveLevel ?? "未提供"}</small>
+              </TraceBlock>
+              <TraceBlock title="3. 外显回应">
+                <p>{trace.emergenceDecision.message ? `说出口：${trace.emergenceDecision.message}` : "这一步没有外显回复。"}</p>
+              </TraceBlock>
+              <TraceBlock title="4. 结构校验">
+                <TraceList items={trace.emergenceDecision.ruleTrace} />
+              </TraceBlock>
+            </div>
           </section>
         ) : null}
         {trace.harnessTrace?.length ? (
@@ -1001,6 +1007,19 @@ function feedbackDeltaItems(items: Array<{ key: string; before: number; after: n
   return items.map((item) => `${prefix}.${item.key}: ${item.before} -> ${item.after} (${item.delta > 0 ? "+" : ""}${item.delta})`);
 }
 
+function feedbackMemoryChangeTitle(change: {
+  targetType: "memory" | "episode";
+  operation: "updated" | "purged" | "unchanged";
+}) {
+  const target = change.targetType === "memory" ? "记忆" : "经历";
+  const operation = {
+    updated: "已更新",
+    purged: "已删除",
+    unchanged: "未改变"
+  }[change.operation];
+  return `${target}${operation}`;
+}
+
 function stageLabel(stage: string) {
   const labels: Record<string, string> = {
     attention: "注意",
@@ -1076,16 +1095,16 @@ function MemoryView(props: {
   const [query, setQuery] = useState("");
   const [editingId, setEditingId] = useState<string>();
   const [draft, setDraft] = useState("");
-  const memories = props.profile.longTermMemories.filter((memory) =>
-    `${memory.text} ${memory.kind} ${memory.tags.join(" ")}`.toLowerCase().includes(query.toLowerCase())
-  );
+  const memories = [...props.profile.longTermMemories]
+    .filter((memory) => `${memory.text} ${memory.kind} ${memory.tags.join(" ")}`.toLowerCase().includes(query.toLowerCase()))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const otherMemories = memories.filter((memory) => memory.kind !== "creature_self_memory");
 
   return (
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={History} title="Papo 记得的生活" />
-        <p className="muted">这里慢慢留下你们一起经历过的事。每条都可以被你改准，或者让 Papo 放下。</p>
+        <p className="muted">按时间放着 Papo 真正留下的回忆。点开一条，可以看原始来龙去脉或反馈。</p>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一找哪件事" />
         {otherMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
@@ -1117,7 +1136,27 @@ function MemoryView(props: {
                 }}
               >
                 <MessageCircle size={16} />
-                教我记准
+                改准
+              </button>
+              <button
+                onClick={() =>
+                  props.onFeedback("remember", memory.id, "这件事很重要，请提高它的权重，之后可以更自然地想起。", "text")
+                }
+              >
+                <Save size={16} />
+                很重要
+              </button>
+              <button
+                onClick={() =>
+                  props.onFeedback("remember", memory.id, "这件事之后可能需要提醒我，请先作为提醒意图记住。", "text")
+                }
+              >
+                <Lightbulb size={16} />
+                提醒我
+              </button>
+              <button onClick={() => props.onFeedback("forget", memory.id)}>
+                <RefreshCcw size={16} />
+                {memory.weight <= 0 ? "彻底忘掉" : "忘掉"}
               </button>
             </div>
             <MemoryFeedbackBox
@@ -1148,35 +1187,38 @@ function MemoryView(props: {
 
 function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTermMemories"][number]; profile: CreatureProfile }) {
   const sourceEpisode = memorySourceEpisode(memory, profile);
-  if (!sourceEpisode) {
-    return (
-      <div className="memory-main">
-        <div>
-          <span>Papo 记住</span>
-          <strong>{memoryResultLine(memory)}</strong>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="memory-main">
       <div>
-        <span>你当时说</span>
-        <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode))}</p>
+        <span>{new Date(memory.createdAt).toLocaleString("zh-CN")}</span>
+        <strong>{memoryResultLine(memory)}</strong>
       </div>
-      {episodePapoLine(sourceEpisode) ? (
-        <div>
-          <span>Papo 当时回你</span>
-          <p>{episodePapoLine(sourceEpisode)}</p>
+      <details className="memory-details">
+        <summary>详情</summary>
+        <div className="memory-detail-body">
+          {sourceEpisode ? (
+            <>
+              <div>
+                <span>你当时说</span>
+                <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode))}</p>
+              </div>
+              {episodePapoLine(sourceEpisode) ? (
+                <div>
+                  <span>Papo 当时回你</span>
+                  <p>{episodePapoLine(sourceEpisode)}</p>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+          {memory.consolidatedBecause ? (
+            <div>
+              <span>为什么留下</span>
+              <p>{visibleCreatureText(memory.consolidatedBecause)}</p>
+            </div>
+          ) : null}
         </div>
-      ) : null}
-      {memoryResultLine(memory) ? (
-        <div>
-          <span>后来记住</span>
-          <strong>{memoryResultLine(memory)}</strong>
-        </div>
-      ) : null}
+      </details>
     </div>
   );
 }
@@ -1188,62 +1230,51 @@ function MemoryFeedbackBox(props: {
 }) {
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackModality, setFeedbackModality] = useState<"text" | "audio_observation">("text");
-  const actions: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }> = [
-    { kind: "continue", label: "再想一会儿", icon: Lightbulb },
-    { kind: "not_now", label: "先安静点", icon: CircleOff },
-    { kind: "remember", label: "帮我记稳", icon: Save },
-    { kind: "forget", label: props.memory.weight <= 0 ? "这次彻底松开" : "帮我先放下", icon: RefreshCcw }
-  ];
-
-  function submit(kind: FeedbackKind) {
+  function submit() {
     const content = feedbackText.trim();
-    props.onFeedback(kind, props.memory.id, content || undefined, content ? feedbackModality : "button");
+    if (!content) return;
+    props.onFeedback("continue", props.memory.id, content, feedbackModality);
     setFeedbackText("");
     setFeedbackModality("text");
   }
 
   return (
-    <div className="feedback-input memory-feedback">
-      <div className="feedback-teach">
-        <strong>你想怎么补充</strong>
-        <span>可以补一句，让 Papo 下次更贴近你的意思。</span>
-      </div>
-      <textarea
-        value={feedbackText}
-        onChange={(event) => {
-          setFeedbackText(event.target.value);
-          setFeedbackModality("text");
-        }}
-        rows={2}
-        placeholder="告诉我：这件事哪里要记准、放轻，或下次怎么回应"
-      />
-      <label className="upload-button compact-upload">
-        <Mic size={16} />
-        说给我听
-        <input
-          type="file"
-          accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg"
-          onChange={async (event) => {
-            const file = event.currentTarget.files?.[0];
-            event.currentTarget.value = "";
-            if (!file) return;
-            const observation = await props.onObserveFeedbackAudio(file);
-            if (observation.trim()) {
-              setFeedbackText(observation.trim());
-              setFeedbackModality("audio_observation");
-            }
+    <details className="memory-feedback">
+      <summary>反馈</summary>
+      <div className="feedback-input">
+        <textarea
+          value={feedbackText}
+          onChange={(event) => {
+            setFeedbackText(event.target.value);
+            setFeedbackModality("text");
           }}
+          rows={2}
+          placeholder="告诉 Papo：哪里要记准、放轻，或下次怎么回应"
         />
-      </label>
-      <div className="feedback-row">
-        {actions.map((item) => (
-          <button key={item.kind} onClick={() => submit(item.kind)} aria-label={item.label}>
-            <item.icon size={16} />
-            {item.label}
-          </button>
-        ))}
+        <label className="upload-button compact-upload">
+          <Mic size={16} />
+          说给我听
+          <input
+            type="file"
+            accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg"
+            onChange={async (event) => {
+              const file = event.currentTarget.files?.[0];
+              event.currentTarget.value = "";
+              if (!file) return;
+              const observation = await props.onObserveFeedbackAudio(file);
+              if (observation.trim()) {
+                setFeedbackText(observation.trim());
+                setFeedbackModality("audio_observation");
+              }
+            }}
+          />
+        </label>
+        <button className="primary" onClick={submit} disabled={!feedbackText.trim()}>
+          <MessageCircle size={16} />
+          发送反馈
+        </button>
       </div>
-    </div>
+    </details>
   );
 }
 

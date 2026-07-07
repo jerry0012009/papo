@@ -292,14 +292,31 @@ export interface MessageCognitionTrace {
     responseAction?: FeedbackResponseAction;
     replyText?: string;
     memoryCandidateIds: string[];
+    memoryChanges: Array<{
+      targetId: string;
+      targetType: "memory" | "episode";
+      operation: "updated" | "purged" | "unchanged";
+      beforeText?: string;
+      afterText?: string;
+      beforeKind?: LongTermMemory["kind"];
+      afterKind?: LongTermMemory["kind"];
+      beforeWeight?: number;
+      afterWeight?: number;
+    }>;
     stateDeltas: NonNullable<FeedbackRecord["stateDeltas"]>;
     policyDeltas: NonNullable<FeedbackRecord["policyDeltas"]>;
   };
   emergenceDecision?: {
     emergenceId: string;
     kind: EmergenceRecord["kind"];
+    shouldEmerge: boolean;
+    driveSource: string;
     whyNow: string;
+    message: string;
+    memoryId?: string;
+    proactiveLevel?: string;
     relatedMemoryIds: string[];
+    ruleTrace: string[];
   };
 }
 
@@ -343,6 +360,7 @@ export interface EmergenceRecord {
   whyNow: string;
   relatedMemoryIds: string[];
   driveSource: string;
+  proactiveLevel?: "quiet" | "gentle" | "active";
   message: string;
   ruleTrace: string[];
 }

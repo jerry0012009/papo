@@ -491,7 +491,7 @@ select {
 
 .memory-main {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .memory-main div {
@@ -513,6 +513,38 @@ select {
 .memory-main strong {
   color: #1f2421;
   font-size: 0.95rem;
+}
+
+.memory-details,
+.memory-feedback {
+  display: grid;
+  gap: 8px;
+}
+
+.memory-details summary,
+.memory-feedback summary {
+  width: fit-content;
+  cursor: pointer;
+  color: #4f8b76;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.memory-detail-body {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(233, 243, 235, 0.62);
+  border: 1px solid rgba(79, 139, 118, 0.14);
+}
+
+.memory-feedback .feedback-input {
+  margin-top: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.76);
+  border: 1px solid rgba(31, 36, 33, 0.08);
 }
 
 .episode-card {
@@ -850,10 +882,6 @@ select {
 .episode-card h3 {
   font-size: 1rem;
   line-height: 1.45;
-}
-
-.home-episode-slot {
-  display: grid;
 }
 
 .episode-source {

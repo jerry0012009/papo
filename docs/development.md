@@ -55,7 +55,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Empty audio, silence, noise, and unclear speech are ordinary inputs for the model to ignore or use.
 - Photo input records upload time and available browser location so memory can later keep natural provenance.
 - Papo replies are model-written external behavior, not frontend templates.
-- Developer inspection belongs behind a small per-message disclosure control. It should show the full cognition chain for that reply: attention, action selection, visible action result, episode persistence, memory candidate handling, model stages, structural checks, and memory outcomes. It must not become the default creature-facing experience.
+- Developer inspection belongs behind a small per-message disclosure control. It should show the full cognition chain for that reply: attention, action selection, visible action result, episode persistence, memory candidate handling, feedback effects, emergence choice, model stages, structural checks, and memory outcomes. It must not become the default creature-facing experience.
 - Memory cards default to what the user shared and what the model decided to remember.
 - Feedback text/audio/buttons are all interaction input and may trigger learning, memory updates, or new dialogue.
 
@@ -113,7 +113,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - If the model chooses `observe` or `quiet`, it must not provide a visible reply; the API may persist the user's input without adding a Papo reply.
 - Recent conversation, memories, and feedback are passed into model prompts through `model-context.ts`.
 - Development planning text must not be used as creature interaction material.
-- New Papo messages persist `cognitionTrace` with the real model stages, attention/action/memory decisions, visible reply, persistence outcomes, and structural rule checks that produced that visible reply. This supports developer audit without proving the mechanism in the main UI.
+- New Papo messages persist `cognitionTrace` with the real model stages, attention/action/memory decisions, feedback effects, emergence choices, visible reply, persistence outcomes, and structural rule checks that produced that visible reply. This supports developer audit without proving the mechanism in the main UI.
 
 ## Verification Checklist
 

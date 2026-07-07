@@ -36,11 +36,20 @@ const policyDeltaSchema = z
 const optionalText = (max: number) =>
   z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
 const optionalTextArray = (maxItems: number, maxText: number) =>
-  z
-    .array(z.preprocess((value) => cleanOptionalText(value, maxText), z.string().optional()))
-    .transform((values) => values.filter((value): value is string => Boolean(value)))
-    .pipe(z.array(z.string().min(1).max(maxText)).max(maxItems))
-    .optional();
+  z.preprocess(
+    nullToUndefined,
+    z
+      .array(z.preprocess((value) => cleanOptionalText(value, maxText), z.string().optional()))
+      .transform((values) => values.filter((value): value is string => Boolean(value)))
+      .pipe(z.array(z.string().min(1).max(maxText)).max(maxItems))
+      .optional()
+  );
+
+const optionalObject = <T extends z.ZodTypeAny>(schema: T) => z.preprocess(nullToUndefined, schema.optional());
+
+function nullToUndefined(value: unknown) {
+  return value === null ? undefined : value;
+}
 
 function cleanOptionalText(value: unknown, max: number) {
   if (value === null) return undefined;
@@ -52,20 +61,19 @@ function cleanOptionalText(value: unknown, max: number) {
 const semanticFeedbackSchema = z
   .object({
     responseAction: z.enum(["acknowledge", "ask_follow_up", "quiet", "note_memory"]).optional(),
-    stateDeltas: stateDeltaSchema.optional(),
-    policyDeltas: policyDeltaSchema.optional(),
+    stateDeltas: optionalObject(stateDeltaSchema),
+    policyDeltas: optionalObject(policyDeltaSchema),
     memoryWeightDelta: z.number().min(-30).max(30).optional(),
     learningNote: optionalText(260),
     followUpText: optionalText(180),
     replyText: optionalText(260),
     effect: optionalText(260),
-    creatureSelfMemory: z
+    creatureSelfMemory: optionalObject(z
       .object({
         text: optionalText(420),
         tags: optionalTextArray(8, 40)
-      })
-      .optional(),
-    memoryOperation: z
+      })),
+    memoryOperation: optionalObject(z
       .object({
         type: z.enum(["none", "promote_episode", "update_memory", "dismiss_target"]),
         text: optionalText(650),
@@ -73,9 +81,8 @@ const semanticFeedbackSchema = z
         tags: optionalTextArray(10, 40),
         consolidatedBecause: optionalText(360),
         weight: z.number().min(0).max(100).optional()
-      })
-      .optional(),
-    trace: z.array(z.string().min(1).max(160)).max(8).optional()
+      })),
+    trace: z.preprocess(nullToUndefined, z.array(z.string().min(1).max(160)).max(8).optional())
   })
   .refine(
     (value) =>
@@ -396,6 +403,7 @@ memoryOperation 使用口径：
 - update_memory：用户纠正、补充或改写某条长期记忆。可以给 text、kind、tags、weight。
 - dismiss_target：用户通过文本/语音表达这件事不该留、不要再提、放下它。显式 forget 按钮已经会先执行一次存储层放下；你可以继续用 dismiss_target 表示语义上也应该放下。
 - none：反馈只是在教 Papo 以后怎么回应，或者只是轻微鼓励/安抚，不需要改记忆。
+- 即使 feedback.inputText 为空，feedback.kind 也代表用户的明确按钮反馈。kind=forget 表示用户要求放下目标；kind=remember 表示用户希望这件事更重要或更稳地留下。
 
 你不能：
 - 使用未列出的字段。

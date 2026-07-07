@@ -222,12 +222,12 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const body = feedbackSchema.parse(req.body);
-      const targetMemoryBefore = body.targetId ? profile.longTermMemories.find((memory) => memory.id === body.targetId) : undefined;
+      const targetBefore = feedbackTargetSnapshot(profile, body.targetId);
       const feedback = applyFeedback(profile, body);
       const beforeSemanticIds = semanticRecordIds(profile);
       await semanticReflectFeedback(profile, feedback, provider);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
-      const relatedMemoryIds = feedbackRelatedMemoryIds(profile, body.targetId, targetMemoryBefore?.id);
+      const relatedMemoryIds = feedbackRelatedMemoryIds(profile, body.targetId, targetBefore?.type === "memory" ? targetBefore.id : undefined);
       appendInputMessage(profile, {
         channel: "feedback",
         role: "user",
@@ -243,7 +243,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         text: feedback.replyText,
         sourceId: feedback.id,
         relatedMemoryIds,
-        cognitionTrace: feedbackCognitionTrace(feedback, provider, modelRuns)
+        cognitionTrace: feedbackCognitionTrace(feedback, provider, modelRuns, profile, targetBefore)
       });
       await store.saveProfile(profile);
       res.json({ profile, feedback });
@@ -258,6 +258,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const body = updateMemorySchema.parse(req.body);
       const previousMemory = profile.longTermMemories.find((item) => item.id === req.params.memoryId);
       if (!previousMemory) throw new HttpError(404, "Memory not found");
+      const targetBefore = feedbackTargetSnapshot(profile, req.params.memoryId);
       const at = new Date().toISOString();
       const feedback = applyFeedback(profile, {
         kind: "continue",
@@ -286,7 +287,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         text: feedback.replyText,
         sourceId: `${memory.id}:edit`,
         relatedMemoryIds: [memory.id],
-        cognitionTrace: feedbackCognitionTrace(feedback, provider, modelRuns),
+        cognitionTrace: feedbackCognitionTrace(feedback, provider, modelRuns, profile, targetBefore),
         at
       });
       await store.saveProfile(profile);
@@ -412,7 +413,9 @@ function captureCognitionTrace(
 function feedbackCognitionTrace(
   feedback: FeedbackRecord,
   provider: ModelProvider,
-  modelRuns: SemanticBrainRecord[]
+  modelRuns: SemanticBrainRecord[],
+  profile: CreatureProfile,
+  targetBefore?: FeedbackTargetSnapshot
 ): MessageCognitionTrace {
   return {
     at: new Date().toISOString(),
@@ -431,10 +434,67 @@ function feedbackCognitionTrace(
       responseAction: feedback.responseAction,
       replyText: feedback.replyText,
       memoryCandidateIds: feedback.memoryCandidateIds ?? [],
+      memoryChanges: feedbackMemoryChanges(profile, targetBefore),
       stateDeltas: feedback.stateDeltas ?? [],
       policyDeltas: feedback.policyDeltas ?? []
     }
   };
+}
+
+interface FeedbackTargetSnapshot {
+  id: string;
+  type: "memory" | "episode";
+  text?: string;
+  kind?: CreatureProfile["longTermMemories"][number]["kind"];
+  weight?: number;
+}
+
+function feedbackTargetSnapshot(profile: CreatureProfile, targetId?: string): FeedbackTargetSnapshot | undefined {
+  if (!targetId) return undefined;
+  const memory = profile.longTermMemories.find((item) => item.id === targetId);
+  if (memory) {
+    return { id: memory.id, type: "memory", text: memory.text, kind: memory.kind, weight: memory.weight };
+  }
+  const episode = profile.episodes.find((item) => item.id === targetId);
+  if (episode) {
+    return { id: episode.id, type: "episode", text: episode.inputSummary, weight: episode.weight };
+  }
+  return undefined;
+}
+
+function feedbackMemoryChanges(profile: CreatureProfile, before?: FeedbackTargetSnapshot): NonNullable<MessageCognitionTrace["feedbackDecision"]>["memoryChanges"] {
+  if (!before) return [];
+  const afterMemory = before.type === "memory" ? profile.longTermMemories.find((item) => item.id === before.id) : undefined;
+  const afterEpisode = before.type === "episode" ? profile.episodes.find((item) => item.id === before.id) : undefined;
+  const after = afterMemory
+    ? { id: afterMemory.id, type: "memory" as const, text: afterMemory.text, kind: afterMemory.kind, weight: afterMemory.weight }
+    : afterEpisode
+      ? { id: afterEpisode.id, type: "episode" as const, text: afterEpisode.inputSummary, weight: afterEpisode.weight }
+      : undefined;
+
+  if (!after) {
+    return [{
+      targetId: before.id,
+      targetType: before.type,
+      operation: "purged",
+      beforeText: before.text,
+      beforeKind: before.kind,
+      beforeWeight: before.weight
+    }];
+  }
+
+  const changed = before.text !== after.text || before.kind !== after.kind || before.weight !== after.weight;
+  return [{
+    targetId: before.id,
+    targetType: before.type,
+    operation: changed ? "updated" : "unchanged",
+    beforeText: before.text,
+    afterText: after.text,
+    beforeKind: before.kind,
+    afterKind: after.kind,
+    beforeWeight: before.weight,
+    afterWeight: after.weight
+  }];
 }
 
 function emergenceCognitionTrace(
@@ -452,8 +512,14 @@ function emergenceCognitionTrace(
     emergenceDecision: {
       emergenceId: emergence.id,
       kind: emergence.kind,
+      shouldEmerge: Boolean(emergence.text?.trim()),
+      driveSource: emergence.driveSource,
       whyNow: emergence.whyNow,
-      relatedMemoryIds: emergence.relatedMemoryIds
+      message: emergence.text,
+      memoryId: emergence.memoryId,
+      proactiveLevel: emergence.proactiveLevel,
+      relatedMemoryIds: emergence.relatedMemoryIds,
+      ruleTrace: emergence.ruleTrace
     }
   };
 }

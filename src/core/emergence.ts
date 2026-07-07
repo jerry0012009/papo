@@ -51,6 +51,7 @@ export async function semanticDecideEmergence(profile: CreatureProfile, provider
       whyNow: safeCreatureText(parsed.data.whyNow) ?? "",
       relatedMemoryIds: [],
       driveSource: parsed.data.driveSource ?? "rhythm",
+      proactiveLevel: parsed.data.proactiveLevel ?? "quiet",
       message: "",
       text: "",
       ruleTrace: ["llm: chose quiet emergence", "guardrail: memory=none"]
@@ -95,6 +96,7 @@ function createSemanticEmergenceRecord(
     whyNow,
     relatedMemoryIds: [memory.id],
     driveSource: suggestion.driveSource ?? "curiosity",
+    proactiveLevel: suggestion.proactiveLevel ?? "gentle",
     message,
     ruleTrace: [
       "llm: selected active emergence",
@@ -143,6 +145,7 @@ function buildSemanticEmergencePrompt(profile: CreatureProfile, now: string) {
 
 candidate_memories 为空，所以没有任何可合法提起的长期记忆。
 你必须返回一个 JSON object，不要输出解释性文字、Markdown 或空内容。
+JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 因为没有可用记忆，必须返回 shouldEmerge=false。
 
 返回格式：
