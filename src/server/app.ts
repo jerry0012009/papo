@@ -58,7 +58,7 @@ const audioObservationSchema = z.object({
 });
 
 const feedbackSchema = z.object({
-  kind: z.enum(["understood", "continue", "not_now", "remember", "important", "remind", "forget"]),
+  kind: z.enum(["understood", "continue", "not_now", "remember", "important", "remind", "correct", "forget"]),
   targetId: z.string().optional(),
   content: z.string().max(1200).optional(),
   modality: z.enum(["text", "audio_observation", "button"]).optional()
@@ -261,9 +261,9 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const targetBefore = feedbackTargetSnapshot(profile, req.params.memoryId);
       const at = new Date().toISOString();
       const feedback = applyFeedback(profile, {
-        kind: "continue",
+        kind: "correct",
         targetId: req.params.memoryId,
-        content: `帮我记准：${body.text}`,
+        content: body.text,
         modality: "text",
         now: at
       });
@@ -275,7 +275,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       appendInputMessage(profile, {
         channel: "feedback",
         role: "user",
-        text: feedback.inputText ?? `帮我记准：${body.text}`,
+        text: feedback.inputText ?? body.text,
         sourceId: `${memory.id}:edit:input`,
         modality: "text",
         observedAt: at,
@@ -347,6 +347,7 @@ function feedbackInputText(kind: string, content?: string) {
     remember: "记住",
     important: "重要",
     remind: "提醒",
+    correct: "改准",
     forget: "放下"
   }[kind] ?? kind;
   const note = content?.trim();

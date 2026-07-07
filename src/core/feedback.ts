@@ -145,7 +145,7 @@ export async function semanticReflectFeedback(
   if (!parsed.success) {
     throw new Error(`invalid feedback JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   }
-  assertSemanticFeedbackVisibleOutput(parsed.data);
+  assertSemanticFeedbackVisibleOutput(profile, feedback, parsed.data);
   applySemanticFeedbackSuggestion(profile, feedback, parsed.data);
   recordFeedbackSemanticRun(profile, provider, "applied", "llm feedback reflection applied");
   return feedback;
@@ -217,7 +217,7 @@ function applySemanticFeedbackSuggestion(profile: CreatureProfile, feedback: Fee
   if (!feedback.replyText) feedback.replyText = "";
 }
 
-function assertSemanticFeedbackVisibleOutput(suggestion: SemanticFeedbackSuggestion) {
+function assertSemanticFeedbackVisibleOutput(profile: CreatureProfile, feedback: FeedbackRecord, suggestion: SemanticFeedbackSuggestion) {
   const learningNote = safeCreatureText(suggestion.learningNote);
   if (!learningNote) throw new Error("feedback model did not provide a usable learning note");
   const effect = safeCreatureText(suggestion.effect);
@@ -225,6 +225,20 @@ function assertSemanticFeedbackVisibleOutput(suggestion: SemanticFeedbackSuggest
   if (suggestion.responseAction && suggestion.responseAction !== "quiet") {
     const replyText = safeCreatureText(suggestion.replyText);
     if (!replyText) throw new Error("feedback model selected a visible feedback response without replyText");
+  }
+  if (feedback.kind === "correct" && feedback.targetId && feedback.inputText?.trim()) {
+    const targetLongTerm = profile.longTermMemories.find((item) => item.id === feedback.targetId);
+    const targetEpisode = profile.episodes.find((item) => item.id === feedback.targetId);
+    const operation = suggestion.memoryOperation;
+    if (targetLongTerm && suggestion.memoryOperation?.type !== "update_memory") {
+      throw new Error("feedback model received a memory correction without update_memory");
+    }
+    if (targetLongTerm && !safeCreatureText(operation?.text)) {
+      throw new Error("feedback model received a memory correction without corrected memory text");
+    }
+    if (targetEpisode && operation?.type !== "promote_episode") {
+      throw new Error("feedback model received an episode correction without promote_episode");
+    }
   }
 }
 
@@ -407,6 +421,7 @@ memoryOperation 使用口径：
   - kind=remember 表示用户希望这件事被记住或从 episode 进入长期记忆。
   - kind=important 表示用户认为这条记忆更重要，通常应提高目标权重，必要时调整记忆文字或标签。
   - kind=remind 表示用户希望以后能被这件事提醒或回到这件事上，通常应考虑 future_review、open_question、标签或 consolidatedBecause 的调整；不要编造具体提醒时间。
+  - kind=correct 表示用户正在把目标记忆或经历改准。target.type="memory" 时必须使用 memoryOperation.update_memory，并把用户给出的修正内容整理成新的记忆文本；target.type="episode" 时必须使用 promote_episode。
   - kind=forget 表示用户要求放下目标。
 - 当前系统还没有定时通知调度器。kind=remind 的 replyText 不能承诺“以后会提醒你”“到时通知你”，只能说 Papo 会把这件事放得更靠前、之后更容易想起或一起回到这件事。
 

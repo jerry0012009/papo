@@ -19,7 +19,7 @@ export interface ActionResult {
   items?: string[];
 }
 
-export type FeedbackKind = "understood" | "continue" | "not_now" | "remember" | "important" | "remind" | "forget";
+export type FeedbackKind = "understood" | "continue" | "not_now" | "remember" | "important" | "remind" | "correct" | "forget";
 export type FeedbackResponseAction = "acknowledge" | "ask_follow_up" | "quiet" | "note_memory";
 export type SegmentKind = "text" | "image_summary" | "audio_observation";
 export type ProviderKind = "mimo" | "openrouter" | "generic";

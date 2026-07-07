@@ -1032,6 +1032,7 @@ function feedbackKindLabel(kind: string) {
     remember: "用户要求记住",
     important: "用户标记这件事很重要",
     remind: "用户希望以后提醒",
+    correct: "用户修正这条记忆",
     forget: "用户要求放下"
   };
   return labels[kind] ?? kind;
