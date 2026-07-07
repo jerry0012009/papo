@@ -1758,7 +1758,7 @@ function EmergenceCard({ emergence }: { emergence: EmergenceSurface }) {
   const flowSteps = [
     emergence.whyNow ? { label: "为什么这时", text: visibleCreatureText(emergence.whyNow) } : undefined,
     emergence.driveSource ? { label: "什么带回来的", text: emergenceDriveText(emergence.driveSource) } : undefined,
-    { label: "连到什么", text: hasMemory ? "这次连着一件已经记住的事。" : "这次没有拉起具体旧事，只是安静等你继续说。" }
+    { label: "连到什么", text: hasMemory ? "这次连着一件已经记住的事。" : "这次没有连到已经记住的事，只是安静等你继续说。" }
   ].filter(Boolean) as { label: string; text?: string }[];
 
   return (

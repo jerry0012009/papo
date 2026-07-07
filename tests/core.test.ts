@@ -340,8 +340,9 @@ describe("creature core", () => {
     expect(emergence.relatedMemoryIds).toEqual([]);
     expect(emergence.memoryId).toBeUndefined();
     expect(emergence.text).toContain("我安静了一下");
-    expect(emergence.text).toContain("真的和你一起经历过的事");
+    expect(emergence.text).toContain("先只是陪在这里");
     expect(emergence.text).toContain("等你继续说");
+    expect(emergence.text).not.toMatch(/足够稳定|真实内容|真的和你一起经历过/);
     expect(emergence.text).not.toMatch(/耳朵留给|抱住|叼|情景记忆/);
     expect(emergence.text).not.toContain("所以我想起了");
     expect(emergence.text).not.toMatch(/不装作|装成|假装|旧记忆|内在倾向|我浮现的是|旧事/);

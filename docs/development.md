@@ -439,6 +439,7 @@ Verified:
 - Demo contrast should show the two Papos' actual visible replies to the same input, not only a prose summary. The point is to let a viewer see that feedback changed the creature's behavior without reading policy numbers or action enums.
 - Demo contrast cards should also show the listening style each Papo learned from feedback, preferably from feedback-shaped self-memory. The viewer should see how the creature was raised, not infer it from configuration or labels.
 - Active emergence on Home defaults to the surfaced thought only. Why-now, drive source, and memory linkage remain available in expandable details so the product preserves auditability without making Papo speak its cognitive trace.
+- Active emergence with no related memory should read as quiet presence, not self-audit. Avoid visible phrases such as "足够稳定", "真实内容", or "真的和你一起经历过"; prove honesty with empty related memory ids and concise waiting behavior.
 - Core tests protect memory candidates and consolidation reasons from internal developer wording.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:

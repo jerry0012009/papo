@@ -140,8 +140,8 @@ describe("App", () => {
           profile: profileFixture(),
           emergence: {
             id: "emergence-empty",
-            text: "我安静了一下，还没有足够稳定、真的和你一起经历过的事可以自己想起。我先等你继续说。",
-            whyNow: "我有点想继续想，但还没有足够稳定的真实内容。",
+            text: "我安静了一下，先只是陪在这里。等你继续说的时候，我会认真接住新的事。",
+            whyNow: "我有点想继续想。现在没有连到已经记住的事，所以先安静等你继续说。",
             driveSource: "curiosity",
             relatedMemoryIds: [],
             ruleTrace: ["memory=none"]
@@ -242,8 +242,9 @@ describe("App", () => {
     expect(screen.getByText("文字、照片或声音会留在同一次对话里，让 Papo 接着回应。")).toBeInTheDocument();
     await userEvent.click(screen.getByLabelText("问问 Papo 想到了什么"));
     expect(await screen.findByText("Papo 安静了一下")).toBeInTheDocument();
-    expect(screen.getByText(/真的和你一起经历过的事/)).toBeInTheDocument();
-    const emergenceReason = screen.getByText("我有点想继续想，但还没有足够稳定的真实内容。");
+    expect(screen.getByText(/先只是陪在这里/)).toBeInTheDocument();
+    expect(screen.queryByText(/足够稳定|真的和你一起经历过|真实内容/)).not.toBeInTheDocument();
+    const emergenceReason = screen.getByText("我有点想继续想。现在没有连到已经记住的事，所以先安静等你继续说。");
     expect(screen.getByText("看看为什么这时想起")).toBeInTheDocument();
     expect(emergenceReason).not.toBeVisible();
     await userEvent.click(screen.getByText("看看为什么这时想起"));

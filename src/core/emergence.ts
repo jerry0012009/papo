@@ -112,10 +112,10 @@ function buildRecord(input: {
       id: makeId("emergence"),
       at: input.now,
       kind: input.kind,
-      whyNow: `${input.whyNow} 但我还没有和你经历过足够稳定的真实内容，所以这次先等你继续说。`,
+      whyNow: `${input.whyNow} 现在没有连到已经记住的事，所以先安静等你继续说。`,
       relatedMemoryIds: [],
       driveSource: input.driveSource,
-      message: "我安静了一下，还没有足够稳定、真的和你一起经历过的事可以自己想起。我先等你继续说，等真的有值得记住的事，再在合适的时候想起来。",
+      message: "我安静了一下，先只是陪在这里。等你继续说的时候，我会认真接住新的事。",
       ruleTrace: [`kind=${input.kind}`, `drive=${input.driveSource}`, "memory=none", "shared_memory=none"]
     };
   }
