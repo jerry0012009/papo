@@ -62,7 +62,8 @@ export function handleCuriousStream(
     .filter((segment) => segment.content.trim().length > 0);
 
   const attentionBudget = deriveAttentionBudget(profile);
-  const candidates = prepared.map((segment) => ({
+  const intervalSegments = mergeSegmentsByInterval(prepared, now);
+  const candidates = intervalSegments.map((segment) => ({
     segment,
     score: scoreSegment(profile, segment, { position: segment.position })
   }));
@@ -207,6 +208,29 @@ export function composeStreamSummary(events: AttentionEvent[], session: CuriousS
 
 function buildNoticed(text: string): string {
   return `candidate_input: ${summarizeText(text, 88)}`;
+}
+
+function mergeSegmentsByInterval(segments: StreamSegment[], now: string): StreamSegment[] {
+  const groups = new Map<string, StreamSegment[]>();
+  for (const segment of segments) {
+    const key = segment.batchId ?? segment.id;
+    groups.set(key, [...(groups.get(key) ?? []), segment]);
+  }
+
+  return [...groups.entries()].map(([batchId, items], index) => {
+    if (items.length === 1) return items[0];
+    const first = items[0];
+    return {
+      id: `interval-${batchId}`,
+      kind: "text",
+      label: "这 30 秒",
+      content: items.map((item) => `${item.label}：${item.content.trim()}`).join("\n"),
+      position: index + 1,
+      observedAt: first.observedAt ?? now,
+      batchId,
+      location: items.find((item) => item.location)?.location
+    };
+  });
 }
 
 function contentWithObservationContext(segment: StreamSegment) {
