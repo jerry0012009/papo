@@ -1253,10 +1253,6 @@ function DeveloperTraceBody({ trace, sensingTraces, profile }: { trace?: Convers
   const allSensingTraces = uniqueSensingTraces([...(sensingTraces ?? []), ...(trace?.sensingTraces ?? [])]);
   return (
       <div className="developer-trace-body">
-        <section>
-          <strong>状态与性格快照</strong>
-          <StatePolicySnapshot profile={profile} />
-        </section>
         {allSensingTraces.length ? (
           <section className="cognition-flow">
             <strong>感知流程</strong>
