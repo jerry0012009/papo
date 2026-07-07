@@ -92,7 +92,8 @@ export function App() {
   const [error, setError] = useState<string>();
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const pendingAudioSlicesRef = useRef<AudioSliceMeta[]>([]);
+  const audioRecorderChunksRef = useRef<Blob[]>([]);
+  const activeAudioSliceMetaRef = useRef<AudioSliceMeta | undefined>(undefined);
   const audioObservationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const liveCaptureQueueRef = useRef<Promise<void>>(Promise.resolve());
   const liveBatchBuffersRef = useRef<Map<string, LiveBatchBuffer>>(new Map());
@@ -306,7 +307,8 @@ export function App() {
     }
 
     mediaStreamRef.current = stream;
-    pendingAudioSlicesRef.current = [];
+    audioRecorderChunksRef.current = [];
+    activeAudioSliceMetaRef.current = undefined;
     audioObservationQueueRef.current = Promise.resolve();
     liveCaptureQueueRef.current = Promise.resolve();
     clearLiveBatchBuffers();
@@ -320,22 +322,7 @@ export function App() {
     if (Recorder) {
       try {
         const mimeType = preferredAudioMimeType(Recorder);
-        const recorder = new Recorder(stream, mimeType ? { mimeType } : undefined);
-        recorder.ondataavailable = (event) => {
-          const meta = pendingAudioSlicesRef.current.shift();
-          if (!meta && !listeningStartedAtRef.current) return;
-          const sliceMeta = meta ?? nextAudioSliceMeta();
-          if (event.data.size > 0) {
-            enqueueAudioObservationBlob(event.data, sliceMeta);
-          } else {
-            markLiveBatchAudioSettled(sliceMeta.batchId);
-          }
-        };
-        recorder.onerror = () => {
-          setError("这次听到一半断开了。已经整理出来的内容会继续留在这里。");
-        };
-        mediaRecorderRef.current = recorder;
-        recorder.start();
+        startAudioRecorder(stream, Recorder, mimeType);
       } catch {
         stopMediaCapture();
         setListening(false);
@@ -353,6 +340,41 @@ export function App() {
       requestAudioSlice(false);
     }, LIVE_BATCH_MS);
     stopTimerRef.current = window.setTimeout(() => stopListening(), LIVE_LISTENING_MAX_MS);
+  }
+
+  function startAudioRecorder(stream: MediaStream, Recorder: typeof MediaRecorder, mimeType: string) {
+    if (!listeningStartedAtRef.current) return;
+    audioRecorderChunksRef.current = [];
+    const recorder = new Recorder(stream, mimeType ? { mimeType } : undefined);
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) audioRecorderChunksRef.current.push(event.data);
+    };
+    recorder.onstop = () => {
+      const meta = activeAudioSliceMetaRef.current;
+      activeAudioSliceMetaRef.current = undefined;
+      const chunks = audioRecorderChunksRef.current;
+      audioRecorderChunksRef.current = [];
+      if (meta) {
+        const totalSize = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
+        if (totalSize > 0) {
+          enqueueAudioObservationBlob(new Blob(chunks, { type: recorder.mimeType || mimeType || chunks[0]?.type || "audio/webm" }), meta);
+        } else {
+          markLiveBatchAudioSettled(meta.batchId);
+        }
+      }
+      if (shouldStartNextAudioRecorder()) startAudioRecorder(stream, Recorder, mimeType);
+    };
+    recorder.onerror = () => {
+      setError("这次听到一半断开了。已经整理出来的内容会继续留在这里。");
+    };
+    mediaRecorderRef.current = recorder;
+    recorder.start();
+  }
+
+  function shouldStartNextAudioRecorder() {
+    const startedAt = listeningStartedAtRef.current;
+    const stream = mediaStreamRef.current;
+    return Boolean(startedAt && stream?.active && Date.now() - startedAt < LIVE_LISTENING_MAX_MS);
   }
 
   function stopListening() {
@@ -376,10 +398,10 @@ export function App() {
     if (force && shouldSuppressForcedAudioSlice(now, lastAudioSliceRequestAtRef.current)) return;
     lastAudioSliceRequestAtRef.current = now;
     const meta = nextAudioSliceMeta();
-    pendingAudioSlicesRef.current.push(meta);
+    activeAudioSliceMetaRef.current = meta;
     markLiveBatchClosed(meta.batchId);
     try {
-      recorder.requestData();
+      recorder.stop();
     } catch (caught) {
       if (force) setError(errorMessage(caught));
     }
@@ -551,6 +573,7 @@ export function App() {
       }
     }
     mediaRecorderRef.current = null;
+    if (!activeAudioSliceMetaRef.current) audioRecorderChunksRef.current = [];
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
     mediaStreamRef.current = null;
   }
@@ -961,13 +984,7 @@ function DeveloperTraceBody({ trace, sensingTraces, profile }: { trace?: Convers
             <strong>感知流程</strong>
             <div className="flow-chain">
               {allSensingTraces.map((item, index) => (
-                <TraceBlock title={`${index + 1}. ${item.modality === "audio" ? "声音感知" : "图片感知"} · ${sensingStatusLabel(item.status)}`} key={`${item.at}-${item.label}-${index}`}>
-                  <small>{item.label}</small>
-                  <p>{item.observation ? `模型读到：${item.observation}` : "模型没有读到可进入注意流程的生活信息。"}</p>
-                  <p>{item.decision}</p>
-                  <small>{item.provider}{item.model ? ` · ${item.model}` : ""}{item.route ? ` · ${item.route}` : ""}</small>
-                  <TraceList items={item.ruleTrace} />
-                </TraceBlock>
+                <SensingTraceBlock item={item} index={index} trace={trace} key={`${item.at}-${item.label}-${index}`} />
               ))}
             </div>
           </section>
@@ -1137,6 +1154,57 @@ function sensingStatusLabel(status: SensingTrace["status"]) {
     unreadable: "没有继续处理"
   };
   return labels[status];
+}
+
+function SensingTraceBlock({ item, index, trace }: { item: SensingTrace; index: number; trace?: ConversationMessage["cognitionTrace"] }) {
+  const linkedEvents = linkedSensingEvents(item, trace);
+  const attentionRun = trace?.modelRuns.find((run) => (run.stage ?? run.source) === "attention");
+  return (
+    <TraceBlock title={`${index + 1}. ${item.modality === "audio" ? "声音感知" : "图片感知"} · ${sensingStatusLabel(item.status)}`}>
+      <small>{item.label}</small>
+      <small>感知模型：{item.provider}{item.model ? ` · ${item.model}` : ""}{item.route ? ` · ${item.route}` : ""}</small>
+      <p>{item.observation ? `感知输出：${item.observation}` : "感知输出：没有可用生活信息。"}</p>
+      <p>流程路由：{sensingRouteText(item)}</p>
+      {linkedEvents.length ? (
+        linkedEvents.map((event) => (
+          <div className="trace-memory-result" key={event.eventId}>
+            <b>注意 LLM：继续处理</b>
+            <p>{event.noticed}</p>
+            <small>{event.reason}</small>
+          </div>
+        ))
+      ) : item.status === "content" ? (
+        <div className="trace-memory-result">
+          <b>{attentionRun ? "注意 LLM：未选为后续事件" : "注意 LLM：尚未记录"}</b>
+          <small>{attentionRun ? `${attentionRun.status} · ${attentionRun.message}` : "这条消息只记录了感知结果，没有随消息保存后续认知 trace。"}</small>
+        </div>
+      ) : (
+        <div className="trace-memory-result">
+          <b>注意 LLM：未调用</b>
+          <small>流程规则只结算这段输入，不把空白、噪音或不可读音频伪造成事件。</small>
+        </div>
+      )}
+      <TraceList items={item.ruleTrace} />
+    </TraceBlock>
+  );
+}
+
+function sensingRouteText(item: SensingTrace) {
+  if (item.status === "content") {
+    return `${item.decision} 如果这段所在批次提交成功，下一步由注意 LLM 判断是否继续进入行动和记忆。`;
+  }
+  if (item.status === "unreadable") {
+    return "音频模型没有返回可读内容；流程规则只把这段音频标记为已结算，不触发注意、行动或记忆。";
+  }
+  return "音频/图片模型没有返回可用生活信息；流程规则只结算这段输入，不触发注意、行动或记忆。";
+}
+
+function linkedSensingEvents(item: SensingTrace, trace?: ConversationMessage["cognitionTrace"]) {
+  if (!trace?.eventDecisions?.length || !item.observation) return [];
+  return trace.eventDecisions.filter((event) => {
+    const source = `${event.sourceLabel}\n${event.sourceText}`;
+    return source.includes(item.label) || source.includes(item.observation ?? "");
+  });
 }
 
 function uniqueSensingTraces(items: SensingTrace[]) {
@@ -1331,8 +1399,8 @@ function MemoryView(props: {
   const [query, setQuery] = useState("");
   const [editingId, setEditingId] = useState<string>();
   const [draft, setDraft] = useState("");
-  const memories = [...props.profile.longTermMemories]
-    .filter((memory) => `${memory.text} ${memory.kind} ${memory.tags.join(" ")}`.toLowerCase().includes(query.toLowerCase()))
+  const memories = [...(props.profile.longTermMemories ?? [])]
+    .filter((memory) => `${memory.text} ${memory.kind} ${(memory.tags ?? []).join(" ")}`.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const otherMemories = memories.filter((memory) => memory.kind !== "creature_self_memory");
 
@@ -1461,7 +1529,7 @@ function memoryTraceMessages(memory: CreatureProfile["longTermMemories"][number]
       if (!trace) return false;
       if (message.relatedMemoryIds?.includes(memory.id)) return true;
       if (trace.feedbackDecision?.targetId === memory.id) return true;
-      if (trace.feedbackDecision?.memoryChanges.some((change) => change.targetId === memory.id)) return true;
+      if (trace.feedbackDecision?.memoryChanges?.some((change) => change.targetId === memory.id)) return true;
       if (sourceEpisodeId && trace.memoryDecisions?.some((decision) => decision.sourceEpisodeId === sourceEpisodeId)) return true;
       return false;
     })

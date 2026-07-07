@@ -35,6 +35,8 @@ const policyDeltaSchema = z
 
 const optionalText = (max: number) =>
   z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
+const requiredText = (max: number) =>
+  z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).max(max));
 const optionalTextArray = (maxItems: number, maxText: number) =>
   z.preprocess(
     nullToUndefined,
@@ -64,10 +66,10 @@ const semanticFeedbackSchema = z
     stateDeltas: optionalObject(stateDeltaSchema),
     policyDeltas: optionalObject(policyDeltaSchema),
     memoryWeightDelta: z.number().min(-30).max(30).optional(),
-    learningNote: optionalText(260),
+    learningNote: requiredText(260),
     followUpText: optionalText(180),
     replyText: optionalText(260),
-    effect: optionalText(260),
+    effect: requiredText(260),
     creatureSelfMemory: optionalObject(z
       .object({
         text: optionalText(420),
@@ -417,10 +419,12 @@ JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 - policyDeltas：preferDepth, preferProactivity, privacySensitivity, saveThreshold, askThreshold, recallTendency, quietTendency，每项 -15 到 15。
 - memoryWeightDelta：目标 episode 或 memory 的权重变化，-30 到 30。
 - memoryOperation：none, promote_episode, update_memory, dismiss_target。
+- memoryOperation.kind 只能使用这些内部枚举 ID：user_preference, long_theme, creature_self_memory, safety_rule, future_review, relationship, habit, open_question。不要输出 preference、preference_memory、preference_user 等别名。
 - responseAction：acknowledge, ask_follow_up, quiet, note_memory。
-- learningNote：内部学习记录，不给普通用户直接展示；不要写成前端说明或字段解释。
+- learningNote：必填。内部学习记录，不给普通用户直接展示；不要写成前端说明或字段解释。
 - followUpText：内部追问意图记录，不给普通用户直接展示。
 - replyText：如果 responseAction 不是 quiet，写一句 Papo 可以直接对用户说的自然短回应；不要解释内部状态、字段、阈值或流程。
+- effect：必填。准确说明这次反馈实际改变了什么；如果没有改变记忆或状态，也要写明“只理解了反馈，未改变存储或状态”的实际结果。
 - creatureSelfMemory：如果这次反馈体现了用户正在训练 Papo 的长期回应习惯，写成一条 Papo 自己的成长记忆；text、tags、consolidatedBecause、weight 都由你决定。
 
 memoryOperation 使用口径：
@@ -439,6 +443,7 @@ memoryOperation 使用口径：
 你不能：
 - 使用未列出的字段。
 - 编造用户没有说过的新事实。
+- 使用未列出的枚举值。所有 type、kind、responseAction 必须逐字使用上面列出的 ID。
 - promote_episode 只能用于 target.type="episode"。
 - update_memory 只能用于 target.type="memory"。
 

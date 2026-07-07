@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   audioSliceBatchId,
   currentLiveBatchId,
@@ -31,5 +32,9 @@ assert.equal(currentLiveBatchId(startedAt, startedAt + 5 * LIVE_BATCH_MS), plann
 
 assert.equal(shouldSuppressForcedAudioSlice(startedAt + LIVE_LISTENING_MAX_MS, startedAt + LIVE_LISTENING_MAX_MS - 500), true);
 assert.equal(shouldSuppressForcedAudioSlice(startedAt + LIVE_LISTENING_MAX_MS, startedAt + LIVE_LISTENING_MAX_MS - 1500), false);
+
+const appSource = readFileSync(new URL("../src/web/App.tsx", import.meta.url), "utf8");
+assert.equal(appSource.includes(".requestData()"), false, "continuous webm chunks must be complete recorder files, not requestData stream fragments");
+assert.equal(appSource.includes(".stop()"), true, "continuous recording should close each recorder segment so every 30s blob has a container header");
 
 console.log(JSON.stringify({ ok: true, planned }, null, 2));
