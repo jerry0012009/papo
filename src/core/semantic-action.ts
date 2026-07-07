@@ -452,9 +452,6 @@ ${JSON.stringify(result.events.map((event) => ({
   relatedMemoryIds: event.relatedMemoryIds,
   attentionStrength: event.attentionStrength,
   privacyRisk: event.privacyRisk,
-  currentGuardedAction: event.actionDecision.action,
-  blockedActions: event.actionDecision.blockedActions,
-  safetyNotes: event.actionDecision.safetyNotes,
   tags: isHighPrivacySegmentContent(event.triggerContent) ? [] : event.tags
 })))}
 `;

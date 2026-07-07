@@ -1,4 +1,4 @@
-import { selectAction } from "./action";
+import { structuralActionPlaceholder } from "./action";
 import { describeStateInfluence } from "./drive";
 import { makeId } from "./ids";
 import { hasHighPrivacyText } from "./privacy";
@@ -139,14 +139,7 @@ export function buildAttentionEvent(
   const related: string[] = [];
   const privacyRisk = hasHighPrivacyText(input.triggerContent) ? 92 : 0;
   const strength = input.source === "button" ? Math.max(62, input.score.total) : input.score.total;
-  const actionDecision = selectAction({
-    profile,
-    source: input.source,
-    text: input.triggerContent,
-    attentionStrength: strength,
-    privacyRisk,
-    relatedMemoryIds: related
-  });
+  const actionDecision = structuralActionPlaceholder();
   return {
     id: makeId("attention"),
     source: input.source,
@@ -176,7 +169,7 @@ export function buildAttentionEvent(
     decisionTrace: [
       `pacing_score=${input.score.total}`,
       `privacy_risk=${privacyRisk}`,
-      `final_action: ${actionDecision.action} (${actionDecision.reason})`
+      "structural: awaiting llm action decision"
     ],
     createdAt: input.now
   };
