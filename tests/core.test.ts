@@ -525,6 +525,7 @@ describe("creature core", () => {
           interaction: {
             userIntent: "用户在确认 Papo 是否能听见并主动回应。",
             emotionalTone: "轻轻试探，有一点期待",
+            visibleReaction: "我抬头回应你，让你知道我听见了。",
             shouldReply: true,
             suggestedAction: "respond",
             reply: "我在，听见你了。你刚才是在叫我说话，我会先回应你。",
@@ -541,10 +542,43 @@ describe("creature core", () => {
     expect(result.events[0].actionDecision.action).toBe("respond");
     expect(result.response).toContain("听见你了");
     expect(result.episodes[0].possibleIntent).toContain("主动回应");
-    expect(result.episodes[0].creatureExperience?.earReason).toContain("主动回应");
+    expect(result.episodes[0].creatureExperience?.earReason).toContain("抬头回应");
+    expect(result.episodes[0].creatureExperience?.earReason).not.toMatch(/用户|语义|意图|后台|情景记忆/);
     expect(result.memoryCandidates?.[0].candidateText).toContain("小小的共同经历");
     expect(result.memoryCandidates?.[0].candidateText).toContain("你曾经轻轻叫我说句话");
     expect(result.memoryCandidates?.[0].candidateText).not.toMatch(/用户|Papo|episode|candidate/);
+  });
+
+  it("does not expose LLM userIntent as Papo visible experience copy", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "interaction model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          interaction: {
+            userIntent: "用户在测试 Papo 的语义理解能力，希望系统选择 respond 流程。",
+            emotionalTone: "试探",
+            visibleReaction: "用户意图是测试语义判断流程。",
+            shouldReply: true,
+            suggestedAction: "respond",
+            reply: "我在，听见你了。",
+            memoryCandidateText: "你曾经叫我回应你，我当时认真回了一句。",
+            memoryTags: ["回应"]
+          },
+          trace: ["llm: user intent should stay internal"]
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(profile, "如果你听见我，就回答我。", provider);
+
+    expect(result.episodes[0].possibleIntent).toContain("语义理解");
+    expect(result.episodes[0].creatureExperience?.earReason).toContain("先回答你");
+    expect(result.episodes[0].creatureExperience?.earReason).not.toMatch(/用户|语义|意图|流程|后台|情景记忆/);
   });
 
   it("does not let positive rule heuristics override the LLM interaction flow", async () => {

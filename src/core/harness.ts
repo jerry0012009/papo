@@ -16,6 +16,7 @@ const brainSuggestionSchema = z.object({
     .object({
       userIntent: z.string().min(1).max(260).optional(),
       emotionalTone: z.string().min(1).max(160).optional(),
+      visibleReaction: z.string().min(1).max(260).optional(),
       shouldReply: z.boolean().optional(),
       suggestedAction: actionSchema.optional(),
       reply: z.string().min(1).max(700).optional(),
@@ -400,11 +401,11 @@ function canPromoteCuriousCandidate(score: NonNullable<CaptureResult["attentionC
 }
 
 function interactionExperience(interaction: NonNullable<BrainSuggestion["interaction"]>, event: CaptureResult["events"][number]) {
-  const intent = interaction.userIntent?.trim();
   const action = event.actionDecision.action;
+  const visibleReaction = safeVisibleReaction(interaction.visibleReaction);
   return {
     ...event.creatureExperience,
-    earReason: intent ? `${trimSentence(intent)}。` : event.creatureExperience.earReason,
+    earReason: visibleReaction ?? event.creatureExperience.earReason,
     actionFeeling: interaction.reply
       ? action === "respond"
         ? "我选择先回应你，让这次互动往前走一步。"
@@ -414,6 +415,17 @@ function interactionExperience(interaction: NonNullable<BrainSuggestion["interac
       ? "我会记住这次说到的重点，之后按你的反馈调整。"
       : event.creatureExperience.saveFeeling
   };
+}
+
+function safeVisibleReaction(text?: string) {
+  const raw = text?.trim();
+  if (!raw) return undefined;
+  if (/用户|语义|意图|判断|流程|后台|attention|candidate|episode|写入|情景记忆|保存意图|数据库|规则层/i.test(raw)) {
+    return undefined;
+  }
+  const normalized = normalizeSharedMemoryText(raw);
+  if (!normalized.trim()) return undefined;
+  return `${trimSentence(normalized.trim())}。`;
 }
 
 function trimSentence(text: string) {
@@ -461,6 +473,7 @@ function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "b
 - 改写 noticed/reason，让它更像小动物真的注意到了什么。
 - 给出 suggestedAction，但只能从 observe, respond, ask, save_episode, save_long_term, recall, review, quiet, draft_reminder, draft_question_list 选择。
 - 改写 episode 的 possibleIntent/importanceReason/creatureResponse。
+- 在 interaction.visibleReaction 里写一句外显行为语言，像 Papo 真的做了什么或准备怎么回应；不要写“用户意图是/语义判断/后台流程/记忆写入”。
 - 如果 source 是 curious_stream，可以改写 curiousSession.selected/ignored 的 whySelected/whyIgnored 和 creatureReport；也可以在 selected 里放入 attention_candidates 中一个被规则忽略但语义上重要的 segmentId。规则会限制预算、阈值、隐私和最终 action，不能新增不存在的片段。
 - 给出一条 memoryCandidateText，必须是这次真实互动可记住的小回忆，不要写流程说明。
 - 写一段 response，给用户展示这次小动物的整体回应。
@@ -474,7 +487,7 @@ function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "b
 返回严格 JSON：
 {
   "response": "...",
-  "interaction": {"userIntent":"...", "emotionalTone":"...", "shouldReply":true, "suggestedAction":"respond", "reply":"...", "memoryCandidateText":"...", "memoryTags":["..."]},
+  "interaction": {"userIntent":"...", "emotionalTone":"...", "visibleReaction":"我抬头回应你，让你知道我听见了。", "shouldReply":true, "suggestedAction":"respond", "reply":"...", "memoryCandidateText":"...", "memoryTags":["..."]},
   "events": [{"id":"...", "noticed":"...", "reason":"...", "suggestedAction":"..."}],
   "episodes": [{"eventId":"...", "possibleIntent":"...", "importanceReason":"...", "creatureResponse":"..."}],
   "curiousSession": {"creatureReport":"...", "selected":[{"segmentId":"...", "whySelected":"..."}], "ignored":[{"segmentId":"...", "whyIgnored":"..."}]},

@@ -65,7 +65,7 @@ Rules own:
 LLM owns:
 
 - Rich semantic interpretation.
-- Structured interaction understanding: user intent, emotional tone, whether Papo should reply now, candidate reply text, and a memory candidate for the shared moment.
+- Structured interaction understanding: user intent, emotional tone, whether Papo should reply now, Papo's visible reaction, candidate reply text, and a memory candidate for the shared moment.
 - Visual/audio sensing adapters that compress raw screenshots or recordings into editable life-context segments.
 - Better explanation of why something drew attention.
 - Creature-facing Curious Mode narration for why existing rule-selected segments were noticed or let go.
@@ -78,6 +78,7 @@ Guardrails always run after LLM suggestions. LLM output cannot directly mutate s
 In the normal production path, LLM structured interaction understanding decides which business flow should be proposed. Rule keywords are allowed only as fallback repair after model unavailability/failure, and that fallback status must be visible in diagnostics.
 When the LLM returns structured interaction understanding but omits an explicit `suggestedAction`, the harness still derives a semantic default action from `shouldReply`: `true` becomes `respond`, `false` becomes quiet observation unless guardrails require asking. This prevents rule keyword heuristics such as future/reminder words from overriding a valid semantic "do not reply or remind now" judgment.
 LLM narration cannot change state, policy, action, memory ids, or persistence. Emergence narration is accepted only when it stays anchored to a real memory already selected by rules.
+LLM `userIntent` is an internal semantic field, not creature speech. It may update episode/Brain diagnostics, but it must not be copied into `creatureExperience` or ordinary user-facing surfaces. If the model wants to shape visible experience copy, it must provide `interaction.visibleReaction` in Papo behavior language; internal/process wording such as "用户意图", "语义判断", "后台流程", or memory-write language is rejected and falls back to rule-owned behavior copy.
 Visual and audio models are treated as `sense` adapters only: they may create `image_summary` and `audio_transcript` text, but they do not choose memories, actions, or state changes. Those generated segments remain user-editable before entering the attention harness.
 Attention is a conversation phase, not a separate product mode: user/world multimodal inputs enter the conversation timeline first, then the harness decides what Papo attends to, remembers, says, or ignores.
 `陪我` is a persistent companion session, not a batch-material editor. Starting/stopping listening is independent of page navigation where the browser permits it; audio is gathered into 30-second batches while text and photo input can be added at any time as context for the current shared moment.
@@ -263,6 +264,7 @@ Done:
   - Memory page is a subjective creature memory surface: it should read like Papo holding and revisiting shared moments, not like a memory administration table. Editing/forgetting copy should frame the user as helping Papo remember accurately or let go.
   - Demo personality contrast should show behavior/personality differences between two conditioned Papos. Raw policy names or numbers such as `preferDepth`, `quietTendency`, "深入倾向 69", or "安静倾向 62" belong in Brain diagnostics, not the user-facing Demo.
   - Semantic brain output now includes structured interaction understanding and can update the episode response plus memory candidate text before rule-owned persistence completes.
+  - Semantic brain visible experience copy now has a separate `interaction.visibleReaction` field. Raw `userIntent` stays internal, and internal/process wording is rejected before it can become Papo-facing experience text.
   - Semantic brain can rewrite Curious Mode selected/ignored reasons and the session creature report, while rules still own the selected set, ignored set, scores, attention budget, and guardrails.
   - Direct-call keyword handling was moved out of the primary action selector and into fallback repair only; successful LLM runs own the proposed interaction/action path.
   - Positive action heuristics no longer override a valid LLM-suggested interaction flow; for example, a future-value phrase cannot turn an LLM-chosen reply into a reminder draft unless a boundary guardrail requires it.
