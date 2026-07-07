@@ -5,7 +5,7 @@ import { modelConversationContext, modelFeedbackContext, modelMemoryContext } fr
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
 import { applyStateDelta } from "./state";
-import type { CaptureResult, CreatureProfile } from "./types";
+import type { AttentionSource, CaptureResult, CreatureProfile, SemanticBrainRecord } from "./types";
 
 const optionalText = (max: number) =>
   z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
@@ -55,28 +55,34 @@ const semanticAttentionSchema = z.object({
 type SemanticAttentionSuggestion = z.infer<typeof semanticAttentionSchema>;
 type AttentionCandidate = NonNullable<CaptureResult["attentionCandidates"]>[number];
 
-export async function semanticDecideAttention(profile: CreatureProfile, result: CaptureResult, provider: ModelProvider): Promise<CaptureResult> {
+export async function semanticDecideAttention(
+  profile: CreatureProfile,
+  result: CaptureResult,
+  provider: ModelProvider,
+  source: AttentionSource
+): Promise<CaptureResult> {
   if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for attention.");
   if (!result.curiousSession || !result.attentionCandidates?.length) return result;
 
-  const raw = await provider.generateJson<unknown>(buildSemanticAttentionPrompt(profile, result));
+  const raw = await provider.generateJson<unknown>(buildSemanticAttentionPrompt(profile, result, source));
   if (!raw) throw new Error("empty attention model result");
   const parsed = semanticAttentionSchema.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`invalid attention JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   }
-  const applied = applySemanticAttention(profile, result, parsed.data);
+  const applied = applySemanticAttention(profile, result, parsed.data, source);
   if (!applied && parsed.data.shouldAttend !== false) throw new Error("attention model did not select any valid segment");
   recordAttentionSemanticRun(
     profile,
     provider,
+    source,
     applied ? "applied" : "applied",
     applied ? "llm attention decision applied" : "llm attention decision ignored all candidates"
   );
   return result;
 }
 
-function applySemanticAttention(profile: CreatureProfile, result: CaptureResult, suggestion: SemanticAttentionSuggestion) {
+function applySemanticAttention(profile: CreatureProfile, result: CaptureResult, suggestion: SemanticAttentionSuggestion, source: AttentionSource) {
   const session = result.curiousSession;
   const candidates = result.attentionCandidates;
   if (!session || !candidates?.length) return false;
@@ -111,7 +117,7 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
   const events = selectedFromModel.map((candidate) => {
     const decision = selectedDecision.get(candidate.segment.id);
     const event = buildAttentionEvent(profile, {
-      source: "curious_stream",
+      source,
       triggerSegmentId: candidate.segment.id,
       triggerBatchId: candidate.segment.batchId,
       triggerObservedAt: candidate.segment.observedAt,
@@ -144,7 +150,7 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
     applyStateDelta(
       profile,
       { curiosity: 5, energy: -4 - Math.max(0, events.length - 1), arousal: events.length > 1 ? 4 : 1, attachment: 1 },
-      "model selected curious stream attention",
+      `model selected ${source} attention`,
       now
     );
   }
@@ -218,25 +224,32 @@ function validRelatedMemoryIds(profile: CreatureProfile, ids?: string[]) {
   return [...new Set(ids)].filter((id) => allowed.has(id)).slice(0, 6);
 }
 
-function recordAttentionSemanticRun(profile: CreatureProfile, provider: ModelProvider, status: "skipped" | "applied" | "empty" | "invalid" | "failed", message: string) {
+function recordAttentionSemanticRun(
+  profile: CreatureProfile,
+  provider: ModelProvider,
+  source: SemanticBrainRecord["source"],
+  status: "skipped" | "applied" | "empty" | "invalid" | "failed",
+  message: string
+) {
   profile.semanticBrainHistory.unshift({
     id: makeId("semantic"),
     at: new Date().toISOString(),
-    source: "curious_stream",
+    source,
     stage: "attention",
     providerKind: provider.kind,
     providerName: provider.name,
     model: provider.diagnostics?.textModel,
     status,
     message,
-    ruleTrace: [`provider=${provider.kind}`, "source=curious_stream", `status=${status}`, "stage=attention"]
+    ruleTrace: [`provider=${provider.kind}`, `source=${source}`, `status=${status}`, "stage=attention"]
   });
   profile.semanticBrainHistory = profile.semanticBrainHistory.slice(0, 30);
 }
 
-function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureResult) {
+function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureResult, source: AttentionSource) {
   return `请作为 Papo 的注意决策脑，从这一组真实输入片段里决定 Papo 此刻要认真回应哪几段。
 
+输入来源：${source === "button" ? "用户主动发来的一条直接消息" : "持续陪伴/多模态信息流的一组片段"}。
 系统已经整理了候选片段和注意预算。你负责具体判断：
 - 哪些段值得注意。
 - 哪些段应该暂时略过。
@@ -244,7 +257,9 @@ function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureR
 - 注意到的核心内容是什么。
 - 这段内容对用户可能意味着什么。
 - 它是否自然关联到 recent_memories 里的旧记忆。
-- 如果都只是背景声，可以 shouldAttend=false。
+- 如果都只是背景声、空白、误触或没有可用生活信息，可以 shouldAttend=false。
+- 用户主动发来的直接消息通常值得注意；但仍由你判断是否只是误触、空白或无需进入后续 cognition。
+- JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 
 护栏会校验：
 - selected.segmentId 必须来自 candidates。

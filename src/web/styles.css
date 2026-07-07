@@ -817,6 +817,31 @@ select {
   margin: 0;
 }
 
+.cognition-flow {
+  gap: 10px;
+}
+
+.flow-chain {
+  display: grid;
+  gap: 7px;
+}
+
+.flow-chain .trace-block {
+  border-left: 3px solid rgba(79, 139, 118, 0.4);
+}
+
+.trace-memory-result {
+  display: grid;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(70, 82, 72, 0.12);
+}
+
+.trace-memory-result:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
 .trace-list {
   color: #5d6a61;
   font-size: 0.78rem;

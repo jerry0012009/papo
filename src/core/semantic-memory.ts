@@ -144,6 +144,7 @@ function buildSemanticMemoryPrompt(profile: CreatureProfile, candidates: MemoryC
 候选里的 sourceMaterial 只是用户原始材料或行动脑给出的草稿，不是系统结论。
 initialMemoryKind、initialConfidence、initialWritePolicy 是存储结构占位，不代表规则已经判断过这件事。
 你必须自己决定是否保留、怎么写、分到哪一类、是否长期保存。
+JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 
 你可以决定：
 - 这条候选是否应该保留为候选。

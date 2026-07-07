@@ -379,6 +379,8 @@ function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: Feedbac
   return `请作为 Papo 的反馈反思脑，根据这次用户反馈，决定 Papo 应该怎样被养成。
 
 系统只记录了这次反馈和目标对象。你可以在护栏内决定：
+JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
+
 - stateDeltas：curiosity, attachment, energy, arousal, safety, confidence，每项 -15 到 15。
 - policyDeltas：preferDepth, preferProactivity, privacySensitivity, saveThreshold, askThreshold, recallTendency, quietTendency，每项 -15 到 15。
 - memoryWeightDelta：目标 episode 或 memory 的权重变化，-30 到 30。

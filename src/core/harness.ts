@@ -41,19 +41,15 @@ async function enrichWithSemanticBrain(
 
   if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for cognition.");
 
-  if (source === "curious_stream") {
-    if (!result.attentionCandidates?.length) {
-      result.harnessTrace = [...trace, "sense: no content candidates"];
-      return result;
-    }
-    await semanticDecideAttention(profile, result, provider);
-    if (!result.events.length) {
-      result.harnessTrace = [...trace, "semantic: llm ignored all candidates"];
-      recordSemanticBrainRun(profile, provider, source, "applied", "llm attention decision ignored all candidates");
-      return result;
-    }
-  } else if (!result.events.length) {
-    throw new Error("Papo did not produce any attention event to interpret.");
+  if (!result.attentionCandidates?.length) {
+    result.harnessTrace = [...trace, "sense: no content candidates"];
+    return result;
+  }
+  await semanticDecideAttention(profile, result, provider, source);
+  if (!result.events.length) {
+    result.harnessTrace = [...trace, "semantic: llm ignored all candidates"];
+    recordSemanticBrainRun(profile, provider, source, "applied", "llm attention decision ignored all candidates");
+    return result;
   }
   clearRuleVisibleDrafts(result);
   await semanticSelectAction(profile, result, provider, source);

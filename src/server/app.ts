@@ -372,15 +372,24 @@ function captureCognitionTrace(
     model: provider.diagnostics?.textModel,
     modelRuns,
     harnessTrace: result.harnessTrace ?? [],
-    eventDecisions: result.events.map((event) => ({
-      eventId: event.id,
-      action: event.actionDecision.action,
-      semanticSource: event.semanticSource,
-      noticed: event.noticed,
-      reason: event.reason,
-      relatedMemoryIds: event.relatedMemoryIds,
-      decisionTrace: event.decisionTrace ?? event.actionDecision.ruleTrace ?? []
-    })),
+    eventDecisions: result.events.map((event) => {
+      const episode = result.episodes.find((item) => item.sourceSegmentId === event.triggerSegmentId || item.id === event.triggerSegmentId);
+      const memoryCandidateKept = Boolean(episode && (result.memoryCandidates ?? []).some((candidate) => candidate.sourceEpisodeId === episode.id));
+      return {
+        eventId: event.id,
+        sourceLabel: event.triggerLabel,
+        sourceText: event.triggerContent,
+        action: event.actionDecision.action,
+        semanticSource: event.semanticSource,
+        noticed: event.noticed,
+        reason: event.reason,
+        visibleReply: event.id === result.events[0]?.id ? result.response : undefined,
+        episodeKept: Boolean(episode),
+        memoryCandidateKept,
+        relatedMemoryIds: event.relatedMemoryIds,
+        decisionTrace: event.decisionTrace ?? event.actionDecision.ruleTrace ?? []
+      };
+    }),
     episodeDecisions: result.episodes.map((episode) => ({
       episodeId: episode.id,
       action: episode.actionDecision?.action,

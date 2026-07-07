@@ -254,10 +254,15 @@ export interface MessageCognitionTrace {
   harnessTrace?: string[];
   eventDecisions?: Array<{
     eventId: string;
+    sourceLabel: string;
+    sourceText: string;
     action: ActionKind;
     semanticSource: "rules" | "llm";
     noticed: string;
     reason: string;
+    visibleReply?: string;
+    episodeKept: boolean;
+    memoryCandidateKept: boolean;
     relatedMemoryIds: string[];
     decisionTrace: string[];
   }>;

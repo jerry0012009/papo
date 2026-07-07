@@ -840,32 +840,41 @@ function DeveloperTrace({ trace, profile }: { trace: NonNullable<ConversationMes
           )}
         </section>
         {trace.eventDecisions?.length ? (
-          <section>
-            <strong>动作选择</strong>
+          <section className="cognition-flow">
+            <strong>认知流程</strong>
             {trace.eventDecisions.map((event) => (
-              <TraceBlock key={event.eventId} title={actionLabel(event.action)}>
-                <p>{event.noticed}</p>
-                <p>{event.reason}</p>
-                <TraceList items={event.decisionTrace} />
-                <RelatedMemories ids={event.relatedMemoryIds} profile={profile} />
-              </TraceBlock>
+              <div className="flow-chain" key={event.eventId}>
+                <TraceBlock title="1. 注意">
+                  <small>{event.sourceLabel}</small>
+                  <p>{visibleCreatureText(event.sourceText)}</p>
+                  <p>{event.noticed}</p>
+                  <small>{event.reason}</small>
+                  <RelatedMemories ids={event.relatedMemoryIds} profile={profile} />
+                </TraceBlock>
+                <TraceBlock title={`2. 行动 · ${actionLabel(event.action)}`}>
+                  <p>{event.visibleReply ? `说出口：${event.visibleReply}` : "这一步没有外显回复。"}</p>
+                  <TraceList items={actionTraceItems(event.decisionTrace)} />
+                </TraceBlock>
+                <TraceBlock title="3. 记忆">
+                  <p>{event.episodeKept ? "形成了一条 episode。" : "没有保留为 episode。"}</p>
+                  <p>{event.memoryCandidateKept ? "进入记忆候选，交给记忆模型判断。" : "没有进入记忆候选。"}</p>
+                  <TraceList items={memoryTraceItems(event.decisionTrace)} />
+                </TraceBlock>
+              </div>
             ))}
-          </section>
-        ) : null}
-        {trace.episodeDecisions?.length || trace.memoryDecisions?.length ? (
-          <section>
-            <strong>记忆结果</strong>
-            {trace.episodeDecisions?.map((episode) => (
-              <TraceBlock key={episode.episodeId} title={`episode ${episode.kept ? "保留" : "未保留"}`}>
-                <TraceList items={episode.decisionTrace} />
-              </TraceBlock>
-            ))}
-            {trace.memoryDecisions?.map((memory) => (
-              <TraceBlock key={memory.candidateId} title={`${memory.status} · ${memory.writePolicy}`}>
-                <p>{memory.text}</p>
-                <small>{memory.memoryKind} · {memory.why}</small>
-              </TraceBlock>
-            ))}
+            {trace.memoryDecisions?.length ? (
+              <div className="flow-chain">
+                <TraceBlock title="4. 记忆模型结果">
+                  {trace.memoryDecisions.map((memory) => (
+                    <div className="trace-memory-result" key={memory.candidateId}>
+                      <b>{memoryStatusText(memory.status, memory.writePolicy)}</b>
+                      <p>{memory.text}</p>
+                      <small>{memory.memoryKind} · {memory.why}</small>
+                    </div>
+                  ))}
+                </TraceBlock>
+              </div>
+            ) : null}
           </section>
         ) : null}
         {trace.feedbackDecision ? (
@@ -930,6 +939,29 @@ function RelatedMemories({ ids, profile }: { ids: string[]; profile: CreaturePro
       ))}
     </ul>
   );
+}
+
+function actionTraceItems(items: string[]) {
+  return items.filter((item) => /^(intent=|action_reason=|should_reply=|guardrail: action=)/.test(item));
+}
+
+function memoryTraceItems(items: string[]) {
+  return items.filter((item) => /^(episode=|memory_candidate=)/.test(item));
+}
+
+function memoryStatusText(status: string, policy: string) {
+  const statusText: Record<string, string> = {
+    candidate: "候选保留",
+    promoted: "写入长期记忆",
+    dismissed: "没有留下"
+  };
+  const policyText: Record<string, string> = {
+    auto: "自动写入",
+    ask_user: "等用户确认",
+    wait_feedback: "等后续反馈",
+    do_not_save: "不保存"
+  };
+  return `${statusText[status] ?? status} · ${policyText[policy] ?? policy}`;
 }
 
 function stageLabel(stage: string) {

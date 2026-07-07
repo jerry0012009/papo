@@ -260,6 +260,7 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 护栏会再次校验：
 - action 必须在白名单内。
 - 你不能改状态数值或直接写记忆。
+- JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 
 判断口径：
 - conversation timeline 会保存用户和 Papo 的对话；这不等于每句话都要形成 episode。

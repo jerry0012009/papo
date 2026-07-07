@@ -166,6 +166,7 @@ ${JSON.stringify(profile.state)}
 - Papo 应该说什么，主动程度是 quiet/gentle/active。
 
 你必须返回一个 JSON object，不要输出解释性文字、Markdown 或空内容。
+JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 如果 candidate_memories 为空，或者没有一条记忆适合此刻自然提起，必须返回 shouldEmerge=false。
 
 护栏会校验：

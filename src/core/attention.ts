@@ -1,9 +1,7 @@
 import { selectAction } from "./action";
 import { describeStateInfluence } from "./drive";
 import { makeId } from "./ids";
-import { createEpisodeFromEvent, createMemoryCandidateFromEpisode } from "./memory";
 import { hasHighPrivacyText } from "./privacy";
-import { applyStateDelta } from "./state";
 import { summarizeText } from "./text";
 import type {
   AttentionEvent,
@@ -20,23 +18,27 @@ export function handleButtonCapture(
   now = new Date().toISOString()
 ): CaptureResult {
   const cleanText = text.trim();
-  const score = scoreSegment(profile, { id: "button", kind: "text", label: "你给我的话", content: cleanText });
+  const segment: StreamSegment = {
+    id: `button-${makeId("segment")}`,
+    kind: "text",
+    label: "你给我的话",
+    content: cleanText,
+    position: 1,
+    observedAt: now
+  };
+  const score = scoreSegment(profile, segment);
   score.total = 72;
+  const session = createAttentionSession(profile, now, 1, [{ segment, score }]);
 
-  const event = buildAttentionEvent(profile, {
-    source: "button",
-    triggerLabel: "你给我的话",
-    triggerContent: cleanText,
-    reasonPrefix: "manual_input_candidate",
-    score,
-    now
-  });
-  const response = "";
-  const episode = createEpisodeFromEvent(event, response, now);
-  profile.episodes.unshift(episode);
-  const candidate = createMemoryCandidateFromEpisode(profile, episode, { now });
-  applyStateDelta(profile, { curiosity: 3, energy: -2, arousal: 3, attachment: 2 }, "manual input processed as attention candidate", now);
-  return { profile, events: [event], episodes: [episode], response, memoryCandidates: [candidate] };
+  return {
+    profile,
+    events: [],
+    episodes: [],
+    response: "",
+    curiousSession: session,
+    attentionCandidates: [{ segment, score, selectedByModel: false }],
+    memoryCandidates: []
+  };
 }
 
 export function handleCuriousStream(
@@ -61,10 +63,31 @@ export function handleCuriousStream(
     score: scoreSegment(profile, segment, { position: segment.position })
   }));
 
-  const curiousSession: CuriousSessionAudit = {
-    id: sessionId,
+  const curiousSession = createAttentionSession(profile, now, attentionBudget, candidates, prepared.length, sessionId);
+
+  return {
+    profile,
+    events: [],
+    episodes: [],
+    response: "",
+    curiousSession,
+    attentionCandidates: candidates.map((item) => ({ segment: item.segment, score: item.score, selectedByModel: false })),
+    memoryCandidates: []
+  };
+}
+
+function createAttentionSession(
+  profile: CreatureProfile,
+  now: string,
+  attentionBudget: number,
+  candidates: Array<{ segment: StreamSegment; score: SegmentScore }>,
+  totalSegments = candidates.length,
+  id = makeId("session")
+): CuriousSessionAudit {
+  return {
+    id,
     createdAt: now,
-    totalSegments: prepared.length,
+    totalSegments,
     selected: [],
     ignored: candidates.map((item) => ({
       segmentId: item.segment.id,
@@ -75,16 +98,6 @@ export function handleCuriousStream(
     stateInfluence: describeStateInfluence(profile),
     attentionBudget,
     creatureReport: ""
-  };
-
-  return {
-    profile,
-    events: [],
-    episodes: [],
-    response: "",
-    curiousSession,
-    attentionCandidates: candidates.map((item) => ({ segment: item.segment, score: item.score, selectedByModel: false })),
-    memoryCandidates: []
   };
 }
 

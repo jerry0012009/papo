@@ -55,7 +55,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Empty audio, silence, noise, and unclear speech are ordinary inputs for the model to ignore or use.
 - Photo input records upload time and available browser location so memory can later keep natural provenance.
 - Papo replies are model-written external behavior, not frontend templates.
-- Developer inspection belongs behind a small per-message disclosure control. It may show model stages, parsed decisions, structural checks, and memory outcomes for debugging, but it must not become the default creature-facing experience.
+- Developer inspection belongs behind a small per-message disclosure control. It should show the full cognition chain for that reply: attention, action selection, visible action result, episode persistence, memory candidate handling, model stages, structural checks, and memory outcomes. It must not become the default creature-facing experience.
 - Memory cards default to what the user shared and what the model decided to remember.
 - Feedback text/audio/buttons are all interaction input and may trigger learning, memory updates, or new dialogue.
 
@@ -76,7 +76,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - `src/core/attention.ts`: structural input candidates and pacing primitives; no semantic scoring.
 - `src/core/harness.ts`: semantic cognition loop and visible-output contract.
 - `src/core/semantic-action.ts`: model action selection.
-- `src/core/semantic-attention.ts`: model attention selection for stream inputs.
+- `src/core/semantic-attention.ts`: model attention selection for direct text and stream inputs.
 - `src/core/semantic-memory.ts`: model memory decisions.
 - `src/core/feedback.ts`: feedback application plus model reflection.
 - `src/core/emergence.ts`: active resurfacing through model decisions.
@@ -93,7 +93,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - The semantic harness strips rule-created visible drafts before model action/wording. Papo's final visible reply must come from a model.
 - `attention.ts` creates neutral candidates only. It must not write creature-facing replies, semantic "noticed" explanations, keyword tags, related-memory guesses, curious reports, or mixed-preference dialogue.
 - Attention candidate scores are structural pacing only. They must not contain fake semantic dimensions such as novelty, emotional charge, memory resonance, local tags, or local related-memory guesses.
-- Curious stream input starts with zero attention events. `semanticDecideAttention` must select segments with the model and provide noticed content, user meaning, memory relation, valid related memory ids, and tags before episodes or memory candidates are created.
+- Direct text and curious stream input start with zero attention events. `semanticDecideAttention` must select segments with the model and provide noticed content, user meaning, memory relation, valid related memory ids, and tags before episodes or memory candidates are created.
 - Action selection code is an enum executor, not a semantic classifier. It must not locally replace a model-selected visible action because of mood, energy, keywords, or confidence heuristics.
 - `semanticSelectAction` owns the persistence decision for attended input. It must explicitly return whether to keep an episode and whether to keep a memory candidate; rules may prune temporary structures but must not default every input into memory.
 - Memory candidates keep user text and provenance only. Initial kind, confidence, and write policy are storage placeholders, not cognition. Memory kind, tags, consolidation wording, write policy, and long-term meaning must come from `semanticDecideMemory` before they are treated as product cognition.
@@ -113,7 +113,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - If the model chooses `observe` or `quiet`, the API may persist the user's input without adding a Papo reply.
 - Recent conversation, memories, and feedback are passed into model prompts through `model-context.ts`.
 - Development planning text must not be used as creature interaction material.
-- New Papo messages persist `cognitionTrace` with the real model stages and structural rule checks that produced that visible reply. This supports developer audit without proving the mechanism in the main UI.
+- New Papo messages persist `cognitionTrace` with the real model stages, attention/action/memory decisions, visible reply, persistence outcomes, and structural rule checks that produced that visible reply. This supports developer audit without proving the mechanism in the main UI.
 
 ## Verification Checklist
 
