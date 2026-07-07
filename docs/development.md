@@ -132,7 +132,7 @@ Harness stages:
 5. `remember`: append episode memory.
 6. `learn`: feedback updates state and memory weight.
 7. `emerge`: state and memory trigger active resurfacing.
-8. `wake`: app open/reopen applies deterministic time rhythm and shows a small presence note.
+8. `wake`: app open/reopen applies deterministic time rhythm and records it for diagnostics/history without creating default UI noise.
 9. `narrate`: LLM may rewrite user-facing feedback/emergence text after rules have already decided the facts.
 
 Wake rhythm split:
@@ -229,7 +229,7 @@ Done:
   - Feedback immediately surfaces a user-facing "I learned" note.
   - Real-model providers can now rewrite feedback learning notes and active emergence messages while rules keep ownership of state, policy, actions, and memory ids.
   - Semantic brain runs are persisted as diagnostics: fallback/skipped, applied, empty, invalid JSON, and failed model calls are visible in Brain page.
-  - App open/reopen creates a wake event: Papo reacts to time passing, recovers energy by rule, and shows a small presence note on Home.
+  - App open/reopen creates a wake event: Papo reacts to time passing and recovers energy by rule, while routine wake copy stays out of Home and the default dialogue flow.
   - After a long enough absence, wake can create a rhythm emergence from a real non-self long-term memory, so opening the app can feel like it quietly remembered something.
   - Demo Mode uses life-context examples rather than Papo development text as interaction material.
   - Demo Mode includes Curious stream loading, two-creature feedback conditioning, and active emergence.
@@ -238,7 +238,7 @@ Done:
   - Companion listening session: the browser can listen up to 3 minutes and split transcripts every 30 seconds into `audio_transcript` segments.
   - OpenRouter/OpenAI-compatible visual sensing endpoint: uploaded screenshots are summarized into editable `image_summary` segments.
   - OpenRouter/OpenAI-compatible audio sensing endpoint: uploaded recordings are transcribed into editable `audio_transcript` segments.
-  - Papo conversation timeline: multimodal inputs plus wake notes, attention responses, feedback learning, and active emergence are persisted into `conversation`, with a dedicated dialogue history page.
+  - Papo conversation storage: multimodal inputs plus wake records, attention responses, feedback learning, and active emergence are persisted into `conversation`; the default dialogue page hides wake records because they are rhythm diagnostics, not ordinary Papo replies.
   - Companion continuous recording: MediaRecorder records up to 3 minutes, requests audio chunks every 30 seconds, sends chunks to `/api/audio-transcript`, and keeps browser speech recognition only as a local fallback transcript source.
   - Multimodal 30-second batches: text, photo summaries, and audio transcripts carry `batchId` and `observedAt`; photo uploads also carry available browser geolocation so later memories can include time/place.
   - Papo is now rendered as a stateful cartoon Shiba Inu SVG: triangular ears, curled tail, urajiro face/chest, breathing, blinking, tired/alert/attached/careful motion states are bound to `CreatureState`.
@@ -254,7 +254,7 @@ Done:
   - Feedback impact on Home is translated into behavior language such as "it will pause longer next time" instead of numeric `+8` state or policy deltas; Brain keeps numeric deltas.
   - Forget feedback is staged: it first downranks memory weight to zero, then a repeated forget purges the zero-weight target.
   - Feedback follow-up text is target-aware: "continue", "remember", "not_now", and the two forget stages speak about the specific remembered topic rather than returning a generic receipt.
-  - New non-wake Papo utterances show a small unread dot on the dialogue tab; entering the dialogue clears it. Wake notes stay in conversation history/diagnostics and do not create a homepage content block.
+  - New non-wake Papo utterances show a small unread dot on the dialogue tab; entering the dialogue clears it. Wake notes stay in storage/diagnostics and do not create a homepage block or ordinary dialogue bubble.
   - The former separate `陪我` page was folded into the dialogue page: continuous listening, text, photo, uploaded audio, staged fragments, and conversation history now live in one timeline with one bottom composer.
   - Conversation bubbles no longer show system-channel labels such as "认真注意后"; Papo replies are shown as Papo speaking, with light context only for user/world inputs.
   - Memory page no longer defaults to database labels such as `future_review`, batch ids, or numeric weights. It shows Papo's own memory language and keeps time/location as part of the shared moment; raw details belong in Brain/developer diagnostics instead.
@@ -354,7 +354,7 @@ Verified:
 - Active emergence reads as inner resurfacing rather than a template reminder.
 - Active emergence prefers real shared memories over feedback-shaped self-memory; when it does surface feedback-shaped self-memory, it speaks as a raised habit rather than an old event.
 - Wake rhythm records an app-open presence event, applies rule-owned time-based state recovery, and can resurface a real user memory after absence.
-- Papo utterances are visible in persisted dialogue history, and new non-wake replies mark the dialogue tab unread.
+- Papo utterances are visible in the default dialogue history except wake records, and new non-wake replies mark the dialogue tab unread.
 - Active emergence ignores zero-weight forgotten memories; it may use a derived safety rule, but it will not resurface the forgotten target itself.
 - Active emergence with no shared memories does not say "I remembered"; it records no related memory ids and waits for real shared material.
 - Goal 3 acceptance flow is covered by an end-to-end core test: wake, 8-part Curious stream, selected/ignored reasons, remember/continue feedback, A/B conditioned creatures, and active emergence from a real promoted memory.
@@ -450,7 +450,7 @@ Demo material rule:
 - Curious Mode can segment live recording into audio transcripts.
 - Curious Mode records multimodal input metadata: 30-second batch id, observed time, and photo location when permitted.
 - Papo's visible Shiba Inu SVG avatar reflects state and remains readable on mobile.
-- Conversation timeline treats attention as part of dialogue, and only non-wake Papo utterances create an unread dialogue indicator.
+- Conversation timeline treats attention as part of dialogue, hides wake records from the default message flow, and only non-wake Papo utterances create an unread dialogue indicator.
 - Same-batch multimodal inputs are visible as one shared moment in the conversation timeline.
 - Episode memory provenance links back to the source shared moment where available.
 - Feedback itself is dialogue input, including text and audio transcript feedback, and visible raising deltas are shown after feedback.

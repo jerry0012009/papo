@@ -280,7 +280,7 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "对话" }));
     expect(screen.getByText("和 Papo 的小日常")).toBeInTheDocument();
     expect(screen.getByText("5 条你给的内容")).toBeInTheDocument();
-    expect(screen.getByText("4 次 Papo 回应")).toBeInTheDocument();
+    expect(screen.getByText("3 次 Papo 回应")).toBeInTheDocument();
     expect(screen.getAllByText("同一次事件").length).toBeGreaterThan(1);
     expect(screen.getByText("2 条内容")).toBeInTheDocument();
     expect(screen.getByText("1 条内容")).toBeInTheDocument();
@@ -294,7 +294,7 @@ describe("App", () => {
     expect(screen.queryByText(/你在教它/)).not.toBeInTheDocument();
     expect(screen.getAllByText("Papo").length).toBeGreaterThan(1);
     expect(screen.getAllByText("你给 Papo 看了照片")).toHaveLength(2);
-    expect(screen.getByText("我刚刚醒着，你一打开我就还在这里。")).toBeInTheDocument();
+    expect(screen.queryByText("我刚刚醒着，你一打开我就还在这里。")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "记忆" }));
     expect(screen.getByText("我记住的事")).toBeInTheDocument();

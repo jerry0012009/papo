@@ -862,7 +862,7 @@ function ChatView(props: {
   onStopListening: () => void;
 }) {
   const [draft, setDraft] = useState("");
-  const messages = [...(props.profile.conversation ?? [])].slice(0, 50).reverse();
+  const messages = [...(props.profile.conversation ?? [])].filter((message) => message.channel !== "wake").slice(0, 50).reverse();
   const sections = groupConversationSections(messages);
   const inputCount = messages.filter((message) => message.role !== "papo").length;
   const papoCount = messages.filter((message) => message.role === "papo").length;
