@@ -376,6 +376,7 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "演示" }));
     expect(screen.getByText("带 Papo 走一圈")).toBeInTheDocument();
+    expect(screen.getByText("用几段日常内容，看 Papo 怎么听见、回应、被你养一下，再在合适的时候想起真实记住的事。")).toBeInTheDocument();
     expect(screen.getByText("带 Papo 完整走一圈")).toBeInTheDocument();
     expect(screen.queryByText("带它完整走一圈")).not.toBeInTheDocument();
     expect(screen.getByText("先递 8 段生活")).toBeInTheDocument();

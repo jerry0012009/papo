@@ -78,16 +78,18 @@ describe("creature brain v0.2", () => {
       deepResult: aNext,
       quietResult: bNext
     });
-    expect(summary).toContain("被你鼓励多想的 Papo");
-    expect(summary).toContain("被你教会轻声陪着的 Papo");
+    expect(summary).toContain("同一句担心，两只 Papo 的接法已经分开了");
+    expect(summary).toContain("被你鼓励多想后");
+    expect(summary).toContain("被你教着轻声陪后");
     expect(summary).not.toContain("深想型");
     expect(summary).not.toContain("安静型");
     expect(summary).toContain("更愿意停下来多想一点");
     expect(summary).toContain("更会收住声音");
     expect(summary).not.toContain(`深入倾向 ${a.policyProfile.preferDepth}`);
     expect(summary).not.toContain(`安静倾向 ${b.policyProfile.quietTendency}`);
-    expect(summary).toContain("接话方式也被养得不一样");
+    expect(summary).toContain("说出口的第一反应也不一样");
     expect(summary).not.toContain("内在选择");
+    expect(summary).not.toMatch(/追问确认|保存本次经历|长期记忆/);
   });
 
   it("memory consolidation creates candidates before long-term promotion", () => {

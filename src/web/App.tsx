@@ -588,12 +588,12 @@ export function App() {
       setLearningNote(learned);
       setEmergence(emerged.emergence);
       setDemoSummary({
-        attention: `它看了 ${curiousResult.curiousSession?.totalSegments ?? demoCuriousSegments.length} 段，只认真注意到 ${curiousResult.events.length} 段。`,
-        feedback: learned || "它已经听见“帮我记住”和“再想一会儿”，正在把这点养进后面的回应里。",
+        attention: `Papo 听过 ${curiousResult.curiousSession?.totalSegments ?? demoCuriousSegments.length} 段生活，只接住 ${curiousResult.events.length} 段真正需要回应的内容。`,
+        feedback: learned || "Papo 已经听见“帮我记住”和“再想一会儿”，这会影响它后面怎么接你的话。",
         contrast,
         emergence: emerged.emergence.text
       });
-      setDemoNote("这只 Papo 已经走完一圈：先听见生活内容，再根据你的反馈调整，之后能在合适的时候想起旧事。");
+      setDemoNote("Papo 小团刚走完一圈：先听见生活内容，再被你的反馈养一下，之后在合适的时候把真实记住的事带回来。");
       setTab("demo");
     });
   }
@@ -623,7 +623,7 @@ export function App() {
       setProfile(aResult.profile);
       setLastResult(aResult);
       setLearningNote(contrast);
-      setDemoNote(`${aProfile.creatureName} 和 ${bProfile.creatureName} 刚被不同反馈养了一小会儿。${contrast}`);
+      setDemoNote(`${aProfile.creatureName} 和 ${bProfile.creatureName} 刚被你用不同反馈养了一小会儿。${contrast}`);
       setTab("home");
     });
   }
@@ -1409,7 +1409,7 @@ function DemoView(props: {
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={Wand2} title="带 Papo 走一圈" />
-        <p className="response">用几段日常内容，看 Papo 怎么听见、回应、学习反馈，再在合适的时候想起旧事。</p>
+        <p className="response">用几段日常内容，看 Papo 怎么听见、回应、被你养一下，再在合适的时候想起真实记住的事。</p>
         {props.note ? <section className="learning-note">{props.note}</section> : null}
         {props.summary ? (
           <section className="demo-checklist">

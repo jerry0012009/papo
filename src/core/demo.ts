@@ -10,22 +10,25 @@ export function createContrastSummary(input: {
   const quietAction = input.quietResult.events[0]?.actionDecision.action ?? "quiet";
   const deepLine = summarizeVisibleStyle(input.deepResult);
   const quietLine = summarizeVisibleStyle(input.quietResult);
+  const deepName = input.deepProfile.creatureName || "Papo 小想";
+  const quietName = input.quietProfile.creatureName || "Papo 小静";
   return [
-    `同一句话下，被你鼓励多想的 Papo ${actionTone(deepAction)}；被你教会轻声陪着的 Papo ${actionTone(quietAction)}。`,
-    `养成差异：${deepProfileLine(input.deepProfile, input.quietProfile)}；${quietProfileLine(input.quietProfile, input.deepProfile)}。`,
-    `接话方式也被养得不一样：多想的那只「${deepLine}」；轻声的那只「${quietLine}」。`
+    `同一句担心，两只 Papo 的接法已经分开了。`,
+    `${deepName}被你鼓励多想后，会${actionTone(deepAction)}；${deepProfileLine(input.deepProfile, input.quietProfile)}。`,
+    `${quietName}被你教着轻声陪后，会${actionTone(quietAction)}；${quietProfileLine(input.quietProfile, input.deepProfile)}。`,
+    `它们说出口的第一反应也不一样：${deepName}「${deepLine}」；${quietName}「${quietLine}」。`
   ].join(" ");
 }
 
 function deepProfileLine(deep: CreatureProfile, quiet: CreatureProfile) {
-  const parts = ["被你鼓励多想的 Papo 更愿意停下来多想一点"];
+  const parts = ["更愿意停下来多想一点"];
   if (deep.policyProfile.recallTendency > quiet.policyProfile.recallTendency) parts.push("更容易把以前的小事带回来一起听");
   if (deep.policyProfile.preferProactivity > quiet.policyProfile.preferProactivity) parts.push("也更可能轻轻接一句话");
   return parts.join("，");
 }
 
 function quietProfileLine(quiet: CreatureProfile, deep: CreatureProfile) {
-  const parts = ["被你教会轻声陪着的 Papo 更会收住声音"];
+  const parts = ["更会收住声音"];
   if (quiet.policyProfile.quietTendency > deep.policyProfile.quietTendency) parts.push("先陪着，不急着打扰你");
   if (quiet.policyProfile.privacySensitivity >= deep.policyProfile.privacySensitivity) parts.push("保存前会多等你的意思");
   return parts.join("，");
@@ -35,13 +38,13 @@ function actionTone(action: string) {
   const map: Record<string, string> = {
     recall: "把以前的小事带回来",
     review: "多停一下继续想",
-    ask: "追问确认",
-    save_episode: "把这件事认真留下",
-    save_long_term: "更认真记住这件事",
+    ask: "先问你一句",
+    save_episode: "把这件事放在心上",
+    save_long_term: "把这件事记得更稳",
     observe: "先轻轻观察",
     quiet: "安静陪着",
     respond: "先回应你",
-    draft_reminder: "之后轻轻回来提醒",
+    draft_reminder: "记得之后再回来看",
     draft_question_list: "把问题拆开陪你看"
   };
   return map[action] ?? action;

@@ -424,6 +424,7 @@ Verified:
 - Memory cards default to the user's shared moment and the resulting remembered content; attention reasons, action choice, and consolidation rationale stay in expandable process details.
 - Expandable process details are still product experience, not raw backend output. Rule and LLM process fields should use "你/我" wording and avoid "用户可能", "语义理解", "后台流程", or "系统选择" phrasing unless the user is on a technical Brain diagnostic surface.
 - The semantic brain owns semantic interpretation, action suggestions, visible replies, and memory candidate wording; rule code owns flow classes, safety guards, budgets, and fallback behavior.
+- Demo contrast copy now frames A/B conditioning as two named Papos receiving the same worry differently after feedback, rather than as policy or action summaries.
 - Core tests protect memory candidates and consolidation reasons from internal developer wording.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:
