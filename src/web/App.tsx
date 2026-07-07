@@ -793,10 +793,7 @@ function HomeView(props: {
   onGoCurious: () => void;
   onGoChat: () => void;
 }) {
-  const latestReply = latestVisiblePapoReply(props.profile);
-  const longTermCount = (props.profile.longTermMemories ?? []).filter((memory) => memory.kind !== "creature_self_memory" && memory.weight > 0).length;
-  const candidateCount = (props.profile.memoryCandidates ?? []).filter((candidate) => candidate.status === "candidate").length;
-  const latestMemory = latestVisibleMemoryLine(props.profile);
+  const latestReply = props.unreadPapoCount ? latestVisiblePapoReply(props.profile) : "";
   const actionLine = papoVisibleActionLine(props.profile.state);
   return (
     <section className="stack">
@@ -809,29 +806,6 @@ function HomeView(props: {
           <HomeBrainPeek profile={props.profile} />
         </div>
       </div>
-      <div className="home-status-grid" aria-label="Papo 当前的陪伴状态">
-        <div className="home-status-card">
-          <History size={16} />
-          <span>记得</span>
-          <strong>{longTermCount}</strong>
-        </div>
-        <div className="home-status-card">
-          <Sparkles size={16} />
-          <span>待确认</span>
-          <strong>{candidateCount}</strong>
-        </div>
-        <button className="home-status-card interactive" onClick={props.onGoChat}>
-          <MessagesSquare size={16} />
-          <span>新消息</span>
-          <strong>{Math.min(3, props.unreadPapoCount)}</strong>
-        </button>
-      </div>
-      {latestMemory ? (
-        <section className="home-memory-strip">
-          <span>最近留下</span>
-          <p>{latestMemory}</p>
-        </section>
-      ) : null}
       {props.unreadPapoCount ? (
         <button className="proactive-nudge" onClick={props.onGoChat}>
           <MessagesSquare size={16} />
@@ -2143,14 +2117,6 @@ function latestVisiblePapoReply(profile: CreatureProfile) {
   const text = visiblePapoReplyText(latest?.text);
   if (!text) return "";
   return text.length > 80 ? `${text.slice(0, 80)}...` : text;
-}
-
-function latestVisibleMemoryLine(profile: CreatureProfile) {
-  const latest = [...(profile.longTermMemories ?? [])]
-    .filter((memory) => memory.kind !== "creature_self_memory" && memory.weight > 0)
-    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
-  const text = latest ? memoryResultLine(latest) : "";
-  return text.length > 64 ? `${text.slice(0, 64)}...` : text;
 }
 
 function visiblePapoReplyText(text: string | undefined) {
