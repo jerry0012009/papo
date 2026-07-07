@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { handleButtonCapture, handleCuriousStream } from "../src/core/attention";
 import { createActiveEmergence, semanticDecideEmergence } from "../src/core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../src/core/feedback";
-import { runButtonHarness } from "../src/core/harness";
+import { runButtonHarness, runCuriousHarness } from "../src/core/harness";
 import { memoryKeepReasonToCreatureVoice, promoteEpisode, toCreatureMemoryVoice } from "../src/core/memory";
 import { createCreatureProfile } from "../src/core/profile";
 import { createModelProvider, type ModelProvider } from "../src/core/provider";
@@ -129,6 +129,19 @@ describe("creature core", () => {
     expect(memory?.text).toContain("那一小段的时间是 2026-07-06 10:00:30 UTC");
     expect(memory?.text).toContain("地点是家里");
     expect(memory?.text).not.toContain("batch-core");
+  });
+
+  it("curious mode keeps high privacy stream content out of attention events and memory candidates", () => {
+    const profile = createCreatureProfile();
+    const result = handleCuriousStream(profile, [
+      { id: "s1", kind: "text", label: "背景", content: "窗外有点吵，我继续做自己的事。" },
+      { id: "s2", kind: "text", label: "隐私", content: "我的 secret token 是 abc，刚才复制到了剪贴板。" }
+    ]);
+
+    expect(result.events.map((event) => event.triggerSegmentId)).not.toContain("s2");
+    expect(result.episodes.map((episode) => episode.sourceSegmentId)).not.toContain("s2");
+    expect(result.memoryCandidates?.map((candidate) => candidate.candidateText).join(" ")).not.toContain("secret token");
+    expect(result.curiousSession?.ignored.map((item) => item.segmentId)).toContain("s2");
   });
 
   it("feedback changes state and keeps values clamped", () => {
@@ -793,6 +806,78 @@ describe("creature core", () => {
     expect(candidate?.writePolicy).toBe("ask_user");
     expect(candidate?.candidateText).not.toContain("abc");
     expect(candidate?.privacyReason).toContain("token");
+  });
+
+  it("LLM attention decision chooses curious segments before episodes and memory candidates are finalized", async () => {
+    const prompts: string[] = [];
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "attention model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+        prompts.push(prompt);
+        if (prompt.includes("注意决策脑")) {
+          return {
+            shouldAttend: true,
+            selected: [
+              { segmentId: "s3", whySelected: "这段在说最近反复出现的游泳习惯，也带着人太多带来的不舒服。" },
+              { segmentId: "s2", whySelected: "这段虽然显眼，但里面有需要保护的内容。" }
+            ],
+            ignored: [
+              { segmentId: "s1", whyIgnored: "这只是路过的早餐背景，不需要打断。" },
+              { segmentId: "s2", whyIgnored: "这里像是密钥或验证码一类内容，我先等你的意思。" }
+            ],
+            creatureReport: "我先回应游泳这件事，其他背景先不打断；有隐私味道的内容先放轻。",
+            trace: ["attention: choose swimming"]
+          } as T;
+        }
+        if (prompt.includes("记忆决策脑")) {
+          const candidateId = prompt.match(/"candidateId":"(candidate_[^"]+)"/)?.[1] ?? "";
+          return {
+            candidates: [
+              {
+                candidateId,
+                shouldKeepCandidate: true,
+                candidateText: "你最近每天游泳，喜欢运动后轻一点，但不喜欢游泳馆人太多。",
+                memoryKind: "habit",
+                confidence: 76,
+                writePolicy: "wait_feedback",
+                whyConsolidate: "这和你最近稳定出现的运动习惯有关。",
+                decayPolicy: "decay_without_feedback",
+                tags: ["游泳", "运动习惯"]
+              }
+            ]
+          } as T;
+        }
+        return { trace: ["semantic: leave wording"] } as T;
+      }
+    };
+    const profile = createCreatureProfile();
+    const result = await runCuriousHarness(
+      profile,
+      [
+        { id: "s1", kind: "text", label: "早餐", content: "今天早餐吃了面包，没什么特别的。" },
+        { id: "s2", kind: "text", label: "隐私", content: "我的 secret token 是 abc，刚才复制到了剪贴板。" },
+        { id: "s3", kind: "text", label: "游泳", content: "我最近每天游泳，喜欢运动后轻一点，但不喜欢游泳馆人太多。" }
+      ],
+      provider
+    );
+
+    expect(result.events.map((event) => event.triggerSegmentId)).toEqual(["s3"]);
+    expect(result.episodes).toHaveLength(1);
+    expect(result.episodes[0].sourceSegmentId).toBe("s3");
+    expect(result.memoryCandidates?.[0].sourceEpisodeId).toBe(result.episodes[0].id);
+    expect(result.memoryCandidates?.[0].memoryKind).toBe("habit");
+    expect(result.curiousSession?.selected.map((item) => item.segmentId)).toEqual(["s3"]);
+    expect(result.curiousSession?.ignored.map((item) => item.segmentId)).toContain("s2");
+    expect(result.curiousSession?.creatureReport).toContain("先回应游泳");
+    expect(profile.semanticBrainHistory.some((run) => run.source === "curious_stream" && run.message.includes("attention decision"))).toBe(true);
+    expect(prompts.join("\n")).not.toContain("secret token");
+    expect(prompts.join("\n")).not.toContain("abc");
   });
 
   it("keeps useful LLM semantics when optional text fields are empty strings", async () => {

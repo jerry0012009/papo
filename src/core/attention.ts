@@ -19,6 +19,7 @@ import type {
 const EMOTIONAL_WORDS = ["担心", "焦虑", "兴奋", "害怕", "喜欢", "痛苦", "重要", "卡住", "不确定"];
 const FUTURE_WORDS = ["以后", "未来", "下次", "提醒", "计划", "deadline", "明天", "本周", "复查", "资料"];
 const PRIVACY_WORDS = ["隐私", "密码", "token", "key", "身份证", "银行卡", "地址", "private", "secret"];
+const HIGH_PRIVACY_PATTERN = /token|secret|密码|验证码|身份证|银行卡|api key|apikey|私钥|地址/i;
 const IDENTITY_WORDS = ["小动物", "小脑袋", "companion", "活物", "生命", "注意", "记忆", "反馈", "工具"];
 const COMMUNICATION_WORDS = ["说句话", "说话", "回复", "回答", "你在吗", "你好", "hello", "汪", "打招呼", "听见", "听到", "回应", "叫你"];
 
@@ -79,18 +80,25 @@ export function handleCuriousStream(
 
   for (const item of initialScores.sort((a, b) => b.score.total - a.score.total)) {
     const adjusted = applyRedundancyPenalty(item.score, selected.map((entry) => entry.score.tags));
-    if (selected.length < attentionBudget && adjusted.total >= 38) {
+    if (isHighPrivacySegmentContent(item.segment.content)) {
+      ignored.push({ segment: item.segment, score: adjusted, whyIgnored: "这里可能有隐私内容，我先等你的意思。" });
+    } else if (selected.length < attentionBudget && adjusted.total >= 38) {
       selected.push({ segment: item.segment, score: adjusted, whySelected: explainSelected(adjusted) });
     } else {
       ignored.push({ segment: item.segment, score: adjusted, whyIgnored: explainIgnored(adjusted, selected.length, attentionBudget) });
     }
   }
 
-  const focused = selected.length ? selected : initialScores.slice(0, 1).map((item) => ({
-    segment: item.segment,
-    score: item.score,
-    whySelected: "整组信息都偏弱，我只保留相对最清晰的一段作为轻观察。"
-  }));
+  const focused = selected.length
+    ? selected
+    : initialScores
+        .filter((item) => !isHighPrivacySegmentContent(item.segment.content))
+        .slice(0, 1)
+        .map((item) => ({
+          segment: item.segment,
+          score: item.score,
+          whySelected: "整组信息都偏弱，我只保留相对最清晰的一段作为轻观察。"
+        }));
 
   const events = focused.map(({ segment, score }) =>
     buildAttentionEvent(profile, {
@@ -313,7 +321,7 @@ function hasMixedPreference(text: string) {
   return /喜欢/.test(text) && /不喜欢|讨厌|烦|太多|难受/.test(text);
 }
 
-function composeStreamSummary(events: AttentionEvent[], session: CuriousSessionAudit): string {
+export function composeStreamSummary(events: AttentionEvent[], session: CuriousSessionAudit): string {
   if (!events.length) return "我刚才先安静听着，没有打断你。";
   const ignoredPrivacy = session.ignored.filter((item) => item.score.privacyRisk > 0).map((item) => item.label);
   const names = events.map((event) => event.triggerLabel).join("、");
@@ -353,6 +361,10 @@ function contentWithObservationContext(segment: StreamSegment) {
     details.push(`观察地点：纬度 ${segment.location.latitude.toFixed(5)}，经度 ${segment.location.longitude.toFixed(5)}${accuracy}`);
   }
   return details.length ? `${segment.content.trim()}\n${details.join("\n")}` : segment.content;
+}
+
+export function isHighPrivacySegmentContent(text: string) {
+  return HIGH_PRIVACY_PATTERN.test(text);
 }
 
 function explainScore(score: SegmentScore): string {

@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { guardActionDecision } from "./action";
 import { createMemoryResonanceEmergence } from "./emergence";
-import { buildAttentionEvent, composeCreatureResponse, handleButtonCapture, handleCuriousStream } from "./attention";
+import { buildAttentionEvent, composeCreatureResponse, handleButtonCapture, handleCuriousStream, isHighPrivacySegmentContent } from "./attention";
 import { createCuriousCreatureReport } from "./experience";
 import { makeId } from "./ids";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
+import { semanticDecideAttention } from "./semantic-attention";
 import { semanticDecideMemory } from "./semantic-memory";
 import type { ActionKind, CaptureResult, CreatureProfile, SemanticBrainRecord, StreamSegment } from "./types";
 
@@ -138,6 +139,9 @@ async function enrichWithSemanticBrain(
   }
 
   try {
+    if (source === "curious_stream") {
+      await semanticDecideAttention(profile, result, provider);
+    }
     const semantic = await askSemanticBrain(profile, result, provider, source);
     if (semantic.status !== "applied") {
       applyFallbackInteractionUnderstanding(profile, result, source);
@@ -375,7 +379,7 @@ function promoteCuriousCandidate(result: CaptureResult, segmentId: string, whySe
   const candidate = result.attentionCandidates?.find((item) => item.segment.id === segmentId);
   const ignored = session.ignored.find((item) => item.segmentId === segmentId);
   if (!candidate || !ignored) return;
-  if (!canPromoteCuriousCandidate(candidate.score)) return;
+  if (!canPromoteCuriousCandidate(candidate.score, candidate.segment.content)) return;
 
   const now = result.events[0]?.createdAt ?? new Date().toISOString();
   const event = buildAttentionEvent(result.profile, {
@@ -415,9 +419,10 @@ function promoteCuriousCandidate(result: CaptureResult, segmentId: string, whySe
   session.ignored = session.ignored.filter((item) => item.segmentId !== segmentId);
 }
 
-function canPromoteCuriousCandidate(score: NonNullable<CaptureResult["attentionCandidates"]>[number]["score"]) {
+function canPromoteCuriousCandidate(score: NonNullable<CaptureResult["attentionCandidates"]>[number]["score"], content: string) {
   if (score.total < 32) return false;
   if (score.privacyRisk > 82) return false;
+  if (isHighPrivacySegmentContent(content)) return false;
   return true;
 }
 
@@ -523,6 +528,7 @@ function recordSemanticBrainRun(
 }
 
 function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "button" | "curious_stream") {
+  const highPrivacySegmentIds = new Set((result.attentionCandidates ?? []).filter((item) => isHighPrivacySegmentContent(item.segment.content)).map((item) => item.segment.id));
   return `请作为 Papo 的语义脑，读取规则层产生的候选 attention events，改进语义理解和表达。
 
 你可以：
@@ -575,20 +581,21 @@ ${JSON.stringify(result.events.map((event) => ({
   attentionStrength: event.attentionStrength,
   privacyRisk: event.privacyRisk,
   suggestedAction: event.suggestedAction,
-  tags: event.tags
+  tags: isHighPrivacySegmentContent(event.triggerContent) ? [] : event.tags
 })))}
 
 attention_candidates:
 ${JSON.stringify(result.attentionCandidates?.map((item) => ({
   segmentId: item.segment.id,
   label: item.segment.label,
-  content: item.segment.content,
+  content: modelSafeSegmentContent(item.segment.content),
+  contentHiddenForPrivacy: isHighPrivacySegmentContent(item.segment.content),
   selectedByRules: item.selectedByRules,
   scoreTotal: item.score.total,
   privacyRisk: item.score.privacyRisk,
   redundancyPenalty: item.score.redundancyPenalty,
   relatedIds: item.score.relatedIds,
-  tags: item.score.tags
+  tags: modelSafeTags(item.segment.content, item.score.tags)
 })) ?? [])}
 
 curious_session_rule_audit:
@@ -603,7 +610,7 @@ ${JSON.stringify(result.curiousSession ? {
     scoreTotal: item.score.total,
     privacyRisk: item.score.privacyRisk,
     relatedIds: item.score.relatedIds,
-    tags: item.score.tags
+    tags: highPrivacySegmentIds.has(item.segmentId) ? [] : item.score.tags
   })),
   ignored: result.curiousSession.ignored.map((item) => ({
     segmentId: item.segmentId,
@@ -612,8 +619,18 @@ ${JSON.stringify(result.curiousSession ? {
     scoreTotal: item.score.total,
     privacyRisk: item.score.privacyRisk,
     redundancyPenalty: item.score.redundancyPenalty,
-    tags: item.score.tags
+    tags: highPrivacySegmentIds.has(item.segmentId) ? [] : item.score.tags
   }))
 } : null)}
 `;
+}
+
+function modelSafeSegmentContent(text: string) {
+  if (!isHighPrivacySegmentContent(text)) return text;
+  return "[这段包含可能的密钥、验证码、密码、地址或证件信息，原文已隐藏；不能直接引用、保存或选择为注意事件。]";
+}
+
+function modelSafeTags(text: string, tags: string[]) {
+  if (!isHighPrivacySegmentContent(text)) return tags;
+  return [];
 }
