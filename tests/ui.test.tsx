@@ -348,7 +348,8 @@ describe("App", () => {
     await userEvent.click(screen.getByRole("button", { name: "首页" }));
     expect(screen.queryByText(/sense: button/)).not.toBeInTheDocument();
     expect(screen.queryByText(/semantic: fallback/)).not.toBeInTheDocument();
-    expect(screen.getByText("刚才 Papo 说")).toBeInTheDocument();
+    expect(screen.queryByText("刚才 Papo 说")).not.toBeInTheDocument();
+    expect(screen.queryByText("Papo 新说")).not.toBeInTheDocument();
     const skippedReason = screen.getByText("这段更像背景声，我先不抢着记住。");
     expect(screen.getByText("看看这次 Papo 注意了什么")).toBeInTheDocument();
     expect(skippedReason).not.toBeVisible();

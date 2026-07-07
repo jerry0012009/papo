@@ -782,10 +782,8 @@ function HomeView(props: {
       {props.lastFeedback ? <FeedbackImpactCard feedback={props.lastFeedback} /> : null}
       {!props.lastFeedback && props.learningNote ? <section className="learning-note">{visibleCreatureText(props.learningNote)}</section> : null}
 
-      {props.lastResult ? (
-        <section className="panel">
-          <PanelTitle icon={Eye} title="刚才 Papo 说" />
-          <p className="response">{visibleCreatureText(props.lastResult.response)}</p>
+      {props.lastResult?.curiousSession ? (
+        <section className="panel quiet-detail-panel">
           <ResultReflectionDetails result={props.lastResult} />
         </section>
       ) : null}
