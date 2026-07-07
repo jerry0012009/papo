@@ -4,15 +4,26 @@ import { normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
 import type { CreatureProfile, EmergenceRecord, FeedbackRecord, LongTermMemory } from "./types";
 
+const requiredText = (min: number, max: number) =>
+  z.preprocess((value) => (typeof value === "string" ? value.trim() : value), z.string().min(min).max(max));
+const optionalText = (max: number) =>
+  z.preprocess((value) => (typeof value === "string" && !value.trim() ? undefined : value), z.string().min(1).max(max).optional());
+const optionalTextArray = (maxItems: number, maxText: number) =>
+  z
+    .array(z.preprocess((value) => (typeof value === "string" ? value.trim() : value), z.string().max(maxText)).optional())
+    .transform((values) => values.filter((value): value is string => Boolean(value)))
+    .pipe(z.array(z.string().min(1).max(maxText)).max(maxItems))
+    .optional();
+
 const feedbackNarrationSchema = z.object({
-  learningNote: z.string().min(8).max(260),
-  followUpText: z.string().min(4).max(180).optional(),
-  trace: z.array(z.string().min(1).max(120)).max(5).optional()
+  learningNote: requiredText(8, 260),
+  followUpText: optionalText(180),
+  trace: optionalTextArray(5, 120)
 });
 
 const emergenceNarrationSchema = z.object({
-  message: z.string().min(16).max(460),
-  trace: z.array(z.string().min(1).max(120)).max(5).optional()
+  message: requiredText(16, 460),
+  trace: optionalTextArray(5, 120)
 });
 
 export async function enrichFeedbackNarration(

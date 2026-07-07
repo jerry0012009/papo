@@ -359,6 +359,34 @@ describe("creature brain v0.2", () => {
     expect(feedback.replyText).not.toMatch(/用户|系统|后台|流程|写入|长期记忆/);
   });
 
+  it("keeps useful feedback narration when optional fields are empty strings", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "sparse feedback narration model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>() =>
+        ({
+          learningNote: "我学到：妈妈复查这件事你希望我多停一下，之后我会更认真接住。",
+          followUpText: "",
+          trace: [""]
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "我有点担心自己又把妈妈复查这件事拖到睡前。");
+    const feedback = applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id });
+    const ruleFollowUp = feedback.followUpText;
+
+    await enrichFeedbackNarration(profile, feedback, provider);
+
+    expect(feedback.learningNote).toContain("妈妈复查");
+    expect(feedback.followUpText).toBe(ruleFollowUp);
+    expect(feedback.replyText).toContain(ruleFollowUp);
+  });
+
   it("LLM emergence narration must stay anchored to an existing memory", async () => {
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "妈妈复查这件事对我很重要，我希望提前准备。");
@@ -399,6 +427,34 @@ describe("creature brain v0.2", () => {
     const rejected = await enrichEmergenceNarration(profile, unsafe, unsafeProvider);
 
     expect(rejected.text).toBe(unsafeOriginal);
+  });
+
+  it("keeps useful emergence narration when optional trace is empty", async () => {
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "妈妈复查这件事对我很重要，我希望提前准备。");
+    applyFeedback(profile, { kind: "remember", targetId: result.episodes[0].id });
+    profile.state.curiosity = 86;
+    const emergence = createActiveEmergence(profile);
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "sparse emergence narration model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>() =>
+        ({
+          message: "我刚才又想起妈妈复查这件事，因为我还惦记着你想提前准备。等你继续说时，我会先接住和准备有关的线索。",
+          trace: [""]
+        }) as T
+    };
+
+    const enriched = await enrichEmergenceNarration(profile, emergence, provider);
+
+    expect(enriched.text).toContain("妈妈复查");
+    expect(enriched.text).toContain("提前准备");
+    expect(profile.emergenceHistory[0].ruleTrace).toContain("llm: emergence narration enriched");
   });
 
   it("LLM emergence narration treats feedback self-memory as a raised habit", async () => {
