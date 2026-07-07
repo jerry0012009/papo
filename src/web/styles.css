@@ -574,6 +574,27 @@ meter {
   gap: 9px;
 }
 
+.episode-moment {
+  display: grid;
+  gap: 7px;
+}
+
+.episode-moment p,
+.episode-moment strong {
+  display: block;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.episode-moment p {
+  color: #465248;
+}
+
+.episode-moment strong {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
 .learning-note {
   border-radius: 8px;
   background: #1f2421;

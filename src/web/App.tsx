@@ -1426,6 +1426,8 @@ function EpisodeCard(props: {
 }) {
   const [feedbackText, setFeedbackText] = useState("");
   const [feedbackModality, setFeedbackModality] = useState<"text" | "audio_transcript">("text");
+  const userLine = episodeUserLine(props.episode, props.sourceMessages ?? []);
+  const papoLine = episodePapoLine(props.episode);
 
   function submitFeedback(kind: FeedbackKind) {
     const content = feedbackText.trim();
@@ -1438,9 +1440,11 @@ function EpisodeCard(props: {
     <article className="episode-card">
       <div className="episode-head">
         <span>{props.episode.source === "button" ? "你告诉我的事" : "Papo 回应过的事"}</span>
-        <strong>{memoryFamiliarityText(props.episode.weight)}</strong>
       </div>
-      <h3>{visibleCreatureText(props.episode.creatureResponse || props.episode.noticed)}</h3>
+      <div className="episode-moment">
+        <p>{userLine}</p>
+        <strong>{papoLine}</strong>
+      </div>
       {!props.compact ? <EpisodeProcessDetails episode={props.episode} /> : null}
       <EpisodeSourceMoment episode={props.episode} messages={props.sourceMessages ?? []} compact={props.compact} />
       <div className="feedback-input">
@@ -1486,6 +1490,50 @@ function EpisodeCard(props: {
       </div>
     </article>
   );
+}
+
+function episodeUserLine(episode: EpisodeMemory, messages: ConversationMessage[]) {
+  const sourceText = messages
+    .filter((message) => message.role !== "papo")
+    .map((message) => visibleCreatureText(message.text).trim())
+    .filter(Boolean)
+    .join(" / ");
+  return sourceText || visibleCreatureText(episode.inputSummary || noticedText(episode.noticed));
+}
+
+function episodePapoLine(episode: EpisodeMemory) {
+  const cleaned = visibleCreatureText(episode.creatureResponse || "")
+    .replace(/^我先听你说完[：:，,]?\s*/g, "")
+    .replace(/^我接住你刚告诉来的这件事[：:，,]?\s*/g, "")
+    .replace(/^我接住你刚告诉来的这一件事[：:，,]?\s*/g, "")
+    .replace(/^我接住你刚告诉来的.*?[：:，,]\s*/g, "")
+    .replace(/^我接住你刚递来的.*?[：:，,]\s*/g, "")
+    .replace(/这件事我会先当作刚发生的对话来回应。?/g, "")
+    .replace(/我想轻轻问一句，确认我有没有听对。?/g, "")
+    .replace(/我会先把它当作一段共同经历记下来。?/g, "")
+    .replace(/我会记住这次发生了什么，但不会擅自长期保存。?/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (cleaned && !looksLikeInternalEpisodeText(cleaned) && !looksLikeInputEcho(cleaned, episode)) return summarizeForEpisode(cleaned);
+  return episode.actionDecision?.action === "ask" ? "我听见了，慢慢说。" : "我听见了。";
+}
+
+function summarizeForEpisode(text: string) {
+  return text.length > 52 ? `${text.slice(0, 52)}...` : text;
+}
+
+function looksLikeInternalEpisodeText(text: string) {
+  return /情景|长期|流程|语义|意图|记忆策略|确认我有没有听对|共同经历|刚发生的对话/.test(text);
+}
+
+function looksLikeInputEcho(text: string, episode: EpisodeMemory) {
+  const reply = comparableEpisodeText(text);
+  const input = comparableEpisodeText(episode.inputSummary || noticedText(episode.noticed));
+  return Boolean(reply && input && (reply.includes(input) || input.includes(reply)));
+}
+
+function comparableEpisodeText(text: string) {
+  return visibleCreatureText(text).replace(/[，。！？、\s:：,.!?]/g, "");
 }
 
 function EpisodeProcessDetails({ episode }: { episode: EpisodeMemory }) {
