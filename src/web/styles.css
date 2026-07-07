@@ -216,6 +216,7 @@ select {
 
 .shiba-chest,
 .shiba-paw,
+.shiba-forehead,
 .shiba-urajiro,
 .shiba-muzzle,
 .shiba-brow {
@@ -263,6 +264,13 @@ select {
   stroke: var(--ink);
   stroke-linecap: round;
   stroke-width: 3;
+}
+
+.shiba-toes {
+  fill: none;
+  stroke: rgba(159, 79, 37, 0.58);
+  stroke-linecap: round;
+  stroke-width: 2;
 }
 
 .shiba-calm {

@@ -299,10 +299,13 @@ Done:
   - `remember` feedback with teaching text now truly appends non-private user teaching to the targeted long-term memory and retags it, while private feedback text remains out of memory writes.
   - Long-term memory correction now writes a user teaching message and Papo confirmation into conversation history, linked back to the corrected memory.
   - Long-term memory correction dialogue now normalizes raw memory wording before it reaches the conversation timeline, so Papo says "你希望我..." instead of leaking "用户希望小动物...".
+  - Memory page tone now has a shared subjective-normalization path instead of isolated copy patches: raw model/rule phrases such as "我先试着理解", "当前事件", "用户确认", "保存意图", and "旧记忆" are translated before rendering or correction dialogue uses them.
+  - The memory page's default controls now frame the user as teaching Papo how to remember, release, or revisit a shared moment, rather than managing database records.
+  - Papo's SVG Shiba avatar has a more standard cartoon Shiba silhouette: larger triangular ears, clearer urajiro forehead/face/chest, curled tail, round paws, toe marks, and softened muzzle/eye proportions.
 
 Verified:
 
-- `npm test`: 45 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
+- `npm test`: 50 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -363,9 +366,9 @@ Verified:
 - OpenRouter account/model availability was checked against `/api/v1/models`: `google/gemini-3.5-flash` and `google/gemini-3.1-flash-lite` report audio input support, but real audio requests from the current account returned provider-side 403, so OpenRouter audio is not yet counted as a verified sensing path.
 - Guided Demo Mode can run the Goal 3 acceptance flow through real API calls using ordinary life-context material.
 - Guided Demo Mode's two-creature section displays how feedback changed their behavior and personality on the same input without exposing policy numbers.
-- `npm run test:e2e`: Playwright Chromium desktop/mobile visual smoke passes for the Shiba avatar, conversation timeline, source-linked episode card, unread dialogue dot, feedback input, and Curious recording entry.
+- `npm run test:e2e`: Playwright Chromium desktop/mobile visual smoke passes for the Shiba avatar, memory page, conversation timeline, source-linked episode card, unread dialogue dot, feedback input, and Curious recording entry.
 - Tests protect active emergence and wake resurfacing from template-reminder or self-audit phrases such as "不是提醒", "内在倾向", "下一次你给我信息流", "不装作", and "装成".
-- UI and visual smoke protect the memory page's first-person creature voice and ensure raw memory diagnostics stay out of the default surface.
+- UI and visual smoke protect the memory page's first-person creature voice and ensure raw memory diagnostics or model-analysis phrases stay out of the default surface.
 - UI and visual smoke protect the companionship path from raw source ids and type dropdowns on user-facing pages.
 - UI smoke protects the demo entry from "一键准备" and numbered-scene copy.
 - Core and UI tests protect multi-creature contrast from "深想型/安静型" classifier labels on user-facing surfaces.

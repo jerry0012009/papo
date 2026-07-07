@@ -191,6 +191,12 @@ function buildLongTermText(episode: EpisodeMemory): string {
 export function normalizeSharedMemoryText(text: string) {
   return text
     .trim()
+    .replace(/^我先试着理解[：:]\s*/, "")
+    .replace(/我注意到这个片段可能是你想让我认真理解的当前事件[：:]\s*/g, "你刚递给我的这件小事：")
+    .replace(/这个片段可能是你想让我认真理解的当前事件[：:]\s*/g, "你刚递给我的这件小事：")
+    .replace(/我还没有强烈联想到旧记忆，所以先把它作为新的情景片段/g, "我还没把它和旧事连起来，会先当作这一次的小经历")
+    .replace(/这段需要用户确认，尤其是隐私、情绪或保存意图还不够明确/g, "这段我会先放轻一点，等你告诉我能不能留下")
+    .replace(/这段需要你确认，尤其是隐私、情绪或保存意图还不够明确/g, "这段我会先放轻一点，等你告诉我能不能留下")
     .replace(/我和用户/g, "我和你")
     .replace(/用户主动/g, "你主动")
     .replace(/用户确认/g, "你确认")
@@ -203,10 +209,15 @@ export function normalizeSharedMemoryText(text: string) {
     .replace(/memory candidate/gi, "还没完全记稳的想法")
     .replace(/candidate/gi, "还没完全记稳的想法")
     .replace(/当前工作区/g, "现在这一刻")
+    .replace(/旧记忆/g, "旧小事")
+    .replace(/情景片段/g, "小经历")
+    .replace(/保存意图/g, "要不要留下")
+    .replace(/需要你确认/g, "我会先等你点头")
     .replace(/长期保存/g, "一直记着")
     .replace(/长期记忆/g, "一直记着的事")
     .replace(/短期记忆/g, "刚刚记下的事")
     .replace(/隐私风险/g, "需要先小心的边界")
+    .replace(/隐私、情绪或要不要留下还不够明确/g, "隐私、情绪或要不要留下还需要你点头")
     .replace(/我\s+(说|回应|听|记|想|叫)/g, "我$1")
     .replace(/(\p{Script=Han})\s+(\p{Script=Han})/gu, "$1$2")
     .replace(/[。！？.!?]+$/, "");

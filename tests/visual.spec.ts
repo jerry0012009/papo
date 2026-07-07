@@ -42,15 +42,17 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   expect(chatScreenshot.byteLength).toBeGreaterThan(30_000);
 
   await page.getByRole("button", { name: "记忆" }).click();
-  await expect(page.getByText("我记得的你和我")).toBeVisible();
-  await expect(page.getByText("这件事以后可能还会来，我先替你记着：你希望我解释自己为什么注意到重点")).toBeVisible();
-  await expect(page.getByText("我当时愿意留下它，是因为这一小段有未来价值")).toBeVisible();
-  await expect(page.getByText(/用户|小动物|episode|candidate|长期保存/)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "帮我记准" })).toBeVisible();
+  await expect(page.getByText("我抱着的小事")).toBeVisible();
+  await expect(page.getByText(/这件事以后可能还会回来，我先抱着：你刚递给我的这件小事：如果你能说话/)).toBeVisible();
+  await expect(page.getByText("我当时把它抱住，是因为这一小段有未来价值")).toBeVisible();
+  await expect(page.getByText(/用户|小动物|episode|candidate|长期保存|当前事件|保存意图/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "教我记准" })).toBeVisible();
   await expect(page.getByRole("button", { name: "帮我先放下" })).toBeVisible();
   await expect(page.getByText("来自半分钟里的一小段")).toBeVisible();
   await expect(page.getByText("来源细节")).toHaveCount(0);
   await expect(page.getByText(/batch life-batch-1|segment photo-review/)).toHaveCount(0);
+  const memoryScreenshot = await page.screenshot({ fullPage: true, path: testInfo.outputPath(`${testInfo.project.name}-memory.png`) });
+  expect(memoryScreenshot.byteLength).toBeGreaterThan(30_000);
 
   await page.getByRole("button", { name: "陪我" }).click();
   await expect(page.getByText("陪我看一小段世界")).toBeVisible();
@@ -183,7 +185,7 @@ function profileFixture() {
         createdAt: now,
         sourceEpisodeId: "episode-review",
         kind: "future_review",
-        text: "用户希望小动物解释自己为什么注意到重点。",
+        text: "我先试着理解：我注意到这个片段可能是你想让我认真理解的当前事件：如果你能说话 你就说句话给我听。我还没有强烈联想到旧记忆，所以先把它作为新的情景片段。这段需要用户确认，尤其是隐私、情绪或保存意图还不够明确。",
         weight: 82,
         tags: ["妈妈复查", "病历"],
         consolidatedBecause: "这条 episode 有未来价值。"

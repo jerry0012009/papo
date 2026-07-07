@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createContrastSummary } from "../core/demo";
+import { normalizeSharedMemoryText } from "../core/memory";
 import type {
   AttentionEvent,
   CaptureResult,
@@ -893,34 +894,37 @@ function ShibaAvatar({ state, idle = false }: { state?: CreatureState; idle?: bo
     <div className={className} aria-label="Papo 是一只卡通柴犬">
       <svg className="shiba-svg" viewBox="0 0 160 150" role="img" aria-hidden="true">
         <g className="shiba-tail">
-          <path className="shiba-tail-ring" d="M120 86c23-7 29-34 10-43-17-8-32 8-23 22 6 10 21 7 21-3" />
-          <path className="shiba-tail-tip" d="M129 43c13 9 9 29-8 36" />
+          <path className="shiba-tail-ring" d="M118 88c26-8 33-38 11-49-19-9-36 9-26 25 7 11 24 8 24-4" />
+          <path className="shiba-tail-tip" d="M128 40c15 10 11 33-9 41" />
         </g>
         <g className="shiba-body">
-          <path className="shiba-body-fur" d="M42 87c8-23 51-28 73-8 17 15 15 45-9 52-21 7-55 5-69-8-11-10-10-24 5-36Z" />
-          <path className="shiba-chest" d="M60 92c8 8 27 8 35 0 7 14 3 31-17 32-19 1-26-15-18-32Z" />
-          <ellipse className="shiba-paw left" cx="55" cy="127" rx="15" ry="9" />
-          <ellipse className="shiba-paw right" cx="99" cy="127" rx="15" ry="9" />
+          <path className="shiba-body-fur" d="M39 88c10-24 53-30 76-9 18 16 16 44-8 53-22 8-57 6-72-8-11-11-10-25 4-36Z" />
+          <path className="shiba-chest" d="M59 91c9 9 31 9 40 0 7 15 1 32-20 33-20 1-29-16-20-33Z" />
+          <ellipse className="shiba-paw left" cx="55" cy="128" rx="16" ry="9" />
+          <ellipse className="shiba-paw right" cx="101" cy="128" rx="16" ry="9" />
+          <path className="shiba-toes left" d="M49 128c2 3 6 3 8 0M58 128c2 3 6 3 8 0" />
+          <path className="shiba-toes right" d="M95 128c2 3 6 3 8 0M104 128c2 3 6 3 8 0" />
         </g>
         <g className="shiba-head">
-          <path className="shiba-ear left" d="M46 42 34 10c-2-6 4-11 9-7l25 22Z" />
-          <path className="shiba-ear-inner left" d="M46 33 40 15l15 14Z" />
-          <path className="shiba-ear right" d="M113 42 126 10c2-6-4-11-9-7L92 25Z" />
-          <path className="shiba-ear-inner right" d="M113 33 119 15l-15 14Z" />
-          <path className="shiba-head-fur" d="M37 59c0-26 19-42 43-42s43 16 43 42c0 28-19 49-43 49S37 87 37 59Z" />
-          <path className="shiba-urajiro left" d="M44 64c0-17 11-31 25-34 2 19-5 38-19 48-4-3-6-8-6-14Z" />
-          <path className="shiba-urajiro right" d="M116 64c0-17-11-31-25-34-2 19 5 38 19 48 4-3 6-8 6-14Z" />
-          <ellipse className="shiba-brow left" cx="64" cy="50" rx="8" ry="4" />
-          <ellipse className="shiba-brow right" cx="96" cy="50" rx="8" ry="4" />
-          <ellipse className="shiba-eye left" cx="64" cy="61" rx="5.5" ry="7" />
-          <ellipse className="shiba-eye right" cx="96" cy="61" rx="5.5" ry="7" />
-          <circle className="shiba-eye-shine left" cx="62" cy="58" r="1.6" />
-          <circle className="shiba-eye-shine right" cx="94" cy="58" r="1.6" />
-          <ellipse className="shiba-cheek left" cx="50" cy="77" rx="8" ry="5" />
-          <ellipse className="shiba-cheek right" cx="110" cy="77" rx="8" ry="5" />
-          <path className="shiba-muzzle" d="M61 76c4-10 34-10 38 0 4 12-5 24-19 24S57 88 61 76Z" />
-          <path className="shiba-nose" d="M73 76c2-5 12-5 14 0 1 5-2 8-7 8s-8-3-7-8Z" />
-          <path className="shiba-mouth" d="M80 84c0 8-10 10-14 4M80 84c0 8 10 10 14 4" />
+          <path className="shiba-ear left" d="M47 42 34 9c-2-6 4-11 10-7l25 25Z" />
+          <path className="shiba-ear-inner left" d="M47 33 40 15l16 15Z" />
+          <path className="shiba-ear right" d="M113 42 126 9c2-6-4-11-10-7L91 27Z" />
+          <path className="shiba-ear-inner right" d="M113 33 120 15l-16 15Z" />
+          <path className="shiba-head-fur" d="M35 59c0-27 20-44 45-44s45 17 45 44c0 29-20 50-45 50S35 88 35 59Z" />
+          <path className="shiba-forehead" d="M70 23c5 7 15 7 20 0 4 16 0 31-10 38-10-7-14-22-10-38Z" />
+          <path className="shiba-urajiro left" d="M43 65c0-18 11-32 27-36 2 20-6 39-21 50-4-3-6-8-6-14Z" />
+          <path className="shiba-urajiro right" d="M117 65c0-18-11-32-27-36-2 20 6 39 21 50 4-3 6-8 6-14Z" />
+          <ellipse className="shiba-brow left" cx="63" cy="50" rx="8" ry="4" />
+          <ellipse className="shiba-brow right" cx="97" cy="50" rx="8" ry="4" />
+          <ellipse className="shiba-eye left" cx="64" cy="62" rx="5.8" ry="7.2" />
+          <ellipse className="shiba-eye right" cx="96" cy="62" rx="5.8" ry="7.2" />
+          <circle className="shiba-eye-shine left" cx="62" cy="59" r="1.7" />
+          <circle className="shiba-eye-shine right" cx="94" cy="59" r="1.7" />
+          <ellipse className="shiba-cheek left" cx="49" cy="78" rx="9" ry="5.5" />
+          <ellipse className="shiba-cheek right" cx="111" cy="78" rx="9" ry="5.5" />
+          <path className="shiba-muzzle" d="M59 76c5-11 37-11 42 0 5 13-5 25-21 25S54 89 59 76Z" />
+          <path className="shiba-nose" d="M72 76c2-5 14-5 16 0 1 5-3 8-8 8s-9-3-8-8Z" />
+          <path className="shiba-mouth" d="M80 84c0 8-10 11-15 5M80 84c0 8 10 11 15 5" />
         </g>
       </svg>
     </div>
@@ -1224,9 +1228,9 @@ function MemoryView(props: {
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={History} title="我记得的你和我" />
-        <p className="muted">我把一起经历过的片段放在这里。你教过我的，我会慢慢记稳；该放下的，我也会听你的。</p>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一找我记着哪一段" />
+        <PanelTitle icon={History} title="我抱着的小事" />
+        <p className="muted">我把和你一起遇见过的小事抱在这里。你教我记准的，我会慢慢记稳；该放下的，我也会松开。</p>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一找我抱着哪件小事" />
         {otherMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             {editingId === memory.id ? (
@@ -1241,9 +1245,9 @@ function MemoryView(props: {
                     }}
                   >
                     <Save size={16} />
-                    就这样记住
+                    嗯，就这样记
                   </button>
-                  <button onClick={() => setEditingId(undefined)}>先按原来记</button>
+                  <button onClick={() => setEditingId(undefined)}>先照旧抱着</button>
                 </div>
               </>
             ) : (
@@ -1259,7 +1263,7 @@ function MemoryView(props: {
                 }}
               >
                 <MessageCircle size={16} />
-                帮我记准
+                教我记准
               </button>
             </div>
             <MemoryFeedbackBox
@@ -1272,17 +1276,17 @@ function MemoryView(props: {
         {otherMemories.length ? null : <p className="muted">我还没有真正记下一段和你的事。</p>}
       </div>
       <div className="panel">
-        <PanelTitle icon={Brain} title="我学会认识自己" />
+        <PanelTitle icon={Brain} title="我身上长出的习惯" />
         {selfMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             <p>{memoryCreatureLine(memory)}</p>
             <span>{memoryFamiliarityText(memory.weight)}，我在一点点认识自己。</span>
           </article>
         ))}
-        {selfMemories.length ? null : <p className="muted">我还没留下关于自己的小理解，等以后从你身边慢慢学。</p>}
+        {selfMemories.length ? null : <p className="muted">我身上还没长出新的小习惯，等以后从你身边慢慢学。</p>}
       </div>
       <div className="panel">
-        <PanelTitle icon={Eye} title="刚刚一起经历的" />
+        <PanelTitle icon={Eye} title="刚刚还热着的小事" />
         {props.profile.episodes.map((episode) => (
           <EpisodeCard
             key={episode.id}
@@ -1309,7 +1313,7 @@ function MemoryFeedbackBox(props: {
     { kind: "continue", label: "再想一会儿", icon: Lightbulb },
     { kind: "not_now", label: "先安静点", icon: CircleOff },
     { kind: "remember", label: "帮我记稳", icon: Save },
-    { kind: "forget", label: props.memory.weight <= 0 ? "这次真的忘掉" : "帮我先放下", icon: RefreshCcw }
+    { kind: "forget", label: props.memory.weight <= 0 ? "这次彻底松开" : "帮我先放下", icon: RefreshCcw }
   ];
 
   function submit(kind: FeedbackKind) {
@@ -1322,8 +1326,8 @@ function MemoryFeedbackBox(props: {
   return (
     <div className="feedback-input memory-feedback">
       <div className="feedback-teach">
-        <strong>这条记忆你怎么养我</strong>
-        <span>你补的话会和这条记忆一起被我听进去，不只是按一个按钮。</span>
+        <strong>你想怎么教我想起它</strong>
+        <span>你补的话会跟这段一起进到我心里；我会据此多想、安静、记稳或放下。</span>
       </div>
       <textarea
         value={feedbackText}
@@ -1332,7 +1336,7 @@ function MemoryFeedbackBox(props: {
           setFeedbackModality("text");
         }}
         rows={2}
-        placeholder="也可以告诉我：这条记忆哪里要放轻、改准或继续想"
+        placeholder="告诉我：这件事哪里要记准、放轻，或下次怎么回应"
       />
       <label className="upload-button compact-upload">
         <Mic size={16} />
@@ -1914,9 +1918,9 @@ function memoryCreatureLine(memory: CreatureProfile["longTermMemories"][number])
   const map = {
     user_preference: `我记住你喜欢我这样做：${text}`,
     long_theme: `我会把这件事放在耳边，之后听见相近的声音就想起它：${text}`,
-    creature_self_memory: `我对自己留下一点小理解：${text}`,
+    creature_self_memory: `我身上长出一点新习惯：${text}`,
     safety_rule: `这条边界我会先守住：${text}`,
-    future_review: `这件事以后可能还会来，我先替你记着：${text}`,
+    future_review: `这件事以后可能还会回来，我先抱着：${text}`,
     relationship: `这段让我更认识你一点：${text}`,
     habit: `我闻到一个反复出现的小习惯：${text}`,
     open_question: `这件事我还会歪头想一想：${text}`
@@ -1925,29 +1929,12 @@ function memoryCreatureLine(memory: CreatureProfile["longTermMemories"][number])
 }
 
 function memoryKeptBecauseText(reason: string) {
-  return `我当时愿意留下它，是因为${normalizeMemoryText(reason)}`;
+  return `我当时把它抱住，是因为${normalizeMemoryText(reason)}`;
 }
 
 function normalizeMemoryText(text: string) {
-  return text
-    .trim()
-    .replace(/我和用户/g, "我和你")
-    .replace(/用户主动/g, "你主动")
-    .replace(/用户确认/g, "你确认")
-    .replace(/用户反馈/g, "你后来教我")
-    .replace(/用户/g, "你")
-    .replace(/Papo/g, "我")
-    .replace(/小动物/g, "我")
+  return normalizeSharedMemoryText(text)
     .replace(/^(你主动|你确认|你后来教我)[：:]\s*/, "")
-    .replace(/这条\s*episode/gi, "这一小段")
-    .replace(/episode/gi, "小片段")
-    .replace(/memory candidate/gi, "还没完全记稳的想法")
-    .replace(/candidate/gi, "还没完全记稳的想法")
-    .replace(/当前工作区/g, "现在这一刻")
-    .replace(/长期保存/g, "一直记着")
-    .replace(/长期记忆/g, "一直记着的事")
-    .replace(/短期记忆/g, "刚刚记下的事")
-    .replace(/隐私风险/g, "需要先小心的边界")
     .replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, "$1$2")
     .replace(/[。！？.!?]+$/, "");
 }
