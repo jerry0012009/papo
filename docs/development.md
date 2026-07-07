@@ -101,6 +101,8 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Wake rhythm only updates presence/state. It must not pick memories, write emergence records, or feed wake text back into model conversation context.
 - Active emergence has no rule-generated path. `/emergence` must call the model to decide quiet vs resurfacing and to choose a valid memory.
 - The old "rules create emergence, model polishes narration" path is removed; polishing a fake decision is still fake cognition.
+- Emergence guardrails validate that the chosen memory exists and is active; they must not use local keyword or token matching to decide whether the model's message semantically references the memory.
+- When there are no candidate memories, emergence still uses a compact model call that must choose quiet; this is not a local fake quiet response.
 - Feedback capture records the user's teaching. Explicit forget still performs the storage-layer weight/drop operation, but remembering, memory correction, memory promotion, soft dismissal, state changes, policy changes, learning language, and creature self-memory must come from `semanticReflectFeedback`.
 - Feedback reflection may store internal learning notes and policy/state deltas, but ordinary chat only shows `replyText` when the model chooses a visible response.
 - If the model chooses a visible action such as `respond`, `ask`, `recall`, or `review`, a visible reply is required.

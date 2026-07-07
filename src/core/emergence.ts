@@ -4,7 +4,7 @@ import { modelConversationContext, modelFeedbackContext } from "./model-context"
 import { toCreatureMemoryVoice } from "./memory";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
-import type { CreatureProfile, EmergenceRecord, LongTermMemory } from "./types";
+import type { CreatureProfile, EmergenceRecord } from "./types";
 
 const optionalText = (max: number) =>
   z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
@@ -77,10 +77,6 @@ function sharedMemories(profile: CreatureProfile) {
   return availableMemories(profile).filter((memory) => memory.kind !== "creature_self_memory" || Boolean(memory.sourceEpisodeId));
 }
 
-function isFeedbackSelfMemory(memory: LongTermMemory) {
-  return memory.kind === "creature_self_memory" && memory.tags.includes("被你养成");
-}
-
 function createSemanticEmergenceRecord(
   profile: CreatureProfile,
   suggestion: SemanticEmergenceSuggestion,
@@ -90,7 +86,7 @@ function createSemanticEmergenceRecord(
   if (!memory) return undefined;
   const message = safeCreatureText(suggestion.message);
   const whyNow = safeCreatureText(suggestion.whyNow);
-  if (!message || !whyNow || !referencesMemory(message, memory)) return undefined;
+  if (!message || !whyNow) return undefined;
 
   return {
     id: makeId("emergence"),
@@ -119,33 +115,6 @@ function safeCreatureText(text?: string) {
   return normalized;
 }
 
-function referencesMemory(message: string, memory: LongTermMemory) {
-  const anchors = memoryAnchors(memory);
-  let hits = 0;
-  for (const anchor of anchors) {
-    if (message.includes(anchor)) hits += 1;
-    if (hits >= 2) return true;
-  }
-  return false;
-}
-
-function memoryAnchors(memory: LongTermMemory) {
-  const stop = new Set(["用户", "这个", "那个", "一次", "以后", "应该", "不要", "直接", "保存", "记忆", "注意", "反馈", "内容"]);
-  const anchors = new Set<string>();
-  for (const tag of memory.tags) {
-    if (tag.length >= 2 && !stop.has(tag)) anchors.add(tag);
-  }
-  const chunks = toCreatureMemoryVoice(memory.text).match(/[\p{Script=Han}A-Za-z0-9]{2,}/gu) ?? [];
-  for (const chunk of chunks) {
-    if (chunk.length <= 8 && !stop.has(chunk)) anchors.add(chunk);
-    for (let index = 0; index < chunk.length - 1; index += 1) {
-      const pair = chunk.slice(index, index + 2);
-      if (!stop.has(pair)) anchors.add(pair);
-    }
-  }
-  return [...anchors].slice(0, 80);
-}
-
 function recordEmergenceSemanticRun(
   profile: CreatureProfile,
   provider: ModelProvider,
@@ -166,6 +135,25 @@ function recordEmergenceSemanticRun(
 }
 
 function buildSemanticEmergencePrompt(profile: CreatureProfile, now: string) {
+  const candidateMemories = availableSemanticMemories(profile).slice(0, 12);
+  if (!candidateMemories.length) {
+    return `请作为 Papo 的主动浮现大脑，判断此刻是否要主动浮现。
+
+candidate_memories 为空，所以没有任何可合法提起的长期记忆。
+你必须返回一个 JSON object，不要输出解释性文字、Markdown 或空内容。
+因为没有可用记忆，必须返回 shouldEmerge=false。
+
+返回格式：
+{"shouldEmerge": false, "driveSource": "rhythm", "whyNow": "没有可用的长期记忆适合主动提起", "message": "", "proactiveLevel": "quiet"}
+
+now:
+${now}
+
+current_state:
+${JSON.stringify(profile.state)}
+`;
+  }
+
   return `请作为 Papo 的主动浮现大脑，决定此刻 Papo 要不要主动想起一件事。
 
 系统提供可用记忆、最近互动和当前状态。你负责判断：
@@ -175,10 +163,14 @@ function buildSemanticEmergencePrompt(profile: CreatureProfile, now: string) {
 - 这是 curiosity、attachment、safety、rhythm 还是 memory_resonance。
 - Papo 应该说什么，主动程度是 quiet/gentle/active。
 
+你必须返回一个 JSON object，不要输出解释性文字、Markdown 或空内容。
+如果 candidate_memories 为空，或者没有一条记忆适合此刻自然提起，必须返回 shouldEmerge=false。
+
 护栏会校验：
 - memoryId 必须来自 candidate_memories。
 - 不能引用 weight<=0 或不存在的记忆。
-- message 必须引用被选记忆里的具体内容，不能编造。
+- message 应该自然提到被选记忆里的具体内容，不能编造。
+- message 只能写 Papo 对用户说出口的话，不要写内部原因、字段名、流程说明或括号动作。
 - 普通用户只看到 Papo 的行为和话，不看规则解释。
 
 返回严格 JSON：
@@ -236,7 +228,7 @@ ${JSON.stringify(profile.emergenceHistory.slice(0, 5).map((item) => {
 }))}
 
 candidate_memories:
-${JSON.stringify(availableSemanticMemories(profile).slice(0, 12).map((memory) => ({
+${JSON.stringify(candidateMemories.map((memory) => ({
   id: memory.id,
   kind: memory.kind,
     text: textForModel(toCreatureMemoryVoice(memory.text), false),
