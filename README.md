@@ -88,6 +88,8 @@ OpenRouter 音频默认使用已验证的 `xiaomi/mimo-v2.5` multimodal chat rou
 
 Discord 模式需要使用 Hermes Gateway 会当作用户输入处理的独立 Papo bot。复用 Hermes 自己的 bot token 只能发消息，不能触发 Hermes 处理自己的消息。当前服务器可用 `PAPO_HERMES_DISPATCH=cli` 走本机 Hermes 执行器。
 
+CLI 模式使用 `hermes chat -Q --source tool`，不是一次性 `-z`。Papo 会为每个 `userId` 持久化独立 Hermes `sessionId/sessionName`，后续任务用 `--resume` 进入同一虾虾上下文，不同用户不会串线。
+
 ## 校验
 
 ```bash

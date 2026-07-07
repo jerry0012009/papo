@@ -284,6 +284,8 @@ export interface HermesTaskRecord {
   title?: string;
   channelId?: string;
   channelName?: string;
+  sessionId?: string;
+  sessionName?: string;
   sentMessageId?: string;
   sourceEventId?: string;
   sourceMessageId?: string;
@@ -294,6 +296,8 @@ export interface HermesTaskRecord {
 export interface HermesProfileState {
   channelId?: string;
   channelName?: string;
+  sessionId?: string;
+  sessionName?: string;
   tasks: HermesTaskRecord[];
 }
 

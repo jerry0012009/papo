@@ -161,14 +161,30 @@ function createCliHermesBridge(input: { store: ProfileStore; provider: ModelProv
     const task = profile?.hermes.tasks.find((item) => item.id === taskId);
     if (!profile || !task) return;
     try {
-      const { stdout } = await execFileAsync(command, ["-z", task.task], {
+      const sessionName = profile.hermes.sessionName ?? hermesChannelName(profile.userId);
+      const args = buildHermesCliChatArgs(profile, task);
+      const { stdout, stderr } = await execFileAsync(command, args, {
         timeout: Number(env.PAPO_HERMES_CLI_TIMEOUT_MS ?? 30 * 60_000),
         maxBuffer: 2 * 1024 * 1024,
         env: { ...process.env, ...env }
       });
+      const parsed = parseHermesCliChatOutput(stdout, stderr);
       const current = await input.store.getProfile(userId);
       if (!current) return;
-      await processHermesReplyWithProvider(input.store, input.provider, current, stdout.trim() || "虾虾没有返回可用内容。", taskId);
+      const resolvedSessionId = parsed.sessionId ?? current.hermes.sessionId ?? profile.hermes.sessionId;
+      if (resolvedSessionId && !current.hermes.sessionId) {
+        current.hermes.sessionId = resolvedSessionId;
+        current.hermes.sessionName = sessionName;
+        if (parsed.sessionId) await renameHermesSession(command, parsed.sessionId, sessionName, env);
+      }
+      const currentTask = current.hermes.tasks.find((item) => item.id === taskId);
+      if (currentTask) {
+        currentTask.sessionId = resolvedSessionId;
+        currentTask.sessionName = sessionName;
+        currentTask.channelName = sessionName;
+        currentTask.updatedAt = new Date().toISOString();
+      }
+      await processHermesReplyWithProvider(input.store, input.provider, current, parsed.content || "虾虾没有返回可用内容。", taskId);
     } catch (error) {
       const current = await input.store.getProfile(userId);
       const currentTask = current?.hermes.tasks.find((item) => item.id === taskId);
@@ -192,7 +208,9 @@ function createCliHermesBridge(input: { store: ProfileStore; provider: ModelProv
       if (!tasks.length) return [];
       for (const task of tasks) {
         task.status = "sent";
-        task.channelName = "hermes-cli";
+        task.channelName = profile.hermes.sessionName ?? hermesChannelName(profile.userId);
+        task.sessionId = profile.hermes.sessionId;
+        task.sessionName = profile.hermes.sessionName ?? hermesChannelName(profile.userId);
         task.updatedAt = new Date().toISOString();
       }
       profile.hermes.tasks.unshift(...tasks);
@@ -207,6 +225,46 @@ function createCliHermesBridge(input: { store: ProfileStore; provider: ModelProv
       return checkHermesTimeouts(input.store, now);
     }
   };
+}
+
+export function buildHermesCliChatArgs(profile: CreatureProfile, task: HermesTaskRecord) {
+  const args = ["chat", "-Q", "--source", "tool"];
+  if (profile.hermes.sessionId) args.push("--resume", profile.hermes.sessionId);
+  args.push("-q", task.task);
+  return args;
+}
+
+export function parseHermesCliChatOutput(stdout: string, stderr = "") {
+  const sessionId = extractHermesSessionId(`${stderr}\n${stdout}`);
+  const contentLines: string[] = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    if (line.match(/^\s*session_id:\s*(\S+)\s*$/)) continue;
+    contentLines.push(line);
+  }
+  return {
+    sessionId,
+    content: contentLines.join("\n").trim()
+  };
+}
+
+function extractHermesSessionId(output: string) {
+  for (const line of output.split(/\r?\n/)) {
+    const match = line.match(/^\s*session_id:\s*(\S+)\s*$/);
+    if (match) return match[1];
+  }
+  return undefined;
+}
+
+async function renameHermesSession(command: string, sessionId: string, sessionName: string, env: NodeJS.ProcessEnv) {
+  try {
+    await execFileAsync(command, ["sessions", "rename", sessionId, sessionName], {
+      timeout: 20_000,
+      maxBuffer: 512 * 1024,
+      env: { ...process.env, ...env }
+    });
+  } catch (error) {
+    console.warn(`Hermes session rename failed for ${sessionId}`, error);
+  }
 }
 
 function disabledBridge(): HermesBridge {

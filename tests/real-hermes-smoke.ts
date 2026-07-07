@@ -61,8 +61,32 @@ const provider: ModelProvider = {
               reply: "我去问问虾虾，稍等哦。",
               actionResult: {
                 kind: "hermes_task",
-                title: "Hermes 可用性测试",
-                text: "请只回复：虾虾收到"
+                title: "Hermes 会话测试",
+                text: "请记住这个 Papo 会话测试词：蓝色风铃。只回复：已记住"
+              }
+            }
+          ]
+        };
+      }
+      if (actionTurn === 3) {
+        return {
+          decisions: [
+            {
+              eventId,
+              action: "use_hermes",
+              noticed: "用户想确认 Hermes 会话是否延续。",
+              userIntent: "让 Papo 复用同一个虾虾会话。",
+              emotionalTone: "测试",
+              reason: "这需要 Hermes 记得同一会话里的上一轮内容。",
+              stateDeltas: { curiosity: 1 },
+              shouldCreateEpisode: true,
+              shouldConsiderMemory: false,
+              shouldReply: true,
+              reply: "我再问问同一个虾虾会话。",
+              actionResult: {
+                kind: "hermes_task",
+                title: "Hermes 会话延续测试",
+                text: "刚才这个 Papo 会话测试词是什么？只回复这个词"
               }
             }
           ]
@@ -81,7 +105,7 @@ const provider: ModelProvider = {
             shouldCreateEpisode: true,
             shouldConsiderMemory: false,
             shouldReply: true,
-            reply: "虾虾回来了：虾虾收到。"
+            reply: "虾虾回来了。"
           }
         ]
       };
@@ -111,16 +135,39 @@ try {
   assert.equal(response.status, 200, JSON.stringify(payload));
   assert.equal(payload.events[0].actionDecision.action, "use_hermes");
 
-  const deadline = Date.now() + 120_000;
   let current = await store.getProfile("real-hermes-user");
-  while (Date.now() < deadline) {
+  const firstDeadline = Date.now() + 120_000;
+  while (Date.now() < firstDeadline) {
     current = await store.getProfile("real-hermes-user");
     if (current?.hermes.tasks[0]?.status === "completed") break;
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
   assert.equal(current?.hermes.tasks[0]?.status, "completed", current?.hermes.tasks[0]?.error);
+  const firstSessionId = current?.hermes.sessionId;
+  assert.ok(firstSessionId, "Hermes CLI dispatcher should persist a session id");
+
+  const second = await fetch(`http://127.0.0.1:${address.port}/api/profiles/real-hermes-user/button`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ text: "请 Papo 再问虾虾刚才那个测试词" })
+  });
+  const secondPayload = await second.json();
+  assert.equal(second.status, 200, JSON.stringify(secondPayload));
+  assert.equal(secondPayload.events[0].actionDecision.action, "use_hermes");
+
+  const secondDeadline = Date.now() + 120_000;
+  while (Date.now() < secondDeadline) {
+    current = await store.getProfile("real-hermes-user");
+    if (current?.hermes.tasks[0]?.status === "completed") break;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  assert.equal(current?.hermes.tasks[0]?.status, "completed", current?.hermes.tasks[0]?.error);
+  assert.equal(current?.hermes.sessionId, firstSessionId);
+  assert.equal(current?.hermes.tasks[0]?.sessionId, firstSessionId);
+  assert.equal(current?.hermes.tasks[1]?.sessionId, firstSessionId);
+  assert.equal(current?.conversation.some((message) => message.role === "world" && /蓝色风铃/.test(message.text)), true);
   assert.equal(current?.conversation.some((message) => message.role === "papo" && /虾虾回来了/.test(message.text)), true);
-  console.log(JSON.stringify({ ok: true, taskStatus: current?.hermes.tasks[0]?.status }, null, 2));
+  console.log(JSON.stringify({ ok: true, taskStatus: current?.hermes.tasks[0]?.status, sessionId: firstSessionId }, null, 2));
 } finally {
   server.close();
 }

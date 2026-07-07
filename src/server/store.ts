@@ -108,6 +108,8 @@ function mergeCreatureProfiles(current: CreatureProfile, incoming: CreatureProfi
     hermes: {
       channelId: incoming.hermes.channelId ?? current.hermes.channelId,
       channelName: incoming.hermes.channelName ?? current.hermes.channelName,
+      sessionId: incoming.hermes.sessionId ?? current.hermes.sessionId,
+      sessionName: incoming.hermes.sessionName ?? current.hermes.sessionName,
       tasks: mergeById(current.hermes.tasks, incoming.hermes.tasks, "updatedAt", mergeHermesTask).slice(0, 30)
     }
   });

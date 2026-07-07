@@ -28,7 +28,7 @@ export function createCreatureProfile(input: {
     conversation: [],
     proactive: initialProactiveState(now),
     readState: {},
-    hermes: { tasks: [] }
+    hermes: { sessionName: hermesSessionName(userId), tasks: [] }
   };
   return profile;
 }
@@ -57,6 +57,7 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.proactive ??= initialProactiveState(new Date().toISOString());
   profile.readState ??= {};
   profile.hermes ??= { tasks: [] };
+  profile.hermes.sessionName ??= hermesSessionName(profile.userId);
   profile.hermes.tasks ??= [];
   profile.hermes.tasks = profile.hermes.tasks.slice(0, 30);
   profile.proactive.pendingCount = Math.max(0, Math.min(3, Math.round(profile.proactive.pendingCount ?? 0)));
@@ -84,6 +85,11 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   }
 
   return profile;
+}
+
+function hermesSessionName(userId: string) {
+  const suffix = userId.toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
+  return `papo-${suffix || "user"}`;
 }
 
 function initialProactiveState(now: string) {
