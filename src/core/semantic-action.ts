@@ -24,10 +24,22 @@ const semanticActionSchema = z.object({
       z.object({
         eventId: z.string().min(1),
         action: actionSchema,
+        noticed: optionalText(260),
+        userIntent: optionalText(260),
+        emotionalTone: optionalText(160),
         reason: optionalText(420),
         shouldReply: z.boolean().optional(),
         reply: optionalText(700),
         visibleReaction: optionalText(260),
+        memoryCandidateText: optionalText(650),
+        memoryTags: z.array(z.preprocess((value) => cleanOptionalText(value, 40), z.string().optional()))
+          .transform((values) => values.filter((value): value is string => Boolean(value)))
+          .pipe(z.array(z.string().min(1).max(40)).max(10))
+          .optional(),
+        relatedMemoryIds: z.array(z.preprocess((value) => cleanOptionalText(value, 80), z.string().optional()))
+          .transform((values) => values.filter((value): value is string => Boolean(value)))
+          .pipe(z.array(z.string().min(1).max(80)).max(6))
+          .optional(),
         tone: optionalText(120)
       })
     )
@@ -66,12 +78,17 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
     if (!event) continue;
 
     const guarded = guardActionDecision(event, profile, decision.action);
+    const relatedMemoryIds = validRelatedMemoryIds(profile, decision.relatedMemoryIds);
     event.actionDecision = guarded;
     event.suggestedAction = guarded.action;
+    if (decision.noticed) event.noticed = safeProcessText(decision.noticed, event.noticed) ?? event.noticed;
+    if (decision.reason) event.reason = safeProcessText(decision.reason, event.reason) ?? event.reason;
+    if (relatedMemoryIds.length) event.relatedMemoryIds = relatedMemoryIds;
     event.semanticSource = "llm";
     event.decisionTrace = [
       ...(event.decisionTrace ?? []),
       "llm: action selected",
+      decision.userIntent ? `intent=${safeProcessText(decision.userIntent) ?? "not_shown"}` : "intent=not_provided",
       decision.reason ? `action_reason=${safeProcessText(decision.reason) ?? "not_shown"}` : "action_reason=not_provided",
       decision.shouldReply === undefined ? "should_reply=not_provided" : `should_reply=${decision.shouldReply}`,
       `guardrail: action=${guarded.action}`
@@ -81,9 +98,14 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
     if (episode) {
       episode.actionDecision = guarded;
       episode.decisionTrace = event.decisionTrace;
+      episode.noticed = event.noticed;
+      episode.importanceReason = event.reason;
+      if (relatedMemoryIds.length) episode.relatedMemoryIds = relatedMemoryIds;
+      if (decision.userIntent) episode.possibleIntent = safeProcessText(decision.userIntent, episode.possibleIntent) ?? episode.possibleIntent;
       if (decision.reason) episode.importanceReason = safeProcessText(decision.reason, episode.importanceReason) ?? episode.importanceReason;
       const reply = safeExternalText(decision.reply, event.triggerContent);
       if (reply && decision.reply) episode.creatureResponse = reply;
+      if (decision.memoryTags?.length) episode.tags = decision.memoryTags;
       const reaction = safeExternalText(decision.visibleReaction, event.triggerContent);
       if (reaction) {
         const baseExperience = episode.creatureExperience ?? event.creatureExperience;
@@ -93,6 +115,7 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
         };
         event.creatureExperience = episode.creatureExperience;
       }
+      updateMemoryCandidate(result, episode.id, decision.memoryCandidateText, decision.memoryTags);
     }
 
     if (event.id === result.events[0]?.id) {
@@ -107,6 +130,19 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
   }
 
   return applied;
+}
+
+function updateMemoryCandidate(result: CaptureResult, sourceEpisodeId: string, text?: string, tags?: string[]) {
+  const candidate = result.memoryCandidates?.find((item) => item.sourceEpisodeId === sourceEpisodeId);
+  if (!candidate) return;
+  if (text?.trim()) candidate.candidateText = normalizeSharedMemoryText(text);
+  if (tags?.length) candidate.tags = tags;
+}
+
+function validRelatedMemoryIds(profile: CreatureProfile, ids?: string[]) {
+  if (!ids?.length) return [];
+  const allowed = new Set(profile.longTermMemories.filter((memory) => memory.weight > 0).map((memory) => memory.id));
+  return [...new Set(ids)].filter((id) => allowed.has(id)).slice(0, 6);
 }
 
 function safeExternalText(text?: string, sourceText?: string) {
@@ -182,16 +218,23 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
     {
       "eventId": "attention_xxx",
       "action": "respond",
+      "noticed": "...",
+      "userIntent": "...",
+      "emotionalTone": "...",
       "reason": "...",
       "shouldReply": true,
       "reply": "...",
       "visibleReaction": "...",
+      "memoryCandidateText": "...",
+      "memoryTags": ["..."],
+      "relatedMemoryIds": ["ltm_xxx"],
       "tone": "..."
     }
   ]
 }
 
-reply 和 visibleReaction 是可能给用户看的外显语言。
+noticed、userIntent、reason、memoryCandidateText 是内部理解和记忆材料；reply 和 visibleReaction 是可能给用户看的外显语言。不要把内部流程解释写进 reply。
+如果 recent_memories 里有自然联想到的旧记忆，可以在 relatedMemoryIds 里返回对应 id；不能编造不存在的 id。
 
 current_state:
 ${JSON.stringify(profile.state)}

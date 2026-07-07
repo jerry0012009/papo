@@ -81,7 +81,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - `src/core/conversation.ts`: user/world/Papo timeline.
 - `src/server/app.ts`: API orchestration.
 - `src/web/App.tsx`: mobile-first interaction UI.
-- `tests/`: invariant, API, UI, and browser checks.
+- Verification currently relies on TypeScript/build checks plus real provider smoke tests.
 
 ## Current Implementation Notes
 
@@ -93,7 +93,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Action selection code is a guardrail baseline, not a semantic classifier. Without an LLM suggestion it should stay at observe/quiet/ask safety behavior and avoid keyword-driven review/reminder/recall decisions.
 - Memory candidates keep user text and provenance only. Memory kind, tags, consolidation wording, and long-term meaning must come from `semanticDecideMemory` before they are treated as product cognition.
 - The web UI must not fill empty Papo replies with "我听见了" or other local placeholder speech. If the model chose quiet or failed to provide a visible reply, the product should show no forged reply.
-- The product UI should not ship seeded demo loops or fake life-material buttons. Tests may use fixtures, but the user-facing flow starts from real user text, photos, audio, or continuous listening.
+- The product UI should not ship seeded demo loops or fake life-material buttons. The user-facing flow starts from real user text, photos, audio, or continuous listening.
 - Wake rhythm only updates presence/state. It must not pick memories, write emergence records, or feed wake text back into model conversation context.
 - Active emergence has no rule-generated path. `/emergence` must call the model to decide quiet vs resurfacing and to choose a valid memory.
 - The old "rules create emergence, model polishes narration" path is removed; polishing a fake decision is still fake cognition.
@@ -107,7 +107,6 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 
 - `npm run build`
 - Public provider and page checks after deploy.
-- `npm run test:e2e`
 - Public provider check returns a real provider with `usesRealModel=true`.
 - Real online smoke: direct dialogue should produce a context-specific reply, not repeated template wording.
 - Real online smoke: photo/audio sensing should either return real model output or fail visibly.
@@ -121,6 +120,6 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 ## Next Work
 
 1. Continue auditing visible surfaces so Papo shows behavior and speech, not cognition traces.
-2. Strengthen real user-scenario tests and delete tests that only prove local templates.
+2. Add real provider smoke checks only when they exercise actual user scenarios, not local wording templates.
 3. Verify OpenRouter vision/audio model routing with real accounts, using cost-effective models first.
 4. Improve the Shiba animation only where it helps the interaction, not as decorative proof.
