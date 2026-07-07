@@ -66,10 +66,12 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Supported real providers: OpenRouter, Mimo, and generic OpenAI-compatible APIs.
 - Provider config comes from environment, `.env`, `papo.config.json`, or `.papo/provider.json`.
 - `PAPO_PROVIDER` may explicitly select `openrouter`, `mimo`, or `generic`.
+- `PAPO_VISION_PROVIDER` and `PAPO_AUDIO_PROVIDER` may route sensing to a different real provider than the semantic text brain when one provider is stronger for a modality.
 - Model ids are configurable per modality.
 - Default semantic models should prefer the strongest available configured model, currently `openai/gpt-5.5` for OpenRouter or `gpt-5.5` for generic.
-- Audio sensing should prefer native audio-capable multimodal models. The current OpenRouter default is `xiaomi/mimo-v2.5`, verified through chat completions audio input.
-- Mixed routing is allowed: for example, OpenRouter can be the semantic provider while generic audio uses a transcription endpoint as its provider route.
+- Vision sensing currently uses the verified OpenRouter default `nex-agi/nex-n2-mini`.
+- Audio sensing should prefer native audio-capable multimodal models. The current OpenRouter default is `mistralai/voxtral-small-24b-2507`, verified through chat completions audio input with a speech sample.
+- Mixed routing is allowed: for example, Mimo can be the semantic provider while OpenRouter handles image/audio sensing, or OpenRouter can be the semantic provider while generic audio uses a transcription endpoint as its provider route.
 - Provider errors are product errors. They should be visible through API errors and diagnostics instead of being hidden behind local wording.
 - If a real model repeatedly returns empty or invalid structured output for core cognition, switch to another configured real provider/model and verify it with scenario smoke tests. Do not add local semantic fallback to mask the model failure.
 
@@ -123,6 +125,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - If the model chooses `observe` or `quiet`, it must not provide a visible reply; the API may persist the user's input without adding a Papo reply.
 - Recent conversation, memories, and feedback are passed into model prompts through `model-context.ts`.
 - For button and curious captures, the current input is passed to the semantic brain as the current event/candidate, then appended to the conversation timeline after cognition. `recent_conversation` must represent prior context, not duplicate the current input.
+- During live listening, audio capture and cognition are separate queues. The browser must cut immutable audio slices on the 30-second rhythm even when earlier slices are still being sensed or processed. Text, photo, and uploaded-audio inputs submitted during live listening enter the same live capture queue, preserving order and triggering the normal attention/action/memory trace for each processed batch.
 - During feedback reflection, the current feedback is passed through the dedicated `feedback` field. `recent_feedback` must contain prior feedback only, not the same current feedback record repeated as history.
 - Development planning text must not be used as creature interaction material.
 - New Papo messages persist `cognitionTrace` with the real model stages, attention/action/memory decisions, feedback effects, emergence choices, visible reply, persistence outcomes, and structural rule checks that produced that visible reply. This supports developer audit without proving the mechanism in the main UI.

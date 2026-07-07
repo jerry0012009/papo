@@ -516,18 +516,26 @@ select {
 }
 
 .memory-details,
-.memory-feedback {
+.memory-feedback,
+.memory-trace-list {
   display: grid;
   gap: 8px;
 }
 
 .memory-details summary,
-.memory-feedback summary {
+.memory-feedback summary,
+.memory-trace-list summary {
   width: fit-content;
   cursor: pointer;
   color: #4f8b76;
   font-size: 0.82rem;
   font-weight: 700;
+}
+
+.memory-trace-list summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
 }
 
 .memory-detail-body {
@@ -545,6 +553,33 @@ select {
   border-radius: 8px;
   background: rgba(255, 250, 240, 0.76);
   border: 1px solid rgba(31, 36, 33, 0.08);
+}
+
+.memory-trace-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.memory-trace-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.72);
+  border: 1px solid rgba(31, 36, 33, 0.08);
+}
+
+.memory-trace-item > small {
+  color: #69756c;
+}
+
+.memory-trace-list .developer-trace-body {
+  position: static;
+  width: 100%;
+  max-height: none;
+  overflow: visible;
+  box-shadow: none;
+  background: #fffdf7;
 }
 
 .episode-card {

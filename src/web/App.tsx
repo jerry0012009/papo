@@ -1,6 +1,5 @@
 import {
   Check,
-  CircleOff,
   Eye,
   History,
   ImagePlus,
@@ -14,7 +13,7 @@ import {
   Sparkles,
   UserRound
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toCreatureMemoryVoice } from "../core/memory";
 import type {
   ActionResult,
@@ -53,13 +52,11 @@ type ConversationSection =
   | { kind: "batch"; id: string; batchId: string; messages: ConversationMessage[] }
   | { kind: "single"; id: string; message: ConversationMessage };
 
-const episodeFeedbacks: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }> = [
-  { kind: "understood", label: "懂了", icon: Check },
-  { kind: "continue", label: "再想想", icon: Lightbulb },
-  { kind: "not_now", label: "轻一点", icon: CircleOff },
-  { kind: "remember", label: "记住", icon: Save },
-  { kind: "forget", label: "放下", icon: RefreshCcw }
-];
+interface AudioSliceMeta {
+  index: number;
+  observedAt: string;
+  batchId: string;
+}
 
 export function App() {
   const [tab, setTab] = useState<Tab>("home");
@@ -74,8 +71,9 @@ export function App() {
   const [error, setError] = useState<string>();
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
-  const audioFlushRef = useRef<Promise<void>>(Promise.resolve());
+  const pendingAudioSlicesRef = useRef<AudioSliceMeta[]>([]);
+  const audioObservationQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const liveCaptureQueueRef = useRef<Promise<void>>(Promise.resolve());
   const segmentIndexRef = useRef(1);
   const listeningStartedAtRef = useRef<number | undefined>(undefined);
   const profileRef = useRef<CreatureProfile | undefined>(undefined);
@@ -160,12 +158,14 @@ export function App() {
       const textSegment = cleanText
         ? [makeSegment(`chat-text-${Date.now()}`, "text", listening ? "这 30 秒里你补充的话" : "你刚说的话", cleanText, { observedAt: new Date().toISOString(), batchId })]
         : [];
-      const result = await curiousCapture(
-        profile.userId,
-        [...textSegment, ...chatSegments].filter((segment) => segment.content.trim()).map((segment, index) => ensureSegmentContext(segment, index))
-      );
+      const segments = [...textSegment, ...chatSegments].filter((segment) => segment.content.trim()).map((segment, index) => ensureSegmentContext(segment, index));
+      if (listening) {
+        await submitLiveSegments(segments);
+      } else {
+        const result = await curiousCapture(profile.userId, segments);
+        setProfile(result.profile);
+      }
       setChatSegments([]);
-      setProfile(result.profile);
       setTab("chat");
     });
   }
@@ -179,14 +179,19 @@ export function App() {
       const result = await summarizeImage(dataUrl, file.name || "对话照片");
       const content = sensingSegmentContent(result.summary);
       if (!content) return;
-      setChatSegments((current) => [
-        ...current,
-        makeSegment(`chat-image-${Date.now()}`, "image_summary", file.name || `照片 ${current.length + 1}`, content, {
-          observedAt,
-          batchId: current[0]?.batchId ?? currentBatchId(),
-          location
-        })
-      ]);
+      const segment = makeSegment(`chat-image-${Date.now()}`, "image_summary", file.name || "照片", content, {
+        observedAt,
+        batchId: currentBatchId(),
+        location
+      });
+      if (listening) {
+        await submitLiveSegments([ensureSegmentContext(segment, 0)]);
+      } else {
+        setChatSegments((current) => [
+          ...current,
+          { ...segment, label: file.name || `照片 ${current.length + 1}`, batchId: current[0]?.batchId ?? segment.batchId }
+        ]);
+      }
       setTab("chat");
     });
   }
@@ -198,13 +203,18 @@ export function App() {
       const result = await observeAudio(dataUrl, file.name || "对话录音");
       const content = sensingSegmentContent(result.observation);
       if (!content) return;
-      setChatSegments((current) => [
-        ...current,
-        makeSegment(`chat-audio-${Date.now()}`, "audio_observation", file.name || `录音 ${current.length + 1}`, content, {
-          observedAt: new Date().toISOString(),
-          batchId: current[0]?.batchId ?? currentBatchId()
-        })
-      ]);
+      const segment = makeSegment(`chat-audio-${Date.now()}`, "audio_observation", file.name || "录音", content, {
+        observedAt: new Date().toISOString(),
+        batchId: currentBatchId()
+      });
+      if (listening) {
+        await submitLiveSegments([ensureSegmentContext(segment, 0)]);
+      } else {
+        setChatSegments((current) => [
+          ...current,
+          { ...segment, label: file.name || `录音 ${current.length + 1}`, batchId: current[0]?.batchId ?? segment.batchId }
+        ]);
+      }
       setTab("chat");
     });
   }
@@ -271,7 +281,9 @@ export function App() {
     }
 
     mediaStreamRef.current = stream;
-    recordedChunksRef.current = [];
+    pendingAudioSlicesRef.current = [];
+    audioObservationQueueRef.current = Promise.resolve();
+    liveCaptureQueueRef.current = Promise.resolve();
     segmentIndexRef.current = 1;
     listeningStartedAtRef.current = Date.now();
     setListeningElapsed(0);
@@ -283,7 +295,8 @@ export function App() {
         const mimeType = preferredAudioMimeType(Recorder);
         const recorder = new Recorder(stream, mimeType ? { mimeType } : undefined);
         recorder.ondataavailable = (event) => {
-          if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+          const meta = pendingAudioSlicesRef.current.shift() ?? nextAudioSliceMeta();
+          if (event.data.size > 0) enqueueAudioObservationBlob(event.data, meta);
         };
         recorder.onerror = () => {
           setError("这次听到一半断开了。已经整理出来的内容会继续留在这里。");
@@ -304,7 +317,7 @@ export function App() {
       setListeningElapsed(Math.min(180, Math.floor((Date.now() - listeningStartedAtRef.current) / 1000)));
     }, 1000);
     segmentTimerRef.current = window.setInterval(() => {
-      void queueAudioObservationSegment(false);
+      requestAudioSlice(false);
     }, 30_000);
     stopTimerRef.current = window.setTimeout(() => stopListening(), 180_000);
   }
@@ -318,50 +331,64 @@ export function App() {
     stopTimerRef.current = undefined;
     listeningStartedAtRef.current = undefined;
     setListening(false);
-    void queueAudioObservationSegment(true).finally(() => stopMediaCapture());
+    requestAudioSlice(true);
+    window.setTimeout(() => stopMediaCapture(), 350);
   }
 
-  function queueAudioObservationSegment(force: boolean) {
-    audioFlushRef.current = audioFlushRef.current.then(() => flushAudioObservationSegment(force)).catch((caught) => {
-      setError(errorMessage(caught));
-    });
-    return audioFlushRef.current;
+  function requestAudioSlice(force: boolean) {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state !== "recording") return;
+    pendingAudioSlicesRef.current.push(nextAudioSliceMeta());
+    try {
+      recorder.requestData();
+    } catch (caught) {
+      if (force) setError(errorMessage(caught));
+    }
   }
 
-  async function flushAudioObservationSegment(force: boolean) {
-    const chunks = await takeRecordedAudioChunks();
-    if (!chunks.length && !force) return;
-    if (!chunks.length) return;
+  function nextAudioSliceMeta(): AudioSliceMeta {
     const index = segmentIndexRef.current;
     segmentIndexRef.current += 1;
-
-    let content = "";
-    const blob = new Blob(chunks, { type: mediaRecorderRef.current?.mimeType || chunks[0]?.type || "audio/webm" });
-    if (blob.size > 0) {
-      const dataUrl = await blobToDataUrl(blob);
-      const result = await observeAudio(dataUrl, `语音片段 ${index}`);
-      content = chooseAudioObservation(result.observation);
-    }
-
-    if (!content.trim()) return;
-    await submitLiveAudioSegment(
-      makeSegment(`live-audio-${Date.now()}-${index}`, "audio_observation", `听到的声音 ${index}`, content.trim(), {
-        observedAt: new Date().toISOString(),
-        batchId: batchIdForSegment(index)
-      })
-    );
+    return {
+      index,
+      observedAt: new Date().toISOString(),
+      batchId: batchIdForSegment(index)
+    };
   }
 
-  async function submitLiveAudioSegment(segment: StreamSegment) {
+  function enqueueAudioObservationBlob(blob: Blob, meta: AudioSliceMeta) {
+    audioObservationQueueRef.current = audioObservationQueueRef.current
+      .then(() => processAudioObservationBlob(blob, meta))
+      .catch((caught) => {
+        setError(`Papo 刚才听到一点声音，但整理时断开了。${errorMessage(caught)}`);
+      });
+  }
+
+  async function processAudioObservationBlob(blob: Blob, meta: AudioSliceMeta) {
+    const dataUrl = await blobToDataUrl(blob);
+    const result = await observeAudio(dataUrl, `语音片段 ${meta.index}`);
+    const content = chooseAudioObservation(result.observation);
+    if (!content.trim()) return;
+    await submitLiveSegments([
+      makeSegment(`live-audio-${Date.now()}-${meta.index}`, "audio_observation", `听到的声音 ${meta.index}`, content.trim(), {
+        observedAt: meta.observedAt,
+        batchId: meta.batchId
+      })
+    ]);
+  }
+
+  async function submitLiveSegments(segments: StreamSegment[]) {
     const activeProfile = profileRef.current;
-    if (!activeProfile) return;
-    try {
-      const result = await curiousCapture(activeProfile.userId, [ensureSegmentContext(segment, 0)]);
+    const usefulSegments = segments.filter((segment) => segment.content.trim()).map((segment, index) => ensureSegmentContext(segment, index));
+    if (!activeProfile || !usefulSegments.length) return;
+    liveCaptureQueueRef.current = liveCaptureQueueRef.current.then(async () => {
+      const latestProfile = profileRef.current;
+      if (!latestProfile) return;
+      const result = await curiousCapture(latestProfile.userId, usefulSegments);
       profileRef.current = result.profile;
       setProfile(result.profile);
-    } catch (caught) {
-      setError(`Papo 刚才听到一点声音，但整理时断开了。${errorMessage(caught)}`);
-    }
+    });
+    await liveCaptureQueueRef.current;
   }
 
   function ensureSegmentContext(segment: StreamSegment, index: number): StreamSegment {
@@ -383,21 +410,6 @@ export function App() {
   function batchIdForSegment(index: number) {
     const startedAt = listeningStartedAtRef.current;
     return startedAt ? liveBatchId(startedAt, index) : manualBatchId();
-  }
-
-  async function takeRecordedAudioChunks() {
-    const recorder = mediaRecorderRef.current;
-    if (recorder?.state === "recording") {
-      try {
-        recorder.requestData();
-        await delay(180);
-      } catch {
-        // Keep any chunks already emitted.
-      }
-    }
-    const chunks = recordedChunksRef.current;
-    recordedChunksRef.current = [];
-    return chunks;
   }
 
   function stopMediaCapture() {
@@ -615,8 +627,10 @@ function ChatView(props: {
   const sections = groupConversationSections(messages);
   const canSubmit = Boolean(draft.trim() || props.stagedSegments.some((segment) => segment.content.trim()));
 
-  useEffect(() => {
-    composerRef.current?.scrollIntoView({ block: "end" });
+  useLayoutEffect(() => {
+    window.requestAnimationFrame(() => {
+      composerRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
+    });
   }, [props.profile.conversation?.[0]?.id, props.stagedSegments.length]);
 
   function updateStagedSegmentContent(index: number, content: string) {
@@ -802,6 +816,13 @@ function DeveloperTrace({ trace, profile }: { trace: NonNullable<ConversationMes
         <Eye size={14} />
         背后
       </summary>
+      <DeveloperTraceBody trace={trace} profile={profile} />
+    </details>
+  );
+}
+
+function DeveloperTraceBody({ trace, profile }: { trace: NonNullable<ConversationMessage["cognitionTrace"]>; profile: CreatureProfile }) {
+  return (
       <div className="developer-trace-body">
         <section>
           <strong>模型调用</strong>
@@ -933,7 +954,6 @@ function DeveloperTrace({ trace, profile }: { trace: NonNullable<ConversationMes
           </section>
         ) : null}
       </div>
-    </details>
   );
 }
 
@@ -1037,7 +1057,7 @@ function memoryStatusText(status: string, policy: string) {
 function feedbackKindLabel(kind: string) {
   const labels: Record<string, string> = {
     understood: "用户表示这次懂了",
-    continue: "用户让 Papo 再想一会儿",
+    continue: "用户补充反馈",
     not_now: "用户让 Papo 先安静",
     remember: "用户要求记住",
     important: "用户标记这件事很重要",
@@ -1149,7 +1169,7 @@ function MemoryView(props: {
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={History} title="Papo 记得的生活" />
-        <p className="muted">按时间放着 Papo 真正留下的回忆。点开一条，可以看原始来龙去脉或反馈。</p>
+        <p className="muted">按时间放着 Papo 真正留下的回忆。点开一条，可以看原始来龙去脉、反馈和背后的模型流程。</p>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一找哪件事" />
         {otherMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
@@ -1201,22 +1221,10 @@ function MemoryView(props: {
               onFeedback={props.onFeedback}
               onObserveFeedbackAudio={props.onObserveFeedbackAudio}
             />
+            <MemoryTraceList memory={memory} profile={props.profile} />
           </article>
         ))}
         {otherMemories.length ? null : <p className="muted">我还没有真正记下一件和你有关的事。</p>}
-      </div>
-      <div className="panel">
-        <PanelTitle icon={Eye} title="最近一起经历过" />
-        {props.profile.episodes.map((episode) => (
-          <EpisodeCard
-            key={episode.id}
-            episode={episode}
-            sourceMessages={episodeSourceMessages(props.profile, episode)}
-            onFeedback={props.onFeedback}
-            onObserveFeedbackAudio={props.onObserveFeedbackAudio}
-            compact
-          />
-        ))}
       </div>
     </section>
   );
@@ -1231,33 +1239,70 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
         <span>{new Date(memory.createdAt).toLocaleString("zh-CN")}</span>
         <strong>{memoryResultLine(memory)}</strong>
       </div>
-      <details className="memory-details">
-        <summary>详情</summary>
-        <div className="memory-detail-body">
-          {sourceEpisode ? (
-            <>
-              <div>
-                <span>你当时说</span>
-                <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode))}</p>
-              </div>
-              {episodePapoLine(sourceEpisode) ? (
-                <div>
-                  <span>Papo 当时回你</span>
-                  <p>{episodePapoLine(sourceEpisode)}</p>
-                </div>
-              ) : null}
-            </>
-          ) : null}
-          {memory.consolidatedBecause ? (
+      {sourceEpisode ? (
+        <details className="memory-details">
+          <summary>详情</summary>
+          <div className="memory-detail-body">
             <div>
-              <span>为什么留下</span>
-              <p>{visibleCreatureText(memory.consolidatedBecause)}</p>
+              <span>你当时说</span>
+              <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode))}</p>
             </div>
-          ) : null}
-        </div>
-      </details>
+            {episodePapoLine(sourceEpisode) ? (
+              <div>
+                <span>Papo 当时回你</span>
+                <p>{episodePapoLine(sourceEpisode)}</p>
+              </div>
+            ) : null}
+          </div>
+        </details>
+      ) : null}
     </div>
   );
+}
+
+function MemoryTraceList({ memory, profile }: { memory: CreatureProfile["longTermMemories"][number]; profile: CreatureProfile }) {
+  const traces = memoryTraceMessages(memory, profile);
+  if (!traces.length) return null;
+  return (
+    <details className="memory-trace-list">
+      <summary aria-label="查看这条记忆背后的模型流程">
+        <Eye size={14} />
+        小眼睛
+      </summary>
+      <div className="memory-trace-stack">
+        {traces.map((message) => (
+          <section className="memory-trace-item" key={message.id}>
+            <strong>{memoryTraceTitle(message)}</strong>
+            <small>{new Date(message.at).toLocaleString("zh-CN")}</small>
+            {message.cognitionTrace ? <DeveloperTraceBody trace={message.cognitionTrace} profile={profile} /> : null}
+          </section>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function memoryTraceMessages(memory: CreatureProfile["longTermMemories"][number], profile: CreatureProfile) {
+  const sourceEpisodeId = memory.sourceEpisodeId;
+  return (profile.conversation ?? [])
+    .filter((message) => {
+      const trace = message.cognitionTrace;
+      if (!trace) return false;
+      if (message.relatedMemoryIds?.includes(memory.id)) return true;
+      if (trace.feedbackDecision?.targetId === memory.id) return true;
+      if (trace.feedbackDecision?.memoryChanges.some((change) => change.targetId === memory.id)) return true;
+      if (sourceEpisodeId && trace.memoryDecisions?.some((decision) => decision.sourceEpisodeId === sourceEpisodeId)) return true;
+      return false;
+    })
+    .slice(0, 4);
+}
+
+function memoryTraceTitle(message: ConversationMessage) {
+  const source = message.cognitionTrace?.source;
+  if (source === "feedback") return "反馈怎样改变它";
+  if (source === "emergence") return "Papo 后来怎样想起它";
+  if (source === "curious_stream" || source === "button") return "它当时怎样被理解";
+  return "模型流程";
 }
 
 function MemoryFeedbackBox(props: {
@@ -1346,88 +1391,6 @@ function ProfileView(props: {
   );
 }
 
-function EpisodeCard(props: {
-  episode: EpisodeMemory;
-  sourceMessages?: ConversationMessage[];
-  compact: boolean;
-  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
-  onObserveFeedbackAudio: (file: File) => Promise<string>;
-}) {
-  const [feedbackText, setFeedbackText] = useState("");
-  const [feedbackModality, setFeedbackModality] = useState<"text" | "audio_observation">("text");
-  const userLine = episodeUserLine(props.episode, props.sourceMessages ?? []);
-  const papoLine = episodePapoLine(props.episode);
-
-  function submitFeedback(kind: FeedbackKind) {
-    const content = feedbackText.trim();
-    props.onFeedback(kind, props.episode.id, content || undefined, content ? feedbackModality : "button");
-    setFeedbackText("");
-    setFeedbackModality("text");
-  }
-
-  return (
-    <article className="episode-card">
-      <div className="episode-head">
-        <span>{props.episode.source === "button" ? "你告诉我的事" : "Papo 回应过的事"}</span>
-      </div>
-      <div className="episode-moment">
-        <div>
-          <span>你</span>
-          <p>{userLine}</p>
-        </div>
-        {papoLine ? (
-          <div>
-            <span>Papo</span>
-            <strong>{papoLine}</strong>
-          </div>
-        ) : null}
-      </div>
-      <EpisodeSourceMoment episode={props.episode} messages={props.sourceMessages ?? []} compact={props.compact} />
-      <div className="feedback-input">
-        <div className="feedback-teach">
-          <strong>你想怎么补充</strong>
-          <span>还有想让 Papo 记准或放轻的地方吗？</span>
-        </div>
-        <textarea
-          value={feedbackText}
-          onChange={(event) => {
-            setFeedbackText(event.target.value);
-            setFeedbackModality("text");
-          }}
-          rows={props.compact ? 2 : 3}
-          placeholder="也可以补一句：哪里懂对了、哪里先放下、要怎么记准"
-        />
-        <label className="upload-button compact-upload">
-          <Mic size={16} />
-          说给我听
-          <input
-            type="file"
-            accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg"
-            onChange={async (event) => {
-              const file = event.currentTarget.files?.[0];
-              event.currentTarget.value = "";
-              if (!file) return;
-              const observation = await props.onObserveFeedbackAudio(file);
-              if (observation.trim()) {
-                setFeedbackText(observation.trim());
-                setFeedbackModality("audio_observation");
-              }
-            }}
-          />
-        </label>
-      </div>
-      <div className="feedback-row">
-        {episodeFeedbacks.map((item) => (
-          <button key={item.kind} onClick={() => submitFeedback(item.kind)} aria-label={item.label}>
-            <item.icon size={16} />
-            {item.label}
-          </button>
-        ))}
-      </div>
-    </article>
-  );
-}
-
 function episodeUserLine(episode: EpisodeMemory, messages: ConversationMessage[]) {
   const sourceText = messages
     .filter((message) => message.role !== "papo")
@@ -1447,31 +1410,6 @@ function episodePapoLine(episode: EpisodeMemory) {
 
 function summarizeForEpisode(text: string) {
   return text.length > 52 ? `${text.slice(0, 52)}...` : text;
-}
-
-function EpisodeSourceMoment({ episode, messages, compact }: { episode: EpisodeMemory; messages: ConversationMessage[]; compact: boolean }) {
-  if (!messages.length && !episode.sourceBatchId && !episode.sourceObservedAt && !episode.sourceLocation) return null;
-  const title = episode.sourceBatchId ? "来自同一次事件" : "来自当时你给我的片段";
-  const momentParts = [
-    episode.sourceObservedAt ? `那时 ${new Date(episode.sourceObservedAt).toLocaleString("zh-CN")}` : "",
-    episode.sourceLocation ? locationText(episode.sourceLocation) : ""
-  ].filter(Boolean);
-  return (
-    <div className={`episode-source ${compact ? "compact" : ""}`}>
-      <strong>{title}</strong>
-      {momentParts.length ? <small>{momentParts.join(" · ")}</small> : null}
-      {!compact && messages.length ? (
-        <div className="episode-source-list">
-          {messages.map((message) => (
-            <p key={message.id}>
-              <span>{messageTitle(message)}</span>
-              {visibleCreatureText(message.text)}
-            </p>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
 }
 
 function episodeSourceMessages(profile: CreatureProfile, episode: EpisodeMemory) {
@@ -1677,10 +1615,6 @@ function liveBatchId(startedAt: number, index: number) {
 
 function manualBatchId(nowMs = Date.now()) {
   return `manual-${Math.floor(nowMs / 30_000)}`;
-}
-
-function delay(ms: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function formatListeningTime(seconds: number) {

@@ -44,8 +44,8 @@ export function createModelProvider(env: NodeJS.ProcessEnv = process.env): Model
 
 function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
   const textModel = merged.OPENROUTER_MODEL ?? "openai/gpt-5.5";
-  const visionModel = merged.OPENROUTER_VISION_MODEL ?? "google/gemini-3.1-flash-lite";
-  const audioModel = merged.OPENROUTER_AUDIO_MODEL ?? "xiaomi/mimo-v2.5";
+  const visionModel = merged.OPENROUTER_VISION_MODEL ?? "nex-agi/nex-n2-mini";
+  const audioModel = merged.OPENROUTER_AUDIO_MODEL ?? "mistralai/voxtral-small-24b-2507";
   return openAiCompatibleProvider({
     kind: "openrouter",
     name: "OpenRouter",
@@ -218,28 +218,63 @@ function openAiCompatibleProvider(input: {
 }
 
 function withModalityOverrides(primary: ModelProvider, merged: NodeJS.ProcessEnv): ModelProvider {
+  const vision = visionOverrideProvider(primary, merged);
   const audio = audioOverrideProvider(primary, merged);
-  if (!audio) return primary;
+  if (!vision && !audio) return primary;
   return {
     ...primary,
-    name: `${primary.name} + ${audio.name} audio`,
+    name: [
+      primary.name,
+      vision ? `${vision.name} vision` : "",
+      audio ? `${audio.name} audio` : ""
+    ].filter(Boolean).join(" + "),
     diagnostics: {
       ...primary.diagnostics,
-      audioProvider: audio.kind,
-      audioModel: audio.diagnostics?.audioModel,
-      audioRoute: audio.diagnostics?.audioRoute
+      ...(vision ? {
+        visionProvider: vision.kind,
+        visionModel: vision.diagnostics?.visionModel
+      } : {}),
+      ...(audio ? {
+        audioProvider: audio.kind,
+        audioModel: audio.diagnostics?.audioModel,
+        audioRoute: audio.diagnostics?.audioRoute
+      } : {})
     },
-    observeAudio: (dataUrl, prompt) => audio.observeAudio(dataUrl, prompt)
+    summarizeImage: vision ? (dataUrl, prompt) => vision.summarizeImage(dataUrl, prompt) : primary.summarizeImage,
+    observeAudio: audio ? (dataUrl, prompt) => audio.observeAudio(dataUrl, prompt) : primary.observeAudio
   };
 }
 
 function audioOverrideProvider(primary: ModelProvider, merged: NodeJS.ProcessEnv) {
   const requested = merged.PAPO_AUDIO_PROVIDER;
   if (requested === "primary") return undefined;
-  if (primary.kind === "generic") return undefined;
-  if (requested && requested !== "generic") return undefined;
-  if (!(merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY)) return undefined;
-  return genericProvider(merged);
+  if (!requested && primary.kind === "generic") return undefined;
+  if (!requested && !(merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY)) return undefined;
+  return requested ? providerForKind(requested, merged) : genericProvider(merged);
+}
+
+function visionOverrideProvider(primary: ModelProvider, merged: NodeJS.ProcessEnv) {
+  const requested = merged.PAPO_VISION_PROVIDER;
+  if (!requested || requested === "primary") return undefined;
+  const provider = providerForKind(requested, merged);
+  if (provider.kind === primary.kind) return undefined;
+  return provider;
+}
+
+function providerForKind(kind: string, merged: NodeJS.ProcessEnv) {
+  if (kind === "openrouter") {
+    if (!merged.OPENROUTER_API_KEY) throw new Error("PAPO modality override requested OpenRouter without OPENROUTER_API_KEY.");
+    return openRouterProvider(merged);
+  }
+  if (kind === "mimo") {
+    if (!(merged.MIMO_ENDPOINT || merged.MIMO_API_KEY)) throw new Error("PAPO modality override requested Mimo without MIMO_ENDPOINT or MIMO_API_KEY.");
+    return mimoProvider(merged);
+  }
+  if (kind === "generic") {
+    if (!(merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY)) throw new Error("PAPO modality override requested generic without OPENAI_API_KEY or GENERIC_MODEL_API_KEY.");
+    return genericProvider(merged);
+  }
+  throw new Error(`Unsupported PAPO modality provider override: ${kind}`);
 }
 
 async function callChatCompletions(
