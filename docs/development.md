@@ -58,7 +58,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Papo replies are model-written external behavior, not frontend templates.
 - Developer inspection belongs behind a small per-message disclosure control. It should show the full cognition chain for that reply: attention, action selection, visible action result, episode persistence, memory candidate handling, feedback effects, emergence choice, model stages, structural checks, and memory outcomes. It must not become the default creature-facing experience.
 - Memory cards default to what the user shared and what the model decided to remember.
-- Feedback text/audio/buttons are all interaction input and may trigger learning, memory updates, or new dialogue.
+- Feedback text/audio/buttons are all interaction input and may trigger learning, memory updates, or new dialogue. Buttons should pass structured feedback kinds such as `important` or `remind`; the frontend must not fake user feedback by injecting hardcoded semantic sentences.
 
 ## Provider Policy
 
@@ -109,7 +109,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - The old "rules create emergence, model polishes narration" path is removed; polishing a fake decision is still fake cognition.
 - Emergence guardrails validate that the chosen memory exists and is active; they must not use local keyword or token matching to decide whether the model's message semantically references the memory.
 - When there are no candidate memories, emergence still uses a compact model call that must choose quiet; this is not a local fake quiet response.
-- Feedback capture records the user's teaching. Explicit forget still performs the storage-layer weight/drop operation, but remembering, memory correction, memory promotion, soft dismissal, state changes, policy changes, learning language, and creature self-memory must come from `semanticReflectFeedback`.
+- Feedback capture records the user's teaching. Explicit forget still performs the storage-layer weight/drop operation, but remembering, importance, reminder intent, memory correction, memory promotion, soft dismissal, state changes, policy changes, learning language, and creature self-memory must come from `semanticReflectFeedback`.
 - Feedback reflection may store internal learning notes and policy/state deltas, but ordinary chat only shows `replyText` when the model chooses a visible response.
 - If the model chooses a visible action such as `respond`, `ask`, `recall`, or `review`, a visible reply is required.
 - If the model chooses `observe` or `quiet`, it must not provide a visible reply; the API may persist the user's input without adding a Papo reply.

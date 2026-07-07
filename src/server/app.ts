@@ -58,7 +58,7 @@ const audioObservationSchema = z.object({
 });
 
 const feedbackSchema = z.object({
-  kind: z.enum(["understood", "continue", "not_now", "remember", "forget"]),
+  kind: z.enum(["understood", "continue", "not_now", "remember", "important", "remind", "forget"]),
   targetId: z.string().optional(),
   content: z.string().max(1200).optional(),
   modality: z.enum(["text", "audio_observation", "button"]).optional()
@@ -341,11 +341,13 @@ async function requireProfile(store: ProfileStore, userId: string) {
 
 function feedbackInputText(kind: string, content?: string) {
   const label = {
-    understood: "这次懂了",
-    continue: "再想一会儿",
-    not_now: "先安静点",
-    remember: "帮我记住",
-    forget: "帮我放下"
+    understood: "懂了",
+    continue: "再想想",
+    not_now: "轻一点",
+    remember: "记住",
+    important: "重要",
+    remind: "提醒",
+    forget: "放下"
   }[kind] ?? kind;
   const note = content?.trim();
   return note ? `${label}：${note}` : label;

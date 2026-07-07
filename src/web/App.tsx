@@ -53,12 +53,12 @@ type ConversationSection =
   | { kind: "batch"; id: string; batchId: string; messages: ConversationMessage[] }
   | { kind: "single"; id: string; message: ConversationMessage };
 
-const feedbacks: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }> = [
-  { kind: "understood", label: "这次懂了", icon: Check },
-  { kind: "continue", label: "再想一会儿", icon: Lightbulb },
-  { kind: "not_now", label: "先安静点", icon: CircleOff },
-  { kind: "remember", label: "帮我记住", icon: Save },
-  { kind: "forget", label: "帮我放下", icon: RefreshCcw }
+const episodeFeedbacks: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }> = [
+  { kind: "understood", label: "懂了", icon: Check },
+  { kind: "continue", label: "再想想", icon: Lightbulb },
+  { kind: "not_now", label: "轻一点", icon: CircleOff },
+  { kind: "remember", label: "记住", icon: Save },
+  { kind: "forget", label: "放下", icon: RefreshCcw }
 ];
 
 export function App() {
@@ -1030,6 +1030,8 @@ function feedbackKindLabel(kind: string) {
     continue: "用户让 Papo 再想一会儿",
     not_now: "用户让 Papo 先安静",
     remember: "用户要求记住",
+    important: "用户标记这件事很重要",
+    remind: "用户希望以后提醒",
     forget: "用户要求放下"
   };
   return labels[kind] ?? kind;
@@ -1170,19 +1172,11 @@ function MemoryView(props: {
                 <MessageCircle size={16} />
                 改准
               </button>
-              <button
-                onClick={() =>
-                  props.onFeedback("remember", memory.id, "这件事很重要，请提高它的权重，之后可以更自然地想起。", "text")
-                }
-              >
+              <button onClick={() => props.onFeedback("important", memory.id, undefined, "button")}>
                 <Save size={16} />
                 很重要
               </button>
-              <button
-                onClick={() =>
-                  props.onFeedback("remember", memory.id, "这件事之后可能需要提醒我，请先作为提醒意图记住。", "text")
-                }
-              >
+              <button onClick={() => props.onFeedback("remind", memory.id, undefined, "button")}>
                 <Lightbulb size={16} />
                 提醒我
               </button>
@@ -1412,7 +1406,7 @@ function EpisodeCard(props: {
         </label>
       </div>
       <div className="feedback-row">
-        {feedbacks.map((item) => (
+        {episodeFeedbacks.map((item) => (
           <button key={item.kind} onClick={() => submitFeedback(item.kind)} aria-label={item.label}>
             <item.icon size={16} />
             {item.label}

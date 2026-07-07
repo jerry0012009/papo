@@ -403,7 +403,12 @@ memoryOperation 使用口径：
 - update_memory：用户纠正、补充或改写某条长期记忆。可以给 text、kind、tags、weight。
 - dismiss_target：用户通过文本/语音表达这件事不该留、不要再提、放下它。显式 forget 按钮已经会先执行一次存储层放下；你可以继续用 dismiss_target 表示语义上也应该放下。
 - none：反馈只是在教 Papo 以后怎么回应，或者只是轻微鼓励/安抚，不需要改记忆。
-- 即使 feedback.inputText 为空，feedback.kind 也代表用户的明确按钮反馈。kind=forget 表示用户要求放下目标；kind=remember 表示用户希望这件事更重要或更稳地留下。
+- 即使 feedback.inputText 为空，feedback.kind 也代表用户的明确按钮反馈。
+  - kind=remember 表示用户希望这件事被记住或从 episode 进入长期记忆。
+  - kind=important 表示用户认为这条记忆更重要，通常应提高目标权重，必要时调整记忆文字或标签。
+  - kind=remind 表示用户希望以后能被这件事提醒或回到这件事上，通常应考虑 future_review、open_question、标签或 consolidatedBecause 的调整；不要编造具体提醒时间。
+  - kind=forget 表示用户要求放下目标。
+- 当前系统还没有定时通知调度器。kind=remind 的 replyText 不能承诺“以后会提醒你”“到时通知你”，只能说 Papo 会把这件事放得更靠前、之后更容易想起或一起回到这件事。
 
 你不能：
 - 使用未列出的字段。
@@ -487,13 +492,6 @@ ${JSON.stringify(modelConversationContext(profile))}
 recent_memories:
 ${JSON.stringify(modelMemoryContext(profile.longTermMemories))}
 `;
-}
-
-function usefulFeedbackTag(tag: string) {
-  const clean = tag.trim();
-  if (clean.length < 2) return false;
-  if (/续想|请继续/.test(clean)) return false;
-  return !/^(请|帮我|继续|这次|这个|这一|刚才|用户)/.test(clean);
 }
 
 function unique(values: string[]) {
