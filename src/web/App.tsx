@@ -48,24 +48,6 @@ import {
 
 type Tab = "home" | "chat" | "memory" | "brain" | "profile";
 
-interface SpeechRecognitionLike {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: { error?: string }) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-}
-
-interface SpeechRecognitionEventLike {
-  resultIndex: number;
-  results: ArrayLike<{ isFinal: boolean; 0: { transcript: string } }>;
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
 interface EmergenceSurface {
   text: string;
   memoryId?: string;
@@ -102,12 +84,10 @@ export function App() {
   const [listeningElapsed, setListeningElapsed] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
   const audioFlushRef = useRef<Promise<void>>(Promise.resolve());
-  const transcriptBufferRef = useRef("");
   const segmentIndexRef = useRef(1);
   const listeningStartedAtRef = useRef<number | undefined>(undefined);
   const profileRef = useRef<CreatureProfile | undefined>(undefined);
@@ -291,10 +271,9 @@ export function App() {
 
   async function startListening() {
     if (listening) return;
-    const Recognition = getSpeechRecognition();
     const Recorder = getMediaRecorder();
-    if (!Recorder && !Recognition) {
-      setError("当前浏览器不支持录音或实时语音转写。可以继续用文字或手动粘贴录音转写。");
+    if (!Recorder) {
+      setError("当前浏览器不支持录音。你可以继续用文字、照片或上传音频。");
       return;
     }
 
@@ -312,7 +291,6 @@ export function App() {
 
     mediaStreamRef.current = stream;
     recordedChunksRef.current = [];
-    transcriptBufferRef.current = "";
     segmentIndexRef.current = 1;
     listeningStartedAtRef.current = Date.now();
     setListeningElapsed(0);
@@ -332,43 +310,12 @@ export function App() {
         mediaRecorderRef.current = recorder;
         recorder.start();
       } catch {
-        if (!Recognition) {
-          stopMediaCapture();
-          setListening(false);
-          listeningStartedAtRef.current = undefined;
-          setError("这个浏览器暂时没法让 Papo 连续听。你可以先写给它，或者加照片补充。");
-          return;
-        }
+        stopMediaCapture();
+        setListening(false);
+        listeningStartedAtRef.current = undefined;
+        setError("这个浏览器暂时没法让 Papo 连续听。你可以先写给它，或者加照片补充。");
+        return;
       }
-    }
-
-    if (Recognition) {
-      const recognition = new Recognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "zh-CN";
-      recognition.onresult = (event) => {
-        let finalText = "";
-        for (let index = event.resultIndex; index < event.results.length; index += 1) {
-          const result = event.results[index];
-          if (result.isFinal) finalText += result[0].transcript;
-        }
-        if (finalText.trim()) transcriptBufferRef.current = `${transcriptBufferRef.current} ${finalText.trim()}`.trim();
-      };
-      recognition.onerror = (event) => {
-        if (!mediaRecorderRef.current) setError(`语音监听中断：${event.error ?? "未知错误"}`);
-      };
-      recognition.onend = () => {
-        if (listeningStartedAtRef.current) {
-          try {
-            recognition.start();
-          } catch {
-            // Some browsers throw if restart happens too quickly.
-          }
-        }
-      };
-      recognitionRef.current = recognition;
-      recognition.start();
     }
 
     tickTimerRef.current = window.setInterval(() => {
@@ -382,11 +329,6 @@ export function App() {
   }
 
   function stopListening() {
-    if (recognitionRef.current) {
-      recognitionRef.current.onend = null;
-      recognitionRef.current.stop();
-      recognitionRef.current = null;
-    }
     if (tickTimerRef.current) window.clearInterval(tickTimerRef.current);
     if (segmentTimerRef.current) window.clearInterval(segmentTimerRef.current);
     if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current);
@@ -406,22 +348,18 @@ export function App() {
   }
 
   async function flushAudioTranscriptSegment(force: boolean) {
-    const localTranscript = transcriptBufferRef.current.trim();
-    transcriptBufferRef.current = "";
     const chunks = await takeRecordedAudioChunks();
-    if (!chunks.length && !localTranscript && !force) return;
-    if (!chunks.length && !localTranscript) return;
+    if (!chunks.length && !force) return;
+    if (!chunks.length) return;
     const index = segmentIndexRef.current;
     segmentIndexRef.current += 1;
 
-    let content = localTranscript;
-    if (chunks.length) {
-      const blob = new Blob(chunks, { type: mediaRecorderRef.current?.mimeType || chunks[0]?.type || "audio/webm" });
-      if (blob.size > 0) {
-        const dataUrl = await blobToDataUrl(blob);
-        const result = await transcribeAudio(dataUrl, `语音片段 ${index}`);
-        content = chooseAudioTranscript(result.transcript);
-      }
+    let content = "";
+    const blob = new Blob(chunks, { type: mediaRecorderRef.current?.mimeType || chunks[0]?.type || "audio/webm" });
+    if (blob.size > 0) {
+      const dataUrl = await blobToDataUrl(blob);
+      const result = await transcribeAudio(dataUrl, `语音片段 ${index}`);
+      content = chooseAudioTranscript(result.transcript);
     }
 
     if (!content.trim()) return;
@@ -1938,14 +1876,6 @@ function blobToDataUrl(blob: Blob) {
     reader.onerror = () => reject(new Error("录音片段读取失败"));
     reader.readAsDataURL(blob);
   });
-}
-
-function getSpeechRecognition(): SpeechRecognitionConstructor | undefined {
-  const webWindow = window as typeof window & {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  };
-  return webWindow.SpeechRecognition ?? webWindow.webkitSpeechRecognition;
 }
 
 function getMediaRecorder(): typeof MediaRecorder | undefined {

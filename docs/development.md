@@ -49,6 +49,7 @@ The boundary is strict: internal thinking, decision traces, scores, ids, and mem
 - Dialogue and companionship are one surface.
 - Text, photo, uploaded audio, and continuous listening chunks enter the same conversation timeline.
 - Continuous listening is internally batched around 30 seconds for up to 3 minutes, but the user should experience it as Papo listening with them.
+- Continuous listening records audio chunks and sends them to the configured audio model. Browser/local speech recognition output must not bypass the model into the life stream.
 - Empty audio, silence, noise, and unclear speech are ordinary non-events. They should not create fake life content.
 - Photo input records upload time and available browser location so memory can later keep natural provenance.
 - Papo replies are short external behavior, not cognitive reports.
