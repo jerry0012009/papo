@@ -99,11 +99,19 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const prompt = `请用中文把这张图片压缩成一段 80 字以内的生活场景摘要，给 Curious Mode 当 image_summary。标签：${body.label ?? "截图"}`;
       try {
         const summary = (await provider.summarizeImage(body.dataUrl, prompt)).slice(0, 600);
-        res.json({ summary, provider: provider.kind, semanticSource: provider.usesRealModel ? "llm" : "fallback" });
+        res.json({
+          summary,
+          provider: sensingProvider(provider, "vision"),
+          model: provider.diagnostics?.visionModel,
+          route: "chat_completions",
+          semanticSource: provider.usesRealModel ? "llm" : "fallback"
+        });
       } catch (error) {
         res.json({
           summary: `图片已上传，但视觉模型暂时没有返回摘要。请手动补充这张截图里值得注意的生活信息。${error instanceof Error ? ` (${error.message})` : ""}`,
-          provider: provider.kind,
+          provider: sensingProvider(provider, "vision"),
+          model: provider.diagnostics?.visionModel,
+          route: "chat_completions",
           semanticSource: "fallback"
         });
       }
@@ -120,11 +128,19 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         const transcript =
           (await provider.transcribeAudio(body.dataUrl, prompt)).slice(0, 1200).trim() ||
           "这段录音里没有听到清楚的人声。你可以补一句这段声音里发生了什么。";
-        res.json({ transcript, provider: provider.kind, semanticSource: provider.usesRealModel ? "llm" : "fallback" });
+        res.json({
+          transcript,
+          provider: sensingProvider(provider, "audio"),
+          model: provider.diagnostics?.audioModel,
+          route: provider.diagnostics?.audioRoute,
+          semanticSource: provider.usesRealModel ? "llm" : "fallback"
+        });
       } catch (error) {
         res.json({
           transcript: `音频已上传，但音频模型暂时没有返回转写。请手动补充这段录音里值得注意的生活信息。${error instanceof Error ? ` (${error.message})` : ""}`,
-          provider: provider.kind,
+          provider: sensingProvider(provider, "audio"),
+          model: provider.diagnostics?.audioModel,
+          route: provider.diagnostics?.audioRoute,
           semanticSource: "fallback"
         });
       }
@@ -358,6 +374,12 @@ function feedbackRelatedMemoryIds(profile: CreatureProfile, targetId?: string, t
     }
   }
   return [...ids];
+}
+
+function sensingProvider(provider: ModelProvider, modality: "vision" | "audio") {
+  return modality === "vision"
+    ? provider.diagnostics?.visionProvider ?? provider.kind
+    : provider.diagnostics?.audioProvider ?? provider.kind;
 }
 
 class HttpError extends Error {

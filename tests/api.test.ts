@@ -132,6 +132,8 @@ describe("api", () => {
       .send({ dataUrl: `data:image/png;base64,${base64}`, label: "截图" })
       .expect(200)
       .expect((response) => {
+        expect(response.body.provider).toBe("fallback");
+        expect(response.body.route).toBe("chat_completions");
         expect(response.body.semanticSource).toBe("fallback");
         expect(response.body.summary).toContain("图片");
       });
@@ -141,6 +143,8 @@ describe("api", () => {
       .send({ dataUrl: `data:audio/webm;base64,${base64}`, label: "录音" })
       .expect(200)
       .expect((response) => {
+        expect(response.body.provider).toBe("fallback");
+        expect(response.body.route).toBe("fallback");
         expect(response.body.semanticSource).toBe("fallback");
         expect(response.body.transcript).toContain("音频");
       });
@@ -152,7 +156,7 @@ describe("api", () => {
       kind: "generic" as const,
       name: "empty audio model",
       usesRealModel: true,
-      diagnostics: { audioRoute: "audio_transcriptions" as const, audioModel: "gpt-4o-mini-transcribe" },
+      diagnostics: { audioProvider: "generic" as const, audioRoute: "audio_transcriptions" as const, audioModel: "gpt-4o-mini-transcribe" },
       transcribeAudio: async () => ""
     };
     const app = createApp({ store: new MemoryProfileStore(), provider });
@@ -162,8 +166,39 @@ describe("api", () => {
       .send({ dataUrl: `data:audio/wav;base64,${"A".repeat(80)}`, label: "空录音" })
       .expect(200)
       .expect((response) => {
+        expect(response.body.provider).toBe("generic");
+        expect(response.body.model).toBe("gpt-4o-mini-transcribe");
+        expect(response.body.route).toBe("audio_transcriptions");
         expect(response.body.semanticSource).toBe("llm");
         expect(response.body.transcript).toContain("没有听到清楚的人声");
+      });
+  });
+
+  it("reports the actual modality provider when audio is routed away from the semantic brain", async () => {
+    const provider = {
+      ...createModelProvider({}),
+      kind: "openrouter" as const,
+      name: "OpenRouter + Generic model API audio",
+      usesRealModel: true,
+      diagnostics: {
+        textProvider: "openrouter" as const,
+        audioProvider: "generic" as const,
+        audioRoute: "audio_transcriptions" as const,
+        audioModel: "gpt-4o-mini-transcribe"
+      },
+      transcribeAudio: async () => "这段声音里有人说周五复查。"
+    };
+    const app = createApp({ store: new MemoryProfileStore(), provider });
+
+    await request(app)
+      .post("/api/audio-transcript")
+      .send({ dataUrl: `data:audio/wav;base64,${"A".repeat(80)}`, label: "混合路由录音" })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.provider).toBe("generic");
+        expect(response.body.provider).not.toBe("openrouter");
+        expect(response.body.route).toBe("audio_transcriptions");
+        expect(response.body.transcript).toContain("周五复查");
       });
   });
 });
