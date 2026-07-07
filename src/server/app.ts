@@ -7,7 +7,7 @@ import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { createModelProvider, type ModelProvider } from "../core/provider";
 import { wakeCreature } from "../core/rhythm";
-import type { CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, MessageCognitionTrace, SemanticBrainRecord, StreamSegment } from "../core/types";
+import type { CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, MessageCognitionTrace, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
 const createProfileSchema = z.object({
@@ -17,6 +17,20 @@ const createProfileSchema = z.object({
 
 const buttonSchema = z.object({
   text: z.string().min(1).max(4000)
+});
+
+const sensingTraceSchema = z.object({
+  at: z.string().datetime(),
+  modality: z.enum(["audio", "image"]),
+  label: z.string().min(1).max(120),
+  provider: z.string().min(1).max(120),
+  model: z.string().max(160).optional(),
+  route: z.string().max(80).optional(),
+  semanticSource: z.literal("llm"),
+  status: z.enum(["content", "empty", "unreadable"]),
+  decision: z.string().min(1).max(600),
+  observation: z.string().max(1200).optional(),
+  ruleTrace: z.array(z.string().max(240)).max(12)
 });
 
 const curiousSchema = z.object({
@@ -36,7 +50,8 @@ const curiousSchema = z.object({
             accuracy: z.number().nonnegative().optional(),
             label: z.string().min(1).max(120).optional()
           })
-          .optional()
+          .optional(),
+        sensingTrace: sensingTraceSchema.optional()
       })
     )
     .min(1)
@@ -112,6 +127,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const body = audioObservationSchema.parse(req.body);
       const prompt = `请直接理解这段音频，写成一段给 Papo 后续注意机制使用的中文生活观察。只描述能直接听见的事实、明确听清的说话内容、环境声类型或正在发生的事；不能猜测人声、文字、看不见的物体、身份或原因，不能把非语音声音当成说话；不确定就写“不确定的声音”。最多 400 字；如果没有可用生活信息，返回空文本。如果你无法读取或处理这段音频，只返回 ERROR_AUDIO_UNREADABLE。标签：${body.label ?? "录音"}`;
       const audioObservation = normalizeAudioObservation((await provider.observeAudio(body.dataUrl, prompt)).slice(0, 1200));
+      const trace = audioSensingTrace(provider, body.label ?? "录音", audioObservation);
       res.json({
         observation: audioObservation.text,
         noSpeech: !audioObservation.text,
@@ -119,7 +135,8 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         provider: sensingProvider(provider, "audio"),
         model: provider.diagnostics?.audioModel,
         route: provider.diagnostics?.audioRoute,
-        semanticSource: "llm"
+        semanticSource: "llm",
+        sensingTrace: trace
       });
     } catch (error) {
       next(error);
@@ -203,7 +220,8 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
-      const cognitionTrace = captureCognitionTrace(result, provider, "curious_stream", modelRuns);
+      const sensingTraces = body.segments.flatMap((segment) => segment.sensingTrace ? [segment.sensingTrace as SensingTrace] : []);
+      const cognitionTrace = captureCognitionTrace(result, provider, "curious_stream", modelRuns, sensingTraces);
       const hasVisibleReply = Boolean(result.response.trim());
       const traceSourceId = result.events[0]?.triggerSegmentId ?? body.segments[0]?.id;
       for (const segment of body.segments) {
@@ -216,6 +234,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
           batchId: segment.batchId,
           observedAt: segment.observedAt,
           location: segment.location,
+          sensingTrace: segment.sensingTrace as SensingTrace | undefined,
           cognitionTrace: !hasVisibleReply && segment.id === traceSourceId ? cognitionTrace : undefined
         });
       }
@@ -388,7 +407,8 @@ function captureCognitionTrace(
   result: CaptureResult,
   provider: ModelProvider,
   source: "button" | "curious_stream",
-  modelRuns: SemanticBrainRecord[]
+  modelRuns: SemanticBrainRecord[],
+  sensingTraces: SensingTrace[] = []
 ): MessageCognitionTrace {
   return {
     at: new Date().toISOString(),
@@ -396,6 +416,7 @@ function captureCognitionTrace(
     providerKind: provider.kind,
     providerName: provider.name,
     model: provider.diagnostics?.textModel,
+    sensingTraces,
     modelRuns,
     harnessTrace: result.harnessTrace ?? [],
     eventDecisions: result.events.map((event) => {
@@ -572,6 +593,36 @@ function normalizeAudioObservation(text: string) {
     return { text: "", unreadable: true };
   }
   return { text: normalized, unreadable: false };
+}
+
+function audioSensingTrace(
+  provider: ModelProvider,
+  label: string,
+  observation: ReturnType<typeof normalizeAudioObservation>
+): SensingTrace {
+  const status: SensingTrace["status"] = observation.text ? "content" : observation.unreadable ? "unreadable" : "empty";
+  const decision = observation.text
+    ? "音频模型读到了可用的生活信息；规则把它作为 audio_observation 放入当前 30 秒批次，交给注意 LLM 决定是否继续处理。"
+    : observation.unreadable
+      ? "音频模型没有读出可用生活信息或认为音频不可读；规则只结算这段音频，不把它伪造成对话事件。"
+      : "音频模型判断这段没有可用生活信息；规则只结算这段音频，不进入注意、行动或记忆流程。";
+  return {
+    at: new Date().toISOString(),
+    modality: "audio",
+    label,
+    provider: sensingProvider(provider, "audio"),
+    model: provider.diagnostics?.audioModel,
+    route: provider.diagnostics?.audioRoute,
+    semanticSource: "llm",
+    status,
+    decision,
+    observation: observation.text || undefined,
+    ruleTrace: [
+      "sensing: call audio-capable model",
+      `status=${status}`,
+      observation.text ? "route=curious_candidate" : "route=settle_audio_batch_only"
+    ]
+  };
 }
 
 function sensingProvider(provider: ModelProvider, modality: "vision" | "audio") {

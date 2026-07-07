@@ -1,5 +1,5 @@
 import { makeId } from "./ids";
-import type { ConversationChannel, CreatureMessage, CreatureProfile, MessageCognitionTrace, SegmentKind, StreamSegment } from "./types";
+import type { ConversationChannel, CreatureMessage, CreatureProfile, MessageCognitionTrace, SegmentKind, SensingTrace, StreamSegment } from "./types";
 
 const MAX_CONVERSATION_MESSAGES = 80;
 
@@ -49,6 +49,7 @@ export function appendInputMessage(
     observedAt?: string;
     location?: StreamSegment["location"];
     relatedMemoryIds?: string[];
+    sensingTrace?: SensingTrace;
     cognitionTrace?: MessageCognitionTrace;
     at?: string;
   }
@@ -73,6 +74,7 @@ export function appendInputMessage(
     batchId: input.batchId,
     observedAt: input.observedAt,
     location: input.location,
+    sensingTrace: input.sensingTrace,
     cognitionTrace: input.cognitionTrace
   };
   profile.conversation.unshift(message);

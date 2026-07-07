@@ -23,6 +23,7 @@ import type {
   FeedbackKind,
   MessageCognitionTrace,
   SegmentKind,
+  SensingTrace,
   StreamSegment
 } from "../core/types";
 import {
@@ -40,6 +41,16 @@ import {
   wakeProfile,
   type ProfileSummary
 } from "./api";
+import {
+  audioSliceBatchId,
+  currentLiveBatchId,
+  liveBatchBoundaryMs as liveBatchBoundaryFor,
+  LIVE_BATCH_AUDIO_GRACE_MS,
+  LIVE_BATCH_MAX_WAIT_MS,
+  LIVE_BATCH_MS,
+  LIVE_LISTENING_MAX_MS,
+  shouldSuppressForcedAudioSlice
+} from "./live-listening";
 
 type Tab = "home" | "chat" | "memory" | "profile";
 
@@ -68,10 +79,6 @@ interface LiveBatchBuffer {
   updatedAt: number;
 }
 
-const LIVE_BATCH_MS = 30_000;
-const LIVE_BATCH_AUDIO_GRACE_MS = 1_500;
-const LIVE_BATCH_MAX_WAIT_MS = 12_000;
-
 export function App() {
   const [tab, setTab] = useState<Tab>("home");
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
@@ -90,6 +97,7 @@ export function App() {
   const liveCaptureQueueRef = useRef<Promise<void>>(Promise.resolve());
   const liveBatchBuffersRef = useRef<Map<string, LiveBatchBuffer>>(new Map());
   const segmentIndexRef = useRef(1);
+  const lastAudioSliceRequestAtRef = useRef(0);
   const listeningStartedAtRef = useRef<number | undefined>(undefined);
   const profileRef = useRef<CreatureProfile | undefined>(undefined);
   const tickTimerRef = useRef<number | undefined>(undefined);
@@ -222,6 +230,7 @@ export function App() {
         observedAt: new Date().toISOString(),
         batchId: currentBatchId()
       });
+      segment.sensingTrace = result.sensingTrace;
       if (listening) {
         await submitLiveSegments([ensureSegmentContext(segment, 0)]);
       } else {
@@ -301,6 +310,7 @@ export function App() {
     liveCaptureQueueRef.current = Promise.resolve();
     clearLiveBatchBuffers();
     segmentIndexRef.current = 1;
+    lastAudioSliceRequestAtRef.current = 0;
     listeningStartedAtRef.current = Date.now();
     setListeningElapsed(0);
     setListening(true);
@@ -311,8 +321,14 @@ export function App() {
         const mimeType = preferredAudioMimeType(Recorder);
         const recorder = new Recorder(stream, mimeType ? { mimeType } : undefined);
         recorder.ondataavailable = (event) => {
-          const meta = pendingAudioSlicesRef.current.shift() ?? nextAudioSliceMeta();
-          if (event.data.size > 0) enqueueAudioObservationBlob(event.data, meta);
+          const meta = pendingAudioSlicesRef.current.shift();
+          if (!meta && !listeningStartedAtRef.current) return;
+          const sliceMeta = meta ?? nextAudioSliceMeta();
+          if (event.data.size > 0) {
+            enqueueAudioObservationBlob(event.data, sliceMeta);
+          } else {
+            markLiveBatchAudioSettled(sliceMeta.batchId);
+          }
         };
         recorder.onerror = () => {
           setError("这次听到一半断开了。已经整理出来的内容会继续留在这里。");
@@ -330,12 +346,12 @@ export function App() {
 
     tickTimerRef.current = window.setInterval(() => {
       if (!listeningStartedAtRef.current) return;
-      setListeningElapsed(Math.min(180, Math.floor((Date.now() - listeningStartedAtRef.current) / 1000)));
+      setListeningElapsed(Math.min(LIVE_LISTENING_MAX_MS / 1000, Math.floor((Date.now() - listeningStartedAtRef.current) / 1000)));
     }, 1000);
     segmentTimerRef.current = window.setInterval(() => {
       requestAudioSlice(false);
-    }, 30_000);
-    stopTimerRef.current = window.setTimeout(() => stopListening(), 180_000);
+    }, LIVE_BATCH_MS);
+    stopTimerRef.current = window.setTimeout(() => stopListening(), LIVE_LISTENING_MAX_MS);
   }
 
   function stopListening() {
@@ -355,6 +371,9 @@ export function App() {
   function requestAudioSlice(force: boolean) {
     const recorder = mediaRecorderRef.current;
     if (!recorder || recorder.state !== "recording") return;
+    const now = Date.now();
+    if (force && shouldSuppressForcedAudioSlice(now, lastAudioSliceRequestAtRef.current)) return;
+    lastAudioSliceRequestAtRef.current = now;
     const meta = nextAudioSliceMeta();
     pendingAudioSlicesRef.current.push(meta);
     markLiveBatchClosed(meta.batchId);
@@ -397,7 +416,7 @@ export function App() {
         observedAt: meta.observedAt,
         batchId: meta.batchId
       })
-    ], { audioSettledBatchId: meta.batchId });
+    ].map((segment) => ({ ...segment, sensingTrace: result.sensingTrace })), { audioSettledBatchId: meta.batchId });
   }
 
   function submitLiveSegments(segments: StreamSegment[], options: { audioSettledBatchId?: string } = {}) {
@@ -491,10 +510,7 @@ export function App() {
   }
 
   function liveBatchBoundaryMs(batchId: string) {
-    const startedAt = listeningStartedAtRef.current;
-    const match = batchId.match(/-(\d{2})$/);
-    if (!startedAt || !match) return Date.now();
-    return startedAt + Number(match[1]) * LIVE_BATCH_MS;
+    return liveBatchBoundaryFor(listeningStartedAtRef.current, batchId);
   }
 
   function isPastLiveBatchBoundary(batchId: string) {
@@ -518,15 +534,11 @@ export function App() {
   }
 
   function currentBatchId(nowMs = Date.now()) {
-    const startedAt = listeningStartedAtRef.current;
-    if (!startedAt) return manualBatchId(nowMs);
-    const index = Math.max(1, Math.floor((nowMs - startedAt) / LIVE_BATCH_MS) + 1);
-    return liveBatchId(startedAt, index);
+    return currentLiveBatchId(listeningStartedAtRef.current, nowMs);
   }
 
   function batchIdForSegment(index: number) {
-    const startedAt = listeningStartedAtRef.current;
-    return startedAt ? liveBatchId(startedAt, index) : manualBatchId();
+    return audioSliceBatchId(listeningStartedAtRef.current, index);
   }
 
   function stopMediaCapture() {
@@ -909,7 +921,7 @@ function ChatBubble({ message, profile }: { message: ConversationMessage; profil
             {context ? `${context} · ` : ""}{new Date(message.at).toLocaleString("zh-CN")}
           </span>
         </div>
-        {message.cognitionTrace ? <DeveloperTrace trace={message.cognitionTrace} profile={profile} /> : null}
+        {message.cognitionTrace || message.sensingTrace ? <DeveloperTrace trace={message.cognitionTrace} sensingTrace={message.sensingTrace} profile={profile} /> : null}
       </div>
       <p>{visibleMessageText(message)}</p>
       {message.observedAt || message.location ? (
@@ -926,21 +938,40 @@ function ChatBubble({ message, profile }: { message: ConversationMessage; profil
   );
 }
 
-function DeveloperTrace({ trace, profile }: { trace: NonNullable<ConversationMessage["cognitionTrace"]>; profile: CreatureProfile }) {
+function DeveloperTrace({ trace, sensingTrace, profile }: { trace?: ConversationMessage["cognitionTrace"]; sensingTrace?: SensingTrace; profile: CreatureProfile }) {
   return (
     <details className="developer-trace">
       <summary aria-label="查看这句话背后的模型调用">
         <Eye size={14} />
         背后
       </summary>
-      <DeveloperTraceBody trace={trace} profile={profile} />
+      <DeveloperTraceBody trace={trace} sensingTraces={sensingTrace ? [sensingTrace] : undefined} profile={profile} />
     </details>
   );
 }
 
-function DeveloperTraceBody({ trace, profile }: { trace: NonNullable<ConversationMessage["cognitionTrace"]>; profile: CreatureProfile }) {
+function DeveloperTraceBody({ trace, sensingTraces, profile }: { trace?: ConversationMessage["cognitionTrace"]; sensingTraces?: SensingTrace[]; profile: CreatureProfile }) {
+  const allSensingTraces = uniqueSensingTraces([...(sensingTraces ?? []), ...(trace?.sensingTraces ?? [])]);
   return (
       <div className="developer-trace-body">
+        {allSensingTraces.length ? (
+          <section className="cognition-flow">
+            <strong>感知流程</strong>
+            <div className="flow-chain">
+              {allSensingTraces.map((item, index) => (
+                <TraceBlock title={`${index + 1}. ${item.modality === "audio" ? "声音感知" : "图片感知"} · ${sensingStatusLabel(item.status)}`} key={`${item.at}-${item.label}-${index}`}>
+                  <small>{item.label}</small>
+                  <p>{item.observation ? `模型读到：${item.observation}` : "模型没有读到可进入注意流程的生活信息。"}</p>
+                  <p>{item.decision}</p>
+                  <small>{item.provider}{item.model ? ` · ${item.model}` : ""}{item.route ? ` · ${item.route}` : ""}</small>
+                  <TraceList items={item.ruleTrace} />
+                </TraceBlock>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        {trace ? (
+        <>
         <section>
           <strong>模型调用</strong>
           {trace.modelRuns.length ? (
@@ -1070,6 +1101,8 @@ function DeveloperTraceBody({ trace, profile }: { trace: NonNullable<Conversatio
             <TraceList items={trace.harnessTrace} />
           </section>
         ) : null}
+        </>
+        ) : null}
       </div>
   );
 }
@@ -1093,6 +1126,25 @@ function TraceList({ items }: { items: string[] }) {
       ))}
     </ul>
   );
+}
+
+function sensingStatusLabel(status: SensingTrace["status"]) {
+  const labels: Record<SensingTrace["status"], string> = {
+    content: "进入注意候选",
+    empty: "没有继续处理",
+    unreadable: "没有继续处理"
+  };
+  return labels[status];
+}
+
+function uniqueSensingTraces(items: SensingTrace[]) {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = `${item.at}:${item.modality}:${item.label}:${item.status}:${item.observation ?? ""}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function RelatedMemories({ ids, profile }: { ids: string[]; profile: CreatureProfile }) {
@@ -1762,14 +1814,6 @@ async function currentLocationSnapshot(): Promise<StreamSegment["location"] | un
       { enableHighAccuracy: false, maximumAge: 300_000, timeout: 2500 }
     );
   });
-}
-
-function liveBatchId(startedAt: number, index: number) {
-  return `live-${new Date(startedAt).toISOString()}-${String(index).padStart(2, "0")}`;
-}
-
-function manualBatchId(nowMs = Date.now()) {
-  return `manual-${Math.floor(nowMs / 30_000)}`;
 }
 
 function formatListeningTime(seconds: number) {

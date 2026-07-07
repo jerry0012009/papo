@@ -1,4 +1,4 @@
-import type { CaptureResult, CreatureProfile, FeedbackKind, FeedbackRecord, MessageCognitionTrace, SegmentKind, StreamSegment, WakeEvent } from "../core/types";
+import type { CaptureResult, CreatureProfile, FeedbackKind, FeedbackRecord, MessageCognitionTrace, SegmentKind, SensingTrace, StreamSegment, WakeEvent } from "../core/types";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 const apiBase = import.meta.env.VITE_API_BASE as string | undefined;
@@ -60,8 +60,8 @@ export async function summarizeImage(dataUrl: string, label: string): Promise<{ 
   });
 }
 
-export async function observeAudio(dataUrl: string, label: string): Promise<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; unreadable?: boolean; semanticSource: "llm" }> {
-  return request<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; unreadable?: boolean; semanticSource: "llm" }>("/api/audio-observation", {
+export async function observeAudio(dataUrl: string, label: string): Promise<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; unreadable?: boolean; semanticSource: "llm"; sensingTrace?: SensingTrace }> {
+  return request<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; unreadable?: boolean; semanticSource: "llm"; sensingTrace?: SensingTrace }>("/api/audio-observation", {
     method: "POST",
     headers: jsonHeaders,
     body: JSON.stringify({ dataUrl, label })

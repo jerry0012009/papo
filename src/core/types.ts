@@ -66,6 +66,21 @@ export interface StreamSegment {
     accuracy?: number;
     label?: string;
   };
+  sensingTrace?: SensingTrace;
+}
+
+export interface SensingTrace {
+  at: string;
+  modality: "audio" | "image";
+  label: string;
+  provider: string;
+  model?: string;
+  route?: string;
+  semanticSource: "llm";
+  status: "content" | "empty" | "unreadable";
+  decision: string;
+  observation?: string;
+  ruleTrace: string[];
 }
 
 export interface SegmentScore {
@@ -260,6 +275,7 @@ export interface MessageCognitionTrace {
   providerKind: ProviderKind;
   providerName: string;
   model?: string;
+  sensingTraces?: SensingTrace[];
   modelRuns: SemanticBrainRecord[];
   harnessTrace?: string[];
   eventDecisions?: Array<{
@@ -343,6 +359,7 @@ export interface CreatureMessage {
   batchId?: string;
   observedAt?: string;
   location?: StreamSegment["location"];
+  sensingTrace?: SensingTrace;
   cognitionTrace?: MessageCognitionTrace;
 }
 
