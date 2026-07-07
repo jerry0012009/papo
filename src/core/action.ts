@@ -121,17 +121,17 @@ function explainAction(action: ActionKind, input: ActionSelectionInput) {
     case "save_episode":
       return "注意强度足够高，适合先写入情景记忆。";
     case "save_long_term":
-      return "这段未来价值高且风险低，可以建议巩固为长期记忆。";
+      return "这段以后可能还会回来找用户，而且风险不高，可以建议记得更稳。";
     case "recall":
-      return "当前片段和旧记忆共振，适合把过去经历带回工作区。";
+      return "当前片段碰到了以前抱着的小事，适合把过去那段拉近一起看。";
     case "review":
       return "用户像是在整理判断，适合生成复盘。";
     case "quiet":
       return "当前精力或反馈策略更适合短回应和安静陪伴。";
     case "draft_reminder":
-      return "这段有未来行动价值，适合生成提醒草稿而不是直接执行。";
+      return "这段以后可能还会回来找用户，适合先记住回来时机而不是直接执行。";
     case "draft_question_list":
-      return "这段像一个待拆解的问题，适合生成问题清单草稿。";
+      return "这段像一个还没想完的问题，适合先把几处没弄清的地方分开。";
     default:
       return "先观察，不急着保存或打扰用户。";
   }

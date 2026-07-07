@@ -130,9 +130,9 @@ function baseActionFeeling(action: ActionKind, profile: CreatureProfile) {
     case "quiet":
       return "我会短一点回应，先安静陪着，不急着打扰你。";
     case "draft_reminder":
-      return "我感觉它可能以后还会回来，所以更像一张提醒草稿。";
+      return "我感觉它以后可能还会回来找你，所以我先轻轻抱住这个回来时机。";
     case "draft_question_list":
-      return "我感觉它像一个还没想完的问题，可以拆成几个小问题。";
+      return "我感觉它还没想完，所以我先把里面几处没弄清的小结轻轻分开。";
     case "save_long_term":
       return "我觉得它可能值得变成长期记忆，但仍需要规则和你的反馈确认。";
     case "save_episode":

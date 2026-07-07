@@ -2049,8 +2049,8 @@ function actionText(action: AttentionEvent["suggestedAction"]) {
     recall: "回忆",
     review: "复盘",
     quiet: "安静",
-    draft_reminder: "提醒草稿",
-    draft_question_list: "问题清单"
+    draft_reminder: "以后回来",
+    draft_question_list: "分开想想"
   };
   return map[action];
 }

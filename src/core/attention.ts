@@ -304,9 +304,9 @@ function actionResponseLine(action: AttentionEvent["actionDecision"]["action"]):
     case "quiet":
       return "我会先安静一点，只把重点抱住。";
     case "draft_reminder":
-      return "我会先把它当成一张以后可能会回来的提醒草稿。";
+      return "我会先记住它以后可能还会回来找你，但不会替你直接执行。";
     case "draft_question_list":
-      return "我会先把里面没想完的地方拆成几个小问题。";
+      return "我会先把里面没想明白的地方轻轻分开，等你要继续时再一起想。";
     case "observe":
     default:
       return "我先不急着打扰你，只继续看这一小段会不会变重要。";
@@ -339,10 +339,10 @@ function buildNoticed(text: string, relatedCount: number): string {
     return `我注意到你又在校准“小动物不是工具，而是有小脑袋的系统”：${summarizeText(text, 88)}`;
   }
   if (includesAny(text, FUTURE_WORDS)) {
-    return `我注意到这里有未来价值，可能之后还要回来处理：${summarizeText(text, 88)}`;
+    return `我注意到这件事以后可能还会回来找你：${summarizeText(text, 88)}`;
   }
   if (includesAny(text, EMOTIONAL_WORDS)) {
-    return `我注意到这段里有情绪强度，不应该只把它当作普通信息：${summarizeText(text, 88)}`;
+    return `我注意到这段里有一点情绪，不适合被当成路过的背景声：${summarizeText(text, 88)}`;
   }
   if (relatedCount > 0) {
     return `我注意到这一小段和过去的记忆相连：${summarizeText(text, 88)}`;
@@ -370,23 +370,51 @@ function contentWithObservationContext(segment: StreamSegment) {
 
 function explainScore(score: SegmentScore): string {
   const strong = score.contributions.filter((item) => item.value >= 12 && item.key !== "privacy_risk");
-  const reasons = strong.map((item) => item.reason);
-  if (score.privacyRisk > 0) reasons.push("它可能涉及隐私，需要谨慎");
-  if (score.redundancyPenalty > 0) reasons.push("它和已选片段有重复，所以被压低");
-  return reasons.length ? `我注意到它，因为${reasons.join("，")}。` : "我注意到它，因为它在这组信息流里相对更显著。";
+  const reasons = strong.map(creatureReasonForContribution);
+  if (score.privacyRisk > 0) reasons.push("这里有一点隐私味道，我需要放轻");
+  if (score.redundancyPenalty > 0) reasons.push("它和我刚盯住的小事太像了");
+  return reasons.length ? `我竖起耳朵，因为${reasons.join("，")}。` : "我竖起耳朵，因为它比周围背景更像一件需要停一下的小事。";
 }
 
 function explainSelected(score: SegmentScore) {
   const positives = score.contributions.filter((item) => item.value > 0).sort((a, b) => b.value - a.value).slice(0, 3);
-  return `选中：${positives.map((item) => `${item.label} ${item.value >= 0 ? "+" : ""}${item.value}`).join("，")}，总分 ${score.total}。`;
+  const reasons = positives.map(creatureReasonForContribution);
+  return reasons.length ? `我竖起耳朵，因为${reasons.join("，")}。` : "我在这一小段里停了一下，因为它比旁边的背景声更像正在发生的事。";
 }
 
 function explainIgnored(score: SegmentScore, selectedCount: number, budget: number) {
-  if (selectedCount >= budget) return `忽略：注意预算已满，当前最多处理 ${budget} 段。`;
-  if (score.privacyRisk > 45) return "忽略/压低：隐私风险高，需要先问，不能自动长期保存。";
-  if (score.redundancyPenalty > 0) return `忽略：和已注意片段重复，redundancy -${score.redundancyPenalty}。`;
-  if (score.total < 38) return `忽略：总分 ${score.total} 未达到主动注意阈值。`;
-  return "忽略：相比已选片段，未来价值或记忆共振较弱。";
+  if (selectedCount >= budget) return `我先放过它，因为这一轮我只能认真盯住 ${budget} 段，不能假装全都记住。`;
+  if (score.privacyRisk > 45) return "我先放轻它，因为这里有隐私味道，不能自己偷偷长期留下。";
+  if (score.redundancyPenalty > 0) return "我先放过它，因为它和刚才被我盯住的小事太像了。";
+  if (score.total < 38) return "我先放过它，因为它更像路过的背景声，还没有把我拉过去。";
+  return "我先放过它，因为相比刚才被我叼住的片段，它还没有那么拉住我。";
+}
+
+function creatureReasonForContribution(item: ScoreContribution) {
+  switch (item.key) {
+    case "communication_intent":
+      return "你像是在叫我回应你";
+    case "memory_resonance":
+      return "它碰到了我以前抱着的小事";
+    case "emotional_charge":
+      return "里面有担心、重要感或没放下的情绪";
+    case "future_value":
+      return "它以后可能还会回来找你";
+    case "identity_relevance":
+      return "它在影响我应该怎么长大";
+    case "novelty":
+      return "它比周围背景更新一点";
+    case "state_bias":
+      return "你把这一小段直接递给了我";
+    case "redundancy_penalty":
+      return "它和刚才的小事有点重复";
+    case "fatigue_penalty":
+      return "我现在没有力气盯住太多东西";
+    case "privacy_risk":
+      return "这里有一点需要保护的边界";
+    default:
+      return item.reason;
+  }
 }
 
 function applyRedundancyPenalty(score: SegmentScore, selectedTags: string[][]): SegmentScore {

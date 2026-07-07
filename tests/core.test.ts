@@ -53,7 +53,7 @@ describe("creature core", () => {
     if (!event.scoreBreakdown) throw new Error("expected score breakdown");
     expect(event.noticed).toContain("复查");
     expect(event.scoreBreakdown.futureValue).toBeGreaterThan(0);
-    expect(result.response).toMatch(/共同经历|提醒草稿|复查/);
+    expect(result.response).toMatch(/共同经历|以后可能还会回来|复查/);
     expect(result.episodes[0].possibleIntent).toContain("我们刚一起经过的情景");
     expect(result.response).not.toContain("我先试着理解");
     expect(result.response).not.toContain("我注意到这个片段可能");
