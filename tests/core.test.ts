@@ -8,6 +8,7 @@ import { enrichFeedbackNarration } from "../src/core/narration";
 import { createCreatureProfile } from "../src/core/profile";
 import { createModelProvider, type ModelProvider } from "../src/core/provider";
 import { wakeCreature } from "../src/core/rhythm";
+import { semanticDecideMemory } from "../src/core/semantic-memory";
 import type { CreatureState } from "../src/core/types";
 
 describe("creature core", () => {
@@ -756,6 +757,36 @@ describe("creature core", () => {
     const profile = createCreatureProfile();
 
     await expect(runButtonHarness(profile, "为什么说“先回应你”，你还想后干啥？", provider)).rejects.toThrow(/visible text|process language/);
+  });
+
+  it("memory model must write kept candidate text instead of preserving rule draft", async () => {
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "我最近每天游泳，但不喜欢游泳馆人太多。");
+    const candidateId = result.memoryCandidates?.[0].id;
+    if (!candidateId) throw new Error("expected memory candidate");
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "incomplete memory model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          candidates: [{
+            candidateId,
+            shouldKeepCandidate: true,
+            memoryKind: "habit",
+            confidence: 72,
+            writePolicy: "wait_feedback",
+            whyConsolidate: "这和最近稳定出现的运动习惯有关。",
+            decayPolicy: "decay_without_feedback"
+          }]
+        }) as T
+    };
+
+    await expect(semanticDecideMemory(profile, result.memoryCandidates ?? [], provider)).rejects.toThrow(/usable memory text/);
   });
 
 });

@@ -74,9 +74,11 @@ function applySemanticMemorySuggestion(profile: CreatureProfile, candidates: Mem
     if (!episode) continue;
 
     if (item.shouldKeepCandidate === false) {
+      const reason = safeMemoryProcessText(item.whyConsolidate);
+      if (!reason) throw new Error("memory model dismissed candidate without a usable reason");
       candidate.writePolicy = "do_not_save";
       candidate.status = "dismissed";
-      candidate.whyConsolidate = safeMemoryProcessText(item.whyConsolidate) ?? "这次先不把它留下。";
+      candidate.whyConsolidate = reason;
       candidate.decayPolicy = "forget_if_dismissed";
       applied += 1;
       continue;
@@ -84,12 +86,14 @@ function applySemanticMemorySuggestion(profile: CreatureProfile, candidates: Mem
 
     const privacyHigh = hasPrivacyRisk(`${episode.inputSummary} ${episode.noticed} ${item.candidateText ?? ""}`);
     const candidateText = safeMemoryText(item.candidateText);
-    if (candidateText && !privacyHigh) candidate.candidateText = candidateText;
+    if (!candidateText) throw new Error("memory model kept candidate without a usable memory text");
+    candidate.candidateText = candidateText;
     if (item.memoryKind) candidate.memoryKind = item.memoryKind;
     if (Number.isFinite(item.confidence)) candidate.confidence = Math.max(0, Math.min(100, Math.round(item.confidence ?? candidate.confidence)));
     if (item.writePolicy) candidate.writePolicy = guardWritePolicy(item.writePolicy, privacyHigh);
     if (item.whyConsolidate) candidate.whyConsolidate = safeMemoryProcessText(item.whyConsolidate) ?? candidate.whyConsolidate;
-    if (item.privacyReason || privacyHigh) candidate.privacyReason = safeMemoryProcessText(item.privacyReason) ?? candidate.privacyReason ?? "这里可能有需要先小心的边界。";
+    if (privacyHigh && !safeMemoryProcessText(item.privacyReason)) throw new Error("memory model kept private candidate without a usable privacy reason");
+    if (item.privacyReason) candidate.privacyReason = safeMemoryProcessText(item.privacyReason) ?? candidate.privacyReason;
     if (item.decayPolicy) candidate.decayPolicy = item.decayPolicy;
     if (item.tags?.length) candidate.tags = item.tags.filter((tag) => !containsInternalMemoryLanguage(tag));
     if (privacyHigh && candidate.writePolicy === "auto") candidate.writePolicy = "ask_user";
@@ -150,7 +154,10 @@ function buildSemanticMemoryPrompt(profile: CreatureProfile, candidates: MemoryC
 
 规则会校验：
 - candidateId 必须来自候选列表。
+- shouldKeepCandidate=true 时必须给出 candidateText；这是 Papo 真正会留下的记忆候选文本，不能依赖 ruleCandidateText。
+- shouldKeepCandidate=false 时必须给出 whyConsolidate 说明为什么不留下。
 - 隐私高的内容不能 auto 保存。
+- 隐私高时必须给出不泄露具体秘密的 candidateText 和 privacyReason，并把 writePolicy 设为 ask_user 或 do_not_save。
 - 不允许把 token、验证码、密码、地址、身份证、银行卡等隐私内容写进 candidateText。
 - 不能编造用户没说过的新事实。
 - 普通用户看到的是 Papo 记得的生活，不看这些分类。
