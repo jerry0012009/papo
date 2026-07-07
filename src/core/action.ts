@@ -119,11 +119,11 @@ function explainAction(action: ActionKind, input: ActionSelectionInput) {
     case "ask":
       return "这段需要用户确认，尤其是隐私、情绪或保存意图还不够明确。";
     case "save_episode":
-      return "注意强度足够高，适合先写入情景记忆。";
+      return "注意强度足够高，适合先记录这次经历。";
     case "save_long_term":
       return "这段以后可能还会回来找用户，而且风险不高，可以建议记得更稳。";
     case "recall":
-      return "当前片段碰到了以前抱着的小事，适合把过去那段拉近一起看。";
+      return "当前内容关联到以前记住的事，适合一起考虑。";
     case "review":
       return "用户像是在整理判断，适合生成复盘。";
     case "quiet":

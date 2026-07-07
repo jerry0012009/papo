@@ -19,8 +19,8 @@ describe("goal 3 acceptance flow", () => {
     const curious = handleCuriousStream(main, lifeSegments(), "2026-07-06T06:01:00.000Z");
     expect(curious.curiousSession?.totalSegments).toBe(8);
     expect(curious.events).toHaveLength(2);
-    expect(curious.curiousSession?.creatureReport).toContain("我刚才陪你看了 8 段");
-    expect(curious.curiousSession?.creatureReport).toContain("只认真盯住了 2 段");
+    expect(curious.curiousSession?.creatureReport).toContain("我刚才陪你听了 8 段");
+    expect(curious.curiousSession?.creatureReport).toContain("先回应其中 2 段");
     expect(curious.curiousSession?.selected.every((item) => item.whySelected)).toBe(true);
     expect(curious.curiousSession?.ignored.every((item) => item.whyIgnored)).toBe(true);
 
@@ -64,7 +64,7 @@ describe("goal 3 acceptance flow", () => {
     expect(emergence.relatedMemoryIds[0]).toBe(promoted?.id);
     expect(emergence.whyNow).toBeTruthy();
     expect(emergence.driveSource).toBeTruthy();
-    expect(emergence.message).toContain("我想起了");
+    expect(emergence.message).toContain("想起了");
     expect(emergence.message).not.toContain("我浮现的是");
   });
 });

@@ -54,7 +54,7 @@ describe("creature core", () => {
     expect(event.noticed).toContain("复查");
     expect(event.scoreBreakdown.futureValue).toBeGreaterThan(0);
     expect(result.response).toMatch(/共同经历|以后可能还会回来|复查/);
-    expect(result.episodes[0].possibleIntent).toContain("我们刚一起经过的情景");
+    expect(result.episodes[0].possibleIntent).toContain("刚发生的对话");
     expect(result.response).not.toContain("我先试着理解");
     expect(result.response).not.toContain("我注意到这个片段可能");
     expect(result.episodes[0].possibleIntent).not.toContain("认真理解并判断");
@@ -194,8 +194,8 @@ describe("creature core", () => {
 
     const wake = wakeCreature(profile, "2026-07-06T08:02:00.000Z");
 
-    expect(wake.innerThought).toContain("你教过我的样子");
-    expect(wake.innerThought).toContain("等新的小事真的发生");
+    expect(wake.innerThought).toContain("你教过我");
+    expect(wake.innerThought).toContain("继续听你说");
     expect(wake.innerThought).not.toContain("我想起了");
     expect(wake.innerThought).not.toMatch(/不装作|装成|旧记忆|节律/);
     expect(wake.relatedMemoryIds).toEqual([expect.stringMatching(/^ltm_/)]);
@@ -232,7 +232,7 @@ describe("creature core", () => {
     expect(text).toContain("我当时还没和旧事连起来");
     expect(text).toContain("我当时决定先放轻一点");
     expect(text).not.toMatch(/用户|小动物|当前事件|保存意图|情景片段|旧记忆/);
-    expect(reason).toBe("它以后可能还会回来找你");
+    expect(reason).toBe("这件事以后可能还会回来找你");
   });
 
   it("remember promotes an episode to long-term memory", () => {
@@ -323,8 +323,9 @@ describe("creature core", () => {
 
     expect(emergence.relatedMemoryIds).toEqual([]);
     expect(emergence.memoryId).toBeUndefined();
-    expect(emergence.text).toContain("还没有能自己回来的小事");
-    expect(emergence.text).toContain("耳朵留给下一段");
+    expect(emergence.text).toContain("还没有足够稳定的旧事");
+    expect(emergence.text).toContain("等你继续说");
+    expect(emergence.text).not.toMatch(/耳朵留给|抱住|叼|情景记忆/);
     expect(emergence.text).not.toContain("所以我想起了");
     expect(emergence.text).not.toMatch(/不装作|装成|旧记忆|内在倾向|我浮现的是/);
   });
@@ -337,7 +338,7 @@ describe("creature core", () => {
     const emergence = createActiveEmergence(profile);
 
     expect(profile.longTermMemories.some((memory) => memory.id === emergence.memoryId && memory.kind !== "creature_self_memory" && memory.weight > 0)).toBe(true);
-    expect(emergence.text).toContain("我想起了");
+    expect(emergence.text).toContain("想起");
     expect(emergence.text).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|我浮现的是|旧记忆|节律/);
   });
 
@@ -371,8 +372,8 @@ describe("creature core", () => {
 
     expect(memory?.kind).toBe("creature_self_memory");
     expect(memory?.tags).toContain("被你养成");
-    expect(emergence.message).toContain("你教过我的样子");
-    expect(emergence.message).toContain("等真正的生活片段靠近");
+    expect(emergence.message).toContain("你教过我");
+    expect(emergence.message).toContain("多听一会儿");
     expect(emergence.ruleTrace).toContain("memory_type=feedback_self_memory");
     expect(emergence.message).not.toMatch(/我想起了|旧事|旧记忆|我浮现的是|下一次你给我信息流|不装作|装成/);
   });
@@ -526,7 +527,7 @@ describe("creature core", () => {
             emotionalTone: "轻轻试探，有一点期待",
             shouldReply: true,
             suggestedAction: "respond",
-            reply: "我在，听见你了。我会把这次你叫我说话的小片段记下来。",
+            reply: "我在，听见你了。你刚才是在叫我说话，我会先回应你。",
             memoryCandidateText: "用户曾经轻轻叫 Papo 说句话，Papo 回应并把这当成一次小小的共同经历。",
             memoryTags: ["回应", "共同经历"]
           },
@@ -562,7 +563,7 @@ describe("creature core", () => {
             emotionalTone: "轻轻试探",
             shouldReply: true,
             suggestedAction: "respond",
-            reply: "我在，先回应你。明天这件事我会先当成我们正在说话的小片段来听。",
+            reply: "我在，先回应你。明天这件事我会先当成我们正在说话的事来听。",
             memoryCandidateText: "你曾经在提到明天之前先确认我会不会回应你，我先回答了你。",
             memoryTags: ["回应", "明天"]
           },
@@ -596,10 +597,10 @@ describe("creature core", () => {
       generateJson: async <T,>(): Promise<T | undefined> =>
         ({
           interaction: {
-            userIntent: "你只是把明天这件小事递给我注意，不希望我马上追问或生成提醒。",
+            userIntent: "你只是告诉我明天这件事，不希望我马上追问或生成提醒。",
             emotionalTone: "轻一点，不想被打扰",
             shouldReply: false,
-            memoryCandidateText: "你曾经提到明天早上前要看一眼检查单，但当时更希望我安静抱住，不急着提醒。",
+            memoryCandidateText: "你曾经提到明天早上前要看一眼检查单，但当时更希望我安静陪着，不急着提醒。",
             memoryTags: ["明天", "检查单", "安静"]
           },
           trace: ["llm: quiet observation beats keyword reminder"]
@@ -615,7 +616,7 @@ describe("creature core", () => {
     expect(event.actionDecision.ruleTrace).toContain("llm_suggested=observe");
     expect(event.actionDecision.ruleTrace).not.toContain("future_value_action");
     expect(event.decisionTrace?.join(" ")).toContain("llm_default_action=observe");
-    expect(result.response).toContain("先轻轻抱住");
+    expect(result.response).toContain("不急着追问");
     expect(result.response).not.toMatch(/提醒草稿|问题清单/);
   });
 });

@@ -66,7 +66,7 @@ export function applyFeedback(
     if (targetEpisode) {
       const candidate = createMemoryCandidateFromEpisode(profile, targetEpisode, { feedback: "continue", now });
       if (inputText && !hasPrivacyRisk(inputText)) {
-        candidate.candidateText = `你后来教我补上这一点：${summarizeText(inputText, 140)}。我会把它和原来的小片段放在一起理解。`;
+        candidate.candidateText = `你后来教我补上这一点：${summarizeText(inputText, 140)}。我会把它和原来的事放在一起理解。`;
         candidate.tags = unique([...candidate.tags, ...extractTags(inputText)]);
       }
       record.memoryCandidateIds?.push(candidate.id);
@@ -171,7 +171,7 @@ function feedbackTopic(context: FeedbackReplyContext) {
   if (tag) return `「${summarizeText(tag, 18)}」`;
   const text = context.targetEpisode?.inputSummary ?? context.targetEpisode?.noticed ?? context.targetLongTerm?.text;
   if (text) return `「${summarizeText(text, 18)}」`;
-  return "这类小片段";
+  return "这类事";
 }
 
 function usefulFeedbackTag(tag: string) {
@@ -269,7 +269,7 @@ function selfMemoryTrait(kind: FeedbackKind) {
     case "remember":
       return {
         tag: "更愿意记稳",
-        text: (topic: string) => `你教我被确认的小片段值得记稳。以后遇到${topic}，我会更愿意把它和以前的小事连起来。`
+        text: (topic: string) => `你教我被确认的内容值得记稳。以后遇到${topic}，我会更愿意把它和以前的事连起来。`
       };
     case "forget":
       return {
@@ -289,5 +289,5 @@ function selfMemoryTopic(input: {
   if (tag) return `「${summarizeText(tag, 18)}」`;
   const text = input.targetEpisode?.inputSummary ?? input.targetEpisode?.noticed ?? input.targetLongTerm?.text ?? input.inputText;
   if (text) return `「${summarizeText(text, 22)}」`;
-  return "这类小片段";
+  return "这类事";
 }

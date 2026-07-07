@@ -283,7 +283,7 @@ export function App() {
           location
         })
       ]);
-      setDemoNote(result.error ? "照片先留在这一小段里，等你补一句我再一起听。" : result.semanticSource === "llm" ? "照片已经变成一段可改准的小片段，会和这半分钟里的话一起给我听。" : "照片先放进这一小段，对话提交时会一起给我听。");
+      setDemoNote(result.error ? "照片先留在这次对话里，等你补一句我再一起看。" : result.semanticSource === "llm" ? "照片已经整理成可修改的描述，会和这半分钟里的话一起给我看。" : "照片先留在这次对话里，提交时会一起给我看。");
       setTab("chat");
     });
   }
@@ -301,7 +301,7 @@ export function App() {
           batchId: current[0]?.batchId ?? currentBatchId()
         })
       ]);
-      setDemoNote(result.error ? "录音先留在这一小段里，等你补一句我再一起听。" : result.semanticSource === "llm" ? "录音已经变成一段可改准的小片段，会和这半分钟里的话一起给我听。" : "录音先放进这一小段，对话提交时会一起给我听。");
+      setDemoNote(result.error ? "录音先留在这次对话里，等你补一句我再一起听。" : result.semanticSource === "llm" ? "录音已经整理成可修改的文字，会和这半分钟里的话一起给我听。" : "录音先留在这次对话里，提交时会一起给我听。");
       setTab("chat");
     });
   }
@@ -322,7 +322,7 @@ export function App() {
           location
         })
       ]);
-      setDemoNote(result.error ? "照片已经留在这一小段里，先补一句再给我看。" : result.semanticSource === "llm" ? "我已经把照片看成一段可改准的小片段，并记下可用的时间和地点。" : "照片已经进入这一小段，你可以先改准再给我看。");
+      setDemoNote(result.error ? "照片已经留在这次陪伴里，先补一句再给我看。" : result.semanticSource === "llm" ? "我已经把照片整理成可修改的描述，并记下可用的时间和地点。" : "照片已经加入这次陪伴，你可以先改准再给我看。");
       setTab("curious");
     });
   }
@@ -340,7 +340,7 @@ export function App() {
           batchId: currentBatchId()
         })
       ]);
-      setDemoNote(result.error ? "录音已经留在这一小段里，先补一句再给我听。" : result.semanticSource === "llm" ? "我已经把录音听成一段可改准的小片段。" : "录音已经进入这一小段，你可以先改准再给我听。");
+      setDemoNote(result.error ? "录音已经留在这次陪伴里，先补一句再给我听。" : result.semanticSource === "llm" ? "我已经把录音整理成可修改的文字。" : "录音已经加入这次陪伴，你可以先改准再给我听。");
       setTab("curious");
     });
   }
@@ -427,7 +427,7 @@ export function App() {
           if (event.data.size > 0) recordedChunksRef.current.push(event.data);
         };
         recorder.onerror = () => {
-          setError("这次听到一半断开了。已经整理出来的小片段会继续留在这里。");
+          setError("这次听到一半断开了。已经整理出来的内容会继续留在这里。");
         };
         mediaRecorderRef.current = recorder;
         recorder.start();
@@ -590,7 +590,7 @@ export function App() {
 
   function loadDemoCurious() {
     setSegments(demoCuriousSegments.map((segment, index) => makeSegment(`demo-${index + 1}`, segment.kind, segment.label, segment.content)));
-    setDemoNote("我把 8 段日常小片段放到 Papo 面前了：有背景、有日历、有隐私味道、有声音，也有重复。现在可以让它自己挑出真正想看的地方。");
+    setDemoNote("我把 8 段日常内容放到 Papo 面前了：有背景、有日历、有隐私内容、有声音，也有重复。现在可以让它自己挑出真正需要回应的地方。");
     setDemoSummary(undefined);
     setTab("curious");
   }
@@ -639,7 +639,7 @@ export function App() {
         contrast,
         emergence: emerged.emergence.text
       });
-      setDemoNote("这只 Papo 已经走完一圈：先注意生活片段，再被你反馈养成，然后自己想起一段抱着的小事。");
+      setDemoNote("这只 Papo 已经走完一圈：先听见生活内容，再根据你的反馈调整，之后能在合适的时候想起旧事。");
       setTab("demo");
     });
   }
@@ -704,7 +704,7 @@ export function App() {
         <div>
           <p className="eyebrow">住在手机里的小狗</p>
           <h1>{profile.creatureName}</h1>
-          <p className="eyebrow">正在陪你攒小片段</p>
+          <p className="eyebrow">正在陪着你</p>
         </div>
         <button className="icon-button" onClick={askEmergence} disabled={busy} aria-label="问问 Papo 现在想到什么">
           <Sparkles size={19} />
@@ -824,26 +824,26 @@ function HomeView(props: {
       {props.wakeMessage ? (
         <section className="wake-note">
           <span>Papo 抬头看了你一眼</span>
-          <p>{props.wakeMessage}</p>
-          {props.wakeThought ? <p>{props.wakeThought}</p> : null}
+          <p>{visibleCreatureText(props.wakeMessage)}</p>
+          {props.wakeThought ? <p>{visibleCreatureText(props.wakeThought)}</p> : null}
         </section>
       ) : null}
       {props.emergence ? <EmergenceCard emergence={props.emergence} /> : null}
-      {props.learningNote ? <section className="learning-note">{props.learningNote}</section> : null}
+      {props.learningNote ? <section className="learning-note">{visibleCreatureText(props.learningNote)}</section> : null}
       {props.lastFeedback ? <FeedbackImpactCard feedback={props.lastFeedback} /> : null}
 
       <RaisedShape profile={props.profile} />
 
       {props.lastResult ? (
         <section className="panel">
-          <PanelTitle icon={Eye} title="刚才我竖起耳朵的地方" />
-          <p className="response">{props.lastResult.response}</p>
+          <PanelTitle icon={Eye} title="刚才 Papo 回应的内容" />
+          <p className="response">{visibleCreatureText(props.lastResult.response)}</p>
           {props.lastResult.curiousSession ? (
             <div className="session-audit">
-              <p>{props.lastResult.curiousSession.creatureReport}</p>
+              <p>{visibleCreatureText(props.lastResult.curiousSession.creatureReport)}</p>
               {props.lastResult.curiousSession.ignored.slice(0, 4).map((item) => (
                 <small key={item.segmentId}>
-                  我先放过了 {item.label}：{item.whyIgnored}
+                  暂时略过 {item.label}：{visibleCreatureText(item.whyIgnored)}
                 </small>
               ))}
             </div>
@@ -968,7 +968,7 @@ function CuriousView(props: {
           <div>
             <strong>{props.listening ? "我正在听这一小段世界" : "陪我听一会儿"}</strong>
             <p>
-              最多听 3 分钟，每 30 秒整理成一小段。原始声音不保存，只把可改准的小片段放进这次共同经历。
+              最多听 3 分钟，每 30 秒整理一次。原始声音不保存，只把可修改的文字加入这次共同经历。
             </p>
           </div>
           <button onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
@@ -1119,7 +1119,7 @@ function ChatView(props: {
           ) : null}
         </div>
         <div className="conversation-summary">
-          <span>{inputCount} 条你递来的小片段</span>
+          <span>{inputCount} 条你给的内容</span>
           <span>{papoCount} 次 Papo 回应</span>
         </div>
         {messages.length ? (
@@ -1130,7 +1130,7 @@ function ChatView(props: {
                   <div className="chat-batch-head">
                     <strong>半分钟里的一小段</strong>
                     <span>
-                      {section.messages.length} 条小片段
+                      {section.messages.length} 条内容
                     </span>
                   </div>
                   {section.messages.map((message) => (
@@ -1184,7 +1184,7 @@ function ChatBubble({ message }: { message: ConversationMessage }) {
           {context ? `${context} · ` : ""}{new Date(message.at).toLocaleString("zh-CN")}
         </span>
       </div>
-      <p>{message.text}</p>
+      <p>{visibleCreatureText(message.text)}</p>
       {message.observedAt || message.location ? (
         <small>
           {[
@@ -1234,9 +1234,9 @@ function MemoryView(props: {
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={History} title="我抱着的小事" />
-        <p className="muted">我把和你一起遇见过的小事抱在这里。你教我记准的，我会慢慢记稳；该放下的，我也会松开。</p>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一找我抱着哪件小事" />
+        <PanelTitle icon={History} title="我记住的事" />
+        <p className="muted">这里放着我和你一起经历过、你希望我记住的事。你也可以随时教我记准，或者让我放下。</p>
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一找哪件事" />
         {otherMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             {editingId === memory.id ? (
@@ -1253,7 +1253,7 @@ function MemoryView(props: {
                     <Save size={16} />
                     嗯，就这样记
                   </button>
-                  <button onClick={() => setEditingId(undefined)}>先照旧抱着</button>
+                  <button onClick={() => setEditingId(undefined)}>先不改</button>
                 </div>
               </>
             ) : (
@@ -1279,20 +1279,20 @@ function MemoryView(props: {
             />
           </article>
         ))}
-        {otherMemories.length ? null : <p className="muted">我还没有真正记下一段和你的事。</p>}
+        {otherMemories.length ? null : <p className="muted">我还没有真正记下一件和你有关的事。</p>}
       </div>
       <div className="panel">
-        <PanelTitle icon={Brain} title="我身上长出的习惯" />
+        <PanelTitle icon={Brain} title="你教我的习惯" />
         {selfMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             <p>{memoryCreatureLine(memory)}</p>
-            <span>{memoryFamiliarityText(memory.weight)}，我在一点点认识自己。</span>
+            <span>{memoryFamiliarityText(memory.weight)}，我会照着它调整后面的回应。</span>
           </article>
         ))}
-        {selfMemories.length ? null : <p className="muted">我身上还没长出新的小习惯，等以后从你身边慢慢学。</p>}
+        {selfMemories.length ? null : <p className="muted">你还没有教出稳定的偏好，之后可以慢慢纠正我。</p>}
       </div>
       <div className="panel">
-        <PanelTitle icon={Eye} title="刚刚还热着的小事" />
+        <PanelTitle icon={Eye} title="刚发生的事" />
         {props.profile.episodes.map((episode) => (
           <EpisodeCard
             key={episode.id}
@@ -1332,8 +1332,8 @@ function MemoryFeedbackBox(props: {
   return (
     <div className="feedback-input memory-feedback">
       <div className="feedback-teach">
-        <strong>你想怎么教我想起它</strong>
-        <span>你补的话会跟这段一起进到我心里；我会据此多想、安静、记稳或放下。</span>
+        <strong>你想怎么补充</strong>
+        <span>你补的话会一起进入反馈；我会据此多想、安静、记稳或放下。</span>
       </div>
       <textarea
         value={feedbackText}
@@ -1474,7 +1474,7 @@ function BrainView({ profile, provider }: { profile: CreatureProfile; provider?:
         <PanelTitle icon={Check} title="反馈历史" />
         {profile.feedbackHistory.map((feedback) => (
           <article className="change-row" key={feedback.id}>
-            <p>{feedback.effect}</p>
+            <p>{visibleCreatureText(feedback.effect)}</p>
             <span>{feedback.kind}</span>
           </article>
         ))}
@@ -1525,7 +1525,7 @@ function DemoView(props: {
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={Wand2} title="带 Papo 走一圈" />
-        <p className="response">用几段日常小事，让 Papo 先竖起耳朵，再被你养成，最后自己想起以前抱着的小事。</p>
+        <p className="response">用几段日常内容，看 Papo 怎么听见、回应、学习反馈，再在合适的时候想起旧事。</p>
         {props.note ? <section className="learning-note">{props.note}</section> : null}
         {props.summary ? (
           <section className="demo-checklist">
@@ -1563,16 +1563,16 @@ function AttentionCard({ event }: { event: AttentionEvent }) {
         <span>{event.triggerLabel}</span>
         <strong>{attentionStrengthText(event.attentionStrength)}</strong>
       </div>
-      <p>{event.noticed}</p>
+      <p>{visibleCreatureText(event.noticed)}</p>
       <details className="episode-flow compact-flow">
-        <summary>展开看看我怎么竖起耳朵</summary>
+        <summary>查看后台流程</summary>
         <FlowSteps
           steps={[
-            { label: "听见", text: event.noticed },
-            { label: "停下", text: event.creatureExperience.earReason },
-            { label: "想起", text: event.creatureExperience.rememberedScene ?? "这次还没有拉起以前的小事。" },
-            { label: "行动", text: event.creatureExperience.actionFeeling },
-            { label: "留下", text: event.creatureExperience.saveFeeling }
+            { label: "输入", text: event.noticed },
+            { label: "语义判断", text: event.creatureExperience.earReason },
+            { label: "记忆关联", text: event.creatureExperience.rememberedScene ?? "这次没有关联到以前的事。" },
+            { label: "行动选择", text: event.creatureExperience.actionFeeling },
+            { label: "记忆策略", text: event.creatureExperience.saveFeeling }
           ]}
         />
       </details>
@@ -1604,16 +1604,16 @@ function EpisodeCard(props: {
   return (
     <article className="episode-card">
       <div className="episode-head">
-        <span>{props.episode.source === "button" ? "你递给我的片段" : "我自己注意到的片段"}</span>
+        <span>{props.episode.source === "button" ? "你告诉我的事" : "Papo 回应过的事"}</span>
         <strong>{memoryFamiliarityText(props.episode.weight)}</strong>
       </div>
-      <h3>{props.episode.creatureResponse || props.episode.noticed}</h3>
+      <h3>{visibleCreatureText(props.episode.creatureResponse || props.episode.noticed)}</h3>
       {!props.compact ? <EpisodeProcessDetails episode={props.episode} /> : null}
       <EpisodeSourceMoment episode={props.episode} messages={props.sourceMessages ?? []} compact={props.compact} />
       <div className="feedback-input">
         <div className="feedback-teach">
-          <strong>这一下你怎么养我</strong>
-          <span>你补的一句话，也会被我当成反馈一起听进去。</span>
+          <strong>你想怎么补充</strong>
+          <span>你补的一句话，也会作为反馈影响后面的回应。</span>
         </div>
         <textarea
           value={feedbackText}
@@ -1658,16 +1658,16 @@ function EpisodeCard(props: {
 function EpisodeProcessDetails({ episode }: { episode: EpisodeMemory }) {
   return (
     <details className="episode-flow">
-      <summary>展开看看我心里怎么走的</summary>
+      <summary>查看后台流程</summary>
       <FlowSteps
         steps={[
-          { label: "听见", text: noticedText(episode.noticed) },
-          { label: "停下", text: episode.creatureExperience?.earReason ?? episode.importanceReason },
-          { label: "想起", text: episode.creatureExperience?.rememberedScene ?? "这次还没有拉起以前的小事。" },
-          { label: "猜测", text: episode.possibleIntent },
-          { label: "身体", text: episodeStateText(episode) },
-          { label: "行动", text: episode.creatureExperience?.actionFeeling ?? episode.actionDecision?.reason },
-          { label: "留下", text: episode.creatureExperience?.saveFeeling ?? "先作为情景记忆，等你的反馈决定。" }
+          { label: "输入", text: noticedText(episode.noticed) },
+          { label: "语义判断", text: episode.creatureExperience?.earReason ?? episode.importanceReason },
+          { label: "记忆关联", text: episode.creatureExperience?.rememberedScene ?? "这次没有关联到以前的事。" },
+          { label: "意图估计", text: episode.possibleIntent },
+          { label: "状态约束", text: episodeStateText(episode) },
+          { label: "行动选择", text: episode.creatureExperience?.actionFeeling ?? episode.actionDecision?.reason },
+          { label: "记忆策略", text: episode.creatureExperience?.saveFeeling ?? "先作为这次经历保存，等你的反馈决定。" }
         ]}
       />
     </details>
@@ -1683,7 +1683,7 @@ function FlowSteps({ steps }: { steps: Array<{ label: string; text?: string }> }
           <span className="flow-dot">{index + 1}</span>
           <div>
             <strong>{step.label}</strong>
-            <p>{step.text}</p>
+            <p>{visibleCreatureText(step.text)}</p>
           </div>
         </li>
       ))}
@@ -1707,7 +1707,7 @@ function EpisodeSourceMoment({ episode, messages, compact }: { episode: EpisodeM
           {messages.map((message) => (
             <p key={message.id}>
               <span>{messageTitle(message)}</span>
-              {message.text}
+              {visibleCreatureText(message.text)}
             </p>
           ))}
         </div>
@@ -1747,9 +1747,9 @@ function noticedText(text: string) {
 function EmergenceCard({ emergence }: { emergence: EmergenceSurface }) {
   return (
     <section className="memory-surface active">
-      <strong>Papo 自己想起一点</strong>
-      <p>{emergence.text}</p>
-      {emergence.whyNow ? <small>我为什么这时想起：{emergence.whyNow}</small> : null}
+      <strong>Papo 想起一件事</strong>
+      <p>{visibleCreatureText(emergence.text)}</p>
+      {emergence.whyNow ? <small>{visibleCreatureText(emergence.whyNow)}</small> : null}
       {emergence.driveSource ? <span>{emergenceDriveText(emergence.driveSource)}</span> : null}
     </section>
   );
@@ -1842,13 +1842,13 @@ function feedbackChangeLines(
   const policy = new Map(policyDeltas.map((item) => [item.key, item.delta]));
 
   if ((state.get("curiosity") ?? 0) > 0 || (policy.get("preferDepth") ?? 0) > 0) {
-    lines.push("下次遇到相似的小片段，我会多停一下，愿意展开一点。");
+    lines.push("下次遇到相似内容，我会多停一下，愿意展开一点。");
   }
   if ((policy.get("recallTendency") ?? 0) > 0 || (state.get("attachment") ?? 0) > 0) {
     lines.push("我会更容易把这段和你们以前的小事连起来。");
   }
   if ((policy.get("quietTendency") ?? 0) > 0 || (state.get("arousal") ?? 0) < 0) {
-    lines.push("我学会收小一点声音，不是每次竖起耳朵都打扰你。");
+    lines.push("我学会少打扰一点，不是每次听见都追问你。");
   }
   if ((policy.get("privacySensitivity") ?? 0) > 0 || (state.get("safety") ?? 0) > 0) {
     lines.push("我会更小心守住边界，保存前多等你的意思。");
@@ -1857,14 +1857,14 @@ function feedbackChangeLines(
     lines.push("我会更敢把自己的理解轻轻说出来。");
   }
   if ((state.get("energy") ?? 0) < 0) {
-    lines.push("我刚认真用过一点力，接下来会先抱住重点。");
+    lines.push("我刚认真用过一点力，接下来会先少说一点。");
   }
-  return lines.length ? [...new Set(lines)] : ["我已经把你的反馈放进后面的回应方式里。"];
+  return lines.length ? [...new Set(lines)] : ["你的反馈会影响我后面的回应方式。"];
 }
 
 function attentionStrengthText(strength: number) {
   if (strength >= 82) return "认真盯住";
-  if (strength >= 62) return "竖起耳朵";
+  if (strength >= 62) return "需要回应";
   if (strength >= 42) return "轻轻注意";
   return "先放过去";
 }
@@ -1872,18 +1872,18 @@ function attentionStrengthText(strength: number) {
 function privacyFeelingText(risk: number) {
   if (risk >= 55) return "这段我会先小心放着";
   if (risk >= 25) return "这段先不急着长期留下";
-  return "这段可以轻轻记成情景";
+  return "这段可以先记住";
 }
 
 function emergenceDriveText(drive: string) {
   const map: Record<string, string> = {
     safety: "因为我现在更谨慎",
     curiosity: "因为我还想继续想",
-    attachment: "因为我想靠近以前那一小段",
-    rhythm: "因为安静时摸到我抱着的小事",
-    wake_rhythm: "因为醒来时碰到我抱着的小事",
+    attachment: "因为我想起以前相关的事",
+    rhythm: "因为安静时想起以前的事",
+    wake_rhythm: "因为醒来时想起以前的事",
     wake_self_memory: "因为醒来时碰到你养出来的听法",
-    memory_resonance: "因为新片段碰到我抱着的小事"
+    memory_resonance: "因为这次内容关联到以前的事"
   };
   return map[drive] ?? "因为我现在的状态把这段带了回来";
 }
@@ -1902,7 +1902,7 @@ function memoryKindText(kind: CreatureProfile["longTermMemories"][number]["kind"
     long_theme: "它像一条会反复回到我耳边的小线索",
     creature_self_memory: "这是你在我身上养出的一点听法",
     safety_rule: "这是我会先守住的边界",
-    future_review: "以后它靠近你时，我会先想起这一段",
+    future_review: "以后聊到相近内容时，我会想起这一段",
     relationship: "它让我更认识你一点",
     habit: "我听见这里有个反复出现的小习惯",
     open_question: "这件事我还没有想完"
@@ -1913,7 +1913,7 @@ function memoryKindText(kind: CreatureProfile["longTermMemories"][number]["kind"
 function memoryFeelingText(memory: CreatureProfile["longTermMemories"][number]) {
   const familiarity = memoryFamiliarityText(memory.weight);
   const kindText = memoryKindText(memory.kind);
-  if (memory.weight <= 0) return `${familiarity}，现在我先不把它叼回来。`;
+  if (memory.weight <= 0) return `${familiarity}，现在我先不主动提它。`;
   return `${familiarity}。${kindText}。`;
 }
 
@@ -1922,13 +1922,13 @@ function memoryCreatureLine(memory: CreatureProfile["longTermMemories"][number])
   const text = normalizeMemoryText(rawText);
   const map = {
     user_preference: `我记住你喜欢我这样靠近：${text}`,
-    long_theme: `这件事会反复来找我们，我先抱着：${text}`,
+    long_theme: `这件事可能会反复出现，我先记着：${text}`,
     creature_self_memory: `你这样养过我：${text}`,
     safety_rule: `这条边界我会先守住：${text}`,
-    future_review: `它以后可能还会回来找你，我先抱着：${text}`,
+    future_review: `它以后可能还会回来找你，我先记着：${text}`,
     relationship: `这段让我更认识你一点：${text}`,
     habit: `我听见一个反复出现的小习惯：${text}`,
-    open_question: `这件事我还会歪头想一想：${text}`
+    open_question: `这件事我还会继续想：${text}`
   };
   return map[memory.kind];
 }
@@ -1942,6 +1942,39 @@ function normalizeMemoryText(text: string) {
     .replace(/^(你主动|你确认|你后来教我)[：:]\s*/, "")
     .replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, "$1$2")
     .replace(/[。！？.!?]+$/, "");
+}
+
+function visibleCreatureText(text: string | undefined) {
+  if (!text) return "";
+  return text
+    .replace(/我会把这次你叫我说话的小片段先记成一段情景记忆。?/g, "你刚才是在叫我说话，我会先回应你。")
+    .replace(/这会先成为一条轻量情景记忆，等你的反馈决定要不要长久留下。?/g, "我会记住这次说话，之后按你的反馈调整。")
+    .replace(/我会先形成情景记忆，不把它无脑塞进长期记忆。?/g, "我会记住这次发生了什么，但不会擅自长期保存。")
+    .replace(/情景记忆/g, "这次经历")
+    .replace(/长期记忆/g, "长期记住的事")
+    .replace(/写入/g, "记住")
+    .replace(/后台分析/g, "沉默处理")
+    .replace(/竖起耳朵/g, "开始回应")
+    .replace(/把耳朵留给/g, "等")
+    .replace(/耳朵留给/g, "等")
+    .replace(/小片段/g, "这件事")
+    .replace(/这一小段/g, "这件事")
+    .replace(/一小段/g, "一件事")
+    .replace(/抱住/g, "记住")
+    .replace(/抱着/g, "记着")
+    .replace(/叼住/g, "选中")
+    .replace(/叼了出来/g, "选了出来")
+    .replace(/叼出来/g, "选出来")
+    .replace(/叼回来/g, "主动提起")
+    .replace(/摸到/g, "想起")
+    .replace(/递给/g, "告诉")
+    .replace(/放进同一个小情景里听/g, "放在同一次对话里理解")
+    .replace(/放进情景里/g, "当作这次对话来理解")
+    .replace(/进到我心里/g, "进入反馈")
+    .replace(/当前事件/g, "这件事")
+    .replace(/保存意图/g, "要不要保存")
+    .replace(/用户/g, "你")
+    .replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, "$1$2");
 }
 
 function PanelTitle({ icon: Icon, title }: { icon: typeof Brain; title: string }) {
@@ -1968,12 +2001,12 @@ function NavButton(props: { active: boolean; icon: typeof Brain; label: string; 
 function stateHeadline(profile: CreatureProfile) {
   const latest = profile.conversation?.[0];
   if (latest?.role === "papo") {
-    if (latest.channel === "button") return "刚把耳朵转向你";
-    if (latest.channel === "curious") return "刚陪你听过一小段";
+    if (latest.channel === "button") return "刚听见你说话";
+    if (latest.channel === "curious") return "刚陪你听了一会儿";
     if (latest.channel === "feedback") return "正在把你的意思记进身体里";
-    if (latest.channel === "emergence") return "刚自己想起一小段";
+    if (latest.channel === "emergence") return "刚想起一件旧事";
   }
-  if (latest?.role === "user" || latest?.role === "world") return "刚收到你递来的一小段";
+  if (latest?.role === "user" || latest?.role === "world") return "刚收到你说的事";
   const wake = profile.wakeHistory?.[0];
   if (wake) return wake.elapsedMinutes >= 60 ? "刚从小睡里醒来" : "刚抬头看见你";
   return restingHeadline(profile);
@@ -1983,33 +2016,33 @@ function stateSentence(profile: CreatureProfile) {
   const state = profile.state;
   const latest = profile.conversation?.[0];
   const latestChange = profile.stateChanges?.[0];
-  if (latest?.role === "papo" && latest.channel === "feedback") return "你刚刚教过我一次，我会把这种偏好带到后面相似的小片段里。";
-  if (latest?.role === "papo" && latest.channel === "emergence") return "那段小事刚从我里面自己回来了一下，我会带着这个方向继续听下一段。";
-  if (latest?.role === "papo" && latest.channel === "curious") return "我刚从一小段世界里挑出自己在意的地方，还没有把所有东西都吞下去。";
-  if (latest?.role === "papo" && latest.channel === "button") return "刚才那句话让我竖起耳朵，我正在判断要回应、记住，还是先轻轻问一句。";
-  if (latest?.role === "user" || latest?.role === "world") return "我已经接住这一小段，正在把文字、照片或声音放进同一个小情景里听。";
-  if (latestChange?.reason.includes("button capture")) return "刚才那句话让我竖起耳朵，身体还留着一点被你叫住后的反应。";
+  if (latest?.role === "papo" && latest.channel === "feedback") return "你刚刚教过我一次，我会把这种偏好带到后面相似的回应里。";
+  if (latest?.role === "papo" && latest.channel === "emergence") return "我刚想起一件旧事，会带着它继续听你说。";
+  if (latest?.role === "papo" && latest.channel === "curious") return "我刚陪你听了一会儿，先回应最需要回应的部分。";
+  if (latest?.role === "papo" && latest.channel === "button") return "刚才那句话需要回应，我正在决定是回答、追问，还是先安静陪着。";
+  if (latest?.role === "user" || latest?.role === "world") return "我已经收到你给的文字、照片或声音，会放在同一次对话里理解。";
+  if (latestChange?.reason.includes("button capture")) return "刚才那句话叫住了我，我会先回应你。";
   if (latestChange?.reason.includes("feedback")) return "我刚被你养成了一点，之后遇到相似片段会更接近你的意思。";
-  if (latestChange?.reason.includes("wake")) return "这次重新见到你以后，我先稳住自己，再把耳朵留给新的小片段。";
+  if (latestChange?.reason.includes("wake")) return "这次重新见到你以后，我先安静下来，等你继续说。";
   const memory = strongestSharedMemory(profile);
-  if (memory) return `我还抱着这段以前的小事：${normalizeMemoryText(memory.text)}。下一段相近的生活靠近时，我会先轻轻想起它。`;
+  if (memory) return `我还记得这件旧事：${normalizeMemoryText(memory.text)}。如果之后聊到相近内容，我会想起它。`;
   const raisedMemory = strongestRaisedMemory(profile);
   if (raisedMemory) return `你教过我的这点还在身体里：${normalizeMemoryText(raisedMemory.text)}。我会带着这种听法等你下一段。`;
-  if (!profile.episodes.length) return "我还没有和你攒下真实生活片段，所以先把耳朵留给你接下来递来的文字、照片或声音。";
-  if (state.energy < 35) return "我会短一点回应，把重要片段先抱住，等有力气再展开。";
-  if (state.safety > 74) return "我会先闻一闻边界，隐私和长期保存都会更谨慎。";
-  if (state.curiosity > 72) return "我的耳朵现在更容易被新主题牵动，但还是会挑最值得在意的那一小段。";
-  if (state.attachment > 68) return "我更想把你现在给我的片段，和我们以前经历过的小事连起来。";
+  if (!profile.episodes.length) return "我还没有和你经历过多少事。你可以直接跟我说话，也可以给我照片或声音。";
+  if (state.energy < 35) return "我会短一点回应，先把重要的部分说清楚。";
+  if (state.safety > 74) return "如果内容涉及隐私或长期保存，我会更谨慎。";
+  if (state.curiosity > 72) return "我现在更容易注意到新内容，但还是会先回应最重要的部分。";
+  if (state.attachment > 68) return "我会把你现在说的事，和以前相关的事一起考虑。";
   return "我正安静陪着你，先观察，再决定要不要靠近。";
 }
 
 function restingHeadline(profile: CreatureProfile) {
-  if (strongestSharedMemory(profile)) return "抱着一小段以前的事";
+  if (strongestSharedMemory(profile)) return "想起以前的事";
   if (strongestRaisedMemory(profile)) return "带着你教过的听法";
   if (!profile.episodes.length) return "等第一段生活靠近";
   const state = profile.state;
   if (state.energy < 35) return "趴着听你";
-  if (state.safety > 74) return "先小心闻一闻";
+  if (state.safety > 74) return "先谨慎一点";
   if (state.attachment > 68) return "身体往你这边靠";
   if (state.confidence > 70 && state.energy > 55) return "眼睛亮了一点";
   if (state.arousal < 36) return "安静贴着这一刻";
@@ -2067,7 +2100,7 @@ function messageTitle(message: CreatureProfile["conversation"][number]) {
 function messageContextText(message: CreatureProfile["conversation"][number]) {
   if (message.role === "papo") return "";
   if (message.channel === "feedback") return "你在教我";
-  if (message.channel === "curious") return "和这一小段世界放在一起";
+  if (message.channel === "curious") return "和这次陪伴放在一起";
   return "说给 Papo";
 }
 

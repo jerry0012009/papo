@@ -44,37 +44,37 @@ function earReason(
   strongest?: SegmentScore["contributions"][number]
 ) {
   if (/说句话|说话|回复|回答|你在吗|你好|hello|汪|打招呼|听见|听到|回应|叫你/i.test(input.triggerContent)) {
-    return "我刚才竖起耳朵，是因为你在对我发出一个需要回应的小信号。";
+    return "你在叫我回应，所以我先回答你。";
   }
   if (input.relatedMemories.length) {
-    return "我刚才竖起耳朵，是因为这段碰到了我们以前留下的一点记忆。";
+    return "这件事让我想起以前相关的内容。";
   }
   if (input.privacyRisk > 65) {
-    return "我刚才竖起耳朵，是因为这里可能有需要保护的隐私。";
+    return "这里可能有隐私内容，所以我会谨慎处理。";
   }
   if (strongest?.key === "emotional_charge") {
-    return "我刚才竖起耳朵，是因为这段里有情绪，不适合被当成普通背景音。";
+    return "这里有情绪，我不会把它当成普通背景音。";
   }
   if (strongest?.key === "future_value") {
-    return "我刚才竖起耳朵，是因为这段以后可能还会回来找你。";
+    return "这件事之后可能还要再看。";
   }
   if (strongest?.key === "identity_relevance") {
-    return "我刚才竖起耳朵，是因为这段在影响我应该长成什么样。";
+    return "这会影响我以后怎么回应你。";
   }
   if (input.action === "respond") {
-    return "我刚才竖起耳朵，是因为最自然的下一步是先回应你。";
+    return "最自然的下一步是先回应你。";
   }
-  return "我刚才竖起耳朵，是因为你把这一小段直接递给了我，我需要认真听懂。";
+  return "你主动告诉我这件事，所以我会认真听。";
 }
 
 export function createEpisodeExperience(episode: EpisodeMemory, profile: CreatureProfile): CreatureExperience {
   return episode.creatureExperience ?? {
     earReason: `我刚才注意到：${episode.noticed}`,
     rememberedScene: episode.relatedMemoryIds.length ? "这和我以前记住的一段经历有关。" : undefined,
-    actionFeeling: episode.actionDecision ? actionFeeling(episode.actionDecision.action, profile) : "我先把它轻轻放进情景记忆。",
+    actionFeeling: episode.actionDecision ? actionFeeling(episode.actionDecision.action, profile) : "我会先回应这件事。",
     saveFeeling: episode.promotedToLongTerm
-      ? "它已经被你允许长成长期记忆。"
-      : "它现在先是一条情景记忆，是否长期保存要看你的反馈。"
+      ? "你已经让我记住它。"
+      : "要不要一直记着它，我会看你的反馈。"
   };
 }
 
@@ -83,11 +83,11 @@ export function createCuriousCreatureReport(session: CuriousSessionAudit): strin
   const privacyIgnored = session.ignored.find((item) => item.score.privacyRisk > 0);
   const repeatedIgnored = session.ignored.find((item) => item.score.redundancyPenalty > 0);
   const parts = [
-    `我刚才陪你看了 ${session.totalSegments} 段，只认真盯住了 ${selectedCount} 段。`,
-    session.selected[0] ? `${session.selected[0].label} 让我竖起耳朵：${session.selected[0].whySelected}` : "这组信息都很轻，我没有强行记住全部。",
-    privacyIgnored ? `${privacyIgnored.label} 有隐私味道，我没有直接长期保存。` : undefined,
+    `我刚才陪你听了 ${session.totalSegments} 段，先回应其中 ${selectedCount} 段。`,
+    session.selected[0] ? `${session.selected[0].label} 更需要回应：${session.selected[0].whySelected}` : "这组信息都很轻，我没有强行记住全部。",
+    privacyIgnored ? `${privacyIgnored.label} 可能有隐私内容，我没有直接记住。` : undefined,
     repeatedIgnored ? `${repeatedIgnored.label} 和前面太像，我把它当作重复声音放低了。` : undefined,
-    `当时我的状态影响了选择：${session.stateInfluence}`
+    `当时我选择得更谨慎：${session.stateInfluence}`
   ].filter(Boolean);
   return parts.join(" ");
 }
@@ -118,25 +118,25 @@ function actionFeeling(action: ActionKind, profile: CreatureProfile) {
 function baseActionFeeling(action: ActionKind, profile: CreatureProfile) {
   switch (action) {
     case "respond":
-      return "我想先回你一句，让你知道我听见了，而不是躲在后台只做分析。";
+      return "我想先回你一句，让你知道我听见了。";
     case "ask":
       return profile.state.confidence < 55
         ? "我更想先轻轻问你一句，确认我有没有理解错。"
         : "我想先问你一句，因为直接保存或展开还不够稳。";
     case "recall":
-      return "我更想把以前那段小事拉回来一起看，而不是把它当成孤立的新消息。";
+      return "我会把以前相关的事一起考虑。";
     case "review":
       return "我想把它整理成一次小复盘，帮你看清这件事为什么重要。";
     case "quiet":
       return "我会短一点回应，先安静陪着，不急着打扰你。";
     case "draft_reminder":
-      return "我感觉它以后可能还会回来找你，所以我先轻轻抱住这个回来时机。";
+      return "我感觉这件事之后可能还要再看。";
     case "draft_question_list":
       return "我感觉它还没想完，所以我先把里面几处没弄清的小结轻轻分开。";
     case "save_long_term":
-      return "我觉得它可能值得变成长期记忆，但仍需要规则和你的反馈确认。";
+      return "我觉得它可能值得一直记着，但还要看你的意思。";
     case "save_episode":
-      return "我想先把它写成我们共同经历过的一小段。";
+      return "我会记住这次发生了什么，等你之后再纠正我。";
     default:
       return "我先观察它，不急着行动。";
   }
@@ -148,7 +148,7 @@ function raisedActionFeeling(action: ActionKind, profile: CreatureProfile) {
     return "你把我养得更会收住声音，所以我会把话放轻，不急着追问你。";
   }
   if ((policy.preferDepth >= 65 || policy.recallTendency >= 65) && ["ask", "recall", "review", "save_episode", "observe", "respond", "draft_reminder", "draft_question_list"].includes(action)) {
-    return "你把我养得愿意多停一下，所以我会把这段和以前的小事贴近一点，不浅浅放过。";
+    return "你把我教得愿意多停一下，所以我会把相关的旧事也一起考虑。";
   }
   return "";
 }
@@ -156,6 +156,6 @@ function raisedActionFeeling(action: ActionKind, profile: CreatureProfile) {
 function saveFeeling(action: ActionKind, privacyRisk: number) {
   if (privacyRisk > 65) return "这里有隐私风险，我不会直接长期保存。";
   if (action === "save_long_term") return "它像是可以长期记住的东西，但我会等确认。";
-  if (action === "save_episode" || action === "recall" || action === "respond") return "我会先形成情景记忆，不把它无脑塞进长期记忆。";
-  return "这次我先不急着保存成长期记忆。";
+  if (action === "save_episode" || action === "recall" || action === "respond") return "我会记住这次发生了什么，但不会擅自把它当成长期记忆。";
+  return "这次我先不急着长期记住。";
 }

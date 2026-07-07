@@ -249,7 +249,7 @@ export function buildAttentionEvent(
     triggerLabel: input.triggerLabel,
     triggerContent: input.triggerContent,
     noticed: buildNoticed(input.triggerContent, related.length),
-    reason: `${input.reasonPrefix}${related.length ? " 它还碰到了我抱着的小事，所以我把那段拉近一起听。" : ""}`,
+    reason: `${input.reasonPrefix}${related.length ? " 这件事关联到以前的记忆，所以会一起考虑。" : ""}`,
     relatedMemoryIds: related,
     stateSnapshot: structuredClone(profile.state),
     attentionStrength: Math.min(100, Math.round(strength)),
@@ -278,14 +278,14 @@ export function buildAttentionEvent(
 export function composeCreatureResponse(profile: CreatureProfile, event: AttentionEvent): string {
   if (event.actionDecision.action === "respond") {
     const memoryLine = event.relatedMemoryIds.length
-      ? "这句话还碰到了我们以前的一点记忆，我会带着那段一起听。"
-      : "我会把这次你叫我说话的小片段先记成一段情景记忆。";
+      ? "这句话让我想起以前你说过的事，我会一起考虑。"
+      : "你刚才是在叫我说话，我会先回应你。";
     return `我在，听见了。${memoryLine}${raisedResponseLine(profile, event.actionDecision.action)}`;
   }
-  const posture = profile.state.confidence > 62 ? "我比较稳地接住了这一小段" : "我先把这一小段轻轻抱住";
+  const posture = profile.state.confidence > 62 ? "我听见了" : "我先听你说完";
   const memoryLine = event.relatedMemoryIds.length
-    ? "这一小段碰到我以前抱着的一点记忆，我会把那段小事和现在一起听。"
-    : "这像一段新的共同经历，我会先把它放进情景里。";
+    ? "这件事让我想起以前相关的内容。"
+    : "这件事我会先当作刚发生的对话来回应。";
   return `${posture}：${trimSentence(event.noticed)}。${memoryLine}${actionResponseLine(event.actionDecision.action)}${raisedResponseLine(profile, event.actionDecision.action)}`;
 }
 
@@ -294,22 +294,22 @@ function actionResponseLine(action: AttentionEvent["actionDecision"]["action"]):
     case "ask":
       return "我想轻轻问一句，确认我有没有听对。";
     case "save_episode":
-      return "我会先把它写成我们刚一起经历过的一小段。";
+      return "我会记住这次发生了什么，等你之后再纠正我。";
     case "save_long_term":
       return "我感觉它可能值得长久留下，但会等你的意思更清楚。";
     case "recall":
-      return "我想把以前那段小事拉近一点，和现在这件事一起看。";
+      return "我会把以前相关的事一起考虑。";
     case "review":
-      return "我想陪你把它整理成一小段复盘。";
+      return "我可以陪你把这件事整理清楚。";
     case "quiet":
-      return "我会先安静一点，只把重点抱住。";
+      return "我会先安静一点，不急着追问。";
     case "draft_reminder":
-      return "我会先记住它以后可能还会回来找你，但不会替你直接执行。";
+      return "我会记得这件事之后可能还要再看，但不会替你直接执行。";
     case "draft_question_list":
       return "我会先把里面没想明白的地方轻轻分开，等你要继续时再一起想。";
     case "observe":
     default:
-      return "我先不急着打扰你，只继续看这一小段会不会变重要。";
+      return "我先不急着打扰你。";
   }
 }
 
@@ -373,21 +373,21 @@ function explainScore(score: SegmentScore): string {
   const reasons = strong.map(creatureReasonForContribution);
   if (score.privacyRisk > 0) reasons.push("这里有一点隐私味道，我需要放轻");
   if (score.redundancyPenalty > 0) reasons.push("它和我刚盯住的小事太像了");
-  return reasons.length ? `我竖起耳朵，因为${reasons.join("，")}。` : "我竖起耳朵，因为它比周围背景更像一件需要停一下的小事。";
+  return reasons.length ? `需要回应，因为${reasons.join("，")}。` : "需要回应，因为它比周围背景更像正在发生的事。";
 }
 
 function explainSelected(score: SegmentScore) {
   const positives = score.contributions.filter((item) => item.value > 0).sort((a, b) => b.value - a.value).slice(0, 3);
   const reasons = positives.map(creatureReasonForContribution);
-  return reasons.length ? `我竖起耳朵，因为${reasons.join("，")}。` : "我在这一小段里停了一下，因为它比旁边的背景声更像正在发生的事。";
+  return reasons.length ? `需要回应，因为${reasons.join("，")}。` : "这段更像正在发生的事，需要先回应。";
 }
 
 function explainIgnored(score: SegmentScore, selectedCount: number, budget: number) {
   if (selectedCount >= budget) return `我先放过它，因为这一轮我只能认真盯住 ${budget} 段，不能假装全都记住。`;
   if (score.privacyRisk > 45) return "我先放轻它，因为这里有隐私味道，不能自己偷偷长期留下。";
-  if (score.redundancyPenalty > 0) return "我先放过它，因为它和刚才被我盯住的小事太像了。";
-  if (score.total < 38) return "我先放过它，因为它更像路过的背景声，还没有把我拉过去。";
-  return "我先放过它，因为相比刚才被我叼住的片段，它还没有那么拉住我。";
+  if (score.redundancyPenalty > 0) return "暂时略过，因为它和刚才已经回应过的内容太像了。";
+  if (score.total < 38) return "暂时略过，因为它更像路过的背景声。";
+  return "暂时略过，因为相比刚才回应过的内容，它还没有那么重要。";
 }
 
 function creatureReasonForContribution(item: ScoreContribution) {
@@ -395,7 +395,7 @@ function creatureReasonForContribution(item: ScoreContribution) {
     case "communication_intent":
       return "你像是在叫我回应你";
     case "memory_resonance":
-      return "它碰到了我以前抱着的小事";
+      return "它关联到以前记住的事";
     case "emotional_charge":
       return "里面有担心、重要感或没放下的情绪";
     case "future_value":
@@ -405,7 +405,7 @@ function creatureReasonForContribution(item: ScoreContribution) {
     case "novelty":
       return "它比周围背景更新一点";
     case "state_bias":
-      return "你把这一小段直接递给了我";
+      return "你主动告诉了我这件事";
     case "redundancy_penalty":
       return "它和刚才的小事有点重复";
     case "fatigue_penalty":

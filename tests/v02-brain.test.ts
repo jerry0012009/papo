@@ -172,7 +172,7 @@ describe("creature brain v0.2", () => {
             suggestedAction: "recall"
           })),
           curiousSession: {
-            creatureReport: "我陪你看完这一小段世界后，只把复查担心和未来准备这两处叼了出来，其他背景声先让它们过去。",
+            creatureReport: "我陪你听完这几段内容后，先回应复查担心和未来准备这两处，其他背景声先让它们过去。",
             selected: [
               { segmentId: "s2", whySelected: "这段不是普通抱怨，它在说妈妈复查这件事总被拖到睡前。" },
               { segmentId: "s3", whySelected: "这段关系到下次能不能真的提前把资料准备好。" }
@@ -203,7 +203,8 @@ describe("creature brain v0.2", () => {
     expect(result.events[0].semanticSource).toBe("llm");
     expect(result.curiousSession?.selected.some((item) => item.whySelected.includes("拖到睡前"))).toBe(true);
     expect(result.curiousSession?.ignored.some((item) => item.whyIgnored.includes("背景声"))).toBe(true);
-    expect(result.curiousSession?.creatureReport).toContain("叼了出来");
+    expect(result.curiousSession?.creatureReport).toContain("先回应");
+    expect(result.curiousSession?.creatureReport).not.toMatch(/叼|抱住|竖起耳朵|情景记忆/);
     expect(result.curiousSession?.selected.map((item) => item.segmentId)).toContain("s2");
     expect(result.harnessTrace?.join(" ")).toContain("llm interpretation applied");
     expect(profile.semanticBrainHistory[0].status).toBe("applied");
@@ -220,14 +221,14 @@ describe("creature brain v0.2", () => {
       transcribeAudio: async () => "",
       generateJson: async <T,>() =>
         ({
-          response: "我先盯住你担心复查这件事，也把明天要带资料检查这点叼出来，因为它会影响这件家事能不能真的准备好。",
+          response: "我先回应你担心复查这件事，也会留意明天要带资料检查这点，因为它会影响这件家事能不能真的准备好。",
           curiousSession: {
-            creatureReport: "我没有总结全部，只把担心复查和明天带资料检查这两点认真叼住。",
+            creatureReport: "我没有总结全部，先回应担心复查和明天带资料检查这两点。",
             selected: [
               { segmentId: "s2", whySelected: "这段说的是复查担心，情绪比较重。" },
               { segmentId: "s3", whySelected: "虽然规则分数接近阈值，但它补上了明天要带资料检查这个具体准备动作。" }
             ],
-            ignored: [{ segmentId: "s1", whyIgnored: "这只是背景声，我先放过去。" }]
+            ignored: [{ segmentId: "s1", whyIgnored: "这只是背景声，暂时略过。" }]
           },
           trace: ["llm: promoted near-threshold preparation segment"]
         }) as T
@@ -345,7 +346,7 @@ describe("creature brain v0.2", () => {
         promptSeen = prompt ?? "";
         return {
           message:
-            "我先摸到被你养成的更愿意多想：妈妈复查这类担心不要浅浅带过。它现在冒出来，是因为我还想照着你教的方式多听一会儿。",
+            "我想起你教过我的回应方式：妈妈复查这类担心不要浅浅带过。它现在出现，是因为我还想照着你教的方式多听一会儿。",
           trace: ["llm: self-memory emergence narration"]
         } as T;
       }
@@ -355,8 +356,8 @@ describe("creature brain v0.2", () => {
 
     expect(promptSeen).toContain("被用户教出来的习惯");
     expect(promptSeen).toContain("不能写成普通旧事");
-    expect(enriched.text).toContain("被你养成");
-    expect(enriched.text).toContain("更愿意多想");
+    expect(enriched.text).toContain("你教过");
+    expect(enriched.text).toContain("多听一会儿");
     expect(enriched.text).not.toMatch(/我想起了|旧事|我浮现的是|下一次你给我信息流/);
   });
 });

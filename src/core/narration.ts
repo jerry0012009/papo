@@ -94,7 +94,7 @@ export async function enrichEmergenceNarration(
   try {
     const feedbackSelfMemory = memory.kind === "creature_self_memory" && memory.tags.includes("被你养成");
     const narrationTarget = feedbackSelfMemory
-      ? "请把这条主动浮现改写得更像 Papo 摸到用户养出来的习惯或听法，不要写成普通旧事件。"
+      ? "请把这条主动浮现改写成 Papo 想起用户教过的回应习惯或边界感，不要写成普通旧事件。"
       : "请把这条主动浮现改写得更像 Papo 自己突然想起了一段真实共同经历。";
     const raw = await provider.generateJson<unknown>(
       `${narrationTarget}

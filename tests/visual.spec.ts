@@ -33,7 +33,7 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByText("我醒来时又碰到妈妈复查这件小事。")).toBeVisible();
   await expect(page.getByLabel("有未读 Papo 回复")).toBeVisible();
   await expect(page.getByPlaceholder("也可以补一句：哪里懂对了、哪里先放下、要怎么记准")).toBeVisible();
-  await expect(page.getByText("展开看看我心里怎么走的")).toBeVisible();
+  await expect(page.getByText("查看后台流程")).toBeVisible();
   await expect(page.getByText("我刚才注意到：")).toHaveCount(0);
   await expect(page.getByText("我为什么注意：")).toHaveCount(0);
   await expect(page.getByText("来自半分钟里的一小段").first()).toBeVisible();
@@ -52,9 +52,9 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   expect(chatScreenshot.byteLength).toBeGreaterThan(30_000);
 
   await page.getByRole("button", { name: "记忆" }).click();
-  await expect(page.getByText("我抱着的小事")).toBeVisible();
-  await expect(page.getByText(/它以后可能还会回来找你，我先抱着：如果你能说话/)).toBeVisible();
-  await expect(page.getByText("我留下它，是因为它以后可能还会回来找你。")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "我记住的事" })).toBeVisible();
+  await expect(page.getByText(/它以后可能还会回来找你，我先记着：如果你能说话/)).toBeVisible();
+  await expect(page.getByText("我留下它，是因为这件事以后可能还会回来找你。")).toBeVisible();
   await expect(page.getByText(/用户|小动物|episode|candidate|长期保存|当前事件|保存意图|未来价值/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "教我记准" })).toBeVisible();
   await expect(page.getByRole("button", { name: "帮我先放下" })).toBeVisible();
@@ -155,7 +155,7 @@ function profileFixture() {
         sourceLocation: { latitude: 52.52, longitude: 13.405, accuracy: 24, label: "上传时的位置" },
         inputSummary: "日历照片：妈妈周五复查，需要提前准备病历。",
         noticed: "我注意到妈妈复查需要提前准备病历。",
-        possibleIntent: "你可能希望 Papo 帮你把重要家事提前抱住。",
+        possibleIntent: "你可能希望 Papo 帮你提前留意重要家事。",
         importanceReason: "这段带着未来价值和一点担心，不像背景噪音。",
         relatedMemoryIds: ["memory-review"],
         stateSnapshot: {
@@ -169,7 +169,7 @@ function profileFixture() {
         },
         creatureResponse: "我把这张日历照片和你刚才的担心放在一起听了。",
         creatureExperience: {
-          earReason: "这段让我竖起耳朵，因为这是你很容易拖到最后的重要家事。",
+          earReason: "这段需要回应，因为这是你很容易拖到最后的重要家事。",
           rememberedScene: "我想起你之前也说过，重要家事容易被压到睡前。",
           actionFeeling: "我更想先轻轻提醒你把资料提前准备好。",
           saveFeeling: "这件事值得先成为一段共同经历，等你的反馈决定要不要长期留下。"

@@ -166,7 +166,7 @@ function inferIntent(text: string): string {
   if (/提醒|待办|deadline|todo/i.test(text)) return "用户可能希望把这件事变成之后可回来的提醒。";
   if (/复盘|总结|review|why/i.test(text)) return "用户可能正在整理一次经历，希望我帮它形成可复盘的片段。";
   if (/不像工具|活物|小脑袋|companion|生命/.test(text)) return "用户可能在校准这个小动物应该长成什么样。";
-  return "你把这一小段递给我，我先把它当成我们刚一起经过的情景来听。";
+  return "你主动告诉我这件事，我会先当作刚发生的对话来回应。";
 }
 
 function classifyLongTermKind(episode: EpisodeMemory): LongTermMemory["kind"] {
@@ -210,8 +210,8 @@ export function normalizeSharedMemoryText(text: string) {
   return text
     .trim()
     .replace(/^我先试着理解[：:]\s*/, "")
-    .replace(/我注意到这个片段可能是你想让我认真理解的当前事件[：:]\s*/g, "你刚递给我的这件小事：")
-    .replace(/这个片段可能是你想让我认真理解的当前事件[：:]\s*/g, "你刚递给我的这件小事：")
+    .replace(/我注意到这个片段可能是你想让我认真理解的当前事件[：:]\s*/g, "你刚告诉我的这件事：")
+    .replace(/这个片段可能是你想让我认真理解的当前事件[：:]\s*/g, "你刚告诉我的这件事：")
     .replace(/我还没有强烈联想到旧记忆，所以先把它作为新的情景片段/g, "我还没把它和旧事连起来，会先当作这一次的小经历")
     .replace(/这段需要用户确认，尤其是隐私、情绪或保存意图还不够明确/g, "这段我会先放轻一点，等你告诉我能不能留下")
     .replace(/这段需要你确认，尤其是隐私、情绪或保存意图还不够明确/g, "这段我会先放轻一点，等你告诉我能不能留下")
@@ -222,8 +222,8 @@ export function normalizeSharedMemoryText(text: string) {
     .replace(/用户/g, "你")
     .replace(/Papo/g, "我")
     .replace(/小动物/g, "我")
-    .replace(/这条\s*episode/gi, "这一小段")
-    .replace(/episode/gi, "小片段")
+    .replace(/这条\s*episode/gi, "这件事")
+    .replace(/episode/gi, "这件事")
     .replace(/memory candidate/gi, "还没完全记稳的想法")
     .replace(/candidate/gi, "还没完全记稳的想法")
     .replace(/当前工作区/g, "现在这一刻")
@@ -243,7 +243,7 @@ export function normalizeSharedMemoryText(text: string) {
 
 export function toCreatureMemoryVoice(text: string) {
   return normalizeSharedMemoryText(text)
-    .replace(/^(你刚递给我的这件小事|我刚才注意到|我注意到|你曾经对我说)[：:]\s*/g, "")
+    .replace(/^(你刚递给我的这件小事|你刚告诉我的这件事|我刚才注意到|我注意到|你曾经对我说)[：:]\s*/g, "")
     .replace(/^我把这条记忆改准了[：:]\s*/g, "")
     .replace(/^你希望我/g, "你那时希望我")
     .replace(/^你想让我/g, "你那时想让我")
@@ -251,6 +251,7 @@ export function toCreatureMemoryVoice(text: string) {
     .replace(/我还没把它和旧事连起来，会先当作这一次的小经历/g, "我当时还没和旧事连起来，就先把它当成这一次的小经历")
     .replace(/这段我会先放轻一点，等你告诉我能不能留下/g, "我当时决定先放轻一点，等你告诉我能不能留下")
     .replace(/这条小片段有未来价值/g, "它以后可能还会回来找你")
+    .replace(/小片段/g, "这件事")
     .replace(/有未来价值/g, "以后可能还会回来找你")
     .replace(/(\p{Script=Han})\s+(\p{Script=Han})/gu, "$1$2")
     .replace(/[。！？.!?]+$/, "");
@@ -260,7 +261,7 @@ export function memoryKeepReasonToCreatureVoice(reason: string) {
   return toCreatureMemoryVoice(reason)
     .replace(/^这一小段以后可能还会回来找你$/, "它以后可能还会回来找你")
     .replace(/^这件事已经多次回到我这里，我想把它抱成一个长期主题$/, "它已经几次回到我耳边，我想把它记稳一点")
-    .replace(/^我刚才确实认真停了一下，先把这段留成可以被你确认的小记忆$/, "我当时真的停了一下，想先轻轻抱住，等你教我能不能记稳")
+    .replace(/^我刚才确实认真停了一下，先把这段留成可以被你确认的小记忆$/, "我当时认真听了，等你教我能不能记稳")
     .replace(/^这段值得成为我们之间更稳定的一直记着的事$/, "你教我这段值得在我们之间记稳")
     .replace(/[。！？.!?]+$/, "");
 }

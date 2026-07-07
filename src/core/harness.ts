@@ -172,16 +172,16 @@ function applyFallbackInteractionUnderstanding(
     `guardrail: action=${event.actionDecision.action}`
   ];
 
-  const reply = "我在，听见了。我会把这次你叫我说话的小片段先记成一段情景记忆。";
+  const reply = "我在，听见了。你刚才是在叫我说话，我会先回应你。";
   result.response = reply;
   episode.creatureResponse = reply;
   episode.actionDecision = event.actionDecision;
   episode.decisionTrace = event.decisionTrace;
   episode.creatureExperience = {
     ...event.creatureExperience,
-    earReason: "我刚才竖起耳朵，是因为你在对我发出一个需要回应的小信号。",
+    earReason: "你在叫我回应，所以我先回答你。",
     actionFeeling: "我选择先回应你，让这次互动往前走一步。",
-    saveFeeling: "这会先成为一条轻量情景记忆，等你的反馈决定要不要长久留下。"
+    saveFeeling: "我会记住这次说话，之后按你的反馈调整。"
   };
   updateMemoryCandidate(result, episode.id, `你曾经对我说：${event.triggerContent.trim()}。当时我回应你：${reply}`, ["回应", "共同经历"]);
 }
@@ -312,9 +312,9 @@ function semanticActionFromInteraction(
 
 function quietInteractionResponse(action: ActionKind, source: "button" | "curious_stream") {
   if (action === "ask") return "我听见了，但这段要不要留下还需要你点头，所以我先轻轻问一句。";
-  if (action === "quiet") return "我听见了，这次先安静抱住，不急着追问或提醒你。";
-  if (source === "curious_stream") return "我先把这一小段里真正贴近你的地方抱住，不把每个背景声都拿出来说。";
-  return "我听见了，这次先轻轻抱住，不急着追问或替你生成什么。";
+  if (action === "quiet") return "我听见了，这次先安静陪着，不急着追问或提醒你。";
+  if (source === "curious_stream") return "我先回应最重要的部分，不把每个背景声都拿出来说。";
+  return "我听见了，这次先不急着追问或替你生成什么。";
 }
 
 function shouldSuppressTopLevelResponse(interaction?: BrainSuggestion["interaction"]) {
@@ -404,14 +404,14 @@ function interactionExperience(interaction: NonNullable<BrainSuggestion["interac
   const action = event.actionDecision.action;
   return {
     ...event.creatureExperience,
-    earReason: intent ? `我刚才竖起耳朵，是因为${trimSentence(intent)}。` : event.creatureExperience.earReason,
+    earReason: intent ? `${trimSentence(intent)}。` : event.creatureExperience.earReason,
     actionFeeling: interaction.reply
       ? action === "respond"
         ? "我选择先回应你，让这次互动往前走一步。"
-        : "我已经根据这次理解选择了下一步行动，并把回应放在行动后面。"
+        : "我会先做更合适的回应，不把所有判断都说出来。"
       : event.creatureExperience.actionFeeling,
     saveFeeling: interaction.memoryCandidateText
-      ? "这会先成为一条轻量情景记忆，等你的反馈决定要不要长久留下。"
+      ? "我会记住这次说到的重点，之后按你的反馈调整。"
       : event.creatureExperience.saveFeeling
   };
 }

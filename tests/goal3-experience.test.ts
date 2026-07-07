@@ -18,14 +18,14 @@ describe("goal 3 creature experience", () => {
       segment("s8", "重复背景", "妈妈复查这件事刚才已经说过一次，这里只是重复提醒。")
     ]);
 
-    expect(result.curiousSession?.creatureReport).toContain("我刚才陪你看了 8 段");
-    expect(result.curiousSession?.creatureReport).toContain("竖起耳朵");
+    expect(result.curiousSession?.creatureReport).toContain("我刚才陪你听了 8 段");
+    expect(result.curiousSession?.creatureReport).toContain("需要回应");
     expect(result.curiousSession?.creatureReport).not.toContain("投资人");
-    expect(result.curiousSession?.selected.map((item) => item.whySelected).join(" ")).toMatch(/竖起耳朵|以后可能还会回来|情绪/);
+    expect(result.curiousSession?.selected.map((item) => item.whySelected).join(" ")).toMatch(/需要回应|以后可能还会回来|情绪/);
     expect(result.curiousSession?.selected.map((item) => item.whySelected).join(" ")).not.toMatch(/选中|总分|future_value|emotion|score|\+\d/);
     expect(result.curiousSession?.ignored.map((item) => item.whyIgnored).join(" ")).not.toMatch(/忽略|总分|阈值|redundancy|future_value|score/);
     expect(result.events.map((event) => event.noticed).join(" ")).not.toMatch(/未来价值|情绪强度/);
-    expect(result.events[0].creatureExperience.earReason).toContain("竖起耳朵");
+    expect(result.events[0].creatureExperience.earReason).not.toMatch(/竖起耳朵|情景记忆|后台分析|抱住|叼/);
   });
 
   it("feedback returns a visible learning note", () => {
