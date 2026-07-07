@@ -236,7 +236,7 @@ function mergeSegmentsByInterval(segments: StreamSegment[], now: string): Stream
 function contentWithObservationContext(segment: StreamSegment) {
   const details: string[] = [];
   if (segment.observedAt) {
-    const label = segment.kind === "image_summary" ? "照片时间" : segment.kind === "audio_transcript" ? "音频片段时间" : "观察时间";
+    const label = segment.kind === "image_summary" ? "照片时间" : segment.kind === "audio_observation" ? "音频片段时间" : "观察时间";
     details.push(`${label}：${segment.observedAt}`);
   }
   if (segment.batchId) details.push(`30秒批次：${segment.batchId}`);

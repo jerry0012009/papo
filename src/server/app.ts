@@ -27,7 +27,7 @@ const curiousSchema = z.object({
     .array(
       z.object({
         id: z.string().min(1),
-        kind: z.enum(["text", "image_summary", "audio_transcript"]),
+        kind: z.enum(["text", "image_summary", "audio_observation"]),
         label: z.string().min(1).max(80),
         content: z.string().max(4000),
         observedAt: z.string().datetime().optional(),
@@ -51,7 +51,7 @@ const imageSummarySchema = z.object({
   label: z.string().min(1).max(80).optional()
 });
 
-const audioTranscriptSchema = z.object({
+const audioObservationSchema = z.object({
   dataUrl: z
     .string()
     .min(64)
@@ -64,7 +64,7 @@ const feedbackSchema = z.object({
   kind: z.enum(["understood", "continue", "not_now", "remember", "forget"]),
   targetId: z.string().optional(),
   content: z.string().max(1200).optional(),
-  modality: z.enum(["text", "audio_transcript", "button"]).optional()
+  modality: z.enum(["text", "audio_observation", "button"]).optional()
 });
 
 const updateMemorySchema = z.object({
@@ -110,14 +110,14 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     }
   });
 
-  app.post("/api/audio-transcript", async (req, res, next) => {
+  app.post("/api/audio-observation", async (req, res, next) => {
     try {
-      const body = audioTranscriptSchema.parse(req.body);
-      const prompt = `请把这段音频转写成中文。只保留用户生活里清楚发生的内容，最多 400 字；如果没有清楚的人声或事件，返回空文本。标签：${body.label ?? "录音"}`;
-      const transcript = (await provider.transcribeAudio(body.dataUrl, prompt)).slice(0, 1200).trim();
+      const body = audioObservationSchema.parse(req.body);
+      const prompt = `请直接理解这段音频，写成一段给 Papo 后续注意机制使用的中文生活观察。只描述能直接听见的事实、明确听清的说话内容、环境声类型或正在发生的事；不能猜测人声、文字、看不见的物体、身份或原因，不能把非语音声音当成说话；不确定就写“不确定的声音”。最多 400 字；如果没有可用生活信息，返回空文本。如果你无法读取或处理这段音频，只返回 ERROR_AUDIO_UNREADABLE。标签：${body.label ?? "录音"}`;
+      const observation = normalizeAudioObservation((await provider.observeAudio(body.dataUrl, prompt)).slice(0, 1200));
       res.json({
-        transcript,
-        noSpeech: !transcript,
+        observation,
+        noSpeech: !observation,
         provider: sensingProvider(provider, "audio"),
         model: provider.diagnostics?.audioModel,
         route: provider.diagnostics?.audioRoute,
@@ -358,6 +358,17 @@ function memoryCorrectionDialogueText(text: string, maxLength: number) {
       .replace(/^(你主动|你确认|你后来教我)[：:]\s*/, ""),
     maxLength
   );
+}
+
+function normalizeAudioObservation(text: string) {
+  const trimmed = text.trim();
+  if (!trimmed || /^["'“”‘’\s]+$/.test(trimmed)) return "";
+  const quoted = trimmed.match(/^["“](.*)["”]$/s) ?? trimmed.match(/^['‘](.*)['’]$/s);
+  const normalized = (quoted ? quoted[1] : trimmed).trim();
+  if (normalized === "ERROR_AUDIO_UNREADABLE" || /无法(获取|读取|处理|访问).{0,12}音频/.test(normalized)) {
+    throw new Error("Audio model did not process the audio input.");
+  }
+  return normalized;
 }
 
 function sensingProvider(provider: ModelProvider, modality: "vision" | "audio") {

@@ -11,7 +11,7 @@ export interface ModelProvider {
   generate(prompt: string): Promise<string>;
   generateJson<T>(prompt: string): Promise<T | undefined>;
   summarizeImage(dataUrl: string, prompt: string): Promise<string>;
-  transcribeAudio(dataUrl: string, prompt: string): Promise<string>;
+  observeAudio(dataUrl: string, prompt: string): Promise<string>;
 }
 
 export interface ProviderDiagnostics {
@@ -45,7 +45,7 @@ export function createModelProvider(env: NodeJS.ProcessEnv = process.env): Model
 function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
   const textModel = merged.OPENROUTER_MODEL ?? "openai/gpt-5.5";
   const visionModel = merged.OPENROUTER_VISION_MODEL ?? "google/gemini-3.1-flash-lite";
-  const audioModel = merged.OPENROUTER_AUDIO_MODEL ?? merged.OPENROUTER_VISION_MODEL ?? "google/gemini-3.1-flash-lite";
+  const audioModel = merged.OPENROUTER_AUDIO_MODEL ?? "xiaomi/mimo-v2.5";
   return openAiCompatibleProvider({
     kind: "openrouter",
     name: "OpenRouter",
@@ -79,29 +79,33 @@ function mimoProvider(merged: NodeJS.ProcessEnv): ModelProvider {
 function genericProvider(merged: NodeJS.ProcessEnv): ModelProvider {
   const baseUrl = (merged.OPENAI_BASE_URL ?? "https://api.openai.com/v1").replace(/\/$/, "");
   const textModel = merged.OPENAI_MODEL ?? merged.GENERIC_MODEL ?? "gpt-5.5";
-  const audioModel = transcriptionModel(merged);
+  const audioModel = genericAudioModel(merged);
+  const audioRoute = genericAudioRoute(audioModel);
   return openAiCompatibleProvider({
     kind: "generic",
     name: "Generic model API",
     endpoint: `${baseUrl}/chat/completions`,
-    audioEndpoint: `${baseUrl}/audio/transcriptions`,
+    audioEndpoint: audioRoute === "audio_transcriptions" ? `${baseUrl}/audio/transcriptions` : undefined,
     apiKey: merged.OPENAI_API_KEY ?? merged.GENERIC_MODEL_API_KEY,
     model: textModel,
     visionModel: merged.OPENAI_VISION_MODEL ?? textModel,
     audioModel,
-    audioRoute: "audio_transcriptions",
+    audioRoute,
     chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
     visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
     audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 45_000)
   });
 }
 
-function transcriptionModel(merged: NodeJS.ProcessEnv) {
+function genericAudioModel(merged: NodeJS.ProcessEnv) {
+  if (merged.OPENAI_AUDIO_MODEL) return merged.OPENAI_AUDIO_MODEL;
   const explicit = merged.OPENAI_AUDIO_TRANSCRIPTION_MODEL ?? merged.OPENAI_TRANSCRIPTION_MODEL;
   if (explicit) return explicit;
-  const legacy = merged.OPENAI_AUDIO_MODEL;
-  if (legacy && /(transcribe|whisper)/i.test(legacy)) return legacy;
   return "gpt-4o-mini-transcribe";
+}
+
+function genericAudioRoute(model: string): ProviderDiagnostics["audioRoute"] {
+  return /(transcribe|whisper)/i.test(model) ? "audio_transcriptions" : "chat_completions";
 }
 
 function shouldLoadLocalEnv(env: NodeJS.ProcessEnv) {
@@ -202,11 +206,11 @@ function openAiCompatibleProvider(input: {
       const payload = await callVisionSummary(input, dataUrl, prompt);
       return payload.content;
     },
-    async transcribeAudio(dataUrl: string, prompt: string) {
+    async observeAudio(dataUrl: string, prompt: string) {
       const payload =
         input.audioRoute === "audio_transcriptions"
           ? await callAudioTranscriptionEndpoint(input, dataUrl, prompt)
-          : await callAudioTranscript(input, dataUrl, prompt);
+          : await callAudioObservation(input, dataUrl, prompt);
       return payload.content;
     }
   };
@@ -224,7 +228,7 @@ function withModalityOverrides(primary: ModelProvider, merged: NodeJS.ProcessEnv
       audioModel: audio.diagnostics?.audioModel,
       audioRoute: audio.diagnostics?.audioRoute
     },
-    transcribeAudio: (dataUrl, prompt) => audio.transcribeAudio(dataUrl, prompt)
+    observeAudio: (dataUrl, prompt) => audio.observeAudio(dataUrl, prompt)
   };
 }
 
@@ -324,7 +328,7 @@ async function callVisionSummary(
   }
 }
 
-async function callAudioTranscript(
+async function callAudioObservation(
   input: { endpoint: string; apiKey?: string; model: string; audioModel?: string; kind: ProviderKind; audioTimeoutMs: number },
   dataUrl: string,
   prompt: string
@@ -348,7 +352,7 @@ async function callAudioTranscript(
           {
             role: "system",
             content:
-              "你是 Papo 的音频转写器。只转写和摘要用户生活片段中的可听内容，不要决定状态、记忆或行动。不要输出开发过程或产品说明。"
+              "你是 Papo 的声音感知器。直接根据音频写一段中文生活观察，只描述可直接听见的事实、明确听清的说话内容和环境声类型；不能猜测人声、文字、看不见的物体、身份、动机或原因，不能把非语音声音当成说话，不确定就写不确定。不要决定状态、记忆或行动。没有可用生活信息时返回空文本。无法读取或处理音频时只返回 ERROR_AUDIO_UNREADABLE。不要输出开发过程或产品说明。"
           },
           {
             role: "user",
@@ -437,9 +441,46 @@ async function responseErrorSummary(response: Response) {
 }
 
 function parseJson<T>(text: string): T | undefined {
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    return undefined;
+  const candidates = [text.trim(), ...extractJsonBlocks(text), extractFirstJsonObject(text)].filter((item): item is string => Boolean(item?.trim()));
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate) as T;
+    } catch {
+      // Try the next exact JSON candidate from the model output.
+    }
   }
+  return undefined;
+}
+
+function extractJsonBlocks(text: string) {
+  return [...text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)].map((match) => match[1].trim());
+}
+
+function extractFirstJsonObject(text: string) {
+  const start = text.indexOf("{");
+  if (start < 0) return undefined;
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < text.length; index += 1) {
+    const char = text[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+    if (char === "\"") {
+      inString = true;
+      continue;
+    }
+    if (char === "{") depth += 1;
+    if (char === "}") depth -= 1;
+    if (depth === 0) return text.slice(start, index + 1);
+  }
+  return undefined;
 }

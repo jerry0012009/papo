@@ -39,7 +39,7 @@ import {
   makeSegment,
   sendFeedback,
   summarizeImage,
-  transcribeAudio,
+  observeAudio,
   updateLongTermMemory,
   wakeProfile,
   type ProfileSummary,
@@ -195,6 +195,7 @@ export function App() {
       const dataUrl = await readFileAsDataUrl(file);
       const result = await summarizeImage(dataUrl, file.name || "对话照片");
       const content = sensingSegmentContent(result.summary);
+      if (!content) return;
       setChatSegments((current) => [
         ...current,
         makeSegment(`chat-image-${Date.now()}`, "image_summary", file.name || `照片 ${current.length + 1}`, content, {
@@ -207,16 +208,16 @@ export function App() {
     });
   }
 
-  async function uploadChatAudioTranscript(file?: File) {
+  async function uploadChatAudioObservation(file?: File) {
     if (!file) return;
     await run(async () => {
       const dataUrl = await readFileAsDataUrl(file);
-      const result = await transcribeAudio(dataUrl, file.name || "对话录音");
-      const content = sensingSegmentContent(result.transcript);
+      const result = await observeAudio(dataUrl, file.name || "对话录音");
+      const content = sensingSegmentContent(result.observation);
       if (!content) return;
       setChatSegments((current) => [
         ...current,
-        makeSegment(`chat-audio-${Date.now()}`, "audio_transcript", file.name || `录音 ${current.length + 1}`, content, {
+        makeSegment(`chat-audio-${Date.now()}`, "audio_observation", file.name || `录音 ${current.length + 1}`, content, {
           observedAt: new Date().toISOString(),
           batchId: current[0]?.batchId ?? currentBatchId()
         })
@@ -225,7 +226,7 @@ export function App() {
     });
   }
 
-  async function giveFeedback(kind: FeedbackKind, targetId?: string, content?: string, modality: "text" | "audio_transcript" | "button" = content ? "text" : "button") {
+  async function giveFeedback(kind: FeedbackKind, targetId?: string, content?: string, modality: "text" | "audio_observation" | "button" = content ? "text" : "button") {
     if (!profile) return;
     await run(async () => {
       const { profile: next, feedback } = await sendFeedback(profile.userId, kind, targetId, { content, modality });
@@ -236,13 +237,13 @@ export function App() {
     });
   }
 
-  async function transcribeFeedbackAudio(file: File) {
+  async function observeFeedbackAudio(file: File) {
     setBusy(true);
     setError(undefined);
     try {
       const dataUrl = await readFileAsDataUrl(file);
-      const result = await transcribeAudio(dataUrl, file.name || "反馈录音");
-      return result.transcript;
+      const result = await observeAudio(dataUrl, file.name || "反馈录音");
+      return result.observation;
     } catch (caught) {
       setError(errorMessage(caught));
       return "";
@@ -323,7 +324,7 @@ export function App() {
       setListeningElapsed(Math.min(180, Math.floor((Date.now() - listeningStartedAtRef.current) / 1000)));
     }, 1000);
     segmentTimerRef.current = window.setInterval(() => {
-      void queueAudioTranscriptSegment(false);
+      void queueAudioObservationSegment(false);
     }, 30_000);
     stopTimerRef.current = window.setTimeout(() => stopListening(), 180_000);
   }
@@ -337,17 +338,17 @@ export function App() {
     stopTimerRef.current = undefined;
     listeningStartedAtRef.current = undefined;
     setListening(false);
-    void queueAudioTranscriptSegment(true).finally(() => stopMediaCapture());
+    void queueAudioObservationSegment(true).finally(() => stopMediaCapture());
   }
 
-  function queueAudioTranscriptSegment(force: boolean) {
-    audioFlushRef.current = audioFlushRef.current.then(() => flushAudioTranscriptSegment(force)).catch((caught) => {
+  function queueAudioObservationSegment(force: boolean) {
+    audioFlushRef.current = audioFlushRef.current.then(() => flushAudioObservationSegment(force)).catch((caught) => {
       setError(errorMessage(caught));
     });
     return audioFlushRef.current;
   }
 
-  async function flushAudioTranscriptSegment(force: boolean) {
+  async function flushAudioObservationSegment(force: boolean) {
     const chunks = await takeRecordedAudioChunks();
     if (!chunks.length && !force) return;
     if (!chunks.length) return;
@@ -358,13 +359,13 @@ export function App() {
     const blob = new Blob(chunks, { type: mediaRecorderRef.current?.mimeType || chunks[0]?.type || "audio/webm" });
     if (blob.size > 0) {
       const dataUrl = await blobToDataUrl(blob);
-      const result = await transcribeAudio(dataUrl, `语音片段 ${index}`);
-      content = chooseAudioTranscript(result.transcript);
+      const result = await observeAudio(dataUrl, `语音片段 ${index}`);
+      content = chooseAudioObservation(result.observation);
     }
 
     if (!content.trim()) return;
     await submitLiveAudioSegment(
-      makeSegment(`live-audio-${Date.now()}-${index}`, "audio_transcript", `听到的声音 ${index}`, content.trim(), {
+      makeSegment(`live-audio-${Date.now()}-${index}`, "audio_observation", `听到的声音 ${index}`, content.trim(), {
         observedAt: new Date().toISOString(),
         batchId: batchIdForSegment(index)
       })
@@ -484,7 +485,7 @@ export function App() {
           lastFeedback={lastFeedback}
           busy={busy}
           onFeedback={giveFeedback}
-          onTranscribeFeedbackAudio={transcribeFeedbackAudio}
+          onObserveFeedbackAudio={observeFeedbackAudio}
           onGoCapture={() => setTab("chat")}
           onGoCurious={() => setTab("chat")}
         />
@@ -498,14 +499,14 @@ export function App() {
           onChangeStagedSegments={setChatSegments}
           onSubmitMoment={submitChatMoment}
           onUploadImage={uploadChatImageSummary}
-          onUploadAudio={uploadChatAudioTranscript}
+          onUploadAudio={uploadChatAudioObservation}
           listening={listening}
           listeningElapsed={listeningElapsed}
           onStartListening={startListening}
           onStopListening={stopListening}
         />
       ) : null}
-      {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onTranscribeFeedbackAudio={transcribeFeedbackAudio} onEditMemory={editLongTermMemory} /> : null}
+      {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} /> : null}
       {tab === "brain" ? <BrainView profile={profile} provider={provider} /> : null}
       {tab === "profile" ? (
         <ProfileView
@@ -534,8 +535,8 @@ function HomeView(props: {
   learningNote?: string;
   lastFeedback?: FeedbackRecord;
   busy: boolean;
-  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_transcript" | "button") => void;
-  onTranscribeFeedbackAudio: (file: File) => Promise<string>;
+  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
+  onObserveFeedbackAudio: (file: File) => Promise<string>;
   onGoCapture: () => void;
   onGoCurious: () => void;
 }) {
@@ -571,7 +572,7 @@ function HomeView(props: {
             episode={props.selectedEpisode}
             sourceMessages={episodeSourceMessages(props.profile, props.selectedEpisode)}
             onFeedback={props.onFeedback}
-            onTranscribeFeedbackAudio={props.onTranscribeFeedbackAudio}
+            onObserveFeedbackAudio={props.onObserveFeedbackAudio}
             compact={false}
           />
         </div>
@@ -796,19 +797,19 @@ function ChatView(props: {
 }
 
 function StagedSegmentIcon({ kind }: { kind: SegmentKind }) {
-  const Icon = kind === "image_summary" ? ImagePlus : kind === "audio_transcript" ? Mic : MessageCircle;
+  const Icon = kind === "image_summary" ? ImagePlus : kind === "audio_observation" ? Mic : MessageCircle;
   return <Icon size={15} />;
 }
 
 function stagedSegmentKindText(kind: SegmentKind) {
   if (kind === "image_summary") return "照片";
-  if (kind === "audio_transcript") return "录音";
+  if (kind === "audio_observation") return "录音";
   return "文字";
 }
 
 function stagedSegmentPlaceholder(kind: SegmentKind) {
   if (kind === "image_summary") return "可以改成你想让 Papo 看见的照片内容";
-  if (kind === "audio_transcript") return "可以改成你想让 Papo 听见的话";
+  if (kind === "audio_observation") return "可以改成你想让 Papo 听见的话";
   return "可以补充这件事";
 }
 
@@ -869,14 +870,14 @@ function batchMomentSummary(messages: ConversationMessage[]) {
 
 function messageKindNoun(message: ConversationMessage) {
   if (message.modality === "image_summary") return "照片";
-  if (message.modality === "audio_transcript") return "声音";
+  if (message.modality === "audio_observation") return "声音";
   return "文字";
 }
 
 function MemoryView(props: {
   profile: CreatureProfile;
-  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_transcript" | "button") => void;
-  onTranscribeFeedbackAudio: (file: File) => Promise<string>;
+  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
+  onObserveFeedbackAudio: (file: File) => Promise<string>;
   onEditMemory: (memoryId: string, text: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -930,7 +931,7 @@ function MemoryView(props: {
             <MemoryFeedbackBox
               memory={memory}
               onFeedback={props.onFeedback}
-              onTranscribeFeedbackAudio={props.onTranscribeFeedbackAudio}
+              onObserveFeedbackAudio={props.onObserveFeedbackAudio}
             />
           </article>
         ))}
@@ -944,7 +945,7 @@ function MemoryView(props: {
             episode={episode}
             sourceMessages={episodeSourceMessages(props.profile, episode)}
             onFeedback={props.onFeedback}
-            onTranscribeFeedbackAudio={props.onTranscribeFeedbackAudio}
+            onObserveFeedbackAudio={props.onObserveFeedbackAudio}
             compact
           />
         ))}
@@ -1009,11 +1010,11 @@ function MemoryProcessDetails({ memory, profile }: { memory: CreatureProfile["lo
 
 function MemoryFeedbackBox(props: {
   memory: CreatureProfile["longTermMemories"][number];
-  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_transcript" | "button") => void;
-  onTranscribeFeedbackAudio: (file: File) => Promise<string>;
+  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
+  onObserveFeedbackAudio: (file: File) => Promise<string>;
 }) {
   const [feedbackText, setFeedbackText] = useState("");
-  const [feedbackModality, setFeedbackModality] = useState<"text" | "audio_transcript">("text");
+  const [feedbackModality, setFeedbackModality] = useState<"text" | "audio_observation">("text");
   const actions: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }> = [
     { kind: "continue", label: "再想一会儿", icon: Lightbulb },
     { kind: "not_now", label: "先安静点", icon: CircleOff },
@@ -1053,10 +1054,10 @@ function MemoryFeedbackBox(props: {
             const file = event.currentTarget.files?.[0];
             event.currentTarget.value = "";
             if (!file) return;
-            const transcript = await props.onTranscribeFeedbackAudio(file);
-            if (transcript.trim()) {
-              setFeedbackText(transcript.trim());
-              setFeedbackModality("audio_transcript");
+            const observation = await props.onObserveFeedbackAudio(file);
+            if (observation.trim()) {
+              setFeedbackText(observation.trim());
+              setFeedbackModality("audio_observation");
             }
           }}
         />
@@ -1227,11 +1228,11 @@ function EpisodeCard(props: {
   episode: EpisodeMemory;
   sourceMessages?: ConversationMessage[];
   compact: boolean;
-  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_transcript" | "button") => void;
-  onTranscribeFeedbackAudio: (file: File) => Promise<string>;
+  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
+  onObserveFeedbackAudio: (file: File) => Promise<string>;
 }) {
   const [feedbackText, setFeedbackText] = useState("");
-  const [feedbackModality, setFeedbackModality] = useState<"text" | "audio_transcript">("text");
+  const [feedbackModality, setFeedbackModality] = useState<"text" | "audio_observation">("text");
   const userLine = episodeUserLine(props.episode, props.sourceMessages ?? []);
   const papoLine = episodePapoLine(props.episode);
 
@@ -1285,10 +1286,10 @@ function EpisodeCard(props: {
               const file = event.currentTarget.files?.[0];
               event.currentTarget.value = "";
               if (!file) return;
-              const transcript = await props.onTranscribeFeedbackAudio(file);
-              if (transcript.trim()) {
-                setFeedbackText(transcript.trim());
-                setFeedbackModality("audio_transcript");
+              const observation = await props.onObserveFeedbackAudio(file);
+              if (observation.trim()) {
+                setFeedbackText(observation.trim());
+                setFeedbackModality("audio_observation");
               }
             }}
           />
@@ -1602,7 +1603,7 @@ function messageTitle(message: CreatureProfile["conversation"][number]) {
   if (message.role === "papo") return "Papo";
   if (message.channel === "feedback") return "你的反馈";
   if (message.modality === "image_summary") return "你给 Papo 看了照片";
-  if (message.modality === "audio_transcript") return "一段声音";
+  if (message.modality === "audio_observation") return "一段声音";
   return message.role === "world" ? "周围的一段" : "你";
 }
 
@@ -1683,18 +1684,12 @@ function preferredAudioMimeType(Recorder: typeof MediaRecorder) {
   return candidates.find((type) => Recorder.isTypeSupported(type)) ?? "";
 }
 
-function chooseAudioTranscript(modelTranscript: string) {
-  const modelText = modelTranscript.trim();
-  if (isUnclearAudioTranscript(modelText)) return "";
-  return modelText;
+function chooseAudioObservation(modelObservation: string) {
+  return modelObservation.trim();
 }
 
 function sensingSegmentContent(text: string) {
-  return isUnclearAudioTranscript(text) ? "" : text;
-}
-
-function isUnclearAudioTranscript(text: string) {
-  return /不能真实转写|暂时没有返回转写|请手动补充|没有转写成功|暂时没有听清|没有听到清楚的人声|没有清楚的人声|没有人声|录音已接住|你可以补一句|Invalid request/i.test(text);
+  return text.trim();
 }
 
 async function currentLocationSnapshot(): Promise<StreamSegment["location"] | undefined> {

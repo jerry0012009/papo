@@ -172,9 +172,9 @@ function clearCuriousAttentionResult(profile: CreatureProfile, result: CaptureRe
   result.events = [];
   result.episodes = [];
   result.memoryCandidates = [];
-  result.response = safeCreatureText(suggestion.creatureReport) ?? "";
-  if (!result.response && candidates.some((candidate) => !ignoredReason.get(candidate.segment.id))) {
-    throw new Error("attention model chose quiet without a usable report or ignored reasons");
+  result.response = "";
+  if (candidates.some((candidate) => !ignoredReason.get(candidate.segment.id)) && !safeCreatureText(suggestion.creatureReport)) {
+    throw new Error("attention model chose quiet without a usable internal report or ignored reasons");
   }
   session.selected = [];
   session.ignored = candidates.map((candidate) => ({
@@ -183,7 +183,7 @@ function clearCuriousAttentionResult(profile: CreatureProfile, result: CaptureRe
     score: candidate.score,
     whyIgnored: ignoredReason.get(candidate.segment.id) ?? ""
   }));
-  session.creatureReport = result.response;
+  session.creatureReport = safeCreatureText(suggestion.creatureReport) ?? "";
 }
 
 function safeCreatureText(text?: string) {

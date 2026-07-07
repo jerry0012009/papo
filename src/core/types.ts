@@ -13,7 +13,7 @@ export type ActionKind =
 
 export type FeedbackKind = "understood" | "continue" | "not_now" | "remember" | "forget";
 export type FeedbackResponseAction = "acknowledge" | "ask_follow_up" | "quiet" | "note_memory";
-export type SegmentKind = "text" | "image_summary" | "audio_transcript";
+export type SegmentKind = "text" | "image_summary" | "audio_observation";
 export type ProviderKind = "mimo" | "openrouter" | "generic";
 export type ConversationChannel = "wake" | "button" | "curious" | "feedback" | "emergence";
 

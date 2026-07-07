@@ -75,7 +75,7 @@ Provider 配置来自环境变量、`.env`、`papo.config.json` 或 `.papo/provi
 - `OPENAI_VISION_MODEL`
 - `OPENAI_AUDIO_TRANSCRIPTION_MODEL`
 
-音频目前支持 OpenRouter/Mimo 的 multimodal chat route，以及 generic provider 的 `/audio/transcriptions` route。后续应优先迁移到质量、价格、延迟都合适的原生音频模型。
+OpenRouter 音频默认使用已验证的 `xiaomi/mimo-v2.5` multimodal chat route。Generic provider 仍可使用 `/audio/transcriptions` provider route，但那只是供应商兼容路径，不是 Papo 的业务语义。
 
 ## 校验
 

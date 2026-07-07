@@ -60,8 +60,8 @@ export async function summarizeImage(dataUrl: string, label: string): Promise<{ 
   });
 }
 
-export async function transcribeAudio(dataUrl: string, label: string): Promise<{ transcript: string; provider: string; model?: string; route?: string; noSpeech?: boolean; semanticSource: "llm" }> {
-  return request<{ transcript: string; provider: string; model?: string; route?: string; noSpeech?: boolean; semanticSource: "llm" }>("/api/audio-transcript", {
+export async function observeAudio(dataUrl: string, label: string): Promise<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; semanticSource: "llm" }> {
+  return request<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; semanticSource: "llm" }>("/api/audio-observation", {
     method: "POST",
     headers: jsonHeaders,
     body: JSON.stringify({ dataUrl, label })
@@ -88,7 +88,7 @@ export async function sendFeedback(
   userId: string,
   kind: FeedbackKind,
   targetId?: string,
-  input: { content?: string; modality?: "text" | "audio_transcript" | "button" } = {}
+  input: { content?: string; modality?: "text" | "audio_observation" | "button" } = {}
 ): Promise<{ profile: CreatureProfile; feedback: FeedbackRecord }> {
   return request<{ profile: CreatureProfile; feedback: FeedbackRecord }>(`/api/profiles/${userId}/feedback`, {
     method: "POST",

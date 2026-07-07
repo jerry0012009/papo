@@ -39,7 +39,7 @@ LLM owns semantic work:
 - Candidate memory wording and tags.
 - Feedback reflection and learning language.
 - Active emergence message and why it is surfacing.
-- Vision summaries and audio transcripts.
+- Vision summaries and audio observations.
 
 The boundary is strict: rules do not judge user meaning or wording. LLM output is not locally rewritten with keyword filters.
 
@@ -62,8 +62,8 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - `PAPO_PROVIDER` may explicitly select `openrouter`, `mimo`, or `generic`.
 - Model ids are configurable per modality.
 - Default semantic models should prefer the strongest available configured model, currently `openai/gpt-5.5` for OpenRouter or `gpt-5.5` for generic.
-- Audio sensing should move toward native audio-capable multimodal models when price/latency/quality are acceptable; transcription endpoints are only a temporary provider route.
-- Mixed routing is allowed: for example, OpenRouter can be the semantic provider while generic audio handles transcription.
+- Audio sensing should prefer native audio-capable multimodal models. The current OpenRouter default is `xiaomi/mimo-v2.5`, verified through chat completions audio input.
+- Mixed routing is allowed: for example, OpenRouter can be the semantic provider while generic audio uses a transcription endpoint as its provider route.
 - Provider errors are product errors. They should be visible through API errors and diagnostics instead of being hidden behind local wording.
 
 ## Code Map
