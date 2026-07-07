@@ -1395,7 +1395,7 @@ function MemoryView(props: {
             <MemoryTraceList memory={memory} profile={props.profile} />
           </article>
         ))}
-        {otherMemories.length ? null : <p className="muted">我还没有真正记下一件和你有关的事。</p>}
+        {otherMemories.length ? null : <p className="muted">这里还没有留下和你有关的回忆。</p>}
       </div>
     </section>
   );
@@ -1630,6 +1630,9 @@ function memoryResultLine(memory: CreatureProfile["longTermMemories"][number]) {
 
 function normalizeMemoryText(text: string) {
   return toCreatureMemoryVoice(text)
+    .replace(/^用户(?=喜欢|讨厌|正在|准备|希望|担心|提到|说|觉得|认为|想|需要|不喜欢|习惯|经常|已经|今天|明天|最近|曾经)/, "你")
+    .replace(/^用户[：:]\s*/, "你：")
+    .replace(/^关于用户[：:]\s*/, "关于你：")
     .replace(/^(你主动|你确认|你后来教我)[：:]\s*/, "")
     .replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, "$1$2")
     .replace(/[。！？.!?]+$/, "");
