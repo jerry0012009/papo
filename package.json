@@ -10,6 +10,7 @@
     "serve:api": "tsx src/server/index.ts",
     "build": "tsc --noEmit && vite build",
     "test": "npm run build",
+    "test:ui": "playwright test",
     "smoke:real-cognition": "RUN_REAL_MODEL_SMOKE=1 tsx tests/real-cognition-smoke.ts",
     "start": "node dist/server/index.js"
   },
@@ -25,6 +26,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
