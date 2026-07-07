@@ -187,6 +187,7 @@ describe("App", () => {
     expect(screen.queryByText("桌面提醒")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("有未读 Papo 回复")).not.toBeInTheDocument();
     expect(screen.getByText("来自半分钟里的一小段")).toBeInTheDocument();
+    expect(screen.queryByText(/轻问|存情景|存长期|以后回来/)).not.toBeInTheDocument();
     expect(screen.getByText("查看后台流程")).toBeInTheDocument();
     expect(screen.queryByText("我刚才注意到：")).not.toBeInTheDocument();
     expect(screen.queryByText("我为什么注意：")).not.toBeInTheDocument();

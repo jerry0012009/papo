@@ -1579,7 +1579,7 @@ function AttentionCard({ event }: { event: AttentionEvent }) {
         />
       </details>
       <footer>
-        <span>{actionText(event.actionDecision.action)}</span>
+        <span>{visibleActionText(event.actionDecision.action)}</span>
         <span>{privacyFeelingText(event.privacyRisk)}</span>
       </footer>
     </article>
@@ -2030,6 +2030,22 @@ function actionText(action: AttentionEvent["suggestedAction"]) {
     review: "复盘",
     quiet: "安静",
     draft_reminder: "以后回来",
+    draft_question_list: "分开想想"
+  };
+  return map[action];
+}
+
+function visibleActionText(action: AttentionEvent["suggestedAction"]) {
+  const map = {
+    observe: "先听着",
+    respond: "已经回应",
+    ask: "想确认一下",
+    save_episode: "先记住这次",
+    save_long_term: "可能要留下",
+    recall: "想起旧事",
+    review: "陪你整理",
+    quiet: "少说一点",
+    draft_reminder: "之后再看",
     draft_question_list: "分开想想"
   };
   return map[action];

@@ -103,6 +103,7 @@ Active emergence should prove honesty through structure, not self-explanation. I
 Active emergence and wake resurfacing must treat persisted memory text as raw material, just like the memory page. Before a remembered fragment is spoken back to the user or sent into LLM narration context, normalize legacy/model phrases such as "我先试着理解", "当前事件", "用户确认", "旧记忆", and "保存意图" into Papo's subjective memory language.
 Unread dialogue state is a perception layer for new Papo utterances, not an action planner: rules decide persisted `papo` messages, while the UI only shows a small unread dot on the dialogue entry. Wake notes are presence state and do not create unread notifications.
 Internal channel names, memory kinds, batch ids, and numeric weights are developer facts. User-facing dialogue and memory pages should default to natural creature language; raw `channel`, `kind`, `batchId`, and `weight` belong in details or Brain views.
+Action enum labels are also developer facts. Default visible surfaces should say what Papo appears to do, such as "想确认一下", "已经回应", or "少说一点"; labels like `save_episode`, `draft_reminder`, or their literal UI translations belong in Brain diagnostics or explicit process details.
 The memory page is Papo's subjective remembering surface. It should use first-person creature language for what Papo is holding, how familiar the memory feels, why it kept the moment, and how the user can help it remember accurately or let go. Hiding technical fields is necessary but not sufficient UX; raw phrases such as "用户希望小动物..." must become subjective memory such as "你希望我...".
 Memory-page feedback is still interaction, not administration: when the user teaches Papo how to keep, soften, continue, or forget a memory, optional text/audio feedback should enter the same `learn` loop as episode feedback.
 Correcting a long-term memory is also a teaching moment: the memory text is rule-updated, and the user correction plus Papo's confirmation should be written into the conversation timeline with `relatedMemoryIds`.
@@ -361,6 +362,7 @@ Verified:
 - Home renders Papo as an animated Shiba Inu SVG whose visible posture changes with mood, energy, curiosity, attachment, and safety.
 - Home presence copy is context-first and does not expose "current mood" or state-calculation wording.
 - Home does not show low-information wake notices or persistent raised-habit summaries; those are internal rhythm/personality state unless tied to a fresh feedback action, real shared memory, or explicit details surface.
+- Default attention cards translate action decisions into visible behavior instead of action enum labels; Brain retains raw decisions and rule traces.
 - Home idle copy does not fall back to a static mood label; a new Papo with no real shared memory says it is waiting for the first real text/photo/audio fragment.
 - Home topbar does not expose provider names, fallback labels, or "LLM configured" text; those diagnostics are visible in Brain only.
 - Home shows state as creature body signals rather than raw meters; numeric state remains in Brain diagnostics.
