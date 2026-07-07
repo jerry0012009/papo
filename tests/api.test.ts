@@ -156,7 +156,7 @@ describe("api", () => {
       });
   });
 
-  it("turns empty real-model audio transcripts into an editable no-speech segment", async () => {
+  it("keeps empty real-model audio transcripts out of life content", async () => {
     const provider = {
       ...createModelProvider({}),
       kind: "generic" as const,
@@ -176,7 +176,8 @@ describe("api", () => {
         expect(response.body.model).toBe("gpt-4o-mini-transcribe");
         expect(response.body.route).toBe("audio_transcriptions");
         expect(response.body.semanticSource).toBe("llm");
-        expect(response.body.transcript).toContain("没有听到清楚的人声");
+        expect(response.body.transcript).toBe("");
+        expect(response.body.noSpeech).toBe(true);
       });
   });
 

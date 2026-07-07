@@ -437,6 +437,8 @@ Verified:
 - Dialogue uploads are attachments to the current shared moment, not a user-facing segment editor. The UI may show "照片"/"录音" and let the user edit the sensed text, but it must not expose kind toggles, raw segment terms, or "这一小段" language.
 - Continuous listening may still batch internally every 30 seconds, but the companion surface should say it is periodically organizing what it hears rather than asking the user to manage recording segments.
 - Companion listening can keep 3-minute/30-second limits internally, but the visible dialogue surface should not present those scheduler numbers as product instructions. Say Papo is listening with the user, and that clear things enter the conversation while noisy stretches pass by.
+- Empty or no-speech audio sensing is a non-event, not content. APIs may report `noSpeech` for diagnostics, but the attention harness should receive no fallback sentence such as "没有听到清楚的人声" unless the user explicitly edits and submits their own description.
+- Same-batch multimodal conversation groups should read as one shared event, such as "文字和照片一起", rather than a database count like "2 条内容".
 - Demo contrast copy now frames A/B conditioning as two named Papos receiving the same worry differently after feedback, rather than as policy or action summaries.
 - Demo contrast should show the two Papos' actual visible replies to the same input, not only a prose summary. The point is to let a viewer see that feedback changed the creature's behavior without reading policy numbers or action enums.
 - Demo contrast cards should also show the listening style each Papo learned from feedback, preferably from feedback-shaped self-memory. The viewer should see how the creature was raised, not infer it from configuration or labels.

@@ -939,7 +939,7 @@ function ChatView(props: {
                 <section className="chat-batch" key={section.id}>
                   <div className="chat-batch-head">
                     <strong>同一次事件</strong>
-                    <span>{section.messages.length} 条内容</span>
+                    <span>{batchMomentSummary(section.messages)}</span>
                   </div>
                   {section.messages.map((message) => (
                     <ChatBubble message={message} key={message.id} />
@@ -1100,6 +1100,20 @@ function groupConversationSections(messages: ConversationMessage[]): Conversatio
       ? [{ kind: "single" as const, id: section.messages[0].id, message: section.messages[0] }]
       : [section]
   );
+}
+
+function batchMomentSummary(messages: ConversationMessage[]) {
+  const kinds = [...new Set(messages.map((message) => messageKindNoun(message)))];
+  if (!kinds.length) return "一起给 Papo";
+  if (kinds.length === 1) return `${kinds[0]}一起`;
+  if (kinds.length === 2) return `${kinds[0]}和${kinds[1]}一起`;
+  return `${kinds.slice(0, -1).join("、")}和${kinds[kinds.length - 1]}一起`;
+}
+
+function messageKindNoun(message: ConversationMessage) {
+  if (message.modality === "image_summary") return "照片";
+  if (message.modality === "audio_transcript") return "声音";
+  return "文字";
 }
 
 function MemoryView(props: {

@@ -60,8 +60,8 @@ export async function summarizeImage(dataUrl: string, label: string): Promise<{ 
   });
 }
 
-export async function transcribeAudio(dataUrl: string, label: string): Promise<{ transcript: string; provider: string; model?: string; route?: string; error?: string; semanticSource: "llm" | "fallback" }> {
-  return request<{ transcript: string; provider: string; model?: string; route?: string; error?: string; semanticSource: "llm" | "fallback" }>("/api/audio-transcript", {
+export async function transcribeAudio(dataUrl: string, label: string): Promise<{ transcript: string; provider: string; model?: string; route?: string; error?: string; noSpeech?: boolean; semanticSource: "llm" | "fallback" }> {
+  return request<{ transcript: string; provider: string; model?: string; route?: string; error?: string; noSpeech?: boolean; semanticSource: "llm" | "fallback" }>("/api/audio-transcript", {
     method: "POST",
     headers: jsonHeaders,
     body: JSON.stringify({ dataUrl, label })

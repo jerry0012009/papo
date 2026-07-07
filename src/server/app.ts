@@ -124,13 +124,12 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
   app.post("/api/audio-transcript", async (req, res, next) => {
     try {
       const body = audioTranscriptSchema.parse(req.body);
-      const prompt = `请把这段音频转写成中文。只保留用户生活片段里值得 Papo 注意的内容，最多 400 字，给 Curious Mode 当 audio_transcript。标签：${body.label ?? "录音"}`;
+      const prompt = `请把这段音频转写成中文。只保留用户生活里清楚发生的内容，最多 400 字；如果没有清楚的人声或事件，返回空文本。标签：${body.label ?? "录音"}`;
       try {
-        const transcript =
-          (await provider.transcribeAudio(body.dataUrl, prompt)).slice(0, 1200).trim() ||
-          "这段录音里没有听到清楚的人声。你可以补一句这段声音里发生了什么。";
+        const transcript = (await provider.transcribeAudio(body.dataUrl, prompt)).slice(0, 1200).trim();
         res.json({
           transcript,
+          noSpeech: !transcript,
           provider: sensingProvider(provider, "audio"),
           model: provider.diagnostics?.audioModel,
           route: provider.diagnostics?.audioRoute,
