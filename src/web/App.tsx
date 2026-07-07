@@ -645,14 +645,15 @@ function HomeView(props: {
   onGoCapture: () => void;
   onGoCurious: () => void;
 }) {
+  const latestReply = latestVisiblePapoReply(props.profile);
   return (
     <section className="stack">
       <div className="hero">
         <ShibaAvatar state={props.profile.state} />
         <div className="hero-copy">
           <p className="eyebrow">Papo 在这里</p>
-          <h2>{presenceHeadline(props.profile)}</h2>
-          <p>{presenceSentence(props.profile)}</p>
+          <h2>{props.profile.creatureName}</h2>
+          {latestReply ? <p>{latestReply}</p> : null}
         </div>
       </div>
 
@@ -1657,6 +1658,13 @@ function visibleMessageText(message: ConversationMessage) {
   return message.role === "papo" ? visiblePapoReplyText(message.text) : visibleCreatureText(message.text);
 }
 
+function latestVisiblePapoReply(profile: CreatureProfile) {
+  const latest = profile.conversation?.find((message) => message.role === "papo" && message.channel !== "wake");
+  const text = visiblePapoReplyText(latest?.text);
+  if (!text) return "";
+  return text.length > 80 ? `${text.slice(0, 80)}...` : text;
+}
+
 function visiblePapoReplyText(text: string | undefined) {
   return visibleCreatureText(text).replace(/\s+/g, " ").trim();
 }
@@ -1685,32 +1693,6 @@ function NavButton(props: { active: boolean; icon: typeof Check; label: string; 
       </span>
     </button>
   );
-}
-
-function presenceHeadline(profile: CreatureProfile) {
-  const latest = profile.conversation?.[0];
-  if (latest?.role === "papo") {
-    if (latest.channel === "button") return "有一句话给你";
-    if (latest.channel === "curious") return "刚陪你听了一会儿";
-    if (latest.channel === "feedback") return "刚学会一点你的意思";
-    if (latest.channel === "emergence") return latest.relatedMemoryIds?.length ? "刚想起一件你们说过的事" : "刚安静了一下";
-  }
-  if (latest?.role === "user" || latest?.role === "world") return "收到了你刚给的事";
-  if (!profile.episodes.length) return "等第一段生活靠近";
-  return "等你继续说";
-}
-
-function presenceSentence(profile: CreatureProfile) {
-  const latest = profile.conversation?.[0];
-  if (latest?.role === "papo" && latest.channel === "feedback") return "你刚才教过我的那一点，已经放进后面的回应里。";
-  if (latest?.role === "papo" && latest.channel === "emergence") {
-    return latest.relatedMemoryIds?.length ? "那件事已经在对话里，你可以点进去继续说。" : "它先安静等着，等你给它新的生活片段。";
-  }
-  if (latest?.role === "papo" && latest.channel === "curious") return "刚才听到的内容已经整理进对话，你可以接着补文字、照片或声音。";
-  if (latest?.role === "papo" && latest.channel === "button") return "Papo 刚回了你一句，在对话里可以继续接上。";
-  if (latest?.role === "user" || latest?.role === "world") return "文字、照片或声音会留在同一次对话里，让 Papo 接着回应。";
-  if (!profile.episodes.length) return "我还没有和你经历过多少事。你可以直接跟我说话，也可以给我照片或声音。";
-  return "你可以继续说，也可以传照片、录音，或让 Papo 听一会儿。";
 }
 
 function messageTitle(message: CreatureProfile["conversation"][number]) {
