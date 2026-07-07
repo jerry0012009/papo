@@ -562,7 +562,7 @@ function HomeView(props: {
         </button>
       </div>
 
-      {props.emergence ? <EmergenceCard emergence={props.emergence} /> : null}
+      {props.emergence?.text ? <EmergenceCard emergence={props.emergence} /> : null}
       {props.lastFeedback ? <FeedbackImpactCard feedback={props.lastFeedback} /> : null}
       {!props.lastFeedback && props.learningNote ? <section className="learning-note">{visibleCreatureText(props.learningNote)}</section> : null}
 
@@ -916,7 +916,6 @@ function MemoryView(props: {
             ) : (
               <MemoryMainLines memory={memory} profile={props.profile} />
             )}
-            <MemoryProcessDetails memory={memory} profile={props.profile} />
             <div className="memory-actions">
               <button
                 onClick={() => {
@@ -986,25 +985,6 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
         </div>
       ) : null}
     </div>
-  );
-}
-
-function MemoryProcessDetails({ memory, profile }: { memory: CreatureProfile["longTermMemories"][number]; profile: CreatureProfile }) {
-  const sourceEpisode = memorySourceEpisode(memory, profile);
-  const sourceSteps = sourceEpisode ? [{ label: "你当时说", text: episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode)) }] : [];
-  const response = sourceEpisode ? episodePapoLine(sourceEpisode) : "";
-  return (
-    <details className="episode-flow compact-flow">
-      <summary>看看怎么留下的</summary>
-      <FlowSteps
-        steps={[
-          ...sourceSteps,
-          { label: "Papo 当时回你", text: response },
-          { label: "后来记住", text: memoryResultLine(memory) },
-          { label: "模型理由", text: memory.consolidatedBecause || sourceEpisode?.importanceReason }
-        ]}
-      />
-    </details>
   );
 }
 
@@ -1260,7 +1240,6 @@ function EpisodeCard(props: {
           </div>
         ) : null}
       </div>
-      {!props.compact ? <EpisodeProcessDetails episode={props.episode} /> : null}
       <EpisodeSourceMoment episode={props.episode} messages={props.sourceMessages ?? []} compact={props.compact} />
       <div className="feedback-input">
         <div className="feedback-teach">
@@ -1328,44 +1307,6 @@ function summarizeForEpisode(text: string) {
   return text.length > 52 ? `${text.slice(0, 52)}...` : text;
 }
 
-function EpisodeProcessDetails({ episode }: { episode: EpisodeMemory }) {
-  const steps = [
-    { label: "你说了什么", text: episode.inputSummary },
-    { label: "Papo 怎么理解", text: episode.possibleIntent || episode.importanceReason },
-    { label: "Papo 回了什么", text: episodePapoLine(episode) },
-    { label: "动作选择", text: episode.actionDecision?.reason }
-  ];
-  return (
-    <details className="episode-flow">
-      <summary>看看 Papo 怎么处理的</summary>
-      <FlowSteps steps={steps} />
-    </details>
-  );
-}
-
-function FlowSteps({ steps }: { steps: Array<{ label: string; text?: string }> }) {
-  const visibleSteps = steps
-    .map((step) => ({ ...step, text: productDetailText(step.text) }))
-    .filter((step) => step.text?.trim());
-  return (
-    <ol>
-      {visibleSteps.map((step, index) => (
-        <li key={`${step.label}-${index}`}>
-          <span className="flow-dot">{index + 1}</span>
-          <div>
-            <strong>{step.label}</strong>
-            <p>{visibleCreatureText(step.text)}</p>
-          </div>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function productDetailText(text?: string) {
-  return visibleCreatureText(text);
-}
-
 function EpisodeSourceMoment({ episode, messages, compact }: { episode: EpisodeMemory; messages: ConversationMessage[]; compact: boolean }) {
   if (!messages.length && !episode.sourceBatchId && !episode.sourceObservedAt && !episode.sourceLocation) return null;
   const title = episode.sourceBatchId ? "来自同一次事件" : "来自当时你给我的片段";
@@ -1410,21 +1351,10 @@ function noticedText(text: string) {
 }
 
 function EmergenceCard({ emergence }: { emergence: EmergenceSurface }) {
-  const hasMemory = Boolean(emergence.memoryId);
-  const flowSteps = [
-    emergence.whyNow ? { label: "为什么这时", text: visibleCreatureText(emergence.whyNow) } : undefined,
-    emergence.driveSource ? { label: "什么带回来的", text: emergenceDriveText(emergence.driveSource) } : undefined,
-    { label: "连到什么", text: hasMemory ? "这次连着一件已经记住的事。" : "这次没有连到已经记住的事，只是安静等你继续说。" }
-  ].filter(Boolean) as { label: string; text?: string }[];
-
   return (
     <section className="memory-surface active">
-      <strong>{hasMemory ? "Papo 想起一件事" : "Papo 安静了一下"}</strong>
+      <strong>Papo 想起一件事</strong>
       <p>{visibleCreatureText(emergence.text)}</p>
-      <details className="episode-flow compact-flow">
-        <summary>看看为什么这时想起</summary>
-        <FlowSteps steps={flowSteps} />
-      </details>
     </section>
   );
 }
@@ -1465,17 +1395,6 @@ function StateGrid({ state }: { state: CreatureState }) {
       ))}
     </section>
   );
-}
-
-function emergenceDriveText(drive: string) {
-  const map: Record<string, string> = {
-    safety: "谨慎感更高，所以先轻轻碰一下这段。",
-    curiosity: "好奇心更高，所以还想继续想一会儿。",
-    attachment: "这段和以前的共同经历连上了。",
-    rhythm: "Papo 觉得此刻适合安静带回这件事。",
-    memory_resonance: "这次内容和以前记住的事连上了。"
-  };
-  return map[drive] ?? "当前状态把这段带了回来。";
 }
 
 function memorySourceEpisode(memory: CreatureProfile["longTermMemories"][number], profile: CreatureProfile) {
