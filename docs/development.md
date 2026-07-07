@@ -88,6 +88,10 @@ The boundary is strict: internal thinking, decision traces, scores, ids, and mem
 - The provider layer throws when credentials are missing.
 - Sensing endpoints call real model providers directly. Image/audio failures return errors; empty real audio transcripts are non-events.
 - The semantic harness strips rule-created visible drafts before model action/wording. Papo's final visible reply must come from a model.
+- `attention.ts` creates neutral candidates only. It must not write creature-facing replies, semantic "noticed" explanations, curious reports, or mixed-preference dialogue.
+- Rule action selection is a guardrail baseline, not a semantic classifier. Without an LLM suggestion it should stay at observe/quiet/ask safety behavior and avoid keyword-driven review/reminder/recall decisions.
+- Rule memory candidates keep user text and provenance only. Memory kind, tags, consolidation wording, and long-term meaning must be rewritten by `semanticDecideMemory` before they are treated as product cognition.
+- The web UI must not fill empty Papo replies with "我听见了" or other local placeholder speech. If the model chose quiet or failed to provide a visible reply, the product should show no forged reply.
 - Wake rhythm only updates presence/state. It must not pick memories, write emergence records, or feed wake text back into model conversation context.
 - Active emergence has no rule-generated path. `/emergence` must call the model to decide quiet vs resurfacing and to choose a valid memory.
 - The old "rules create emergence, model polishes narration" path is removed; polishing a fake decision is still fake cognition.

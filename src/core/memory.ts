@@ -61,7 +61,7 @@ export function createMemoryCandidateFromEpisode(
   const now = input.now ?? new Date().toISOString();
   const privacyHigh = hasHighPrivacyMemoryText(`${episode.inputSummary} ${episode.noticed}`);
   const repeatedThemeCount = countSimilarEpisodes(profile, episode.tags);
-  const kind = classifyLongTermKind(episode);
+  const kind: LongTermMemory["kind"] = "long_theme";
   const confidence = Math.min(96, Math.max(35, episode.weight + repeatedThemeCount * 8 + (input.feedback === "remember" ? 18 : 0) - (privacyHigh ? 25 : 0)));
   const writePolicy = decideWritePolicy({
     privacyHigh,
@@ -78,9 +78,7 @@ export function createMemoryCandidateFromEpisode(
     memoryKind: input.feedback === "continue" && kind === "long_theme" ? "open_question" : kind,
     confidence,
     sourceEpisodeId: episode.id,
-    whyConsolidate: repeatedThemeCount >= 3
-      ? "这件事已经多次回到我这里，我想把它抱成一个长期主题。"
-      : "我刚才确实认真停了一下，先把这段留成可以被你确认的小记忆。",
+    whyConsolidate: "",
     writePolicy,
     privacyReason: privacyHigh ? "包含隐私或密钥线索，默认不自动长期保存。" : undefined,
     decayPolicy: input.feedback === "continue" ? "stable" : "decay_without_feedback",
@@ -101,7 +99,7 @@ function hasHighPrivacyMemoryText(text: string) {
 function buildPrivateMemoryCandidateText(episode: EpisodeMemory) {
   const timePart = episode.sourceObservedAt ? ` 当时的时间线索是 ${memoryMomentTime(episode.sourceObservedAt)}。` : "";
   const locationPart = episode.sourceLocation?.label ? ` 地点线索是${episode.sourceLocation.label}。` : "";
-  return `你交给我一段需要保护的内容，我没有把具体细节写进记忆。${timePart}${locationPart}这次只留下处理边界：遇到这类内容，我要先等你确认怎么处理。`;
+  return `这次包含需要保护的内容，具体细节不写入候选。${timePart}${locationPart}`;
 }
 
 export function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new Date().toISOString()) {
@@ -174,25 +172,8 @@ export function adjustMemoryWeight(profile: CreatureProfile, targetId: string | 
 }
 
 function inferIntent(text: string): string {
-  if (/说句话|说话|回复|回答|你在吗|你好|hello|汪|打招呼|听见|听到|回应|叫你/i.test(text)) {
-    return "你像是在确认我有没有听见，我应该直接回你。";
-  }
-  if (/提醒|待办|deadline|todo/i.test(text)) return "这件事之后可能还会回来，你可能希望我到时候接得上。";
-  if (/复盘|总结|review|why/i.test(text)) return "你像是在整理一次经历，希望我陪你看清楚。";
-  if (/不像工具|活物|小脑袋|companion|生命/.test(text)) return "你在校准我应该怎么陪你，而不是只完成任务。";
-  return "你在分享一件刚发生或刚想起的事，我会陪你接住当下。";
-}
-
-function classifyLongTermKind(episode: EpisodeMemory): LongTermMemory["kind"] {
-  const text = `${episode.inputSummary} ${episode.noticed}`;
-  if (/隐私|安全|谨慎|删除|忘掉/.test(text)) return "safety_rule";
-  if (/我应该|我曾经|小动物|脑功能|活物|不像工具|被你养成|你教我/.test(text)) return "creature_self_memory";
-  if (/提醒|未来|下次|之后/.test(text)) return "future_review";
-  if (/问题|不确定|继续想/.test(text)) return "open_question";
-  if (/习惯|经常|总是/.test(text)) return "habit";
-  if (/关系|陪伴|靠近/.test(text)) return "relationship";
-  if (/喜欢|偏好|更愿意/.test(text)) return "user_preference";
-  return "long_theme";
+  void text;
+  return "";
 }
 
 function buildLongTermText(episode: EpisodeMemory): string {

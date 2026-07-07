@@ -58,8 +58,8 @@ describe("creature brain v0.2", () => {
       await semanticReflectFeedback(b, applyFeedback(b, { kind: "not_now", targetId: bFirst.episodes[0].id }), feedbackProvider("not_now"));
     }
 
-    const aNext = handleButtonCapture(a, "我担心这个小动物会变成工具，而不是活物。");
-    const bNext = handleButtonCapture(b, "我担心这个小动物会变成工具，而不是活物。");
+    const aNext = await runButtonHarness(a, "我担心这个小动物会变成工具，而不是活物。", styleProvider("deep"));
+    const bNext = await runButtonHarness(b, "我担心这个小动物会变成工具，而不是活物。", styleProvider("quiet"));
 
     expect(a.policyProfile.recallTendency).toBeGreaterThan(b.policyProfile.recallTendency);
     expect(a.policyProfile.quietTendency).toBeLessThan(b.policyProfile.quietTendency);
@@ -70,9 +70,9 @@ describe("creature brain v0.2", () => {
     expect(aNext.events[0].actionDecision.action).not.toBe("quiet");
     expect(["observe", "quiet", "ask"]).toContain(bNext.events[0].actionDecision.action);
     expect(aNext.response).toMatch(/不要浅浅带过|继续多想/);
-    expect(aNext.events[0].creatureExperience.actionFeeling).toMatch(/多停一下|不浅浅放过/);
-    expect(bNext.response).toMatch(/更安静|先轻轻记下|不急着打扰/);
-    expect(bNext.events[0].creatureExperience.actionFeeling).toMatch(/收住声音|不急着追问/);
+    expect(aNext.events[0].creatureExperience.earReason).toContain("靠近");
+    expect(bNext.response).toBe("");
+    expect(bNext.events[0].creatureExperience.earReason).toContain("安静");
 
     const summary = createContrastSummary({
       deepProfile: a,
@@ -99,25 +99,27 @@ describe("creature brain v0.2", () => {
     const result = handleButtonCapture(profile, "用户更重视我解释为什么注意，而不是只总结。");
 
     expect(result.memoryCandidates?.[0].status).toBe("candidate");
-    expect(result.memoryCandidates?.[0].candidateText).toContain("当时我回应你");
-    expect(result.memoryCandidates?.[0].whyConsolidate).not.toContain("episode");
+    expect(result.memoryCandidates?.[0].candidateText).toContain("你当时告诉我");
+    expect(result.memoryCandidates?.[0].candidateText).not.toContain("当时我回应你");
+    expect(result.memoryCandidates?.[0].whyConsolidate).toBe("");
     expect(profile.longTermMemories.some((memory) => memory.sourceEpisodeId === result.episodes[0].id)).toBe(false);
 
     applyFeedback(profile, { kind: "remember", targetId: result.episodes[0].id });
 
-    const promoted = profile.longTermMemories.find((memory) => memory.sourceEpisodeId === result.episodes[0].id && memory.text.includes("当时我回应你"));
+    const promoted = profile.longTermMemories.find((memory) => memory.sourceEpisodeId === result.episodes[0].id && memory.text.includes("你当时告诉我"));
     expect(promoted).toBeTruthy();
-    expect(promoted?.text).toContain("当时我回应你");
-    expect(promoted?.consolidatedBecause).not.toContain("episode");
+    expect(promoted?.text).toContain("你当时告诉我");
+    expect(promoted?.consolidatedBecause).toBe("");
   });
 
-  it("continue creates open question or future-review candidates", () => {
+  it("continue feedback no longer reclassifies memory without the memory model", () => {
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "这个问题还没想完：怎样让它真的像一个有小脑袋的活物？");
 
     applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id });
 
-    expect(profile.memoryCandidates.some((candidate) => ["open_question", "future_review", "creature_self_memory"].includes(candidate.memoryKind))).toBe(true);
+    expect(profile.memoryCandidates.every((candidate) => candidate.memoryKind === "long_theme")).toBe(true);
+    expect(profile.memoryCandidates.every((candidate) => candidate.whyConsolidate === "")).toBe(true);
   });
 
   it("LLM emergence follows selected memory and stays user-isolated", async () => {
@@ -289,6 +291,72 @@ function feedbackProvider(kind: "continue" | "not_now"): ModelProvider {
         }
       }) as T
   };
+}
+
+function styleProvider(style: "deep" | "quiet"): ModelProvider {
+  const deep = style === "deep";
+  return {
+    kind: "generic",
+    name: `${style} v02 style model`,
+    available: true,
+    usesRealModel: true,
+    generate: async () => "",
+    summarizeImage: async () => "",
+    transcribeAudio: async () => "",
+    generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+      const eventId = firstAttentionId(prompt);
+      if (prompt.includes("行动选择脑")) {
+        return {
+          decisions: [{
+            eventId,
+            action: deep ? "respond" : "quiet",
+            shouldReply: deep,
+            reply: deep ? "这件担心我不会浅浅带过，会继续多想一会儿。" : undefined,
+            visibleReaction: deep ? "Papo 靠近一点看着你" : "Papo 安静趴在你旁边"
+          }]
+        } as T;
+      }
+      if (prompt.includes("语义脑")) {
+        return {
+          response: deep ? "这件担心我不会浅浅带过，会继续多想一会儿。" : undefined,
+          interaction: {
+            userIntent: "你在说担心 Papo 变成工具，而不是活物。",
+            emotionalTone: "担心",
+            visibleReaction: deep ? "Papo 靠近一点看着你" : "Papo 安静趴在你旁边",
+            shouldReply: deep,
+            suggestedAction: deep ? "respond" : "quiet",
+            reply: deep ? "这件担心我不会浅浅带过，会继续多想一会儿。" : undefined,
+            memoryCandidateText: "你担心 Papo 变成工具，而不是更像活物。",
+            memoryTags: ["活物", "工具感"]
+          }
+        } as T;
+      }
+      if (prompt.includes("记忆决策脑")) {
+        return {
+          candidates: extractCandidateIds(prompt).map((candidateId) => ({
+            candidateId,
+            shouldKeepCandidate: true,
+            candidateText: "你担心 Papo 变成工具，而不是更像活物。",
+            memoryKind: "creature_self_memory",
+            confidence: 78,
+            writePolicy: "wait_feedback",
+            whyConsolidate: "这和你希望 Papo 更像活物有关。",
+            decayPolicy: "decay_without_feedback",
+            tags: ["活物", "工具感"]
+          }))
+        } as T;
+      }
+      return undefined;
+    }
+  };
+}
+
+function firstAttentionId(prompt: string) {
+  return [...prompt.matchAll(/attention_[A-Za-z0-9_-]{10}/g)].at(-1)?.[0] ?? "missing";
+}
+
+function extractCandidateIds(prompt: string) {
+  return [...new Set([...prompt.matchAll(/candidate_[A-Za-z0-9_-]{10}/g)].map((match) => match[0]))];
 }
 
 function segment(id: string, label: string, content: string, kind: "text" | "image_summary" | "audio_transcript" = "text") {

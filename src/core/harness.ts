@@ -381,19 +381,12 @@ function canPromoteCuriousCandidate(score: NonNullable<CaptureResult["attentionC
 }
 
 function interactionExperience(interaction: NonNullable<BrainSuggestion["interaction"]>, event: CaptureResult["events"][number]) {
-  const action = event.actionDecision.action;
   const visibleReaction = safeVisibleReaction(interaction.visibleReaction);
   return {
     ...event.creatureExperience,
     earReason: visibleReaction ?? event.creatureExperience.earReason,
-    actionFeeling: interaction.reply
-      ? action === "respond"
-        ? "我回你一声，让你知道我在。"
-        : "我会先做更合适的回应，不把所有判断都说出来。"
-      : event.creatureExperience.actionFeeling,
-    saveFeeling: interaction.memoryCandidateText
-      ? "我会记住这次说到的重点，之后按你的反馈调整。"
-      : event.creatureExperience.saveFeeling
+    actionFeeling: "",
+    saveFeeling: ""
   };
 }
 
@@ -440,7 +433,7 @@ function safeProcessText(text?: string, previousText?: string) {
 }
 
 function containsInternalProcessLanguage(text: string) {
-  return /LLM|语义|用户意图|用户在|用户希望|用户可能|用户主动|用户确认|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|长期留下|要不要长期记|prompt|JSON|score|阈值|总分|小动物|我注意到这段|我注意到这个片段|片段可能|认真理解|路过的背景声|我先听你说完|这件事我会先当作|确认我有没有听对|我为什么注意|我想起了什么|我猜你在做|我当时的状态|我选择|显著性|记忆策略|你刚才是在叫我说话|先回应你|先回答你/i.test(text);
+  return /LLM|语义|用户意图|用户在|用户希望|用户可能|用户主动|用户确认|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|长期留下|要不要长期记|prompt|JSON|score|阈值|总分|小动物|我注意到这段|我注意到这个片段|片段可能|认真理解|路过的背景声|我先听你说完|这件事我会先当作|确认我有没有听对|我为什么注意|我想起了什么|我猜你在做|我当时的状态|我选择|显著性|记忆策略|你刚才是在叫我说话|先回应你|先回答你|他\/她|他希望|她希望|他说|她说|他准备|她准备/i.test(text);
 }
 
 function containsFullInputEcho(reply: string, sourceText?: string) {

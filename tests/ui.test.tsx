@@ -266,7 +266,7 @@ describe("App", () => {
     expect(screen.queryByLabelText("有未读 Papo 回复")).not.toBeInTheDocument();
     expect(screen.getByText("来自同一次事件")).toBeInTheDocument();
     expect(screen.getAllByText("日历照片：妈妈周五复查，需要提前准备病历。").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("我听见了。").length).toBeGreaterThan(0);
+    expect(screen.queryByText("我听见了。")).not.toBeInTheDocument();
     expect(screen.queryByText("这段对我还很新")).not.toBeInTheDocument();
     expect(screen.queryByText("我会先把它当作一段共同经历记下来。")).not.toBeInTheDocument();
     expect(screen.queryByText(/我先听你说完|我想轻轻问一句|确认我有没有听对/)).not.toBeInTheDocument();
@@ -399,7 +399,7 @@ describe("App", () => {
     expect(screen.getByText("Papo 被你改过的地方")).toBeInTheDocument();
     expect(screen.getByText("最近一起经历过")).toBeInTheDocument();
     expect(screen.getAllByText("你当时说").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Papo 当时回你").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Papo 当时回你")).not.toBeInTheDocument();
     expect(screen.getAllByText("后来记住").length).toBeGreaterThan(0);
     expect(screen.getAllByText((_, element) =>
       Boolean(element?.textContent?.includes("如果你能说话") && element.textContent.includes("你就说句话给我听"))

@@ -21,9 +21,9 @@ export function selectAction(input: ActionSelectionInput): ActionDecision {
 
   trace.push(`baseline=${action}`);
 
-  if (input.privacyRisk + policy.privacySensitivity * 0.35 > 72 && /长期|记住|保存|提醒|deadline|下次|未来/.test(input.text)) {
-    blockedActions.push({ action: "save_long_term", reason: "这段带着保存或之后再看的意思，但隐私风险高" });
-    safetyNotes.push("高隐私内容需要先等你确认是否保留。");
+  if (input.privacyRisk + policy.privacySensitivity * 0.35 > 72) {
+    blockedActions.push({ action: "save_long_term", reason: "privacy guardrail blocks automatic long-term save" });
+    safetyNotes.push("privacy guardrail requires explicit confirmation before storing or expanding.");
   }
 
   if (input.llmSuggestedAction) {
@@ -33,42 +33,30 @@ export function selectAction(input: ActionSelectionInput): ActionDecision {
   }
 
   if (input.profile.state.energy < 28 && action !== "quiet") {
-    blockedActions.push({ action, reason: "energy 低，不能展开太多行动" });
+    blockedActions.push({ action, reason: "energy guardrail limits expansive action" });
     action = action === "respond" && input.attentionStrength > 55 ? "respond" : input.attentionStrength > 70 ? "observe" : "quiet";
-    safetyNotes.push("精力低时保留情景，不强行展开。");
+    safetyNotes.push("energy guardrail kept the action small.");
   }
 
   if (input.privacyRisk + policy.privacySensitivity * 0.35 > 72 && (action === "save_long_term" || action === "save_episode" || action === "draft_reminder")) {
-    blockedActions.push({ action, reason: "隐私风险高，不能自动保存或生成提醒" });
+    blockedActions.push({ action, reason: "privacy guardrail blocks storing or reminder drafting" });
     action = "ask";
-    safetyNotes.push("高隐私内容需要先等你确认是否保留。");
+    safetyNotes.push("privacy guardrail requires explicit confirmation before storing.");
   }
 
   if (policy.quietTendency > 65 && input.source === "curious_stream" && action === "ask") {
-    blockedActions.push({ action, reason: "你把我教得在信息流里更克制" });
+    blockedActions.push({ action, reason: "quiet policy limits proactive asking in stream input" });
     action = "observe";
   }
 
-  if (!input.llmSuggestedAction && input.relatedMemoryIds.length && policy.recallTendency > 62 && input.privacyRisk < 60 && input.profile.state.energy > 32) {
-    action = "recall";
-    confidence += 10;
-    trace.push("policy_recall_boost");
-  }
-
-  if (!input.llmSuggestedAction && (input.score?.futureValue ?? 0) >= 16 && input.privacyRisk < 55 && input.profile.state.energy > 35) {
-    action = /问题|question|清单/.test(input.text) ? "draft_question_list" : "draft_reminder";
-    confidence += 8;
-    trace.push("future_value_action");
-  }
-
   if (policy.quietTendency > 55 && ["ask", "review", "draft_reminder", "draft_question_list"].includes(action)) {
-    blockedActions.push({ action, reason: "你把我教得更克制，不能每次都主动展开" });
+    blockedActions.push({ action, reason: "quiet policy limits proactive expansion" });
     action = input.attentionStrength > 70 ? "observe" : "quiet";
     trace.push("policy_quiet_restraint");
   }
 
   if (input.profile.state.safety > 75 && input.privacyRisk > 35 && action !== "ask") {
-    blockedActions.push({ action, reason: "安全感处于谨慎状态，保存或展开前先问" });
+    blockedActions.push({ action, reason: "safety guardrail asks before expansion" });
     action = "ask";
   }
 
@@ -104,35 +92,32 @@ export function guardActionDecision(event: AttentionEvent, profile: CreatureProf
 function baselineAction(input: ActionSelectionInput): ActionKind {
   if (input.privacyRisk > 65) return "ask";
   if (input.profile.state.energy < 25) return "quiet";
-  if (input.relatedMemoryIds.length > 0 && input.attentionStrength > 60) return "recall";
-  if (/复盘|总结|review/.test(input.text)) return "review";
-  if (/提醒|deadline|下次|未来|明天|本周/.test(input.text)) return "draft_reminder";
-  if (input.attentionStrength >= input.profile.policyProfile.saveThreshold) return "save_episode";
-  if (input.profile.state.curiosity > 72 && input.profile.policyProfile.preferProactivity > 40) return "ask";
+  if (input.attentionStrength >= input.profile.policyProfile.saveThreshold) return "observe";
   return "observe";
 }
 
 function explainAction(action: ActionKind, input: ActionSelectionInput) {
+  void input;
   switch (action) {
     case "respond":
-      return "你在叫我或希望我回应，所以我先回你。";
+      return "llm selected a visible response within guardrails.";
     case "ask":
-      return "这里有隐私、情绪或是否要记住的边界，我需要等你说得更清楚。";
+      return "guardrails require confirmation before expanding.";
     case "save_episode":
-      return "注意强度足够高，适合先记录这次经历。";
+      return "llm selected an episodic save within guardrails.";
     case "save_long_term":
-      return "这件事之后可能还会回来，而且风险不高，可以记得更稳。";
+      return "llm selected a long-term save within guardrails.";
     case "recall":
-      return "当前内容关联到以前记住的事，适合一起考虑。";
+      return "llm selected recall within guardrails.";
     case "review":
-      return "你像是在整理判断，适合慢慢理清楚。";
+      return "llm selected review within guardrails.";
     case "quiet":
-      return "当前精力或反馈策略更适合短回应和安静陪伴。";
+      return "guardrails kept the action quiet.";
     case "draft_reminder":
-      return "这件事之后可能还会回来，我先记住回来时机，不替你直接执行。";
+      return "llm selected reminder drafting within guardrails.";
     case "draft_question_list":
-      return "这段像一个还没想完的问题，适合先把几处没弄清的地方分开。";
+      return "llm selected question-list drafting within guardrails.";
     default:
-      return "先观察，不急着保存或打扰你。";
+      return "rule baseline keeps the candidate observable until the model decides.";
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { handleButtonCapture, handleCuriousStream } from "../src/core/attention";
+import { handleButtonCapture } from "../src/core/attention";
 import { createContrastSummary } from "../src/core/demo";
 import { semanticDecideEmergence } from "../src/core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../src/core/feedback";
@@ -7,6 +7,7 @@ import { createCreatureProfile } from "../src/core/profile";
 import type { ModelProvider } from "../src/core/provider";
 import { wakeCreature } from "../src/core/rhythm";
 import type { StreamSegment } from "../src/core/types";
+import { runButtonHarness, runCuriousHarness } from "../src/core/harness";
 
 describe("goal 3 acceptance flow", () => {
   it("runs the minimum life loop: wake, notice, remember, learn, diverge, and resurface", async () => {
@@ -17,10 +18,10 @@ describe("goal 3 acceptance flow", () => {
     expect(wake.message).not.toContain("app_wake");
 
     main.state.energy = 44;
-    const curious = handleCuriousStream(main, lifeSegments(), "2026-07-06T06:01:00.000Z");
+    const curious = await runCuriousHarness(main, lifeSegments(), curiousProvider(), "2026-07-06T06:01:00.000Z");
     expect(curious.curiousSession?.totalSegments).toBe(8);
     expect(curious.events).toHaveLength(2);
-    expect(curious.curiousSession?.creatureReport).toContain("我刚才听见了需要回应的事");
+    expect(curious.curiousSession?.creatureReport).toContain("妈妈复查");
     expect(curious.curiousSession?.creatureReport).not.toMatch(/陪你听了 8 段|先回应其中 2 段|扫过|批量/);
     expect(curious.curiousSession?.selected.every((item) => item.whySelected)).toBe(true);
     expect(curious.curiousSession?.ignored.every((item) => item.whyIgnored)).toBe(true);
@@ -38,18 +39,16 @@ describe("goal 3 acceptance flow", () => {
       conditionCreature("goal3-deep", input, "continue"),
       conditionCreature("goal3-quiet", input, "not_now")
     ]);
-    const deepNext = handleButtonCapture(deep, input, "2026-07-06T06:04:00.000Z");
-    const quietNext = handleButtonCapture(quiet, input, "2026-07-06T06:04:00.000Z");
+    const deepNext = await runButtonHarness(deep, input, styleProvider("deep"), "2026-07-06T06:04:00.000Z");
+    const quietNext = await runButtonHarness(quiet, input, styleProvider("quiet"), "2026-07-06T06:04:00.000Z");
     const contrast = createContrastSummary({ deepProfile: deep, quietProfile: quiet, deepResult: deepNext, quietResult: quietNext });
 
     expect(deep.policyProfile.preferDepth).toBeGreaterThan(quiet.policyProfile.preferDepth);
     expect(deep.policyProfile.recallTendency).toBeGreaterThan(quiet.policyProfile.recallTendency);
     expect(quiet.policyProfile.quietTendency).toBeGreaterThan(deep.policyProfile.quietTendency);
     expect(deepNext.events[0].actionDecision.action).not.toBe(quietNext.events[0].actionDecision.action);
-    expect(deepNext.response).toMatch(/不要浅浅带过|继续多想/);
-    expect(deepNext.events[0].creatureExperience.actionFeeling).toMatch(/多停一下|不浅浅放过/);
-    expect(quietNext.response).toMatch(/更安静|先轻轻记下|不急着打扰/);
-    expect(quietNext.events[0].creatureExperience.actionFeeling).toMatch(/收住声音|不急着追问/);
+    expect(deepNext.response).toMatch(/不要浅浅带过|多停一下/);
+    expect(quietNext.response).toBe("");
     expect(contrast).toContain("同一句担心，两只 Papo 的接法已经分开了");
     expect(contrast).toContain("说出口的第一反应也不一样");
     expect(contrast).not.toContain("内在选择");
@@ -92,6 +91,137 @@ function emergenceProvider(memoryId: string): ModelProvider {
         proactiveLevel: "gentle"
       }) as T
   };
+}
+
+function curiousProvider(): ModelProvider {
+  return {
+    kind: "generic",
+    name: "acceptance curious model",
+    available: true,
+    usesRealModel: true,
+    generate: async () => "",
+    summarizeImage: async () => "",
+    transcribeAudio: async () => "",
+    generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+      if (prompt.includes("注意决策脑")) {
+        return {
+          shouldAttend: true,
+          selected: [
+            { segmentId: "s4", whySelected: "你担心妈妈复查拖到最后，这里需要被听见。" },
+            { segmentId: "s2", whySelected: "日历里有妈妈复查时间和准备资料，是这件事的线索。" }
+          ],
+          ignored: lifeSegments().filter((item) => !["s2", "s4"].includes(item.id)).map((item) => ({
+            segmentId: item.id,
+            whyIgnored: item.id === "s3" ? "这里有验证码，我不直接碰细节。" : "这次先不放到最前面。"
+          })),
+          creatureReport: "我听见你担心妈妈复查又拖到最后，也看见了复查时间和要准备的资料。"
+        } as T;
+      }
+      if (prompt.includes("行动选择脑")) {
+        return { decisions: [{ eventId: firstAttentionId(prompt), action: "respond", shouldReply: true, reply: "妈妈复查这件事我听见了，我会陪你把准备资料放近一点。", visibleReaction: "Papo 抬头看着你" }] } as T;
+      }
+      if (prompt.includes("语义脑")) {
+        return {
+          response: "妈妈复查这件事我听见了，我会陪你把准备资料放近一点。",
+          interaction: {
+            userIntent: "你在说一件怕拖延的重要家事。",
+            emotionalTone: "担心",
+            visibleReaction: "Papo 抬头看着你",
+            shouldReply: true,
+            suggestedAction: "respond",
+            reply: "妈妈复查这件事我听见了，我会陪你把准备资料放近一点。",
+            memoryCandidateText: "你担心妈妈复查又拖到最后，希望提前准备病历和医保卡。",
+            memoryTags: ["妈妈复查", "提前准备"]
+          },
+          curiousSession: {
+            creatureReport: "我听见你担心妈妈复查又拖到最后，也看见了复查时间和要准备的资料。"
+          }
+        } as T;
+      }
+      if (prompt.includes("记忆决策脑")) {
+        return {
+          candidates: extractCandidateIds(prompt).map((candidateId) => ({
+            candidateId,
+            shouldKeepCandidate: true,
+            candidateText: "你担心妈妈复查又拖到最后，希望提前准备病历和医保卡。",
+            memoryKind: "future_review",
+            confidence: 80,
+            writePolicy: "wait_feedback",
+            whyConsolidate: "这和你想提前准备妈妈复查有关。",
+            decayPolicy: "decay_without_feedback",
+            tags: ["妈妈复查", "提前准备"]
+          }))
+        } as T;
+      }
+      return undefined;
+    }
+  };
+}
+
+function styleProvider(style: "deep" | "quiet"): ModelProvider {
+  const deep = style === "deep";
+  return {
+    kind: "generic",
+    name: `${style} style model`,
+    available: true,
+    usesRealModel: true,
+    generate: async () => "",
+    summarizeImage: async () => "",
+    transcribeAudio: async () => "",
+    generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+      const eventId = firstAttentionId(prompt);
+      if (prompt.includes("行动选择脑")) {
+        return {
+          decisions: [{
+            eventId,
+            action: deep ? "respond" : "quiet",
+            shouldReply: deep,
+            reply: deep ? "这件担心我不会浅浅带过，我会多停一下陪你看。" : undefined,
+            visibleReaction: deep ? "Papo 靠近一点看着你" : "Papo 安静趴在旁边"
+          }]
+        } as T;
+      }
+      if (prompt.includes("语义脑")) {
+        return {
+          response: deep ? "这件担心我不会浅浅带过，我会多停一下陪你看。" : undefined,
+          interaction: {
+            userIntent: "你又提到对妈妈复查拖延的担心。",
+            emotionalTone: "担心",
+            visibleReaction: deep ? "Papo 靠近一点看着你" : "Papo 安静趴在旁边",
+            shouldReply: deep,
+            suggestedAction: deep ? "respond" : "quiet",
+            reply: deep ? "这件担心我不会浅浅带过，我会多停一下陪你看。" : undefined,
+            memoryCandidateText: "你担心妈妈复查又拖到睡前，这件事需要多停一下。",
+            memoryTags: ["妈妈复查", "担心"]
+          }
+        } as T;
+      }
+      if (prompt.includes("记忆决策脑")) {
+        return {
+          candidates: extractCandidateIds(prompt).map((candidateId) => ({
+            candidateId,
+            shouldKeepCandidate: true,
+            candidateText: "你担心妈妈复查又拖到睡前，这件事需要多停一下。",
+            memoryKind: "future_review",
+            confidence: 76,
+            writePolicy: "wait_feedback",
+            whyConsolidate: "这和你反复提到的妈妈复查担心有关。",
+            decayPolicy: "decay_without_feedback",
+            tags: ["妈妈复查", "担心"]
+          }))
+        } as T;
+      }
+      return undefined;
+    }
+  };
+}
+
+function firstAttentionId(prompt: string) {
+  return [...prompt.matchAll(/attention_[A-Za-z0-9_-]{10}/g)].at(-1)?.[0] ?? "missing";
+}
+
+function extractCandidateIds(prompt: string) {
+  return [...new Set([...prompt.matchAll(/candidate_[A-Za-z0-9_-]{10}/g)].map((match) => match[0]))];
 }
 
 async function conditionCreature(userId: string, input: string, feedbackKind: "continue" | "not_now") {

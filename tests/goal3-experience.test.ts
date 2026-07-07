@@ -4,11 +4,12 @@ import { semanticDecideEmergence } from "../src/core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../src/core/feedback";
 import { createCreatureProfile } from "../src/core/profile";
 import type { ModelProvider } from "../src/core/provider";
+import { runCuriousHarness } from "../src/core/harness";
 
 describe("goal 3 creature experience", () => {
-  it("curious mode creates a creature-facing observation report from everyday material", () => {
+  it("curious harness creates a model-written observation report from everyday material", async () => {
     const profile = createCreatureProfile();
-    const result = handleCuriousStream(profile, [
+    const result = await runCuriousHarness(profile, [
       segment("s1", "背景 1", "今天早餐吃了面包，路上有点堵。"),
       segment("s2", "日历截图", "周五 9:30 妈妈复查，备注写着提前准备病历和医保卡。", "image_summary"),
       segment("s3", "隐私片段", "短信里有验证码 4921 和缴费链接，这段不应该被长期保存。"),
@@ -17,13 +18,13 @@ describe("goal 3 creature experience", () => {
       segment("s6", "朋友提醒", "朋友说我最近总是把重要家事压到睡前才处理，容易焦虑。"),
       segment("s7", "语音 2", "下周想提前一天提醒自己准备资料，不要又临时找东西。", "audio_transcript"),
       segment("s8", "重复背景", "妈妈复查这件事刚才已经说过一次，这里只是重复提醒。")
-    ]);
+    ], curiousProvider());
 
-    expect(result.curiousSession?.creatureReport).toContain("我刚才听见了需要回应的事");
-    expect(result.curiousSession?.creatureReport).toContain("需要回应");
+    expect(result.curiousSession?.creatureReport).toContain("妈妈复查");
+    expect(result.curiousSession?.creatureReport).toContain("有点担心");
     expect(result.curiousSession?.creatureReport).not.toContain("投资人");
     expect(result.curiousSession?.creatureReport).not.toMatch(/扫过|分段|批量|直接记住|状态|谨慎：|\\d+ 段/);
-    expect(result.curiousSession?.selected.map((item) => item.whySelected).join(" ")).toMatch(/需要回应|以后可能还会回来|情绪/);
+    expect(result.curiousSession?.selected.map((item) => item.whySelected).join(" ")).toMatch(/担心|复查/);
     expect(result.curiousSession?.selected.map((item) => item.whySelected).join(" ")).not.toMatch(/选中|总分|future_value|emotion|score|\+\d/);
     expect(result.curiousSession?.ignored.map((item) => item.whyIgnored).join(" ")).not.toMatch(/忽略|总分|阈值|redundancy|future_value|score|偷偷|长期|片段|我先放过/);
     expect(result.events.map((event) => event.noticed).join(" ")).not.toMatch(/未来价值|情绪强度/);
@@ -103,6 +104,79 @@ function feedbackProvider(kind: "continue" | "not_now"): ModelProvider {
         }
       }) as T
   };
+}
+
+function curiousProvider(): ModelProvider {
+  return {
+    kind: "generic",
+    name: "goal curious model",
+    available: true,
+    usesRealModel: true,
+    generate: async () => "",
+    summarizeImage: async () => "",
+    transcribeAudio: async () => "",
+    generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+      if (prompt.includes("注意决策脑")) {
+        return {
+          shouldAttend: true,
+          selected: [
+            { segmentId: "s4", whySelected: "你说自己有点担心妈妈复查会拖到最后，这里最需要被听见。" },
+            { segmentId: "s2", whySelected: "日历里的复查时间和资料准备，是这件事的具体线索。" }
+          ],
+          ignored: [
+            { segmentId: "s3", whyIgnored: "这段有验证码和链接，我不直接碰细节。" }
+          ],
+          creatureReport: "我听见你有点担心妈妈复查又被拖到最后，也看见了复查时间和要准备的资料。",
+          trace: ["selected family review concern"]
+        } as T;
+      }
+      if (prompt.includes("行动选择脑")) {
+        return { decisions: [{ eventId: firstAttentionId(prompt), action: "respond", shouldReply: true, reply: "这件事我听见了，妈妈复查和准备资料我会陪你放近一点。", visibleReaction: "Papo 抬头看着你" }] } as T;
+      }
+      if (prompt.includes("语义脑")) {
+        return {
+          response: "这件事我听见了，妈妈复查和准备资料我会陪你放近一点。",
+          interaction: {
+            userIntent: "你在说一件让你担心会拖延的家事。",
+            emotionalTone: "担心",
+            visibleReaction: "Papo 抬头看着你",
+            shouldReply: true,
+            suggestedAction: "respond",
+            reply: "这件事我听见了，妈妈复查和准备资料我会陪你放近一点。",
+            memoryCandidateText: "你担心妈妈复查又拖到最后，希望提前准备病历和医保卡。",
+            memoryTags: ["妈妈复查", "提前准备"]
+          },
+          curiousSession: {
+            creatureReport: "我听见你有点担心妈妈复查又被拖到最后，也看见了复查时间和要准备的资料。"
+          }
+        } as T;
+      }
+      if (prompt.includes("记忆决策脑")) {
+        return {
+          candidates: extractCandidateIds(prompt).map((candidateId) => ({
+            candidateId,
+            shouldKeepCandidate: true,
+            candidateText: "你担心妈妈复查又拖到最后，希望提前准备病历和医保卡。",
+            memoryKind: "future_review",
+            confidence: 78,
+            writePolicy: "wait_feedback",
+            whyConsolidate: "这和你想提前准备妈妈复查有关。",
+            decayPolicy: "decay_without_feedback",
+            tags: ["妈妈复查", "提前准备"]
+          }))
+        } as T;
+      }
+      return undefined;
+    }
+  };
+}
+
+function firstAttentionId(prompt: string) {
+  return [...prompt.matchAll(/attention_[A-Za-z0-9_-]{10}/g)].at(-1)?.[0] ?? "missing";
+}
+
+function extractCandidateIds(prompt: string) {
+  return [...new Set([...prompt.matchAll(/candidate_[A-Za-z0-9_-]{10}/g)].map((match) => match[0]))];
 }
 
 function segment(id: string, label: string, content: string, kind: "text" | "image_summary" | "audio_transcript" = "text") {

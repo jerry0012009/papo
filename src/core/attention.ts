@@ -1,6 +1,6 @@
 import { selectAction } from "./action";
 import { describeStateInfluence } from "./drive";
-import { createAttentionExperience, createCuriousCreatureReport } from "./experience";
+import { createAttentionExperience } from "./experience";
 import { makeId } from "./ids";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, findRelatedMemories } from "./memory";
 import { applyStateDelta } from "./state";
@@ -35,22 +35,22 @@ export function handleButtonCapture(
     key: "state_bias",
     label: "button_intent",
     value: 18,
-    reason: "你主动告诉我这件事，我会直接理解并回应。"
+    reason: "manual input enters cognition pipeline"
   });
 
   const event = buildAttentionEvent(profile, {
     source: "button",
     triggerLabel: "你给我的话",
     triggerContent: cleanText,
-    reasonPrefix: "你主动把这段交给我，所以我先理解你为什么让我看，而不是再判断它值不值得注意。",
+    reasonPrefix: "manual_input_candidate",
     score,
     now
   });
-  const response = composeCreatureResponse(profile, event);
+  const response = "";
   const episode = createEpisodeFromEvent(event, response, now);
   profile.episodes.unshift(episode);
   const candidate = createMemoryCandidateFromEpisode(profile, episode, { now });
-  applyStateDelta(profile, { curiosity: 3, energy: -2, arousal: 3, attachment: 2 }, "button capture 让我集中注意了一次", now);
+  applyStateDelta(profile, { curiosity: 3, energy: -2, arousal: 3, attachment: 2 }, "manual input processed as attention candidate", now);
   return { profile, events: [event], episodes: [episode], response, memoryCandidates: [candidate] };
 }
 
@@ -81,7 +81,7 @@ export function handleCuriousStream(
   for (const item of initialScores.sort((a, b) => b.score.total - a.score.total)) {
     const adjusted = applyRedundancyPenalty(item.score, selected.map((entry) => entry.score.tags));
     if (isHighPrivacySegmentContent(item.segment.content)) {
-      ignored.push({ segment: item.segment, score: adjusted, whyIgnored: "这里可能有隐私内容，我先等你的意思。" });
+      ignored.push({ segment: item.segment, score: adjusted, whyIgnored: "privacy guardrail blocked automatic attention" });
     } else if (selected.length < attentionBudget && adjusted.total >= 38) {
       selected.push({ segment: item.segment, score: adjusted, whySelected: explainSelected(adjusted) });
     } else {
@@ -97,7 +97,7 @@ export function handleCuriousStream(
         .map((item) => ({
           segment: item.segment,
           score: item.score,
-          whySelected: "整组信息都偏弱，我只保留相对最清晰的一段作为轻观察。"
+          whySelected: "candidate retained for model review because no stronger non-private segment was available"
         }));
 
   const events = focused.map(({ segment, score }) =>
@@ -115,14 +115,14 @@ export function handleCuriousStream(
     })
   );
 
-  const episodes = events.map((event) => createEpisodeFromEvent(event, composeCreatureResponse(profile, event), now));
+  const episodes = events.map((event) => createEpisodeFromEvent(event, "", now));
   const memoryCandidates = episodes.map((episode) => createMemoryCandidateFromEpisode(profile, episode, { now }));
   profile.episodes.unshift(...episodes);
   if (events.length) {
     applyStateDelta(
       profile,
       { curiosity: 5, energy: -4 - Math.max(0, events.length - 1), arousal: events.length > 1 ? 4 : 1, attachment: relatedMemoryCount(events) > 0 ? 3 : 0 },
-      "curious mode 中我先整体扫描信息流，再挑出少数注意事件",
+      "curious stream processed as attention candidates",
       now
     );
   }
@@ -147,13 +147,12 @@ export function handleCuriousStream(
     attentionBudget,
     creatureReport: ""
   };
-  curiousSession.creatureReport = createCuriousCreatureReport(curiousSession);
 
   return {
     profile,
     events,
     episodes,
-    response: composeStreamSummary(events, curiousSession),
+    response: "",
     curiousSession,
     attentionCandidates: [
       ...focused.map((item) => ({ segment: item.segment, score: item.score, selectedByRules: true })),
@@ -182,20 +181,20 @@ export function scoreSegment(
   const total = novelty + emotional + future + identity + communication + privacy * 0.35 + memoryResonance + stateBias - fatiguePenalty;
 
   const contributions: ScoreContribution[] = [
-    { key: "novelty", label: "novelty", value: round(novelty), reason: novelty > 12 ? "出现较多新主题" : "新主题较少" },
+    { key: "novelty", label: "novelty", value: round(novelty), reason: novelty > 12 ? "rule feature: more unseen tags" : "rule feature: fewer unseen tags" },
     {
       key: "memory_resonance",
       label: "memory_resonance",
       value: round(memoryResonance),
-      reason: related.length ? `关联到长期记忆 ${related.map((memory) => memory.id).join(", ")}` : "没有强旧记忆共振"
+      reason: related.length ? `rule feature: related memory ids ${related.map((memory) => memory.id).join(", ")}` : "rule feature: no related memory ids"
     },
-    { key: "emotional_charge", label: "emotion", value: emotional, reason: emotional ? "出现担心/不确定等情绪词" : "情绪强度低" },
-    { key: "future_value", label: "future_value", value: future, reason: future ? "包含未来/提醒/资料准备等未来价值线索" : "未来价值不明显" },
-    { key: "identity_relevance", label: "identity", value: identity, reason: identity ? "触及小动物身份、活物感或脑功能" : "没有直接触及小动物身份" },
-    { key: "communication_intent", label: "communication", value: communication, reason: communication ? "你在直接叫我回应，我应该先回你" : "没有直接要求回应" },
-    { key: "privacy_risk", label: "privacy", value: round(privacy), reason: privacy ? "包含 key/token/地址等隐私风险词" : "未发现明显隐私风险" },
-    { key: "state_bias", label: "state_bias", value: round(stateBias), reason: stateBias > 10 ? "当前状态提高注意倾向" : "状态偏向较弱" },
-    { key: "fatigue_penalty", label: "fatigue", value: -round(fatiguePenalty), reason: fatiguePenalty ? "精力偏低，减少注意预算" : "精力足够" }
+    { key: "emotional_charge", label: "emotion", value: emotional, reason: emotional ? "rule feature: emotion keyword present" : "rule feature: emotion keyword absent" },
+    { key: "future_value", label: "future_value", value: future, reason: future ? "rule feature: future keyword present" : "rule feature: future keyword absent" },
+    { key: "identity_relevance", label: "identity", value: identity, reason: identity ? "rule feature: identity keyword present" : "rule feature: identity keyword absent" },
+    { key: "communication_intent", label: "communication", value: communication, reason: communication ? "rule feature: communication keyword present" : "rule feature: communication keyword absent" },
+    { key: "privacy_risk", label: "privacy", value: round(privacy), reason: privacy ? "rule feature: privacy keyword present" : "rule feature: privacy keyword absent" },
+    { key: "state_bias", label: "state_bias", value: round(stateBias), reason: stateBias > 10 ? "rule feature: state bias raised score" : "rule feature: state bias low" },
+    { key: "fatigue_penalty", label: "fatigue", value: -round(fatiguePenalty), reason: fatiguePenalty ? "rule feature: energy lowered attention budget" : "rule feature: energy did not lower score" }
   ];
 
   return {
@@ -256,8 +255,8 @@ export function buildAttentionEvent(
     triggerLocation: input.triggerLocation,
     triggerLabel: input.triggerLabel,
     triggerContent: input.triggerContent,
-    noticed: buildNoticed(input.triggerContent, related.length),
-    reason: `${input.reasonPrefix}${related.length ? " 这件事关联到以前的记忆，所以会一起考虑。" : ""}`,
+    noticed: buildNoticed(input.triggerContent),
+    reason: `${input.reasonPrefix}${related.length ? "; related_memory_candidate=true" : ""}`,
     relatedMemoryIds: related,
     stateSnapshot: structuredClone(profile.state),
     attentionStrength: Math.min(100, Math.round(strength)),
@@ -284,69 +283,19 @@ export function buildAttentionEvent(
 }
 
 export function composeCreatureResponse(profile: CreatureProfile, event: AttentionEvent): string {
-  if (event.actionDecision.action === "respond") {
-    return event.relatedMemoryIds.length ? "我在，听见了。刚才这句话让我想起以前你说过的事。" : "我在，听见了。";
-  }
-  const line = outwardReactionLine(event.triggerContent, event.actionDecision.action, event.relatedMemoryIds.length > 0);
-  const raised = raisedExternalLine(profile, event.actionDecision.action);
-  const energy = profile.state.energy < 32 && event.actionDecision.action !== "ask" ? "我会少说一点，但我在听。" : "";
-  return [line, raised, energy].filter(Boolean).join("");
-}
-
-function outwardReactionLine(text: string, action: AttentionEvent["actionDecision"]["action"], remembered: boolean): string {
-  const rememberedLine = remembered ? "这也让我想起之前相关的事。" : "";
-  if (hasMixedPreference(text)) return `我听见了。${rememberedLine}这里有你喜欢的部分，也有让你不舒服的部分。`;
-  if (includesAny(text, EMOTIONAL_WORDS)) return `我听见了。${rememberedLine}听起来这件事让你有点在意。`;
-  if (action === "quiet" || action === "observe") return `我听见了。${rememberedLine || "我先陪你听着。"}`;
-  if (action === "review") return `我听见了。${rememberedLine}我们可以慢慢把这件事理清楚。`;
-  if (action === "recall") return `我听见了。${rememberedLine}`;
-  if (action === "draft_reminder") return `我听见了。${rememberedLine}这件事之后可能还要再看。`;
-  if (action === "draft_question_list") return `我听见了。${rememberedLine}里面没想清的地方，我们可以一件件说。`;
-  if (action === "save_long_term" || action === "save_episode") return `我听见了。${rememberedLine || "这件事我会放在心上。"}`;
-  return rememberedLine ? `我听见了。${rememberedLine}` : "我听见了。你可以接着说。";
-}
-
-function raisedExternalLine(profile: CreatureProfile, action: AttentionEvent["actionDecision"]["action"]) {
-  const policy = profile.policyProfile;
-  if (policy.quietTendency >= 58 && ["ask", "quiet", "observe", "draft_reminder", "draft_question_list"].includes(action)) {
-    return "我先不急着打扰你。";
-  }
-  if ((policy.preferDepth >= 65 || policy.recallTendency >= 65) && ["ask", "recall", "review", "save_episode", "observe", "draft_reminder", "draft_question_list"].includes(action)) {
-    return "我会陪你继续多想一会儿。";
-  }
+  void profile;
+  void event;
   return "";
 }
 
-function hasMixedPreference(text: string) {
-  return /喜欢/.test(text) && /不喜欢|讨厌|烦|太多|难受/.test(text);
-}
-
 export function composeStreamSummary(events: AttentionEvent[], session: CuriousSessionAudit): string {
-  if (!events.length) return "我刚才先安静听着，没有打断你。";
-  const ignoredPrivacy = session.ignored.filter((item) => item.score.privacyRisk > 0).map((item) => item.label);
-  const names = events.map((event) => event.triggerLabel).join("、");
-  const privacyLine = ignoredPrivacy.length ? " 有些内容我会先放轻，等你的意思。" : "";
-  const mainLine = events.length === 1 ? `我刚才听见最需要回应的是：${names}。` : `我刚才听见几件需要回应的事：${names}。`;
-  return `${mainLine}${privacyLine}`;
+  void events;
+  void session;
+  return "";
 }
 
-function buildNoticed(text: string, relatedCount: number): string {
-  if (includesAny(text, COMMUNICATION_WORDS)) {
-    return `我听到你在叫我回应你：${summarizeText(text, 88)}`;
-  }
-  if (includesAny(text, IDENTITY_WORDS)) {
-    return `我听见你在校准我不该只是工具，而要会注意、记住和被你养成：${summarizeText(text, 88)}`;
-  }
-  if (includesAny(text, FUTURE_WORDS)) {
-    return `我听见这件事之后可能还会回来：${summarizeText(text, 88)}`;
-  }
-  if (includesAny(text, EMOTIONAL_WORDS)) {
-    return `我听见这里有一点情绪，不该把它当成背景声：${summarizeText(text, 88)}`;
-  }
-  if (relatedCount > 0) {
-    return `我听见这件事和以前记住的内容连上了：${summarizeText(text, 88)}`;
-  }
-  return `我接住你刚告诉我的事：${summarizeText(text, 88)}`;
+function buildNoticed(text: string): string {
+  return `candidate_input: ${summarizeText(text, 88)}`;
 }
 
 function contentWithObservationContext(segment: StreamSegment) {
@@ -368,52 +317,19 @@ export function isHighPrivacySegmentContent(text: string) {
 }
 
 function explainScore(score: SegmentScore): string {
-  const strong = score.contributions.filter((item) => item.value >= 12 && item.key !== "privacy_risk");
-  const reasons = strong.map(creatureReasonForContribution);
-  if (score.privacyRisk > 0) reasons.push("这里有一点隐私味道，我需要放轻");
-  if (score.redundancyPenalty > 0) reasons.push("它和刚才回应过的事太像了");
-  return reasons.length ? `需要回应，因为${reasons.join("，")}。` : "需要回应，因为它比周围背景更像正在发生的事。";
+  return `rule_candidate_score=${score.total}`;
 }
 
 function explainSelected(score: SegmentScore) {
-  const positives = score.contributions.filter((item) => item.value > 0).sort((a, b) => b.value - a.value).slice(0, 3);
-  const reasons = positives.map(creatureReasonForContribution);
-  return reasons.length ? `需要回应，因为${reasons.join("，")}。` : "这件事更像正在发生，需要先回应。";
+  return `rule_candidate_selected score=${score.total}`;
 }
 
 function explainIgnored(score: SegmentScore, selectedCount: number, budget: number) {
-  if (selectedCount >= budget) return "我先不打断，因为刚才已经有更需要回应的事。";
-  if (score.privacyRisk > 45) return "我先放轻它，因为这里有一点隐私味道，要等你的意思。";
-  if (score.redundancyPenalty > 0) return "我先不重复回应，因为它和刚才说过的事太像了。";
-  if (score.total < 38) return "我先安静听过，不打断你。";
-  return "我先不打断，因为刚才那件事更需要回应。";
-}
-
-function creatureReasonForContribution(item: ScoreContribution) {
-  switch (item.key) {
-    case "communication_intent":
-      return "你像是在叫我回应你";
-    case "memory_resonance":
-      return "它关联到以前记住的事";
-    case "emotional_charge":
-      return "里面有担心、重要感或没放下的情绪";
-    case "future_value":
-      return "它以后可能还会回来找你";
-    case "identity_relevance":
-      return "它在影响我应该怎么长大";
-    case "novelty":
-      return "它比周围背景更新一点";
-    case "state_bias":
-      return "你主动告诉了我这件事";
-    case "redundancy_penalty":
-      return "它和刚才的小事有点重复";
-    case "fatigue_penalty":
-      return "我现在没有力气盯住太多东西";
-    case "privacy_risk":
-      return "这里有一点需要保护的边界";
-    default:
-      return item.reason;
-  }
+  if (selectedCount >= budget) return "attention_budget_reached";
+  if (score.privacyRisk > 45) return "privacy_guardrail";
+  if (score.redundancyPenalty > 0) return "redundancy_penalty";
+  if (score.total < 38) return "below_rule_candidate_threshold";
+  return "lower_priority_candidate";
 }
 
 function applyRedundancyPenalty(score: SegmentScore, selectedTags: string[][]): SegmentScore {
@@ -426,7 +342,7 @@ function applyRedundancyPenalty(score: SegmentScore, selectedTags: string[][]): 
     redundancyPenalty: penalty,
     contributions: [
       ...score.contributions,
-      { key: "redundancy_penalty", label: "redundancy", value: -penalty, reason: "和已选 attention event 的主题重复" }
+      { key: "redundancy_penalty", label: "redundancy", value: -penalty, reason: "rule feature: overlaps selected candidate tags" }
     ]
   };
 }

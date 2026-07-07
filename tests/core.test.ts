@@ -40,12 +40,13 @@ describe("creature core", () => {
     expect(result.episodes).toHaveLength(1);
     expect(result.events[0].source).toBe("button");
     expect(result.events[0].attentionStrength).toBeGreaterThan(50);
-    expect(profile.episodes[0].noticed).toContain("不该只是工具");
-    expect(result.response).not.toContain("我先试着理解");
-    expect(result.response).not.toContain("当前工作区");
+    expect(profile.episodes[0].noticed).toContain("candidate_input");
+    expect(profile.episodes[0].inputSummary).toContain("不能像普通工具");
+    expect(result.response).toBe("");
+    expect(result.episodes[0].creatureResponse).toBe("");
   });
 
-  it("rule candidate path creates ordinary shared moments without analysis-template wording", () => {
+  it("rule candidate path only creates neutral candidates without visible creature speech", () => {
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "刚刚医生确认复查时间改到周六上午。");
     const event = result.events[0];
@@ -56,24 +57,19 @@ describe("creature core", () => {
     if (!event.scoreBreakdown) throw new Error("expected score breakdown");
     expect(event.noticed).toContain("复查");
     expect(event.scoreBreakdown.futureValue).toBeGreaterThan(0);
-    expect(result.response).toMatch(/我听见了|之后可能还要再看/);
-    expect(result.episodes[0].possibleIntent).toContain("刚发生或刚想起");
-    expect(result.response).not.toContain("我先试着理解");
-    expect(result.response).not.toContain("我注意到这个片段可能");
-    expect(result.response).not.toContain("我注意到这段");
-    expect(result.response).not.toContain("确认我有没有听对");
+    expect(result.response).toBe("");
+    expect(result.episodes[0].creatureResponse).toBe("");
+    expect(result.episodes[0].possibleIntent).toBe("");
     expect(result.memoryCandidates?.[0].candidateText).toContain("你当时告诉我：刚刚医生确认复查时间改到周六上午");
-    expect(result.memoryCandidates?.[0].candidateText).not.toContain("我听见这件事之后可能还会回来");
-    expect(result.episodes[0].possibleIntent).not.toContain("认真理解并判断");
+    expect(result.memoryCandidates?.[0].whyConsolidate).toBe("");
   });
 
-  it("rule candidate path keeps cognition out of visible dialogue", () => {
+  it("rule candidate path does not synthesize mixed-preference dialogue", () => {
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "我准备去游泳最近每天我都游泳游泳是一个消耗卡路里效率很高的运动我很喜欢但是我不喜欢游泳馆人太多");
 
-    expect(result.response).toContain("我听见了");
-    expect(result.response).toContain("喜欢的部分");
-    expect(result.response).not.toMatch(/我先听你说完|我注意到这段|刚发生的对话|确认我有没有听对|情景记忆|长期记忆/);
+    expect(result.response).toBe("");
+    expect(result.response).not.toMatch(/我听见了|喜欢的部分|我先听你说完|我注意到这段|刚发生的对话|确认我有没有听对|情景记忆|长期记忆/);
     expect(result.episodes[0].creatureResponse).toBe(result.response);
   });
 

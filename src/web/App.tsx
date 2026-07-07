@@ -1236,10 +1236,12 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
         <span>你当时说</span>
         <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode))}</p>
       </div>
-      <div>
-        <span>Papo 当时回你</span>
-        <p>{episodePapoLine(sourceEpisode)}</p>
-      </div>
+      {episodePapoLine(sourceEpisode) ? (
+        <div>
+          <span>Papo 当时回你</span>
+          <p>{episodePapoLine(sourceEpisode)}</p>
+        </div>
+      ) : null}
       <div>
         <span>后来记住</span>
         <strong>{memoryResultLine(memory)}</strong>
@@ -1618,10 +1620,12 @@ function EpisodeCard(props: {
           <span>你</span>
           <p>{userLine}</p>
         </div>
-        <div>
-          <span>Papo</span>
-          <strong>{papoLine}</strong>
-        </div>
+        {papoLine ? (
+          <div>
+            <span>Papo</span>
+            <strong>{papoLine}</strong>
+          </div>
+        ) : null}
       </div>
       {!props.compact ? <EpisodeProcessDetails episode={props.episode} /> : null}
       <EpisodeSourceMoment episode={props.episode} messages={props.sourceMessages ?? []} compact={props.compact} />
@@ -1693,7 +1697,7 @@ function episodePapoLine(episode: EpisodeMemory) {
     .replace(/\s+/g, " ")
     .trim();
   if (cleaned && !looksLikeInternalEpisodeText(cleaned) && !looksLikeInputEcho(cleaned, episode)) return summarizeForEpisode(cleaned);
-  return episode.actionDecision?.action === "ask" ? "我听见了，慢慢说。" : "我听见了。";
+  return "";
 }
 
 function summarizeForEpisode(text: string) {
@@ -1720,7 +1724,7 @@ function EpisodeProcessDetails({ episode }: { episode: EpisodeMemory }) {
       <summary>看看 Papo 怎么处理的</summary>
       <FlowSteps
         steps={[
-          { label: "听见什么", text: noticedText(episode.noticed) },
+          { label: "听见什么", text: episode.inputSummary },
           { label: "怎么理解", text: episode.creatureExperience?.earReason ?? episode.importanceReason },
           { label: "想起什么", text: episode.creatureExperience?.rememberedScene ?? "这次没有关联到以前的事。" },
           { label: "你可能想说", text: episode.possibleIntent },
@@ -1990,7 +1994,7 @@ function visiblePapoReplyText(text: string | undefined) {
     .split(/[。！？.!?]/)
     .map((part) => part.trim())
     .find((part) => part && !looksLikeInternalPapoText(part));
-  return firstVisibleSentence ? `${firstVisibleSentence}。` : "我听见了。";
+  return firstVisibleSentence ? `${firstVisibleSentence}。` : "";
 }
 
 function looksLikeInternalPapoText(text: string) {
@@ -2000,27 +2004,12 @@ function looksLikeInternalPapoText(text: string) {
 function visibleCreatureText(text: string | undefined) {
   if (!text) return "";
   return text
-    .replace(/我会把这次你叫我说话的小片段先记成一段情景记忆。?/g, "你叫了我一声，我听见了。")
-    .replace(/这会先成为一条轻量情景记忆，等你的反馈决定要不要长久留下。?/g, "我会记住这次说话，之后按你的反馈调整。")
-    .replace(/我会先形成情景记忆，不把它无脑塞进长期记忆。?/g, "我会记住这次发生了什么，但不会自己把它放得太重。")
     .replace(/长期保存/g, "一直留下")
     .replace(/情景记忆/g, "这次经历")
     .replace(/长期记忆/g, "一直记得的事")
-    .replace(/写入/g, "记住")
-    .replace(/后台分析/g, "沉默处理")
-    .replace(/竖起耳朵/g, "开始回应")
-    .replace(/把耳朵留给/g, "等")
-    .replace(/耳朵留给/g, "等")
     .replace(/小片段/g, "这件事")
     .replace(/这一小段/g, "这件事")
     .replace(/一小段/g, "一件事")
-    .replace(/抱住/g, "记住")
-    .replace(/抱着/g, "记着")
-    .replace(/叼住/g, "选中")
-    .replace(/叼了出来/g, "选了出来")
-    .replace(/叼出来/g, "选出来")
-    .replace(/叼回来/g, "主动提起")
-    .replace(/摸到/g, "想起")
     .replace(/递给/g, "告诉")
     .replace(/放进同一个小情景里听/g, "放在同一次对话里理解")
     .replace(/放进情景里/g, "当作这次对话来理解")
