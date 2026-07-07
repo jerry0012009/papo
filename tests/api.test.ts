@@ -1,25 +1,25 @@
 import request from "supertest";
 import { describe, expect, it } from "vitest";
-import { createModelProvider } from "../src/core/provider";
+import type { ModelProvider } from "../src/core/provider";
 import { createApp } from "../src/server/app";
 import { MemoryProfileStore } from "../src/server/store";
 
 describe("api", () => {
   it("returns health and provider info", async () => {
-    const app = createApp({ store: new MemoryProfileStore(), provider: createModelProvider({}) });
+    const app = createApp({ store: new MemoryProfileStore(), provider: testProvider() });
 
     await request(app).get("/api/health").expect(200).expect((response) => {
       expect(response.body.ok).toBe(true);
     });
 
     await request(app).get("/api/provider").expect(200).expect((response) => {
-      expect(response.body.kind).toBe("fallback");
-      expect(response.body.diagnostics.audioRoute).toBe("fallback");
+      expect(response.body.kind).toBe("generic");
+      expect(response.body.usesRealModel).toBe(true);
     });
   });
 
   it("runs profile, button, curious, feedback, and emergence endpoints", async () => {
-    const app = createApp({ store: new MemoryProfileStore(), provider: createModelProvider({}) });
+    const app = createApp({ store: new MemoryProfileStore(), provider: testProvider() });
     const created = await request(app).post("/api/profiles").send({ creatureName: "Demo" }).expect(201);
     const userId = created.body.profile.userId;
 
@@ -74,13 +74,13 @@ describe("api", () => {
         expect(response.body.feedback.inputText).toContain("确实要记住");
         expect(response.body.feedback.inputModality).toBe("audio_transcript");
         expect(response.body.feedback.responseAction).toBe("note_memory");
-        expect(response.body.feedback.replyText).toContain("我会把你刚补的这点和");
+        expect(response.body.feedback.replyText).toContain("我学到这件事要记得更稳一点");
         expect(response.body.feedback.policyDeltas.length).toBeGreaterThan(0);
-        expect(response.body.feedback.effect).toContain("你让我帮你记住");
+        expect(response.body.feedback.effect).toContain("你让我帮你把这件事记准一点");
         expect(response.body.feedback.effect).not.toMatch(/用户让我|用户说|策略改变/);
         expect(response.body.profile.conversation[0].channel).toBe("feedback");
         expect(response.body.profile.conversation[0].role).toBe("papo");
-        expect(response.body.profile.conversation[0].text).toContain("我会把你刚补的这点和");
+        expect(response.body.profile.conversation[0].text).toContain("我学到这件事要记得更稳一点");
         expect(response.body.profile.conversation[1].role).toBe("user");
         expect(response.body.profile.conversation[1].text).toContain("帮我记住");
         expect(response.body.profile.conversation[1].text).toContain("这件事确实要记住");
@@ -129,36 +129,9 @@ describe("api", () => {
       });
   });
 
-  it("creates fallback visual and audio sensing material", async () => {
-    const app = createApp({ store: new MemoryProfileStore(), provider: createModelProvider({}) });
-    const base64 = "A".repeat(80);
-
-    await request(app)
-      .post("/api/image-summary")
-      .send({ dataUrl: `data:image/png;base64,${base64}`, label: "截图" })
-      .expect(200)
-      .expect((response) => {
-        expect(response.body.provider).toBe("fallback");
-        expect(response.body.route).toBe("chat_completions");
-        expect(response.body.semanticSource).toBe("fallback");
-        expect(response.body.summary).toContain("图片");
-      });
-
-    await request(app)
-      .post("/api/audio-transcript")
-      .send({ dataUrl: `data:audio/webm;codecs=opus;base64,${base64}`, label: "录音" })
-      .expect(200)
-      .expect((response) => {
-        expect(response.body.provider).toBe("fallback");
-        expect(response.body.route).toBe("fallback");
-        expect(response.body.semanticSource).toBe("fallback");
-        expect(response.body.transcript).toContain("音频");
-      });
-  });
-
   it("keeps empty real-model audio transcripts out of life content", async () => {
     const provider = {
-      ...createModelProvider({}),
+      ...testProvider(),
       kind: "generic" as const,
       name: "empty audio model",
       usesRealModel: true,
@@ -181,9 +154,9 @@ describe("api", () => {
       });
   });
 
-  it("keeps sensing provider errors out of user-editable fallback text", async () => {
+  it("fails loudly when sensing provider errors", async () => {
     const provider = {
-      ...createModelProvider({}),
+      ...testProvider(),
       kind: "generic" as const,
       name: "failing sensing model",
       usesRealModel: true,
@@ -206,29 +179,23 @@ describe("api", () => {
     await request(app)
       .post("/api/image-summary")
       .send({ dataUrl: `data:image/png;base64,${"A".repeat(80)}`, label: "坏图" })
-      .expect(200)
+      .expect(500)
       .expect((response) => {
-        expect(response.body.semanticSource).toBe("fallback");
-        expect(response.body.summary).toContain("你可以补一句");
-        expect(response.body.summary).not.toMatch(/provider failed|403|denied/i);
         expect(response.body.error).toContain("Vision provider failed");
       });
 
     await request(app)
       .post("/api/audio-transcript")
       .send({ dataUrl: `data:audio/wav;base64,${"A".repeat(80)}`, label: "坏录音" })
-      .expect(200)
+      .expect(500)
       .expect((response) => {
-        expect(response.body.semanticSource).toBe("fallback");
-        expect(response.body.transcript).toContain("你可以补一句");
-        expect(response.body.transcript).not.toMatch(/provider failed|unsupported_format|400/i);
         expect(response.body.error).toContain("Audio provider failed");
       });
   });
 
   it("reports the actual modality provider when audio is routed away from the semantic brain", async () => {
     const provider = {
-      ...createModelProvider({}),
+      ...testProvider(),
       kind: "openrouter" as const,
       name: "OpenRouter + Generic model API audio",
       usesRealModel: true,
@@ -254,3 +221,92 @@ describe("api", () => {
       });
   });
 });
+
+function testProvider(): ModelProvider {
+  return {
+    kind: "generic",
+    name: "Test real-model harness",
+    available: true,
+    usesRealModel: true,
+    diagnostics: {
+      textProvider: "generic",
+      visionProvider: "generic",
+      audioProvider: "generic",
+      textModel: "test-text",
+      visionModel: "test-vision",
+      audioModel: "test-audio",
+      audioRoute: "audio_transcriptions"
+    },
+    generate: async () => "",
+    summarizeImage: async () => "照片里是周五复查的日历备注，写着提前准备病历。",
+    transcribeAudio: async () => "这段声音里有人说周五复查。",
+    generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+      const attentionId = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "";
+      const candidateId = prompt.match(/"candidateId":"(candidate_[^"]+)"/)?.[1] ?? "";
+      const memoryId = prompt.match(/"id":"(ltm_[^"]+)"/)?.[1] ?? "";
+      if (prompt.includes("行动选择脑")) {
+        return { decisions: [{ eventId: attentionId, action: "respond", shouldReply: true, reply: "我听见了，会认真陪你把这件事接住。" }] } as T;
+      }
+      if (prompt.includes("语义脑")) {
+        return {
+          response: "我听见了，会认真陪你把这件事接住。",
+          interaction: {
+            shouldReply: true,
+            suggestedAction: "respond",
+            reply: "我听见了，会认真陪你把这件事接住。",
+            memoryCandidateText: "你提到妈妈复查这件事让你有点担心，希望我认真听。",
+            memoryTags: ["复查", "担心"]
+          }
+        } as T;
+      }
+      if (prompt.includes("注意决策脑")) {
+        return {
+          shouldAttend: true,
+          selected: [{ segmentId: "s2", whySelected: "这张照片和复查准备有关，值得回应。" }],
+          ignored: [{ segmentId: "s1", whyIgnored: "午饭只是背景。" }],
+          creatureReport: "我把照片里的复查准备和你刚才的担心放在一起听。"
+        } as T;
+      }
+      if (prompt.includes("记忆决策脑")) {
+        return {
+          candidates: [{
+            candidateId,
+            shouldKeepCandidate: true,
+            candidateText: "你提到妈妈复查这件事让你担心，也补了照片里的准备线索。",
+            memoryKind: "future_review",
+            confidence: 78,
+            writePolicy: "wait_feedback",
+            whyConsolidate: "这件事之后还可能回来。",
+            decayPolicy: "decay_without_feedback",
+            tags: ["复查"]
+          }]
+        } as T;
+      }
+      if (prompt.includes("反馈反思脑")) {
+        return {
+          responseAction: "note_memory",
+          stateDeltas: { attachment: 3 },
+          policyDeltas: { recallTendency: 4 },
+          memoryWeightDelta: 8,
+          learningNote: "我学到这件事要记得更稳一点。",
+          followUpText: "我会把你补的这点和原来的事放在一起。",
+          effect: "你让我帮你把这件事记准一点。"
+        } as T;
+      }
+      if (prompt.includes("反馈学习结果")) {
+        return { learningNote: "我学到这件事要记得更稳一点。", followUpText: "我会把你补的这点和原来的事放在一起。" } as T;
+      }
+      if (prompt.includes("主动浮现大脑")) {
+        return {
+          shouldEmerge: Boolean(memoryId),
+          memoryId,
+          driveSource: "attachment",
+          whyNow: "我想起这件事是因为你刚才把它教得更重要了。",
+          message: "我又想起妈妈复查这件事，记得你希望我把准备线索接住。",
+          proactiveLevel: "gentle"
+        } as T;
+      }
+      return { message: "我又想起妈妈复查这件事，记得你希望我把准备线索接住。" } as T;
+    }
+  };
+}

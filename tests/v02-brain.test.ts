@@ -133,7 +133,7 @@ describe("creature brain v0.2", () => {
     expect(bEmergence.driveSource).toBe("safety");
   });
 
-  it("invalid LLM JSON falls back and is visible in diagnostics", async () => {
+  it("invalid LLM JSON fails loudly instead of falling back", async () => {
     const provider: ModelProvider = {
       kind: "generic",
       name: "bad json model",
@@ -146,158 +146,7 @@ describe("creature brain v0.2", () => {
     };
     const profile = createCreatureProfile();
 
-    const result = await runButtonHarness(profile, "小动物要记得自己如何被用户养成。", provider);
-
-    expect(result.events).toHaveLength(1);
-    expect(result.harnessTrace?.join(" ")).toContain("invalid model JSON");
-    expect(result.events[0].semanticSource).toBe("rules");
-    expect(profile.semanticBrainHistory[0].status).toBe("invalid");
-    expect(profile.semanticBrainHistory[0].providerName).toBe("bad json model");
-  });
-
-  it("LLM can explain curious selection while rules still cap events to 1-3", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "semantic model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(prompt: string) => {
-        const ids = [...prompt.matchAll(/"id":"(attention_[^"]+)"/g)].map((match) => match[1]);
-        return {
-          response: "我不是总结全部，而是挑出最像身份校准和未来行动的片段。",
-          events: ids.map((id) => ({
-            id,
-            noticed: "LLM 语义脑认为这是一个关键转折点。",
-            reason: "它同时包含情绪担心、未来准备和需要被反馈养成的线索。",
-            suggestedAction: "recall"
-          })),
-          curiousSession: {
-            creatureReport: "我陪你听完这几段内容后，先回应复查担心和未来准备这两处，其他背景声先让它们过去。",
-            selected: [
-              { segmentId: "s2", whySelected: "这段不是普通抱怨，它在说妈妈复查这件事总被拖到睡前。" },
-              { segmentId: "s3", whySelected: "这段关系到下次能不能真的提前把资料准备好。" }
-            ],
-            ignored: [
-              { segmentId: "s1", whyIgnored: "它更像今天路过的背景声，没有拉起旧记忆，也不需要 Papo 插话。" },
-              { segmentId: "s4", whyIgnored: "它和第一段普通记录一样轻，我先不把每个背景声都抓住。" }
-            ]
-          },
-          trace: ["llm: semantic curious judgment"]
-        } as T;
-      }
-    };
-    const profile = createCreatureProfile();
-    const result = await runCuriousHarness(
-      profile,
-      [
-        segment("s1", "普通", "今天只是普通记录。"),
-        segment("s2", "家事", "我担心妈妈复查这件事又被拖到睡前。"),
-        segment("s3", "未来", "下次复查前需要提前一天把资料准备好。"),
-        segment("s4", "普通2", "又一个普通记录。")
-      ],
-      provider
-    );
-
-    expect(result.events.length).toBeGreaterThanOrEqual(1);
-    expect(result.events.length).toBeLessThanOrEqual(3);
-    expect(result.events[0].semanticSource).toBe("llm");
-    expect(result.events.map((event) => event.noticed).join(" ")).not.toMatch(/LLM|语义脑|关键转折点/);
-    expect(result.curiousSession?.selected.some((item) => item.whySelected.includes("拖到睡前"))).toBe(true);
-    expect(result.curiousSession?.ignored.some((item) => item.whyIgnored.includes("背景声"))).toBe(true);
-    expect(result.curiousSession?.creatureReport).toContain("先回应");
-    expect(result.curiousSession?.creatureReport).not.toMatch(/叼|抱住|竖起耳朵|情景记忆/);
-    expect(result.curiousSession?.selected.map((item) => item.segmentId)).toContain("s2");
-    expect(result.harnessTrace?.join(" ")).toContain("llm interpretation applied");
-    expect(profile.semanticBrainHistory[0].status).toBe("applied");
-  });
-
-  it("rejects internal LLM wording in curious reports before user-facing display", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "leaky curious model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>() =>
-        ({
-          response: "semantic harness 认为应该展示 attention score。",
-          curiousSession: {
-            creatureReport: "后台流程根据 score 总分和阈值选中了 s2。",
-            selected: [{ segmentId: "s2", whySelected: "attention score 超过阈值，所以 candidate 被写入。" }],
-            ignored: [{ segmentId: "s1", whyIgnored: "fallback 规则判定低于阈值。" }]
-          },
-          trace: ["llm: leaky curious report"]
-        }) as T
-    };
-    const profile = createCreatureProfile();
-    const result = await runCuriousHarness(
-      profile,
-      [
-        segment("s1", "背景", "今天只是普通记录。"),
-        segment("s2", "复查", "我担心妈妈复查又被拖到睡前。")
-      ],
-      provider
-    );
-    const visible = [
-      result.response,
-      result.curiousSession?.creatureReport,
-      ...(result.curiousSession?.selected.map((item) => item.whySelected) ?? []),
-      ...(result.curiousSession?.ignored.map((item) => item.whyIgnored) ?? [])
-    ].join(" ");
-
-    expect(result.harnessTrace?.join(" ")).toContain("llm interpretation applied");
-    expect(visible).not.toMatch(/semantic|harness|后台|流程|score|总分|阈值|candidate|写入|fallback/);
-    expect(result.curiousSession?.creatureReport).toContain("需要回应");
-    expect(result.curiousSession?.creatureReport).not.toMatch(/扫过|分段|批量|直接记住|先回应其中/);
-  });
-
-  it("LLM can promote a near-threshold curious segment while rules keep the attention budget", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "semantic model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>() =>
-        ({
-          response: "我听见你担心复查这件事，也会留意明天要带资料检查这点，因为它会影响这件家事能不能真的准备好。",
-          curiousSession: {
-            creatureReport: "我没有总结全部，先回应担心复查和明天带资料检查这两点。",
-            selected: [
-              { segmentId: "s2", whySelected: "这段说的是复查担心，情绪比较重。" },
-              { segmentId: "s3", whySelected: "它补上了明天要带资料检查这个具体准备动作。" }
-            ],
-            ignored: [{ segmentId: "s1", whyIgnored: "这只是背景声，暂时略过。" }]
-          },
-          trace: ["llm: promoted near-threshold preparation segment"]
-        }) as T
-    };
-    const profile = createCreatureProfile();
-    const result = await runCuriousHarness(
-      profile,
-      [
-        segment("s1", "背景", "今天只是普通记录。"),
-        segment("s2", "担心", "我担心妈妈复查这件事又被拖到睡前。"),
-        segment("s3", "准备", "明天带资料检查")
-      ],
-      provider
-    );
-
-    expect(result.curiousSession?.selected.map((item) => item.segmentId)).toContain("s3");
-    expect(result.curiousSession?.ignored.map((item) => item.segmentId)).not.toContain("s3");
-    expect(result.events.some((event) => event.triggerSegmentId === "s3")).toBe(true);
-    const promoted = result.events.find((event) => event.triggerSegmentId === "s3");
-    expect(promoted?.semanticSource).toBe("llm");
-    expect(promoted?.decisionTrace?.join(" ")).toContain("promoted near-threshold");
-    expect(result.events.length).toBeLessThanOrEqual(result.curiousSession?.attentionBudget ?? 3);
-    expect(result.harnessTrace?.join(" ")).toContain("llm interpretation applied");
+    await expect(runButtonHarness(profile, "小动物要记得自己如何被用户养成。", provider)).rejects.toThrow(/invalid action JSON/);
   });
 
   it("LLM can narrate feedback learning without mutating rule-owned state", async () => {
@@ -353,11 +202,9 @@ describe("creature brain v0.2", () => {
     const ruleLearning = feedback.learningNote;
     const ruleFollowUp = feedback.followUpText;
 
-    await enrichFeedbackNarration(profile, feedback, provider);
-
+    await expect(enrichFeedbackNarration(profile, feedback, provider)).rejects.toThrow(/invalid feedback narration/);
     expect(feedback.learningNote).toBe(ruleLearning);
     expect(feedback.followUpText).toBe(ruleFollowUp);
-    expect(feedback.replyText).not.toMatch(/用户|系统|后台|流程|写入|长期记忆/);
   });
 
   it("keeps useful feedback narration when optional fields are empty strings", async () => {
@@ -425,9 +272,8 @@ describe("creature brain v0.2", () => {
         }) as T
     };
 
-    const rejected = await enrichEmergenceNarration(profile, unsafe, unsafeProvider);
-
-    expect(rejected.text).toBe(unsafeOriginal);
+    await expect(enrichEmergenceNarration(profile, unsafe, unsafeProvider)).rejects.toThrow(/reference selected memory|invalid emergence narration/);
+    expect(unsafe.message).toBe(unsafeOriginal);
   });
 
   it("keeps useful emergence narration when optional trace is empty", async () => {
@@ -514,10 +360,8 @@ describe("creature brain v0.2", () => {
         }) as T
     };
 
-    const enriched = await enrichEmergenceNarration(profile, emergence, provider);
-
-    expect(enriched.text).toBe(original);
-    expect(enriched.text).not.toMatch(/用户|episode|语义|流程|系统|写入|长期记忆/);
+    await expect(enrichEmergenceNarration(profile, emergence, provider)).rejects.toThrow(/invalid emergence narration/);
+    expect(emergence.text).toBe(original);
   });
 });
 

@@ -1,12 +1,11 @@
 import { z } from "zod";
 import { guardActionDecision } from "./action";
 import { createMemoryResonanceEmergence } from "./emergence";
-import { buildAttentionEvent, composeCreatureResponse, handleButtonCapture, handleCuriousStream, isHighPrivacySegmentContent } from "./attention";
-import { createCuriousCreatureReport } from "./experience";
+import { buildAttentionEvent, handleButtonCapture, handleCuriousStream, isHighPrivacySegmentContent } from "./attention";
 import { makeId } from "./ids";
+import { modelConversationContext, modelMemoryContext } from "./model-context";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
-import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import { semanticSelectAction } from "./semantic-action";
 import { semanticDecideAttention } from "./semantic-attention";
 import { semanticDecideMemory } from "./semantic-memory";
@@ -14,13 +13,20 @@ import type { ActionKind, CaptureResult, CreatureProfile, SemanticBrainRecord, S
 
 const actionSchema = z.enum(["observe", "respond", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list"]);
 const optionalText = (max: number) =>
-  z.preprocess((value) => (typeof value === "string" && !value.trim() ? undefined : value), z.string().min(1).max(max).optional());
+  z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
 const optionalTextArray = (maxItems: number, maxText: number) =>
   z
-    .array(z.preprocess((value) => (typeof value === "string" ? value.trim() : value), z.string().max(maxText)).optional())
+    .array(z.preprocess((value) => cleanOptionalText(value, maxText), z.string().optional()))
     .transform((values) => values.filter((value): value is string => Boolean(value)))
     .pipe(z.array(z.string().min(1).max(maxText)).max(maxItems))
     .optional();
+
+function cleanOptionalText(value: unknown, max: number) {
+  if (value === null) return undefined;
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : undefined;
+}
 
 const brainSuggestionSchema = z.object({
   response: optionalText(900),
@@ -96,9 +102,7 @@ const brainSuggestionSchema = z.object({
 );
 
 type BrainSuggestion = z.infer<typeof brainSuggestionSchema>;
-type SemanticBrainAskResult =
-  | { status: "applied"; suggestion: BrainSuggestion; message: string }
-  | { status: "empty" | "invalid"; message: string };
+type SemanticBrainAskResult = { suggestion: BrainSuggestion; message: string };
 
 export async function runButtonHarness(
   profile: CreatureProfile,
@@ -132,82 +136,29 @@ async function enrichWithSemanticBrain(
     `provider: ${provider.kind}`
   ];
 
-  if (!provider.usesRealModel || !result.events.length) {
-    applyFallbackInteractionUnderstanding(profile, result, source);
-    recordMemoryResonance(profile, result);
-    result.harnessTrace = [...trace, "semantic: fallback/rules only"];
-    recordSemanticBrainRun(profile, provider, source, "skipped", provider.usesRealModel ? "no attention events to enrich" : "fallback provider; rules handled the loop");
-    return result;
-  }
+  if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for cognition.");
+  if (!result.events.length) throw new Error("Papo did not produce any attention event to interpret.");
 
-  try {
-    if (source === "curious_stream") {
-      await semanticDecideAttention(profile, result, provider);
-    }
-    await semanticSelectAction(profile, result, provider, source);
-    const semantic = await askSemanticBrain(profile, result, provider, source);
-    if (semantic.status !== "applied") {
-      applyFallbackInteractionUnderstanding(profile, result, source);
-      recordMemoryResonance(profile, result);
-      result.harnessTrace = [...trace, `semantic: ${semantic.message}`];
-      recordSemanticBrainRun(profile, provider, source, semantic.status, semantic.message);
+  if (source === "curious_stream") {
+    await semanticDecideAttention(profile, result, provider);
+    if (!result.events.length) {
+      result.harnessTrace = [...trace, "semantic: llm ignored all candidates"];
+      recordSemanticBrainRun(profile, provider, source, "applied", "llm attention decision ignored all candidates");
       return result;
     }
-
-    const suggestion = semantic.suggestion;
-    applySuggestion(profile, result, suggestion, source);
-    if (result.memoryCandidates?.length) {
-      await semanticDecideMemory(profile, result.memoryCandidates, provider);
-    }
-    result.harnessTrace = [...trace, "semantic: llm interpretation applied", ...(suggestion.trace ?? [])];
-    recordSemanticBrainRun(profile, provider, source, "applied", semantic.message);
-    return result;
-  } catch (error) {
-    const message = `model failed (${error instanceof Error ? error.message : "unknown"})`;
-    applyFallbackInteractionUnderstanding(profile, result, source);
-    recordMemoryResonance(profile, result);
-    result.harnessTrace = [...trace, `semantic: ${message}`];
-    recordSemanticBrainRun(profile, provider, source, "failed", message);
-    return result;
   }
-}
-
-function applyFallbackInteractionUnderstanding(
-  profile: CreatureProfile,
-  result: CaptureResult,
-  source: "button" | "curious_stream"
-) {
-  if (source !== "button") return;
-  const event = result.events[0];
-  const episode = result.episodes[0];
-  if (!event || !episode) return;
-  if (!looksLikeDirectCall(event.triggerContent)) return;
-
-  event.actionDecision = guardActionDecision(event, profile, "respond");
-  event.suggestedAction = event.actionDecision.action;
-  event.semanticSource = "fallback";
-  event.decisionTrace = [
-    ...(event.decisionTrace ?? []),
-    "fallback: direct-call heuristic used because semantic model was unavailable",
-    `guardrail: action=${event.actionDecision.action}`
-  ];
-
-  const reply = "我在，听见你了。";
-  result.response = reply;
-  episode.creatureResponse = reply;
-  episode.actionDecision = event.actionDecision;
-  episode.decisionTrace = event.decisionTrace;
-  episode.creatureExperience = {
-    ...event.creatureExperience,
-    earReason: "你在叫我，我抬头回你一声。",
-    actionFeeling: "我回你一声，让你知道我在。",
-    saveFeeling: "我会记住这次说话，之后按你的反馈调整。"
-  };
-  updateMemoryCandidate(result, episode.id, `你曾经对我说：${event.triggerContent.trim()}。当时我回应你：${reply}`, ["回应", "共同经历"]);
-}
-
-function looksLikeDirectCall(text: string) {
-  return /说句话|说话|回复|回答|你在吗|你好|hello|汪|打招呼|叫你|听见|听到|回应/i.test(text);
+  clearRuleVisibleDrafts(result);
+  await semanticSelectAction(profile, result, provider, source);
+  const semantic = await askSemanticBrain(profile, result, provider, source);
+  const suggestion = semantic.suggestion;
+  applySuggestion(profile, result, suggestion, source);
+  ensureVisibleOutputContract(result);
+  if (result.memoryCandidates?.length) {
+    await semanticDecideMemory(profile, result.memoryCandidates, provider);
+  }
+  result.harnessTrace = [...trace, "semantic: llm interpretation applied", ...(suggestion.trace ?? [])];
+  recordSemanticBrainRun(profile, provider, source, "applied", semantic.message);
+  return result;
 }
 
 async function askSemanticBrain(
@@ -217,15 +168,12 @@ async function askSemanticBrain(
   source: "button" | "curious_stream"
 ): Promise<SemanticBrainAskResult> {
   const suggestion = await provider.generateJson<unknown>(buildPrompt(profile, result, source));
-  if (!suggestion) return { status: "empty", message: "empty model result" };
+  if (!suggestion) throw new Error("empty model result");
   const parsed = brainSuggestionSchema.safeParse(suggestion);
   if (!parsed.success) {
-    return {
-      status: "invalid",
-      message: `invalid model JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`
-    };
+    throw new Error(`invalid model JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   }
-  return { status: "applied", suggestion: parsed.data, message: "llm interpretation applied" };
+  return { suggestion: parsed.data, message: "llm interpretation applied" };
 }
 
 function applySuggestion(profile: CreatureProfile, result: CaptureResult, suggestion: BrainSuggestion, source: "button" | "curious_stream") {
@@ -252,16 +200,17 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
     ];
     if (primaryEpisode) {
       if (interaction.userIntent) primaryEpisode.possibleIntent = safeProcessText(interaction.userIntent, primaryEpisode.possibleIntent) ?? primaryEpisode.possibleIntent;
-      const safeReply = actionConflict ? undefined : safeExternalReplyText(interaction.reply, primaryEpisode.creatureResponse, primaryEvent.triggerContent);
+      const safeReply = actionConflict ? undefined : safeExternalReplyText(interaction.reply, primaryEvent.triggerContent);
       if (safeReply) primaryEpisode.creatureResponse = safeReply;
       if (interaction.memoryTags?.length) primaryEpisode.tags = interaction.memoryTags;
       updateMemoryCandidate(result, primaryEpisode.id, interaction.memoryCandidateText, interaction.memoryTags);
     }
-    const safeReply = actionConflict ? undefined : safeExternalReplyText(interaction.reply, result.response, primaryEvent.triggerContent);
+    const safeReply = actionConflict ? undefined : safeExternalReplyText(interaction.reply, primaryEvent.triggerContent);
     if (safeReply && interaction.reply) {
       result.response = safeReply;
     } else if (!actionConflict && interaction.shouldReply === false && suggestedAction) {
-      result.response = quietInteractionResponse(primaryEvent.actionDecision.action, source);
+      result.response = "";
+      if (primaryEpisode) primaryEpisode.creatureResponse = "";
     }
   }
 
@@ -269,8 +218,8 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
     const event = eventById.get(eventSuggestion.id);
     if (!event) continue;
 
-    if (eventSuggestion.noticed) event.noticed = safeCreatureFacingText(eventSuggestion.noticed, event.noticed) ?? event.noticed;
-    if (eventSuggestion.reason) event.reason = safeCreatureFacingText(eventSuggestion.reason, event.reason) ?? event.reason;
+    if (eventSuggestion.noticed) event.noticed = safeProcessText(eventSuggestion.noticed, event.noticed) ?? event.noticed;
+    if (eventSuggestion.reason) event.reason = safeProcessText(eventSuggestion.reason, event.reason) ?? event.reason;
     if (eventSuggestion.suggestedAction) {
       if (!hasAppliedSemanticAction(event)) {
         event.actionDecision = guardActionDecision(event, profile, eventSuggestion.suggestedAction);
@@ -292,7 +241,7 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
     if (episodeSuggestion.importanceReason) episode.importanceReason = safeProcessText(episodeSuggestion.importanceReason, episode.importanceReason) ?? episode.importanceReason;
     if (episodeSuggestion.creatureResponse) {
       const event = result.events.find((item) => item.id === episodeSuggestion.eventId);
-      episode.creatureResponse = safeExternalReplyText(episodeSuggestion.creatureResponse, episode.creatureResponse, event?.triggerContent) ?? episode.creatureResponse;
+      episode.creatureResponse = safeExternalReplyText(episodeSuggestion.creatureResponse, event?.triggerContent) ?? episode.creatureResponse;
     }
     episode.decisionTrace = [
       ...(episode.decisionTrace ?? []),
@@ -320,7 +269,7 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
   recordMemoryResonance(profile, result);
 
   if (suggestion.response && !shouldSuppressTopLevelResponse(suggestion.interaction) && !hasConflictingAppliedAction(primaryEvent, suggestion, profile)) {
-    result.response = safeExternalReplyText(suggestion.response, result.response, primaryEvent?.triggerContent) ?? result.response;
+    result.response = safeExternalReplyText(suggestion.response, primaryEvent?.triggerContent) ?? result.response;
   }
   if (primaryEpisode && result.response) {
     primaryEpisode.creatureResponse = result.response;
@@ -338,13 +287,6 @@ function semanticActionFromInteraction(
     return "observe";
   }
   return undefined;
-}
-
-function quietInteractionResponse(action: ActionKind, source: "button" | "curious_stream") {
-  if (action === "ask") return "我听见了。你可以再多说一点。";
-  if (action === "quiet") return "我听见了，这次先不急着追问。";
-  if (source === "curious_stream") return "我听见了最重要的那一点。";
-  return "我听见了，这次先不急着追问。";
 }
 
 function shouldSuppressTopLevelResponse(interaction?: BrainSuggestion["interaction"]) {
@@ -370,7 +312,7 @@ function applyCuriousSessionSuggestion(result: CaptureResult, suggestion: BrainS
   const ignoredById = new Map(session.ignored.map((item) => [item.segmentId, item]));
   for (const item of narrative.selected ?? []) {
     const selected = selectedById.get(item.segmentId);
-    const whySelected = safeCreatureFacingText(item.whySelected, selected?.whySelected)?.trim();
+    const whySelected = safeCreatureFacingText(item.whySelected)?.trim();
     if (selected) {
       if (whySelected) selected.whySelected = whySelected;
       continue;
@@ -380,11 +322,11 @@ function applyCuriousSessionSuggestion(result: CaptureResult, suggestion: BrainS
 
   for (const item of narrative.ignored ?? []) {
     const ignored = ignoredById.get(item.segmentId);
-    const whyIgnored = safeCreatureFacingText(item.whyIgnored, ignored?.whyIgnored)?.trim();
+    const whyIgnored = safeCreatureFacingText(item.whyIgnored)?.trim();
     if (ignored && whyIgnored) ignored.whyIgnored = whyIgnored;
   }
 
-  session.creatureReport = safeCreatureFacingText(narrative.creatureReport, createCuriousCreatureReport(session)) ?? createCuriousCreatureReport(session);
+  if (narrative.creatureReport) session.creatureReport = safeCreatureFacingText(narrative.creatureReport) ?? session.creatureReport;
 }
 
 function promoteCuriousCandidate(result: CaptureResult, segmentId: string, whySelected: string) {
@@ -417,8 +359,7 @@ function promoteCuriousCandidate(result: CaptureResult, segmentId: string, whySe
     `guardrail: attention_budget=${session.attentionBudget}`,
     `guardrail: score_total=${candidate.score.total}`
   ];
-  const response = composeCreatureResponse(result.profile, event);
-  const episode = createEpisodeFromEvent(event, response, now);
+  const episode = createEpisodeFromEvent(event, "", now);
   const memoryCandidate = createMemoryCandidateFromEpisode(result.profile, episode, { now });
 
   result.events.push(event);
@@ -459,44 +400,50 @@ function interactionExperience(interaction: NonNullable<BrainSuggestion["interac
   };
 }
 
+function clearRuleVisibleDrafts(result: CaptureResult) {
+  result.response = "";
+  for (const episode of result.episodes) {
+    episode.creatureResponse = "";
+  }
+}
+
+function ensureVisibleOutputContract(result: CaptureResult) {
+  const primaryAction = result.events[0]?.actionDecision.action;
+  if (!primaryAction || primaryAction === "observe" || primaryAction === "quiet") return;
+  if (!result.response.trim()) throw new Error("model selected a visible action without a visible reply");
+}
+
 function safeVisibleReaction(text?: string) {
   const normalized = safeCreatureFacingText(text);
   return normalized ? `${trimSentence(normalized)}。` : undefined;
 }
 
-function safeCreatureFacingText(text?: string, fallback?: string) {
+function safeCreatureFacingText(text?: string) {
   const raw = text?.trim();
-  if (!raw) return fallback;
-  if (containsInternalProcessLanguage(raw)) return fallback;
+  if (!raw) return undefined;
+  if (containsInternalProcessLanguage(raw)) throw new Error("model returned internal process language for visible text");
   const normalized = normalizeSharedMemoryText(raw).trim();
-  if (!normalized || containsInternalProcessLanguage(normalized)) return fallback;
+  if (!normalized || containsInternalProcessLanguage(normalized)) throw new Error("model returned invalid visible text");
   return normalized;
 }
 
-function safeExternalReplyText(text?: string, fallback?: string, sourceText?: string) {
-  if (sourceText && isPapoWordingQuestion(sourceText) && text && containsInternalProcessLanguage(text)) {
-    return "如果我刚才那样说，那句确实别扭。我的意思只是：我听见你了，想回你一声；后面没有藏什么复杂的事。";
-  }
-  const normalized = safeCreatureFacingText(text, fallback);
-  if (!normalized) return fallback;
-  if (containsFullInputEcho(normalized, sourceText)) return fallback;
+function safeExternalReplyText(text?: string, sourceText?: string) {
+  const normalized = safeCreatureFacingText(text);
+  if (!normalized) return undefined;
+  if (containsFullInputEcho(normalized, sourceText)) throw new Error("model echoed the full user input in visible reply");
   return normalized;
 }
 
-function isPapoWordingQuestion(text: string) {
-  return /为什么.*说|你.*说.*什么意思|还想后干啥|后面.*干啥|刚才.*意思/.test(text);
-}
-
-function safeProcessText(text?: string, fallback?: string) {
+function safeProcessText(text?: string, previousText?: string) {
   const raw = text?.trim();
-  if (!raw) return fallback;
+  if (!raw) return previousText;
   const normalized = normalizeSharedMemoryText(raw).trim();
-  if (!normalized || containsInternalProcessLanguage(normalized)) return fallback;
+  if (!normalized || containsInternalProcessLanguage(normalized)) return previousText;
   return normalized;
 }
 
 function containsInternalProcessLanguage(text: string) {
-  return /LLM|语义|用户意图|用户在|用户希望|用户可能|用户主动|用户确认|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|长期留下|要不要长期记|prompt|JSON|score|阈值|总分|fallback|小动物|我注意到这段|我注意到这个片段|片段可能|认真理解|路过的背景声|我先听你说完|这件事我会先当作|确认我有没有听对|我为什么注意|我想起了什么|我猜你在做|我当时的状态|我选择|显著性|记忆策略|你刚才是在叫我说话|先回应你|先回答你/i.test(text);
+  return /LLM|语义|用户意图|用户在|用户希望|用户可能|用户主动|用户确认|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|长期留下|要不要长期记|prompt|JSON|score|阈值|总分|小动物|我注意到这段|我注意到这个片段|片段可能|认真理解|路过的背景声|我先听你说完|这件事我会先当作|确认我有没有听对|我为什么注意|我想起了什么|我猜你在做|我当时的状态|我选择|显著性|记忆策略|你刚才是在叫我说话|先回应你|先回答你/i.test(text);
 }
 
 function containsFullInputEcho(reply: string, sourceText?: string) {
@@ -565,6 +512,7 @@ function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "b
 - 写一段 response，给用户展示这次小动物的整体回应。
 - response/reply/creatureResponse 必须像自然对话，不要说“我注意到这段...”“这件事我会先当作...”“确认我有没有听对”“要不要长期记”。这些属于内隐认知，不是外显台词。
 - 如果用户追问 Papo 刚才为什么那样说，应该直接解释“我刚才说得别扭，我只是想让你知道我听见了”，不要复读原句，也不要装作没听懂。
+- 明确区分说话者和被指代对象：用户消息里的“我”通常是用户，“你”通常是 Papo；Papo 回复里的“我”才是 Papo 自己。不要把用户对 Papo 的描述误写成用户自己的经历。
 - noticed/reason/possibleIntent/importanceReason 可以记录内隐理解，但也不要使用“用户意图/后台流程/语义判断”等工程词。
 - 所有会展示给用户的字段（response, reply, creatureResponse, visibleReaction, creatureReport, whySelected, whyIgnored）都必须是可直接展示的自然语言；不要出现 LLM、语义脑、score、阈值、candidate、episode、后台流程等内部词。
 - 如果 contentHiddenForPrivacy=true，只能说这类内容会先等用户确认，不能声称看到了具体内容，也不要说“我看到啦”。
@@ -589,13 +537,10 @@ profile_state:
 ${JSON.stringify(profile.state)}
 
 recent_long_term_memories:
-${JSON.stringify(profile.longTermMemories.slice(0, 6).map((memory) => {
-  const privacyHigh = hasHighPrivacyText(`${memory.text} ${memory.tags.join(" ")}`);
-  return { id: memory.id, kind: memory.kind, text: textForModel(memory.text, privacyHigh), contentHiddenForPrivacy: privacyHigh, weight: memory.weight, tags: tagsForModel(memory.tags, privacyHigh) };
-}))}
+${JSON.stringify(modelMemoryContext(profile.longTermMemories, { limit: 6 }))}
 
 recent_conversation_newest_first:
-${JSON.stringify(recentConversationForModel(profile))}
+${JSON.stringify(modelConversationContext(profile))}
 
 source:
 ${source}
@@ -665,18 +610,4 @@ function modelSafeSegmentContent(text: string) {
 function modelSafeTags(text: string, tags: string[]) {
   if (!isHighPrivacySegmentContent(text)) return tags;
   return [];
-}
-
-function recentConversationForModel(profile: CreatureProfile) {
-  return (profile.conversation ?? []).slice(0, 10).map((message) => {
-    const privacyHigh = hasHighPrivacyText(message.text);
-    return {
-      role: message.role,
-      channel: message.channel,
-      text: textForModel(message.text, privacyHigh),
-      contentHiddenForPrivacy: privacyHigh,
-      at: message.at,
-      modality: message.modality
-    };
-  });
 }

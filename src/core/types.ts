@@ -14,7 +14,7 @@ export type ActionKind =
 export type FeedbackKind = "understood" | "continue" | "not_now" | "remember" | "forget";
 export type FeedbackResponseAction = "acknowledge" | "ask_follow_up" | "quiet" | "note_memory";
 export type SegmentKind = "text" | "image_summary" | "audio_transcript";
-export type ProviderKind = "mimo" | "openrouter" | "generic" | "fallback";
+export type ProviderKind = "mimo" | "openrouter" | "generic";
 export type ConversationChannel = "wake" | "button" | "curious" | "feedback" | "emergence";
 
 export interface CreatureState {
@@ -152,7 +152,7 @@ export interface AttentionEvent {
   scoreBreakdown?: SegmentScore;
   creatureExperience: CreatureExperience;
   tags: string[];
-  semanticSource: "rules" | "llm" | "fallback";
+  semanticSource: "rules" | "llm";
   decisionTrace?: string[];
   createdAt: string;
 }

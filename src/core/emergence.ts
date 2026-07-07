@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { makeId } from "./ids";
+import { modelConversationContext, modelFeedbackContext } from "./model-context";
 import { toCreatureMemoryVoice } from "./memory";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
@@ -7,7 +8,14 @@ import { summarizeText } from "./text";
 import type { AttentionEvent, CreatureProfile, EmergenceRecord, LongTermMemory } from "./types";
 
 const optionalText = (max: number) =>
-  z.preprocess((value) => (typeof value === "string" && !value.trim() ? undefined : value), z.string().min(1).max(max).optional());
+  z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
+
+function cleanOptionalText(value: unknown, max: number) {
+  if (value === null) return undefined;
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : undefined;
+}
 
 const semanticEmergenceSchema = z
   .object({
@@ -33,44 +41,25 @@ export function createActiveEmergence(profile: CreatureProfile, now = new Date()
 }
 
 export async function semanticDecideEmergence(profile: CreatureProfile, provider: ModelProvider, now = new Date().toISOString()) {
-  if (!provider.usesRealModel) {
-    const emergence = createActiveEmergence(profile, now);
-    recordEmergenceSemanticRun(profile, provider, "skipped", "fallback provider; rule emergence applied");
-    return emergence;
+  if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for emergence.");
+
+  const raw = await provider.generateJson<unknown>(buildSemanticEmergencePrompt(profile, now));
+  if (!raw) throw new Error("empty emergence model result");
+  const parsed = semanticEmergenceSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`invalid emergence JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   }
 
-  try {
-    const raw = await provider.generateJson<unknown>(buildSemanticEmergencePrompt(profile, now));
-    if (!raw) {
-      recordEmergenceSemanticRun(profile, provider, "empty", "empty model result");
-      return createActiveEmergence(profile, now);
-    }
-    const parsed = semanticEmergenceSchema.safeParse(raw);
-    if (!parsed.success) {
-      recordEmergenceSemanticRun(
-        profile,
-        provider,
-        "invalid",
-        `invalid model JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`
-      );
-      return createActiveEmergence(profile, now);
-    }
-
-    const semantic = createSemanticEmergenceRecord(profile, parsed.data, now);
-    if (!semantic) {
-      recordEmergenceSemanticRun(profile, provider, "invalid", "model selected unavailable memory or unsafe message");
-      return createActiveEmergence(profile, now);
-    }
-    profile.emergenceHistory.unshift(semantic);
-    profile.emergenceHistory = profile.emergenceHistory.slice(0, 30);
-    const memory = semantic.relatedMemoryIds[0] ? profile.longTermMemories.find((item) => item.id === semantic.relatedMemoryIds[0]) : undefined;
-    if (memory) memory.lastReferencedAt = now;
-    recordEmergenceSemanticRun(profile, provider, "applied", "llm emergence decision applied");
-    return { ...semantic, text: semantic.message, memoryId: semantic.relatedMemoryIds[0] };
-  } catch (error) {
-    recordEmergenceSemanticRun(profile, provider, "failed", `model failed (${error instanceof Error ? error.message : "unknown"})`);
-    return createActiveEmergence(profile, now);
+  const semantic = createSemanticEmergenceRecord(profile, parsed.data, now);
+  if (!semantic) {
+    throw new Error("emergence model selected unavailable memory or unsafe message");
   }
+  profile.emergenceHistory.unshift(semantic);
+  profile.emergenceHistory = profile.emergenceHistory.slice(0, 30);
+  const memory = semantic.relatedMemoryIds[0] ? profile.longTermMemories.find((item) => item.id === semantic.relatedMemoryIds[0]) : undefined;
+  if (memory) memory.lastReferencedAt = now;
+  recordEmergenceSemanticRun(profile, provider, "applied", "llm emergence decision applied");
+  return { ...semantic, text: semantic.message, memoryId: semantic.relatedMemoryIds[0] };
 }
 
 export function createMemoryResonanceEmergence(
@@ -277,14 +266,17 @@ function createSemanticEmergenceRecord(
   now: string
 ): EmergenceRecord | undefined {
   if (!suggestion.shouldEmerge) {
+    const whyNow = safeCreatureText(suggestion.whyNow);
+    const message = safeCreatureText(suggestion.message);
+    if (!whyNow || !message) return undefined;
     return {
       id: makeId("emergence"),
       at: now,
       kind: "rhythm",
-      whyNow: safeCreatureText(suggestion.whyNow) ?? "现在还没有哪件旧事需要被我主动提起。",
+      whyNow,
       relatedMemoryIds: [],
       driveSource: suggestion.driveSource ?? "rhythm",
-      message: safeCreatureText(suggestion.message) ?? "我安静了一下，先陪在这里。你继续说的时候，我会接住新的事。",
+      message,
       ruleTrace: ["llm: chose quiet emergence", "guardrail: memory=none"]
     };
   }
@@ -323,7 +315,7 @@ function hasMemoryPrivacyRisk(memory: LongTermMemory) {
 function safeCreatureText(text?: string) {
   const normalized = toCreatureMemoryVoice(text?.trim() ?? "");
   if (!normalized) return undefined;
-  if (/(LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|candidate|episode|score|阈值|字段|JSON|prompt|fallback|数据库|写入|长期记忆|情景记忆|我浮现的是|不是提醒|内在倾向|下一次你给我信息流|不装作|装成)/i.test(normalized)) {
+  if (/(LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|candidate|episode|score|阈值|字段|JSON|prompt|数据库|写入|长期记忆|情景记忆|我浮现的是|不是提醒|内在倾向|下一次你给我信息流|不装作|装成)/i.test(normalized)) {
     return undefined;
   }
   return normalized;
@@ -431,16 +423,10 @@ ${JSON.stringify(profile.episodes.slice(0, 6).map((item) => {
 }))}
 
 recent_feedback:
-${JSON.stringify(profile.feedbackHistory.slice(0, 6).map((item) => {
-  const privacyHigh = hasHighPrivacyText(`${item.inputText ?? ""} ${item.learningNote}`);
-  return {
-    kind: item.kind,
-    inputText: textForModel(item.inputText, privacyHigh),
-    learningNote: textForModel(item.learningNote, privacyHigh),
-    targetId: item.targetId,
-    contentHiddenForPrivacy: privacyHigh
-  };
-}))}
+${JSON.stringify(modelFeedbackContext(profile.feedbackHistory))}
+
+recent_conversation_newest_first:
+${JSON.stringify(modelConversationContext(profile))}
 
 recent_emergence:
 ${JSON.stringify(profile.emergenceHistory.slice(0, 5).map((item) => {

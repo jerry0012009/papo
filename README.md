@@ -14,8 +14,8 @@ Server-side audio sensing uses provider-specific routes: OpenRouter/Mimo may use
 Demo 采用混合 harness，而不是纯聊天或纯规则：
 
 1. Sense：把对话、照片、录音或 30 秒共同片段转成 observation。
-2. Attend：规则层先生成候选 attention event，保证可解释和可测试。
-3. Interpret：有 Mimo/OpenRouter/通用 API 时，LLM 语义脑会改进“它注意到了什么、为什么、用户可能在做什么、适合怎样回应”。
+2. Attend：规则层先生成候选 attention event，保证边界、预算和可审计。
+3. Interpret：真实 LLM 语义脑理解“发生了什么、Papo 要不要回应、怎么回应、要不要记住”。
 4. Guardrail：规则层检查隐私、精力、状态范围和行动合法性。
 5. Remember：写入情景记忆，可在反馈后升成长记忆。
 6. Learn：反馈改变状态和记忆权重。
@@ -24,8 +24,8 @@ Demo 采用混合 harness，而不是纯聊天或纯规则：
 规则负责生命体的骨架和边界：
 
 - 小动物状态初始化和状态范围约束
-- 直接对话的基础 attention event
-- 多段生活片段的基础显著性打分
+- 直接对话和多模态输入的候选事件
+- 多段生活片段的候选显著性打分
 - 行动选择护栏
 - 情景记忆与长期记忆写入
 - 用户反馈对状态和记忆权重的影响
@@ -36,13 +36,13 @@ Demo 采用混合 harness，而不是纯聊天或纯规则：
 
 LLM 负责语义质量：
 
-- 更准确地解释“为什么注意到”
-- 判断用户可能意图
-- 形成更自然的情景记忆文案
-- 给出行动建议，再由规则护栏确认
-- 未来接图片、音频和更复杂上下文理解
+- 理解文字、照片和音频里的真实语义
+- 判断用户意图、情绪和当前事件
+- 决定是否回应、询问、安静、记住或回忆
+- 写出 Papo 最终对用户说的话
+- 形成可保存的小回忆和记忆标签
 
-没有 API key 时，fallback provider 仍可跑完整闭环。
+没有真实模型配置时，Papo 不会伪造理解；相关接口会直接报错，方便排查通路。
 
 ## 运行
 
@@ -84,7 +84,6 @@ Provider 选择优先级：
 1. `OPENROUTER_API_KEY`
 2. `MIMO_ENDPOINT` / `MIMO_API_KEY`
 3. `OPENAI_API_KEY` / `GENERIC_MODEL_API_KEY`
-4. fallback demo brain
 
 ## 测试
 

@@ -1,6 +1,6 @@
 import { makeId } from "./ids";
 import { initialState } from "./state";
-import type { CreatureProfile, FeedbackPolicyProfile, LongTermMemory } from "./types";
+import type { CreatureProfile, FeedbackPolicyProfile } from "./types";
 
 export function createCreatureProfile(input: {
   userId?: string;
@@ -16,7 +16,7 @@ export function createCreatureProfile(input: {
     lastSeenAt: now,
     state: initialState(userId),
     episodes: [],
-    longTermMemories: seedMemories(now),
+    longTermMemories: [],
     feedbackHistory: [],
     stateChanges: [],
     policyProfile: initialPolicyProfile(),
@@ -62,17 +62,4 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   }
 
   return profile;
-}
-
-function seedMemories(now: string): LongTermMemory[] {
-  return [
-    {
-      id: makeId("ltm"),
-      createdAt: now,
-      kind: "creature_self_memory",
-      text: "我正在学习先注意、再记住、再根据反馈改变自己，而不是只做一个聊天框。",
-      weight: 62,
-      tags: ["注意", "记忆", "反馈", "小脑袋"]
-    }
-  ];
 }

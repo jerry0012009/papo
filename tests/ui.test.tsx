@@ -14,11 +14,11 @@ describe("App", () => {
       const url = String(input);
       if (url.endsWith("/api/provider")) {
         return json({
-          kind: "fallback",
-          name: "Fallback demo brain",
+          kind: "generic",
+          name: "Test real-model harness",
           available: true,
-          usesRealModel: false,
-          diagnostics: { textProvider: "fallback", visionProvider: "fallback", audioProvider: "fallback", audioRoute: "fallback" }
+          usesRealModel: true,
+          diagnostics: { textProvider: "generic", visionProvider: "generic", audioProvider: "generic", audioRoute: "audio_transcriptions" }
         });
       }
       if (url.endsWith("/api/profiles") && init?.method === "POST") return json({ profile: blankProfileFixture() }, 201);
@@ -54,11 +54,11 @@ describe("App", () => {
       const url = String(input);
       if (url.endsWith("/api/provider")) {
         return json({
-          kind: "fallback",
-          name: "Fallback demo brain",
+          kind: "generic",
+          name: "Test real-model harness",
           available: true,
-          usesRealModel: false,
-          diagnostics: { textProvider: "fallback", visionProvider: "fallback", audioProvider: "fallback", audioRoute: "fallback" }
+          usesRealModel: true,
+          diagnostics: { textProvider: "generic", visionProvider: "generic", audioProvider: "generic", audioRoute: "audio_transcriptions" }
         });
       }
       if (url.endsWith("/api/profiles")) return json({ profiles: [{ userId: "u-raised", creatureName: "Papo" }] });
@@ -96,11 +96,11 @@ describe("App", () => {
       const url = String(input);
       if (url.endsWith("/api/provider")) {
         return json({
-          kind: "fallback",
-          name: "Fallback demo brain",
+          kind: "generic",
+          name: "Test real-model harness",
           available: true,
-          usesRealModel: false,
-          diagnostics: { textProvider: "fallback", visionProvider: "fallback", audioProvider: "fallback", audioRoute: "fallback" }
+          usesRealModel: true,
+          diagnostics: { textProvider: "generic", visionProvider: "generic", audioProvider: "generic", audioRoute: "audio_transcriptions" }
         });
       }
       if (url.endsWith("/api/image-summary")) {
@@ -108,12 +108,12 @@ describe("App", () => {
         if (body.label?.includes("坏照片")) {
           return json({
             summary: "图片已上传，但我暂时没有看清里面的内容。你可以补一句这张图里发生了什么。",
-            provider: "fallback",
-            semanticSource: "fallback",
+            provider: "generic",
+            semanticSource: "llm",
             error: "Vision provider failed: 403"
           });
         }
-        return json({ summary: "照片里是周五复查的日历备注，写着提前准备病历。", provider: "fallback", semanticSource: "fallback" });
+        return json({ summary: "照片里是周五复查的日历备注，写着提前准备病历。", provider: "generic", semanticSource: "llm" });
       }
       if (url.endsWith("/api/profiles") && init?.method === "POST") {
         return json({ profile: profileFixture() }, 201);
@@ -192,8 +192,8 @@ describe("App", () => {
           episodes: [],
           response: "我接住了这件刚发生的小事，会先和这一小段放在一起。",
           memoryCandidates: [],
-          harnessTrace: ["sense: button", "semantic: fallback/rules only"],
-          provider: "fallback"
+          harnessTrace: ["sense: button", "semantic: llm interpretation applied"],
+          provider: "generic"
         });
       }
       if (url.endsWith("/api/profiles/u1/curious")) {
@@ -217,8 +217,8 @@ describe("App", () => {
             stateInfluence: "我先听这一小段里真正重要的部分。"
           },
           memoryCandidates: [],
-          harnessTrace: ["sense: curious_stream", "semantic: fallback/rules only"],
-          provider: "fallback"
+          harnessTrace: ["sense: curious_stream", "semantic: llm interpretation applied"],
+          provider: "generic"
         });
       }
       if (url.endsWith("/api/profiles")) return json({ profiles: [] });
@@ -230,7 +230,7 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByRole("heading", { name: "Papo" })).toBeInTheDocument());
     expect(screen.getByText("住在手机里的小狗")).toBeInTheDocument();
     expect(screen.getByText("正在陪着你")).toBeInTheDocument();
-    expect(screen.queryByText("Fallback demo brain")).not.toBeInTheDocument();
+    expect(screen.queryByText("Test real-model harness")).not.toBeInTheDocument();
     expect(screen.queryByText("Generic model API")).not.toBeInTheDocument();
     expect(screen.queryByText("LLM 语义脑已配置")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Papo 是一只卡通柴犬")).toBeInTheDocument();
@@ -348,7 +348,7 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "首页" }));
     expect(screen.queryByText(/sense: button/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/semantic: fallback/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/semantic:/)).not.toBeInTheDocument();
     expect(screen.queryByText("刚才 Papo 说")).not.toBeInTheDocument();
     expect(screen.queryByText("Papo 新说")).not.toBeInTheDocument();
     const skippedReason = screen.getByText("这段更像背景声，我先不抢着记住。");
@@ -458,7 +458,7 @@ describe("App", () => {
     expect(screen.getByText("模型路由")).toBeInTheDocument();
     expect(screen.getByText("语义脑诊断")).toBeInTheDocument();
     expect(screen.getByText("声音感知")).toBeInTheDocument();
-    expect(screen.getAllByText("fallback").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("generic").length).toBeGreaterThan(0);
 
     await userEvent.click(screen.getByLabelText("看看哪只 Papo 在身边"));
     await userEvent.click(screen.getByText("开发查看"));
@@ -650,11 +650,11 @@ function profileFixture() {
         id: "semantic1",
         at: new Date().toISOString(),
         source: "button",
-        providerKind: "fallback",
-        providerName: "Fallback demo brain",
+        providerKind: "generic",
+        providerName: "Test real-model harness",
         status: "skipped",
-        message: "fallback provider; rules handled the loop",
-        ruleTrace: ["provider=fallback", "source=button", "status=skipped"]
+        message: "llm interpretation applied",
+        ruleTrace: ["provider=generic", "source=button", "status=applied"]
       }
     ],
     conversation: [

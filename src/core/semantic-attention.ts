@@ -1,19 +1,26 @@
 import { z } from "zod";
 import { buildAttentionEvent, composeCreatureResponse, composeStreamSummary, isHighPrivacySegmentContent } from "./attention";
-import { createCuriousCreatureReport } from "./experience";
 import { makeId } from "./ids";
+import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
 import type { CaptureResult, CreatureProfile } from "./types";
 
 const optionalText = (max: number) =>
-  z.preprocess((value) => (typeof value === "string" && !value.trim() ? undefined : value), z.string().min(1).max(max).optional());
+  z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
 const optionalTextArray = (maxItems: number, maxText: number) =>
   z
-    .array(z.preprocess((value) => (typeof value === "string" ? value.trim() : value), z.string().max(maxText)).optional())
+    .array(z.preprocess((value) => cleanOptionalText(value, maxText), z.string().optional()))
     .transform((values) => values.filter((value): value is string => Boolean(value)))
     .pipe(z.array(z.string().min(1).max(maxText)).max(maxItems))
     .optional();
+
+function cleanOptionalText(value: unknown, max: number) {
+  if (value === null) return undefined;
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : undefined;
+}
 
 const semanticAttentionSchema = z.object({
   shouldAttend: z.boolean().optional(),
@@ -43,31 +50,24 @@ type SemanticAttentionSuggestion = z.infer<typeof semanticAttentionSchema>;
 type AttentionCandidate = NonNullable<CaptureResult["attentionCandidates"]>[number];
 
 export async function semanticDecideAttention(profile: CreatureProfile, result: CaptureResult, provider: ModelProvider): Promise<CaptureResult> {
-  if (!provider.usesRealModel || !result.curiousSession || !result.attentionCandidates?.length) return result;
+  if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for attention.");
+  if (!result.curiousSession || !result.attentionCandidates?.length) return result;
 
-  try {
-    const raw = await provider.generateJson<unknown>(buildSemanticAttentionPrompt(profile, result));
-    const parsed = semanticAttentionSchema.safeParse(raw);
-    if (!parsed.success) {
-      recordAttentionSemanticRun(profile, provider, "invalid", `invalid attention JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
-      return result;
-    }
-    const applied = applySemanticAttention(profile, result, parsed.data);
-    recordAttentionSemanticRun(
-      profile,
-      provider,
-      applied ? "applied" : parsed.data.shouldAttend === false ? "skipped" : "empty",
-      applied
-        ? "llm attention decision applied"
-        : parsed.data.shouldAttend === false
-          ? "llm attention decision skipped all candidates"
-          : "llm attention decision had no valid selectable segment"
-    );
-    return result;
-  } catch (error) {
-    recordAttentionSemanticRun(profile, provider, "failed", `attention model failed (${error instanceof Error ? error.message : "unknown"})`);
-    return result;
+  const raw = await provider.generateJson<unknown>(buildSemanticAttentionPrompt(profile, result));
+  if (!raw) throw new Error("empty attention model result");
+  const parsed = semanticAttentionSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`invalid attention JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   }
+  const applied = applySemanticAttention(profile, result, parsed.data);
+  if (!applied && parsed.data.shouldAttend !== false) throw new Error("attention model did not select any valid segment");
+  recordAttentionSemanticRun(
+    profile,
+    provider,
+    applied ? "applied" : "applied",
+    applied ? "llm attention decision applied" : "llm attention decision ignored all candidates"
+  );
+  return result;
 }
 
 function applySemanticAttention(profile: CreatureProfile, result: CaptureResult, suggestion: SemanticAttentionSuggestion) {
@@ -82,11 +82,18 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
     .filter((candidate) => candidate.score.privacyRisk <= 82 && !isHighPrivacySegmentContent(candidate.segment.content))
     .slice(0, session.attentionBudget);
 
-  if (suggestion.shouldAttend !== false && !selectedFromModel.length) return false;
+  if (suggestion.shouldAttend === false) {
+    clearCuriousAttentionResult(profile, result, suggestion);
+    return false;
+  }
+  if (!selectedFromModel.length) return false;
 
   const selectedIds = new Set(selectedFromModel.map((candidate) => candidate.segment.id));
   const selectedReason = new Map((suggestion.selected ?? []).map((item) => [item.segmentId, safeCreatureText(item.whySelected)]));
   const ignoredReason = new Map((suggestion.ignored ?? []).map((item) => [item.segmentId, safeCreatureText(item.whyIgnored)]));
+  for (const candidate of selectedFromModel) {
+    if (!selectedReason.get(candidate.segment.id)) throw new Error("attention model did not explain a selected segment");
+  }
 
   const oldEpisodeIds = new Set(result.episodes.map((episode) => episode.id));
   profile.episodes = profile.episodes.filter((episode) => !oldEpisodeIds.has(episode.id));
@@ -102,7 +109,7 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
       triggerLocation: candidate.segment.location,
       triggerLabel: candidate.segment.label,
       triggerContent: candidate.segment.content,
-      reasonPrefix: selectedReason.get(candidate.segment.id) ?? "我在这一组里更想先回应这件事。",
+      reasonPrefix: selectedReason.get(candidate.segment.id) ?? "",
       score: candidate.score,
       now
     });
@@ -127,7 +134,7 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
     segmentId: candidate.segment.id,
     label: candidate.segment.label,
     score: candidate.score,
-    whySelected: selectedReason.get(candidate.segment.id) ?? "我在这一组里更想先回应这件事。"
+    whySelected: selectedReason.get(candidate.segment.id) ?? ""
   }));
   session.ignored = candidates
     .filter((candidate) => !selectedIds.has(candidate.segment.id))
@@ -135,20 +142,40 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
       segmentId: candidate.segment.id,
       label: candidate.segment.label,
       score: candidate.score,
-      whyIgnored: ignoredReason.get(candidate.segment.id) ?? defaultIgnoredReason(candidate)
+      whyIgnored: ignoredReason.get(candidate.segment.id) ?? ""
     }));
 
-  session.creatureReport = safeCreatureText(suggestion.creatureReport) ?? createCuriousCreatureReport(session);
+  session.creatureReport = safeCreatureText(suggestion.creatureReport) ?? "";
   result.response = composeStreamSummary(events, session);
   result.harnessTrace = [...(result.harnessTrace ?? []), "semantic attention: llm selection applied"];
   return true;
 }
 
-function defaultIgnoredReason(candidate: AttentionCandidate) {
-  if (isHighPrivacySegmentContent(candidate.segment.content)) return "这里可能有隐私内容，我先等你的意思。";
-  if (candidate.score.privacyRisk > 45) return "这里可能有隐私内容，我先等你的意思。";
-  if (candidate.score.redundancyPenalty > 0) return "它和刚才的事太像，我先不重复打断。";
-  return "这次我先不打断，等你继续说。";
+function clearCuriousAttentionResult(profile: CreatureProfile, result: CaptureResult, suggestion: SemanticAttentionSuggestion) {
+  const session = result.curiousSession;
+  const candidates = result.attentionCandidates ?? [];
+  if (!session) return;
+
+  const oldEpisodeIds = new Set(result.episodes.map((episode) => episode.id));
+  profile.episodes = profile.episodes.filter((episode) => !oldEpisodeIds.has(episode.id));
+  profile.memoryCandidates = profile.memoryCandidates.filter((candidate) => !oldEpisodeIds.has(candidate.sourceEpisodeId));
+
+  const ignoredReason = new Map((suggestion.ignored ?? []).map((item) => [item.segmentId, safeCreatureText(item.whyIgnored)]));
+  result.events = [];
+  result.episodes = [];
+  result.memoryCandidates = [];
+  result.response = safeCreatureText(suggestion.creatureReport) ?? "";
+  if (!result.response && candidates.some((candidate) => !ignoredReason.get(candidate.segment.id))) {
+    throw new Error("attention model chose quiet without a usable report or ignored reasons");
+  }
+  session.selected = [];
+  session.ignored = candidates.map((candidate) => ({
+    segmentId: candidate.segment.id,
+    label: candidate.segment.label,
+    score: candidate.score,
+    whyIgnored: ignoredReason.get(candidate.segment.id) ?? ""
+  }));
+  session.creatureReport = result.response;
 }
 
 function safeCreatureText(text?: string) {
@@ -158,7 +185,7 @@ function safeCreatureText(text?: string) {
 }
 
 function containsInternalLanguage(text: string) {
-  return /LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|prompt|JSON|score|阈值|总分|fallback|选中|忽略/i.test(text);
+  return /LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|prompt|JSON|score|阈值|总分|选中|忽略/i.test(text);
 }
 
 function unique(values: string[]) {
@@ -214,10 +241,13 @@ current_policy:
 ${JSON.stringify(profile.policyProfile)}
 
 recent_memories:
-${JSON.stringify(profile.longTermMemories.slice(0, 8).map((memory) => ({ id: memory.id, kind: memory.kind, text: memory.text, weight: memory.weight, tags: memory.tags })))}
+${JSON.stringify(modelMemoryContext(profile.longTermMemories))}
+
+recent_conversation_newest_first:
+${JSON.stringify(modelConversationContext(profile))}
 
 recent_feedback:
-${JSON.stringify(profile.feedbackHistory.slice(0, 6).map((item) => ({ kind: item.kind, inputText: item.inputText, learningNote: item.learningNote, targetId: item.targetId })))}
+${JSON.stringify(modelFeedbackContext(profile.feedbackHistory))}
 
 attentionBudget:
 ${result.curiousSession?.attentionBudget ?? 0}

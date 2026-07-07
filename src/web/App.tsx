@@ -470,13 +470,9 @@ export function App() {
     if (chunks.length) {
       const blob = new Blob(chunks, { type: mediaRecorderRef.current?.mimeType || chunks[0]?.type || "audio/webm" });
       if (blob.size > 0) {
-        try {
-          const dataUrl = await blobToDataUrl(blob);
-          const result = await transcribeAudio(dataUrl, `语音片段 ${index}`);
-          content = chooseAudioTranscript(result.transcript, localTranscript, Boolean(result.error));
-        } catch {
-          content = localTranscript;
-        }
+        const dataUrl = await blobToDataUrl(blob);
+        const result = await transcribeAudio(dataUrl, `语音片段 ${index}`);
+        content = chooseAudioTranscript(result.transcript);
       }
     }
 
@@ -2136,7 +2132,7 @@ function actionText(action: AttentionEvent["suggestedAction"]) {
 
 function semanticStatusText(status: NonNullable<CreatureProfile["semanticBrainHistory"]>[number]["status"]) {
   const map = {
-    skipped: "规则兜底",
+    skipped: "未运行",
     applied: "LLM 已参与",
     empty: "LLM 空输出",
     invalid: "LLM 输出无效",
@@ -2238,14 +2234,10 @@ function preferredAudioMimeType(Recorder: typeof MediaRecorder) {
   return candidates.find((type) => Recorder.isTypeSupported(type)) ?? "";
 }
 
-function chooseAudioTranscript(modelTranscript: string, localTranscript: string, hasModelError = false) {
+function chooseAudioTranscript(modelTranscript: string) {
   const modelText = modelTranscript.trim();
-  const localText = localTranscript.trim();
-  const modelIsFallback = isUnclearAudioTranscript(modelText);
-  if (hasModelError) return localText;
-  if ((!modelText || modelIsFallback) && localText) return localText;
-  if (modelIsFallback) return "";
-  return modelText || localText;
+  if (isUnclearAudioTranscript(modelText)) return "";
+  return modelText;
 }
 
 function sensingSegmentContent(text: string, error?: string) {

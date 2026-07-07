@@ -97,25 +97,14 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const body = imageSummarySchema.parse(req.body);
       const prompt = `请用中文把这张图片压缩成一段 80 字以内的生活场景摘要，给 Curious Mode 当 image_summary。标签：${body.label ?? "截图"}`;
-      try {
-        const summary = (await provider.summarizeImage(body.dataUrl, prompt)).slice(0, 600);
-        res.json({
-          summary,
-          provider: sensingProvider(provider, "vision"),
-          model: provider.diagnostics?.visionModel,
-          route: "chat_completions",
-          semanticSource: provider.usesRealModel ? "llm" : "fallback"
-        });
-      } catch (error) {
-        res.json({
-          summary: "图片已上传，但我暂时没有看清里面的内容。你可以补一句这张图里发生了什么。",
-          provider: sensingProvider(provider, "vision"),
-          model: provider.diagnostics?.visionModel,
-          route: "chat_completions",
-          semanticSource: "fallback",
-          error: sensingError(error)
-        });
-      }
+      const summary = (await provider.summarizeImage(body.dataUrl, prompt)).slice(0, 600);
+      res.json({
+        summary,
+        provider: sensingProvider(provider, "vision"),
+        model: provider.diagnostics?.visionModel,
+        route: "chat_completions",
+        semanticSource: "llm"
+      });
     } catch (error) {
       next(error);
     }
@@ -125,26 +114,15 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const body = audioTranscriptSchema.parse(req.body);
       const prompt = `请把这段音频转写成中文。只保留用户生活里清楚发生的内容，最多 400 字；如果没有清楚的人声或事件，返回空文本。标签：${body.label ?? "录音"}`;
-      try {
-        const transcript = (await provider.transcribeAudio(body.dataUrl, prompt)).slice(0, 1200).trim();
-        res.json({
-          transcript,
-          noSpeech: !transcript,
-          provider: sensingProvider(provider, "audio"),
-          model: provider.diagnostics?.audioModel,
-          route: provider.diagnostics?.audioRoute,
-          semanticSource: provider.usesRealModel ? "llm" : "fallback"
-        });
-      } catch (error) {
-        res.json({
-          transcript: "录音已接住，但我暂时没有听清里面的话。你可以补一句这段声音里发生了什么。",
-          provider: sensingProvider(provider, "audio"),
-          model: provider.diagnostics?.audioModel,
-          route: provider.diagnostics?.audioRoute,
-          semanticSource: "fallback",
-          error: sensingError(error)
-        });
-      }
+      const transcript = (await provider.transcribeAudio(body.dataUrl, prompt)).slice(0, 1200).trim();
+      res.json({
+        transcript,
+        noSpeech: !transcript,
+        provider: sensingProvider(provider, "audio"),
+        model: provider.diagnostics?.audioModel,
+        route: provider.diagnostics?.audioRoute,
+        semanticSource: "llm"
+      });
     } catch (error) {
       next(error);
     }
@@ -342,7 +320,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       return;
     }
     console.error(error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ error: sensingError(error) });
   });
 
   return app;

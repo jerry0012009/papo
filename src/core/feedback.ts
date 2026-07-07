@@ -3,6 +3,7 @@ import { clampPolicy, updatePolicyFromFeedback } from "./drive";
 import { makeId } from "./ids";
 import { createLearningNote } from "./experience";
 import { adjustMemoryWeight, createMemoryCandidateFromEpisode, forgetMemory, normalizeSharedMemoryText, promoteEpisode } from "./memory";
+import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
 import { applyStateDelta, deltaForFeedback } from "./state";
@@ -40,7 +41,14 @@ const policyDeltaSchema = z
   .partial();
 
 const optionalText = (max: number) =>
-  z.preprocess((value) => (typeof value === "string" && !value.trim() ? undefined : value), z.string().min(1).max(max).optional());
+  z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
+
+function cleanOptionalText(value: unknown, max: number) {
+  if (value === null) return undefined;
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : undefined;
+}
 
 const semanticFeedbackSchema = z
   .object({
@@ -159,34 +167,17 @@ export async function semanticReflectFeedback(
   feedback: FeedbackRecord,
   provider: ModelProvider
 ): Promise<FeedbackRecord> {
-  if (!provider.usesRealModel) {
-    recordFeedbackSemanticRun(profile, provider, "skipped", "fallback provider; rule feedback applied");
-    return feedback;
-  }
+  if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for feedback reflection.");
 
-  try {
-    const raw = await provider.generateJson<unknown>(buildSemanticFeedbackPrompt(profile, feedback));
-    if (!raw) {
-      recordFeedbackSemanticRun(profile, provider, "empty", "empty model result");
-      return feedback;
-    }
-    const parsed = semanticFeedbackSchema.safeParse(raw);
-    if (!parsed.success) {
-      recordFeedbackSemanticRun(
-        profile,
-        provider,
-        "invalid",
-        `invalid model JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`
-      );
-      return feedback;
-    }
-    applySemanticFeedbackSuggestion(profile, feedback, parsed.data);
-    recordFeedbackSemanticRun(profile, provider, "applied", "llm feedback reflection applied");
-    return feedback;
-  } catch (error) {
-    recordFeedbackSemanticRun(profile, provider, "failed", `model failed (${error instanceof Error ? error.message : "unknown"})`);
-    return feedback;
+  const raw = await provider.generateJson<unknown>(buildSemanticFeedbackPrompt(profile, feedback));
+  if (!raw) throw new Error("empty feedback model result");
+  const parsed = semanticFeedbackSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw new Error(`invalid feedback JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   }
+  applySemanticFeedbackSuggestion(profile, feedback, parsed.data);
+  recordFeedbackSemanticRun(profile, provider, "applied", "llm feedback reflection applied");
+  return feedback;
 }
 
 export function composeFeedbackReplyText(feedback: FeedbackRecord) {
@@ -320,7 +311,7 @@ function safeCreatureText(text?: string) {
   const normalized = normalizeSharedMemoryText(text?.trim() ?? "");
   if (!normalized) return undefined;
   if (hasPrivacyRisk(normalized)) return undefined;
-  if (/(LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|candidate|episode|score|阈值|字段|JSON|prompt|fallback|数据库|写入|长期记忆|情景记忆)/i.test(normalized)) {
+  if (/(LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|candidate|episode|score|阈值|字段|JSON|prompt|数据库|写入|长期记忆|情景记忆)/i.test(normalized)) {
     return undefined;
   }
   return normalized;
@@ -423,29 +414,13 @@ current_policy:
 ${JSON.stringify(profile.policyProfile)}
 
 recent_feedback:
-${JSON.stringify(profile.feedbackHistory.slice(0, 6).map((item) => {
-  const privacyHigh = hasPrivacyRisk(`${item.inputText ?? ""} ${item.learningNote}`);
-  return {
-    kind: item.kind,
-    inputText: textForModel(item.inputText, privacyHigh),
-    learningNote: textForModel(item.learningNote, privacyHigh),
-    targetId: item.targetId,
-    contentHiddenForPrivacy: privacyHigh
-  };
-}))}
+${JSON.stringify(modelFeedbackContext(profile.feedbackHistory))}
+
+recent_conversation_newest_first:
+${JSON.stringify(modelConversationContext(profile))}
 
 recent_memories:
-${JSON.stringify(profile.longTermMemories.slice(0, 8).map((item) => {
-  const privacyHigh = hasPrivacyRisk(`${item.text} ${item.tags.join(" ")}`);
-  return {
-    id: item.id,
-    kind: item.kind,
-    text: textForModel(item.text, privacyHigh),
-    weight: item.weight,
-    tags: tagsForModel(item.tags, privacyHigh),
-    contentHiddenForPrivacy: privacyHigh
-  };
-}))}
+${JSON.stringify(modelMemoryContext(profile.longTermMemories))}
 `;
 }
 

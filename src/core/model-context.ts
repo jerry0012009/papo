@@ -1,0 +1,54 @@
+import { toCreatureMemoryVoice } from "./memory";
+import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
+import type { CreatureProfile, FeedbackRecord, LongTermMemory } from "./types";
+
+export function modelConversationContext(profile: CreatureProfile, limit = 10) {
+  return (profile.conversation ?? []).slice(0, limit).map((message) => {
+    const privacyHigh = hasHighPrivacyText(message.text);
+    return {
+      role: message.role,
+      channel: message.channel,
+      text: textForModel(message.text, privacyHigh),
+      contentHiddenForPrivacy: privacyHigh,
+      at: message.at,
+      modality: message.modality
+    };
+  });
+}
+
+export function modelMemoryContext(memories: LongTermMemory[], options: { limit?: number; creatureVoice?: boolean } = {}) {
+  return memories.slice(0, options.limit ?? 8).map((memory) => modelMemoryItem(memory, options.creatureVoice ?? false));
+}
+
+export function modelFeedbackContext(feedback: FeedbackRecord[], limit = 6) {
+  return feedback.slice(0, limit).map(modelFeedbackItem);
+}
+
+export function modelMemoryItem(memory: LongTermMemory, creatureVoice = false) {
+  const sourceText = creatureVoice ? toCreatureMemoryVoice(memory.text) : memory.text;
+  const privacyHigh = hasHighPrivacyText(`${sourceText} ${memory.tags.join(" ")}`);
+  return {
+    id: memory.id,
+    kind: memory.kind,
+    text: textForModel(sourceText, privacyHigh),
+    contentHiddenForPrivacy: privacyHigh,
+    weight: memory.weight,
+    tags: tagsForModel(memory.tags, privacyHigh),
+    lastReferencedAt: memory.lastReferencedAt,
+    sourceEpisodeId: memory.sourceEpisodeId
+  };
+}
+
+export function modelFeedbackItem(item: FeedbackRecord) {
+  const privacyHigh = hasHighPrivacyText(`${item.inputText ?? ""} ${item.learningNote} ${item.effect ?? ""} ${item.followUpText ?? ""} ${item.replyText ?? ""}`);
+  return {
+    kind: item.kind,
+    inputText: textForModel(item.inputText, privacyHigh),
+    learningNote: textForModel(item.learningNote, privacyHigh),
+    effect: textForModel(item.effect, privacyHigh),
+    followUpText: textForModel(item.followUpText, privacyHigh),
+    replyText: textForModel(item.replyText, privacyHigh),
+    targetId: item.targetId,
+    contentHiddenForPrivacy: privacyHigh
+  };
+}

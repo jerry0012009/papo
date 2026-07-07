@@ -21,7 +21,7 @@ export interface ProviderDiagnostics {
   textModel?: string;
   visionModel?: string;
   audioModel?: string;
-  audioRoute?: "chat_completions" | "audio_transcriptions" | "fallback";
+  audioRoute?: "chat_completions" | "audio_transcriptions";
 }
 
 export function createModelProvider(env: NodeJS.ProcessEnv = process.env): ModelProvider {
@@ -38,7 +38,8 @@ export function createModelProvider(env: NodeJS.ProcessEnv = process.env): Model
   if (!primary && merged.OPENROUTER_API_KEY) primary = openRouterProvider(merged);
   if (!primary && (merged.MIMO_ENDPOINT || merged.MIMO_API_KEY)) primary = mimoProvider(merged);
   if (!primary && (merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY)) primary = genericProvider(merged);
-  return withModalityOverrides(primary ?? staticProvider("fallback", "Fallback demo brain", true), merged);
+  if (!primary) throw new Error("Papo requires a real model provider; configure OpenRouter, Mimo, or a generic OpenAI-compatible provider.");
+  return withModalityOverrides(primary, merged);
 }
 
 function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
@@ -155,33 +156,10 @@ function parseEnvFile(content: string): NodeJS.ProcessEnv {
   return parsed;
 }
 
-function timeoutFromEnv(env: NodeJS.ProcessEnv, key: string, fallback: number) {
+function timeoutFromEnv(env: NodeJS.ProcessEnv, key: string, defaultMs: number) {
   const value = Number(env[key]);
-  if (!Number.isFinite(value) || value <= 0) return fallback;
+  if (!Number.isFinite(value) || value <= 0) return defaultMs;
   return Math.max(5_000, Math.min(120_000, Math.round(value)));
-}
-
-function staticProvider(kind: ProviderKind, name: string, available: boolean): ModelProvider {
-  return {
-    kind,
-    name,
-    available,
-    usesRealModel: false,
-    diagnostics: { textProvider: kind, visionProvider: kind, audioProvider: kind, audioRoute: "fallback" },
-    async generate(prompt: string) {
-      const firstLine = prompt.split("\n").find(Boolean) ?? prompt;
-      return `fallback:${firstLine.slice(0, 160)}`;
-    },
-    async generateJson() {
-      return undefined;
-    },
-    async summarizeImage() {
-      return "图片已上传，但当前 fallback brain 不能真实看图。请把截图里你希望我注意的地方补成一句摘要。";
-    },
-    async transcribeAudio() {
-      return "音频已上传，但当前 fallback brain 不能真实转写。请把录音里你希望我注意的内容补成一句话。";
-    }
-  };
 }
 
 function openAiCompatibleProvider(input: {

@@ -8,13 +8,20 @@ import type { CreatureProfile, EmergenceRecord, FeedbackRecord, LongTermMemory }
 const requiredText = (min: number, max: number) =>
   z.preprocess((value) => (typeof value === "string" ? value.trim() : value), z.string().min(min).max(max));
 const optionalText = (max: number) =>
-  z.preprocess((value) => (typeof value === "string" && !value.trim() ? undefined : value), z.string().min(1).max(max).optional());
+  z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
 const optionalTextArray = (maxItems: number, maxText: number) =>
   z
-    .array(z.preprocess((value) => (typeof value === "string" ? value.trim() : value), z.string().max(maxText)).optional())
+    .array(z.preprocess((value) => cleanOptionalText(value, maxText), z.string().optional()))
     .transform((values) => values.filter((value): value is string => Boolean(value)))
     .pipe(z.array(z.string().min(1).max(maxText)).max(maxItems))
     .optional();
+
+function cleanOptionalText(value: unknown, max: number) {
+  if (value === null) return undefined;
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : undefined;
+}
 
 const feedbackNarrationSchema = z.object({
   learningNote: requiredText(8, 260),
@@ -32,7 +39,7 @@ export async function enrichFeedbackNarration(
   feedback: FeedbackRecord,
   provider: ModelProvider
 ): Promise<FeedbackRecord> {
-  if (!provider.usesRealModel) return feedback;
+  if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for feedback narration.");
   const targetEpisode = profile.episodes.find((episode) => episode.id === feedback.targetId);
   const targetMemory = profile.longTermMemories.find((memory) => memory.id === feedback.targetId);
   const feedbackPrivacyHigh = hasHighPrivacyText(`${feedback.inputText ?? ""} ${feedback.effect} ${feedback.learningNote} ${feedback.followUpText ?? ""}`);
@@ -40,9 +47,8 @@ export async function enrichFeedbackNarration(
     `${targetEpisode?.inputSummary ?? ""} ${targetEpisode?.noticed ?? ""} ${targetEpisode?.tags.join(" ") ?? ""} ${targetMemory?.text ?? ""} ${targetMemory?.tags.join(" ") ?? ""}`
   );
 
-  try {
-    const raw = await provider.generateJson<unknown>(
-      `请把这条反馈学习结果改写成更像 Papo 自己学到了一点东西的短句。
+  const raw = await provider.generateJson<unknown>(
+    `请把这条反馈学习结果改写成更像 Papo 自己学到了一点东西的短句。
 
 约束：
 - 只改写 learningNote，不要改变状态、policy、记忆或动作。
@@ -91,21 +97,18 @@ ${JSON.stringify(
 current_state:
 ${JSON.stringify(profile.state)}
 `
-    );
-    const parsed = feedbackNarrationSchema.safeParse(raw);
-    if (!parsed.success || !isSafeCreatureText(parsed.data.learningNote) || !parsed.data.learningNote.startsWith("我学到")) {
-      return feedback;
-    }
-    if (parsed.data.followUpText && (!feedback.followUpText || !isSafeCreatureText(parsed.data.followUpText))) {
-      return feedback;
-    }
-    feedback.learningNote = parsed.data.learningNote;
-    if (parsed.data.followUpText && feedback.followUpText) feedback.followUpText = parsed.data.followUpText;
-    feedback.replyText = composeFeedbackReplyText(feedback);
-    return feedback;
-  } catch {
-    return feedback;
+  );
+  const parsed = feedbackNarrationSchema.safeParse(raw);
+  if (!parsed.success || !isSafeCreatureText(parsed.data.learningNote) || !parsed.data.learningNote.startsWith("我学到")) {
+    throw new Error("invalid feedback narration");
   }
+  if (parsed.data.followUpText && (!feedback.followUpText || !isSafeCreatureText(parsed.data.followUpText))) {
+    throw new Error("invalid feedback follow-up narration");
+  }
+  feedback.learningNote = parsed.data.learningNote;
+  if (parsed.data.followUpText && feedback.followUpText) feedback.followUpText = parsed.data.followUpText;
+  feedback.replyText = composeFeedbackReplyText(feedback);
+  return feedback;
 }
 
 export async function enrichEmergenceNarration(
@@ -113,7 +116,7 @@ export async function enrichEmergenceNarration(
   emergence: EmergenceRecord & { text?: string; memoryId?: string },
   provider: ModelProvider
 ): Promise<EmergenceRecord & { text: string; memoryId?: string }> {
-  if (!provider.usesRealModel) return withText(emergence);
+  if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for emergence narration.");
   const memory = emergence.relatedMemoryIds[0]
     ? profile.longTermMemories.find((item) => item.id === emergence.relatedMemoryIds[0])
     : undefined;
@@ -121,13 +124,12 @@ export async function enrichEmergenceNarration(
   const memoryPrivacyHigh = hasHighPrivacyText(`${memory.text} ${memory.tags.join(" ")}`);
   const emergencePrivacyHigh = hasHighPrivacyText(`${emergence.whyNow} ${emergence.message}`);
 
-  try {
-    const feedbackSelfMemory = memory.kind === "creature_self_memory" && memory.tags.includes("被你养成");
-    const narrationTarget = feedbackSelfMemory
-      ? "请把这条主动浮现改写成 Papo 想起你教过它的回应习惯或边界感，不要写成普通旧事件。"
-      : "请把这条主动浮现改写得更像 Papo 自己突然想起了一段真实共同经历。";
-    const raw = await provider.generateJson<unknown>(
-      `${narrationTarget}
+  const feedbackSelfMemory = memory.kind === "creature_self_memory" && memory.tags.includes("被你养成");
+  const narrationTarget = feedbackSelfMemory
+    ? "请把这条主动浮现改写成 Papo 想起你教过它的回应习惯或边界感，不要写成普通旧事件。"
+    : "请把这条主动浮现改写得更像 Papo 自己突然想起了一段真实共同经历。";
+  const raw = await provider.generateJson<unknown>(
+    `${narrationTarget}
 
 约束：
 - 只改写 message，不要改变 state、driveSource、relatedMemoryIds、memoryId 或任何记忆内容。
@@ -163,25 +165,22 @@ ${JSON.stringify(memory ? {
 current_state:
 ${JSON.stringify(profile.state)}
 `
-    );
-    const parsed = emergenceNarrationSchema.safeParse(raw);
-    if (!parsed.success || !isSafeCreatureText(parsed.data.message) || hasTemplatedEmergenceText(parsed.data.message)) {
-      return withText(emergence);
-    }
-    if (memory && !referencesMemory(parsed.data.message, memory)) return withText(emergence);
-
-    emergence.message = parsed.data.message;
-    emergence.text = parsed.data.message;
-    const historyRecord = profile.emergenceHistory.find((item) => item.id === emergence.id);
-    if (historyRecord) {
-      historyRecord.message = parsed.data.message;
-      historyRecord.ruleTrace = [...historyRecord.ruleTrace, "llm: emergence narration enriched"];
-    }
-    emergence.ruleTrace = [...emergence.ruleTrace, "llm: emergence narration enriched"];
-    return withText(emergence);
-  } catch {
-    return withText(emergence);
+  );
+  const parsed = emergenceNarrationSchema.safeParse(raw);
+  if (!parsed.success || !isSafeCreatureText(parsed.data.message) || hasTemplatedEmergenceText(parsed.data.message)) {
+    throw new Error("invalid emergence narration");
   }
+  if (memory && !referencesMemory(parsed.data.message, memory)) throw new Error("emergence narration did not reference selected memory");
+
+  emergence.message = parsed.data.message;
+  emergence.text = parsed.data.message;
+  const historyRecord = profile.emergenceHistory.find((item) => item.id === emergence.id);
+  if (historyRecord) {
+    historyRecord.message = parsed.data.message;
+    historyRecord.ruleTrace = [...historyRecord.ruleTrace, "llm: emergence narration enriched"];
+  }
+  emergence.ruleTrace = [...emergence.ruleTrace, "llm: emergence narration enriched"];
+  return withText(emergence);
 }
 
 function withText<T extends EmergenceRecord & { text?: string; memoryId?: string }>(emergence: T): T & { text: string; memoryId?: string } {
@@ -192,7 +191,7 @@ function withText<T extends EmergenceRecord & { text?: string; memoryId?: string
 
 function isSafeCreatureText(text: string) {
   if (hasHighPrivacyText(text)) return false;
-  return !/(投资人|开发|harness|GitHub|nginx|prompt|数据库字段|字段|用户|小动物|语义|系统|后台|流程|candidate|episode|fallback|score|阈值|写入|长期记忆|情景记忆)/i.test(text);
+  return !/(投资人|开发|harness|GitHub|nginx|prompt|数据库字段|字段|用户|小动物|语义|系统|后台|流程|candidate|episode|score|阈值|写入|长期记忆|情景记忆)/i.test(text);
 }
 
 function hasTemplatedEmergenceText(text: string) {

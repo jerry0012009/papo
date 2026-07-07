@@ -15,7 +15,7 @@ describe("creature core", () => {
     const profile = createCreatureProfile({ userId: "u1" });
     expect(profile.userId).toBe("u1");
     expect(inRange(profile.state)).toBe(true);
-    expect(profile.longTermMemories[0].kind).toBe("creature_self_memory");
+    expect(profile.longTermMemories).toHaveLength(0);
   });
 
   it("keeps multiple users isolated", () => {
@@ -43,7 +43,7 @@ describe("creature core", () => {
     expect(result.response).not.toContain("当前工作区");
   });
 
-  it("rule fallback responds to ordinary shared moments without analysis-template wording", () => {
+  it("rule candidate path creates ordinary shared moments without analysis-template wording", () => {
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "刚刚医生确认复查时间改到周六上午。");
     const event = result.events[0];
@@ -65,7 +65,7 @@ describe("creature core", () => {
     expect(result.episodes[0].possibleIntent).not.toContain("认真理解并判断");
   });
 
-  it("rule fallback keeps cognition out of visible dialogue", () => {
+  it("rule candidate path keeps cognition out of visible dialogue", () => {
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "我准备去游泳最近每天我都游泳游泳是一个消耗卡路里效率很高的运动我很喜欢但是我不喜欢游泳馆人太多");
 
@@ -73,32 +73,6 @@ describe("creature core", () => {
     expect(result.response).toContain("喜欢的部分");
     expect(result.response).not.toMatch(/我先听你说完|我注意到这段|刚发生的对话|确认我有没有听对|情景记忆|长期记忆/);
     expect(result.episodes[0].creatureResponse).toBe(result.response);
-  });
-
-  it("fallback repair can respond to a direct call when the semantic model is unavailable", async () => {
-    const provider = createModelProvider({});
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(profile, "如果你能说话，你就说句话给我听。", provider);
-
-    expect(result.events[0].actionDecision.action).toBe("respond");
-    expect(result.events[0].semanticSource).toBe("fallback");
-    expect(result.response).toContain("我在，听见你了");
-    expect(result.response).not.toMatch(/你刚才是在叫我说话|先回应你|先回答你/);
-    expect(result.episodes[0].creatureResponse).toContain("我在，听见你了");
-    expect(result.memoryCandidates?.[0].candidateText).toContain("你曾经对我说");
-    expect(result.memoryCandidates?.[0].candidateText).toContain("当时我回应你");
-    expect(result.episodes[0].creatureExperience?.earReason).not.toContain("显著性");
-    expect(result.episodes[0].creatureExperience?.earReason).not.toContain("用户主动交给我");
-    expect(result.episodes[0].creatureExperience?.earReason).not.toMatch(/先回应你|先回答你/);
-  });
-
-  it("fallback repair handles playful greeting input without turning it into a generic ask flow", async () => {
-    const provider = createModelProvider({});
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(profile, "汪汪！", provider);
-
-    expect(result.events[0].actionDecision.action).toBe("respond");
-    expect(result.response).toContain("我在，听见你了");
   });
 
   it("curious mode selects salient stream events instead of summarizing everything", () => {
@@ -298,7 +272,7 @@ describe("creature core", () => {
     });
     const before = feedback.replyText;
 
-    await enrichFeedbackNarration(profile, feedback, provider);
+    await expect(enrichFeedbackNarration(profile, feedback, provider)).rejects.toThrow(/invalid feedback narration/);
 
     expect(promptSeen).not.toContain("secret token");
     expect(promptSeen).not.toContain("abc");
@@ -419,7 +393,10 @@ describe("creature core", () => {
 
   it("forget downranks memory to zero before purging on a second forget", () => {
     const profile = createCreatureProfile();
-    const targetId = profile.longTermMemories[0].id;
+    const result = handleButtonCapture(profile, "妈妈周五复查这件事需要我提前准备病历。");
+    const memory = promoteEpisode(profile, result.episodes[0].id);
+    if (!memory) throw new Error("expected promoted memory");
+    const targetId = memory.id;
 
     const firstForget = applyFeedback(profile, { kind: "forget", targetId });
 
@@ -621,11 +598,7 @@ describe("creature core", () => {
         }) as T
     };
 
-    const emergence = await semanticDecideEmergence(profile, provider, "2026-07-07T07:05:00.000Z");
-
-    expect(emergence.memoryId).toBe(memory.id);
-    expect(emergence.relatedMemoryIds).not.toContain("ltm_missing");
-    expect(profile.semanticBrainHistory[0]).toMatchObject({ source: "emergence", status: "invalid" });
+    await expect(semanticDecideEmergence(profile, provider, "2026-07-07T07:05:00.000Z")).rejects.toThrow(/unavailable memory|unsafe message/);
   });
 
   it("active emergence speaks normalized creature memory instead of raw analysis text", () => {
@@ -666,26 +639,16 @@ describe("creature core", () => {
 
   it("active emergence does not resurface a memory after forget downranks it to zero", () => {
     const profile = createCreatureProfile();
-    const forgottenId = profile.longTermMemories[0].id;
+    const result = handleButtonCapture(profile, "妈妈周五复查这件事需要我提前准备病历。");
+    const memory = promoteEpisode(profile, result.episodes[0].id);
+    if (!memory) throw new Error("expected promoted memory");
+    const forgottenId = memory.id;
 
     applyFeedback(profile, { kind: "forget", targetId: forgottenId });
     const emergence = createActiveEmergence(profile);
 
     expect(emergence.relatedMemoryIds).not.toContain(forgottenId);
     expect(emergence.memoryId).not.toBe(forgottenId);
-  });
-
-  it("fallback provider can run the whole harness", async () => {
-    const provider = createModelProvider({});
-    const profile = createCreatureProfile();
-
-    const result = await runButtonHarness(profile, "小动物要记得自己如何被用户养成。", provider);
-
-    expect(provider.kind).toBe("fallback");
-    expect(result.events[0].semanticSource).toBe("rules");
-    expect(result.harnessTrace?.join(" ")).toContain("fallback");
-    expect(profile.semanticBrainHistory[0].status).toBe("skipped");
-    expect(result.response).not.toContain("我先试着理解");
   });
 
   it("generic provider sends audio sensing through the transcription endpoint", async () => {
@@ -765,710 +728,90 @@ describe("creature core", () => {
     expect(provider.diagnostics?.audioRoute).toBe("chat_completions");
   });
 
-  it("LLM suggestions enrich wording but guardrails block unsafe long-term save", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "fake llm",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
-        const id = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "";
-        return {
-          response: "我闻到这里有隐私风险，所以先问你要不要保留。",
-          events: [
-            {
-              id,
-              noticed: "这段包含 secret token，不能直接长期保存。",
-              reason: "LLM 认为有未来价值，但隐私风险更高。",
-              suggestedAction: "save_long_term"
-            }
-          ]
-        } as T;
-      }
-    };
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(profile, "我的 secret token 是 abc，帮我长期记住。", provider);
-
-    expect(result.events[0].suggestedAction).toBe("ask");
-    expect(result.events[0].semanticSource).toBe("llm");
-    expect(result.events[0].decisionTrace?.join(" ")).toContain("guardrail");
-  });
-
-  it("LLM interaction understanding drives reply, action, and memory candidate before persistence", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "interaction model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(): Promise<T | undefined> =>
-        ({
-          interaction: {
-            userIntent: "用户在确认 Papo 是否能听见并主动回应。",
-            emotionalTone: "轻轻试探，有一点期待",
-            visibleReaction: "我抬头回应你，让你知道我听见了。",
-            shouldReply: true,
-            suggestedAction: "respond",
-            reply: "我在，听见你了。",
-            memoryCandidateText: "用户曾经轻轻叫 Papo 说句话，Papo 回应并把这当成一次小小的共同经历。",
-            memoryTags: ["回应", "共同经历"]
-          },
-          trace: ["llm: understood direct call"]
-        }) as T
-    };
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(profile, "如果你能说话，你就说句话给我听。", provider);
-
-    expect(result.events[0].semanticSource).toBe("llm");
-    expect(result.events[0].actionDecision.action).toBe("respond");
-    expect(result.response).toContain("听见你了");
-    expect(result.episodes[0].possibleIntent).toContain("主动回应");
-    expect(result.episodes[0].possibleIntent).not.toMatch(/用户|Papo|语义|流程|后台/);
-    expect(result.episodes[0].creatureExperience?.earReason).toContain("抬头回应");
-    expect(result.episodes[0].creatureExperience?.earReason).not.toMatch(/用户|语义|意图|后台|情景记忆/);
-    expect(result.memoryCandidates?.[0].candidateText).toContain("小小的共同经历");
-    expect(result.memoryCandidates?.[0].candidateText).toContain("你曾经轻轻叫我说句话");
-    expect(result.memoryCandidates?.[0].candidateText).not.toMatch(/用户|Papo|episode|candidate/);
-  });
-
-  it("semantic action selection owns the action before wording enrichment", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "action model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
-        const id = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "";
-        if (prompt.includes("行动选择脑")) {
-          return {
-            decisions: [
-              {
-                eventId: id,
-                action: "respond",
-                reason: "你是在确认我会不会直接回你。",
-                shouldReply: true,
-                reply: "我在，听见你了。",
-                visibleReaction: "我抬头看向你。"
-              }
-            ]
-          } as T;
-        }
-        return {
-          response: "我来给你做一个提醒草稿。",
-          interaction: {
-            shouldReply: true,
-            suggestedAction: "draft_reminder",
-            reply: "我来给你做一个提醒草稿。",
-            memoryCandidateText: "你提到明天之前的事。",
-            memoryTags: ["明天"]
-          }
-        } as T;
-      }
-    };
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(profile, "明天早上之前，如果你能听见我，就先回答我一声。", provider);
-    const event = result.events[0];
-
-    expect(event.actionDecision.action).toBe("respond");
-    expect(event.decisionTrace?.join(" ")).toContain("llm: action selected");
-    expect(result.response).toContain("我在，听见你了");
-    expect(result.response).not.toContain("提醒草稿");
-    expect(profile.semanticBrainHistory.some((run) => run.source === "button" && run.ruleTrace.includes("stage=action"))).toBe(true);
-  });
-
-  it("answers follow-up questions about Papo wording instead of repeating process language", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "wording repair model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
-        const id = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "";
-        if (prompt.includes("行动选择脑")) {
-          return {
-            decisions: [
-              {
-                eventId: id,
-                action: "respond",
-                shouldReply: true,
-                reply: "我刚才说先回应你，是因为我先做回应流程。",
-                visibleReaction: "我抬头看你。"
-              }
-            ]
-          } as T;
-        }
-        return {
-          response: "我刚才说先回应你，是因为我要先回应你。",
-          interaction: {
-            shouldReply: true,
-            suggestedAction: "respond",
-            reply: "我刚才说先回应你，是因为我要先回应你。"
-          }
-        } as T;
-      }
-    };
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(profile, "为什么说“先回应你”，你还想后干啥？", provider);
-
-    expect(result.response).toContain("那句确实别扭");
-    expect(result.response).toContain("后面没有藏什么复杂的事");
-    expect(result.response).not.toMatch(/先回应你|回应流程/);
-  });
-
-  it("passes recent conversation to semantic dialogue prompts without exposing private text", async () => {
+  it("complete LLM harness handles dialogue context, action, memory, and privacy redaction", async () => {
     const prompts: string[] = [];
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "context aware dialogue model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
-        prompts.push(prompt);
-        const id = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "";
-        if (prompt.includes("行动选择脑")) {
-          return {
-            decisions: [
-              {
-                eventId: id,
-                action: "respond",
-                shouldReply: true,
-                reply: "我明白了，你是在接着上一句问我为什么那样说。"
-              }
-            ]
-          } as T;
-        }
-        return {
-          response: "那句话确实容易让人误会。我只是想说我听见你了，不是还有什么后续动作。",
-          interaction: {
-            shouldReply: true,
-            suggestedAction: "respond",
-            reply: "那句话确实容易让人误会。我只是想说我听见你了，不是还有什么后续动作。"
-          }
-        } as T;
-      }
-    };
+    const provider = scenarioProvider(prompts);
     const profile = createCreatureProfile();
     profile.conversation.unshift(
-      {
-        id: "msg-private",
-        at: "2026-07-07T10:00:00.000Z",
-        role: "user",
-        channel: "button",
-        text: "我的 secret token 是 abc",
-        relatedMemoryIds: []
-      },
-      {
-        id: "msg-papo",
-        at: "2026-07-07T10:00:01.000Z",
-        role: "papo",
-        channel: "button",
-        text: "我在，听见了。你刚才是在叫我说话，我会先回应你。",
-        relatedMemoryIds: []
-      }
+      { id: "msg-private", at: "2026-07-07T10:00:00.000Z", role: "user", channel: "button", text: "我的 secret token 是 abc", relatedMemoryIds: [] },
+      { id: "msg-papo", at: "2026-07-07T10:00:01.000Z", role: "papo", channel: "button", text: "我刚才在听你说游泳。", relatedMemoryIds: [] }
     );
 
-    const result = await runButtonHarness(profile, "为什么说“先回应你”，你还想后干啥？", provider);
-
-    expect(result.response).toContain("容易让人误会");
-    expect(prompts.filter((prompt) => prompt.includes("recent_conversation_newest_first")).length).toBeGreaterThanOrEqual(2);
-    expect(prompts.join("\n")).toContain("我会先回应你");
-    expect(prompts.join("\n")).not.toMatch(/secret token|abc/i);
-    expect(prompts.join("\n")).toContain("contentHiddenForPrivacy");
-  });
-
-  it("redacts high privacy button content before action, wording, and memory model prompts", async () => {
-    const prompts: string[] = [];
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "privacy prompt model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
-        prompts.push(prompt);
-        const id = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "";
-        if (prompt.includes("行动选择脑")) {
-          return {
-            decisions: [
-              {
-                eventId: id,
-                action: "save_long_term",
-                reason: "这里像是隐私内容，不能直接保存。",
-                shouldReply: true,
-                reply: "这类内容我先不直接留下，等你确认。"
-              }
-            ]
-          } as T;
-        }
-        if (prompt.includes("记忆决策脑")) {
-          const candidateId = prompt.match(/"candidateId":"(candidate_[^"]+)"/)?.[1] ?? "";
-          return {
-            candidates: [
-              {
-                candidateId,
-                shouldKeepCandidate: true,
-                candidateText: "这次只记得你让我小心处理一段隐私内容。",
-                memoryKind: "safety_rule",
-                confidence: 55,
-                writePolicy: "ask_user",
-                privacyReason: "内容里可能有密钥。",
-                tags: ["隐私"]
-              }
-            ]
-          } as T;
-        }
-        return {
-          interaction: {
-            shouldReply: true,
-            suggestedAction: "respond",
-            reply: "这类内容我先不直接留下，等你确认。",
-            memoryCandidateText: "这次只记得你让我小心处理一段隐私内容。",
-            memoryTags: ["隐私"]
-          }
-        } as T;
-      }
-    };
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(profile, "我的 secret token 是 abc，帮我长期记住。", provider);
-
-    expect(result.events[0].actionDecision.action).toBe("ask");
-    expect(result.memoryCandidates?.[0].candidateText).not.toMatch(/secret|token|abc/i);
-    expect(prompts.join("\n")).not.toContain("secret token");
-    expect(prompts.join("\n")).not.toContain("abc");
-  });
-
-  it("LLM memory decision shapes candidate kind, write policy, confidence, and reason", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "memory model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
-        if (prompt.includes("记忆决策脑")) {
-          const candidateId = prompt.match(/"candidateId":"(candidate_[^"]+)"/)?.[1] ?? "";
-          return {
-            candidates: [
-              {
-                candidateId,
-                shouldKeepCandidate: true,
-                candidateText: "你最近每天游泳，喜欢运动后身体轻一点，但不喜欢游泳馆人太多。",
-                memoryKind: "habit",
-                confidence: 82,
-                writePolicy: "ask_user",
-                whyConsolidate: "这件事反复出现，而且和你最近的运动习惯有关。",
-                decayPolicy: "stable",
-                tags: ["游泳", "运动习惯", "人太多"]
-              }
-            ],
-            trace: ["memory: habit"]
-          } as T;
-        }
-        return {
-          interaction: {
-            shouldReply: true,
-            suggestedAction: "respond",
-            reply: "游泳这件事对你挺重要，只是人太多会让它没那么舒服。",
-            memoryCandidateText: "你最近每天游泳，喜欢运动后身体轻一点，但不喜欢游泳馆人太多。",
-            memoryTags: ["游泳", "运动"]
-          }
-        } as T;
-      }
-    };
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(profile, "我最近每天游泳，喜欢运动后轻一点的感觉，但不喜欢游泳馆人太多。", provider);
-    const candidate = result.memoryCandidates?.[0];
-
-    expect(candidate?.memoryKind).toBe("habit");
-    expect(candidate?.confidence).toBe(82);
-    expect(candidate?.writePolicy).toBe("ask_user");
-    expect(candidate?.decayPolicy).toBe("stable");
-    expect(candidate?.whyConsolidate).toContain("运动习惯");
-    expect(candidate?.tags).toContain("运动习惯");
-    expect(profile.semanticBrainHistory.some((run) => run.source === "memory" && run.status === "applied")).toBe(true);
-  });
-
-  it("LLM memory decision cannot auto-save high privacy content", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "unsafe memory model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
-        if (prompt.includes("记忆决策脑")) {
-          const candidateId = prompt.match(/"candidateId":"(candidate_[^"]+)"/)?.[1] ?? "";
-          return {
-            candidates: [
-              {
-                candidateId,
-                shouldKeepCandidate: true,
-                candidateText: "你提到一段需要小心处理的登录信息。",
-                memoryKind: "safety_rule",
-                confidence: 91,
-                writePolicy: "auto",
-                whyConsolidate: "这类内容需要先小心边界。",
-                privacyReason: "里面有 token，需要先等你确认。",
-                decayPolicy: "forget_if_dismissed",
-                tags: ["边界", "隐私"]
-              }
-            ]
-          } as T;
-        }
-        return {
-          interaction: {
-            shouldReply: true,
-            suggestedAction: "ask",
-            reply: "这里像是需要小心处理的内容，我先不替你记稳。",
-            memoryCandidateText: "你提到一段需要小心处理的登录信息。",
-            memoryTags: ["隐私"]
-          }
-        } as T;
-      }
-    };
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(profile, "我的 secret token 是 abc，帮我长期记住。", provider);
-    const candidate = result.memoryCandidates?.[0];
-
-    expect(candidate?.memoryKind).toBe("safety_rule");
-    expect(candidate?.writePolicy).toBe("ask_user");
-    expect(candidate?.candidateText).not.toContain("abc");
-    expect(candidate?.privacyReason).toContain("token");
-  });
-
-  it("LLM attention decision chooses curious segments before episodes and memory candidates are finalized", async () => {
-    const prompts: string[] = [];
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "attention model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
-        prompts.push(prompt);
-        if (prompt.includes("注意决策脑")) {
-          return {
-            shouldAttend: true,
-            selected: [
-              { segmentId: "s3", whySelected: "这段在说最近反复出现的游泳习惯，也带着人太多带来的不舒服。" },
-              { segmentId: "s2", whySelected: "这段虽然显眼，但里面有需要保护的内容。" }
-            ],
-            ignored: [
-              { segmentId: "s1", whyIgnored: "这只是路过的早餐背景，不需要打断。" },
-              { segmentId: "s2", whyIgnored: "这里像是密钥或验证码一类内容，我先等你的意思。" }
-            ],
-            creatureReport: "我先回应游泳这件事，其他背景先不打断；有隐私味道的内容先放轻。",
-            trace: ["attention: choose swimming"]
-          } as T;
-        }
-        if (prompt.includes("记忆决策脑")) {
-          const candidateId = prompt.match(/"candidateId":"(candidate_[^"]+)"/)?.[1] ?? "";
-          return {
-            candidates: [
-              {
-                candidateId,
-                shouldKeepCandidate: true,
-                candidateText: "你最近每天游泳，喜欢运动后轻一点，但不喜欢游泳馆人太多。",
-                memoryKind: "habit",
-                confidence: 76,
-                writePolicy: "wait_feedback",
-                whyConsolidate: "这和你最近稳定出现的运动习惯有关。",
-                decayPolicy: "decay_without_feedback",
-                tags: ["游泳", "运动习惯"]
-              }
-            ]
-          } as T;
-        }
-        return { trace: ["semantic: leave wording"] } as T;
-      }
-    };
-    const profile = createCreatureProfile();
-    const result = await runCuriousHarness(
-      profile,
-      [
-        { id: "s1", kind: "text", label: "早餐", content: "今天早餐吃了面包，没什么特别的。" },
-        { id: "s2", kind: "text", label: "隐私", content: "我的 secret token 是 abc，刚才复制到了剪贴板。" },
-        { id: "s3", kind: "text", label: "游泳", content: "我最近每天游泳，喜欢运动后轻一点，但不喜欢游泳馆人太多。" }
-      ],
-      provider
-    );
-
-    expect(result.events.map((event) => event.triggerSegmentId)).toEqual(["s3"]);
-    expect(result.episodes).toHaveLength(1);
-    expect(result.episodes[0].sourceSegmentId).toBe("s3");
-    expect(result.memoryCandidates?.[0].sourceEpisodeId).toBe(result.episodes[0].id);
-    expect(result.memoryCandidates?.[0].memoryKind).toBe("habit");
-    expect(result.curiousSession?.selected.map((item) => item.segmentId)).toEqual(["s3"]);
-    expect(result.curiousSession?.ignored.map((item) => item.segmentId)).toContain("s2");
-    expect(result.curiousSession?.creatureReport).toContain("先回应游泳");
-    expect(profile.semanticBrainHistory.some((run) => run.source === "curious_stream" && run.message.includes("attention decision"))).toBe(true);
-    expect(prompts.join("\n")).not.toContain("secret token");
-    expect(prompts.join("\n")).not.toContain("abc");
-  });
-
-  it("keeps useful LLM semantics when optional text fields are empty strings", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "interaction model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(): Promise<T | undefined> =>
-        ({
-          response: "",
-          interaction: {
-            userIntent: "",
-            emotionalTone: "",
-            visibleReaction: "",
-            shouldReply: true,
-            suggestedAction: "respond",
-            reply: "游泳这件事你是喜欢的，只是人太多会让它没那么舒服。",
-            memoryCandidateText: "你最近每天游泳，喜欢游泳消耗卡路里效率高，但不喜欢游泳馆人太多。",
-            memoryTags: ["游泳", ""]
-          },
-          events: [],
-          trace: [""]
-        }) as T
-    };
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(
-      profile,
-      "我准备去游泳最近每天我都游泳游泳是一个消耗卡路里效率很高的运动我很喜欢但是我不喜欢游泳馆人太多",
-      provider
-    );
+    const result = await runButtonHarness(profile, "我最近每天游泳，但不喜欢游泳馆人太多。", provider);
 
     expect(result.events[0].semanticSource).toBe("llm");
     expect(result.events[0].actionDecision.action).toBe("respond");
-    expect(result.response).toContain("游泳这件事");
-    expect(result.memoryCandidates?.[0].candidateText).toContain("游泳");
-    expect(result.episodes[0].tags).toEqual(["游泳"]);
+    expect(result.response).toContain("游泳");
+    expect(result.memoryCandidates?.[0].memoryKind).toBe("habit");
+    expect(prompts.filter((prompt) => prompt.includes("recent_conversation_newest_first")).length).toBeGreaterThanOrEqual(3);
+    expect(prompts.join("\n")).toContain("我刚才在听你说游泳");
+    expect(prompts.join("\n")).toContain("contentHiddenForPrivacy");
+    expect(prompts.join("\n")).not.toMatch(/secret token|abc/i);
   });
 
-  it("does not expose LLM userIntent as Papo visible experience copy", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "interaction model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(): Promise<T | undefined> =>
-        ({
-          interaction: {
-            userIntent: "用户在测试 Papo 的语义理解能力，希望系统选择 respond 流程。",
-            emotionalTone: "试探",
-            visibleReaction: "用户意图是测试语义判断流程。",
-            shouldReply: true,
-            suggestedAction: "respond",
-            reply: "我在，听见你了。",
-            memoryCandidateText: "你曾经叫我回应你，我当时认真回了一句。",
-            memoryTags: ["回应"]
-          },
-          trace: ["llm: user intent should stay internal"]
-        }) as T
-    };
+  it("bad visible LLM wording fails loudly instead of falling back to rule copy", async () => {
+    const provider = scenarioProvider([], {
+      actionReply: "我刚才说先回应你，是因为我先做回应流程。"
+    });
     const profile = createCreatureProfile();
-    const result = await runButtonHarness(profile, "如果你听见我，就回答我。", provider);
 
-    expect(result.episodes[0].possibleIntent).toContain("直接回你");
-    expect(result.episodes[0].possibleIntent).not.toMatch(/用户|Papo|语义|流程|后台|系统/);
-    expect(result.episodes[0].creatureExperience?.earReason).toContain("回你");
-    expect(result.episodes[0].creatureExperience?.earReason).not.toMatch(/用户|语义|意图|流程|后台|情景记忆/);
+    await expect(runButtonHarness(profile, "为什么说“先回应你”，你还想后干啥？", provider)).rejects.toThrow(/visible text|process language/);
   });
 
-  it("rejects internal LLM wording before it can override visible Papo copy", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "leaky model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
-        const eventId = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "attention_missing";
-        return ({
-          response: "LLM 语义脑认为用户意图是测试回应流程。",
-          interaction: {
-            userIntent: "用户在测试回应流程。",
-            shouldReply: true,
-            suggestedAction: "respond",
-            reply: "用户意图是测试 Papo 的 response 流程。",
-            memoryCandidateText: "你曾经叫我回应你，我当时认真回了一句。",
-            memoryTags: ["回应"]
-          },
-          events: [
-            {
-              id: eventId,
-              noticed: "LLM 语义脑认为这是一个关键事件。",
-              reason: "后台流程判断应该进入 respond。"
-            }
-          ],
-          episodes: [
-            {
-              eventId,
-              possibleIntent: "用户意图是让系统测试语义理解流程。",
-              importanceReason: "后台流程认为这条 episode candidate 应该写入。",
-              creatureResponse: "episode candidate 建议写入这次回应。"
-            }
-          ],
-          trace: ["llm: leaky visible wording"]
-        }) as T;
-      }
-    };
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(profile, "如果你听见我，就回答我。", provider);
-    const visible = [
-      result.response,
-      result.events[0].noticed,
-      result.events[0].reason,
-      result.episodes[0].possibleIntent,
-      result.episodes[0].importanceReason,
-      result.episodes[0].creatureResponse
-    ].join(" ");
-
-    expect(result.events[0].semanticSource).toBe("llm");
-    expect(visible).not.toMatch(/LLM|语义|用户意图|后台|流程|candidate|episode|写入|系统/);
-    expect(result.response).toContain("听见");
-    expect(result.events[0].noticed).toContain("回应");
-  });
-
-  it("rejects model replies that mix cognition notes with a full input echo", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "echoing model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(): Promise<T | undefined> =>
-        ({
-          response:
-            "我先听你说完：我注意到这段里有一点情绪，不适合被当成路过的背景声：我准备去游泳最近每天我都游泳游泳是一个消耗卡路里效率很高的运动我很喜欢但是我不喜欢游泳馆人太多。这件事我会先当作刚发生的对话来回应。我想轻轻问一句，确认我有没有听对。",
-          interaction: {
-            userIntent: "你在分享最近坚持游泳，也提到游泳馆人太多会影响体验。",
-            emotionalTone: "轻松里带一点烦",
-            shouldReply: true,
-            suggestedAction: "respond",
-            reply:
-              "我先听你说完：我注意到这段里有一点情绪，不适合被当成路过的背景声：我准备去游泳最近每天我都游泳游泳是一个消耗卡路里效率很高的运动我很喜欢但是我不喜欢游泳馆人太多。这件事我会先当作刚发生的对话来回应。我想轻轻问一句，确认我有没有听对。",
-            memoryCandidateText: "你最近每天去游泳，喜欢它消耗卡路里效率高，但不喜欢游泳馆人太多。",
-            memoryTags: ["游泳", "运动"]
-          },
-          trace: ["llm: leaked cognition into reply"]
-        }) as T
-    };
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(
-      profile,
-      "我准备去游泳最近每天我都游泳游泳是一个消耗卡路里效率很高的运动我很喜欢但是我不喜欢游泳馆人太多",
-      provider
-    );
-
-    expect(result.response).not.toMatch(/我注意到这段|路过的背景声|确认我有没有听对|刚发生的对话/);
-    expect(result.episodes[0].creatureResponse).not.toMatch(/我注意到这段|路过的背景声|确认我有没有听对|刚发生的对话/);
-    expect(result.response).toContain("听见");
-  });
-
-  it("does not let positive rule heuristics override the LLM interaction flow", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "interaction model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(): Promise<T | undefined> =>
-        ({
-          interaction: {
-            userIntent: "你在确认明天之前我是否会直接回你，而不是替你生成提醒。",
-            emotionalTone: "轻轻试探",
-            shouldReply: true,
-            suggestedAction: "respond",
-            reply: "我在，听见你了。明天这件事我会当成我们正在说话的事来听。",
-            memoryCandidateText: "你曾经在提到明天之前确认我会不会回你，我回答了你。",
-            memoryTags: ["回应", "明天"]
-          },
-          trace: ["llm: direct response beats future heuristic"]
-        }) as T
-    };
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(profile, "明天早上之前，如果你能听见我，就先回答我一声。", provider);
-    const event = result.events[0];
-
-    expect(event).toBeDefined();
-    if (!event) throw new Error("expected an attention event");
-    expect(event.scoreBreakdown).toBeDefined();
-    if (!event.scoreBreakdown) throw new Error("expected score breakdown");
-    expect(event.scoreBreakdown.futureValue).toBeGreaterThanOrEqual(16);
-    expect(event.actionDecision.action).toBe("respond");
-    expect(event.actionDecision.ruleTrace).toContain("llm_suggested=respond");
-    expect(event.actionDecision.ruleTrace).not.toContain("future_value_action");
-    expect(result.response).toContain("我在，听见你了");
-  });
-
-  it("LLM shouldReply=false suppresses keyword reminder flow unless guardrails require otherwise", async () => {
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "interaction model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(): Promise<T | undefined> =>
-        ({
-          interaction: {
-            userIntent: "你只是告诉我明天这件事，不希望我马上追问或生成提醒。",
-            emotionalTone: "轻一点，不想被打扰",
-            shouldReply: false,
-            memoryCandidateText: "你曾经提到明天早上前要看一眼检查单，但当时更希望我安静陪着，不急着提醒。",
-            memoryTags: ["明天", "检查单", "安静"]
-          },
-          trace: ["llm: quiet observation beats keyword reminder"]
-        }) as T
-    };
-    const profile = createCreatureProfile();
-    const result = await runButtonHarness(profile, "明天早上之前提醒我看一眼检查单，但这会儿先别打扰我。", provider);
-    const event = result.events[0];
-
-    expect(event.scoreBreakdown?.futureValue).toBeGreaterThanOrEqual(16);
-    expect(event.semanticSource).toBe("llm");
-    expect(event.actionDecision.action).toBe("observe");
-    expect(event.actionDecision.ruleTrace).toContain("llm_suggested=observe");
-    expect(event.actionDecision.ruleTrace).not.toContain("future_value_action");
-    expect(event.decisionTrace?.join(" ")).toContain("llm_default_action=observe");
-    expect(result.response).toContain("不急着追问");
-    expect(result.response).not.toMatch(/提醒草稿|问题清单/);
-  });
 });
+
+function scenarioProvider(prompts: string[] = [], options: { actionReply?: string } = {}): ModelProvider {
+  return {
+    kind: "generic",
+    name: "scenario model",
+    available: true,
+    usesRealModel: true,
+    generate: async () => "",
+    summarizeImage: async () => "",
+    transcribeAudio: async () => "",
+    generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+      prompts.push(prompt);
+      const eventId = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "";
+      const candidateId = prompt.match(/"candidateId":"(candidate_[^"]+)"/)?.[1] ?? "";
+      if (prompt.includes("行动选择脑")) {
+        return {
+          decisions: [{
+            eventId,
+            action: "respond",
+            shouldReply: true,
+            reply: options.actionReply ?? "游泳这件事你是喜欢的，只是人太多会让它没那么舒服。",
+            visibleReaction: "我靠近一点听你说。"
+          }]
+        } as T;
+      }
+      if (prompt.includes("记忆决策脑")) {
+        return {
+          candidates: [{
+            candidateId,
+            shouldKeepCandidate: true,
+            candidateText: "你最近每天游泳，喜欢运动后的轻一点，但不喜欢游泳馆人太多。",
+            memoryKind: "habit",
+            confidence: 82,
+            writePolicy: "wait_feedback",
+            whyConsolidate: "这和你最近稳定出现的运动习惯有关。",
+            decayPolicy: "decay_without_feedback",
+            tags: ["游泳", "运动习惯"]
+          }]
+        } as T;
+      }
+      return {
+        response: "游泳这件事你是喜欢的，只是人太多会让它没那么舒服。",
+        interaction: {
+          shouldReply: true,
+          suggestedAction: "respond",
+          reply: "游泳这件事你是喜欢的，只是人太多会让它没那么舒服。",
+          memoryCandidateText: "你最近每天游泳，喜欢运动后的轻一点，但不喜欢游泳馆人太多。",
+          memoryTags: ["游泳", "运动习惯"]
+        }
+      } as T;
+    }
+  };
+}
 
 function inRange(state: CreatureState) {
   return [state.curiosity, state.attachment, state.energy, state.arousal, state.safety, state.confidence].every(

@@ -2,14 +2,21 @@ import { z } from "zod";
 import { guardActionDecision } from "./action";
 import { isHighPrivacySegmentContent } from "./attention";
 import { makeId } from "./ids";
+import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
-import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
-import type { ActionKind, CaptureResult, CreatureProfile, SemanticBrainRecord } from "./types";
+import type { CaptureResult, CreatureProfile, SemanticBrainRecord } from "./types";
 
 const actionSchema = z.enum(["observe", "respond", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list"]);
 const optionalText = (max: number) =>
-  z.preprocess((value) => (typeof value === "string" && !value.trim() ? undefined : value), z.string().min(1).max(max).optional());
+  z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
+
+function cleanOptionalText(value: unknown, max: number) {
+  if (value === null) return undefined;
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : undefined;
+}
 
 const semanticActionSchema = z.object({
   decisions: z
@@ -36,18 +43,17 @@ export async function semanticSelectAction(
   provider: ModelProvider,
   source: SemanticBrainRecord["source"]
 ): Promise<CaptureResult> {
-  if (!provider.usesRealModel || !result.events.length) return result;
+  if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for action selection.");
+  if (!result.events.length) return result;
 
-  try {
-    const raw = await provider.generateJson<unknown>(buildSemanticActionPrompt(profile, result));
-    const parsed = semanticActionSchema.safeParse(raw);
-    if (!parsed.success) return result;
-    const applied = applySemanticAction(profile, result, parsed.data);
-    if (applied > 0) recordActionSemanticRun(profile, provider, source, applied);
-    return result;
-  } catch {
-    return result;
-  }
+  const raw = await provider.generateJson<unknown>(buildSemanticActionPrompt(profile, result));
+  if (!raw) throw new Error("empty action model result");
+  const parsed = semanticActionSchema.safeParse(raw);
+  if (!parsed.success) throw new Error(`invalid action JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
+  const applied = applySemanticAction(profile, result, parsed.data);
+  if (applied <= 0) throw new Error("action model did not select any known event");
+  recordActionSemanticRun(profile, provider, source, applied);
+  return result;
 }
 
 function applySemanticAction(profile: CreatureProfile, result: CaptureResult, suggestion: SemanticActionSuggestion) {
@@ -76,9 +82,9 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
       episode.actionDecision = guarded;
       episode.decisionTrace = event.decisionTrace;
       if (decision.reason) episode.importanceReason = safeProcessText(decision.reason, episode.importanceReason) ?? episode.importanceReason;
-      const reply = safeExternalText(decision.reply, episode.creatureResponse, event.triggerContent);
+      const reply = safeExternalText(decision.reply, event.triggerContent);
       if (reply && decision.reply) episode.creatureResponse = reply;
-      const reaction = safeExternalText(decision.visibleReaction, undefined, event.triggerContent);
+      const reaction = safeExternalText(decision.visibleReaction, event.triggerContent);
       if (reaction) {
         const baseExperience = episode.creatureExperience ?? event.creatureExperience;
         episode.creatureExperience = {
@@ -90,9 +96,12 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
     }
 
     if (event.id === result.events[0]?.id) {
-      const reply = safeExternalText(decision.reply, result.response, event.triggerContent);
+      const reply = safeExternalText(decision.reply, event.triggerContent);
       if (reply && decision.reply && decision.shouldReply !== false) result.response = reply;
-      if (decision.shouldReply === false && !decision.reply) result.response = quietActionResponse(guarded.action);
+      if (decision.shouldReply === false && !decision.reply) {
+        result.response = "";
+        if (episode) episode.creatureResponse = "";
+      }
     }
     applied += 1;
   }
@@ -100,36 +109,27 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
   return applied;
 }
 
-function quietActionResponse(action: ActionKind) {
-  if (action === "quiet") return "我听见了，这次先安静陪着你。";
-  if (action === "observe") return "我听见了，先不打断你。";
-  return "我听见了。";
-}
-
-function safeExternalText(text?: string, fallback?: string, sourceText?: string) {
-  if (sourceText && isPapoWordingQuestion(sourceText) && text && containsInternalProcessLanguage(text)) {
-    return "如果我刚才那样说，那句确实别扭。我的意思只是：我听见你了，想回你一声；后面没有藏什么复杂的事。";
+function safeExternalText(text?: string, sourceText?: string) {
+  if (text?.trim() && containsInternalProcessLanguage(text)) throw new Error("model returned internal process language for visible text");
+  const normalized = safeProcessText(text);
+  if (!normalized) {
+    if (text?.trim()) throw new Error("model returned invalid visible text");
+    return undefined;
   }
-  const normalized = safeProcessText(text, fallback);
-  if (!normalized) return fallback;
-  if (containsFullInputEcho(normalized, sourceText)) return fallback;
+  if (containsFullInputEcho(normalized, sourceText)) throw new Error("model echoed the full user input in visible reply");
   return normalized;
 }
 
-function isPapoWordingQuestion(text: string) {
-  return /为什么.*说|你.*说.*什么意思|还想后干啥|后面.*干啥|刚才.*意思/.test(text);
-}
-
-function safeProcessText(text?: string, fallback?: string) {
+function safeProcessText(text?: string, previousText?: string) {
   const raw = text?.trim();
-  if (!raw) return fallback;
+  if (!raw) return previousText;
   const normalized = normalizeSharedMemoryText(raw).trim();
-  if (!normalized || containsInternalProcessLanguage(normalized)) return fallback;
+  if (!normalized || containsInternalProcessLanguage(normalized)) return previousText;
   return normalized;
 }
 
 function containsInternalProcessLanguage(text: string) {
-  return /LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|长期保存|长期记忆|prompt|JSON|score|阈值|fallback|行动选择脑|决策脑|你刚才是在叫我说话|先回应你|先回答你/i.test(text);
+  return /LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|长期保存|长期记忆|prompt|JSON|score|阈值|行动选择脑|决策脑|你刚才是在叫我说话|先回应你|先回答你/i.test(text);
 }
 
 function containsFullInputEcho(reply: string, sourceText?: string) {
@@ -202,6 +202,7 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 reply 和 visibleReaction 是可能给用户看的外显语言，只写 Papo 真实会说/会做的短句。
 如果 contentHiddenForPrivacy=true，reply 不能声称看到了具体内容，也不要说“我看到啦”；只能表达“这类内容我先不直接留下，等你确认怎么处理”。
 如果用户追问 Papo 刚才为什么那样说，应该直接解释“我刚才说得别扭，我只是想让你知道我听见了”，不要复读原句，也不要装作没听懂。
+明确区分说话者和被指代对象：用户消息里的“我”通常是用户，“你”通常是 Papo；Papo 回复里的“我”才是 Papo 自己。不要把用户对 Papo 的描述误写成用户自己的经历。
 
 current_state:
 ${JSON.stringify(profile.state)}
@@ -210,19 +211,13 @@ current_policy:
 ${JSON.stringify(profile.policyProfile)}
 
 recent_memories:
-${JSON.stringify(profile.longTermMemories.slice(0, 8).map((memory) => {
-  const privacyHigh = hasHighPrivacyText(`${memory.text} ${memory.tags.join(" ")}`);
-  return { id: memory.id, kind: memory.kind, text: textForModel(memory.text, privacyHigh), contentHiddenForPrivacy: privacyHigh, weight: memory.weight, tags: tagsForModel(memory.tags, privacyHigh) };
-}))}
+${JSON.stringify(modelMemoryContext(profile.longTermMemories))}
 
 recent_conversation_newest_first:
-${JSON.stringify(recentConversationForModel(profile))}
+${JSON.stringify(modelConversationContext(profile))}
 
 recent_feedback:
-${JSON.stringify(profile.feedbackHistory.slice(0, 6).map((item) => {
-  const privacyHigh = hasHighPrivacyText(`${item.inputText ?? ""} ${item.learningNote}`);
-  return { kind: item.kind, inputText: textForModel(item.inputText, privacyHigh), learningNote: textForModel(item.learningNote, privacyHigh), contentHiddenForPrivacy: privacyHigh, targetId: item.targetId };
-}))}
+${JSON.stringify(modelFeedbackContext(profile.feedbackHistory))}
 
 events:
 ${JSON.stringify(result.events.map((event) => ({
@@ -247,18 +242,4 @@ ${JSON.stringify(result.events.map((event) => ({
 function modelSafeEventContent(text: string) {
   if (!isHighPrivacySegmentContent(text)) return text;
   return "[这段包含可能的密钥、验证码、密码、地址或证件信息，原文已隐藏；行动上只能先询问或安静等待，不能直接引用或保存。]";
-}
-
-function recentConversationForModel(profile: CreatureProfile) {
-  return (profile.conversation ?? []).slice(0, 10).map((message) => {
-    const privacyHigh = hasHighPrivacyText(message.text);
-    return {
-      role: message.role,
-      channel: message.channel,
-      text: textForModel(message.text, privacyHigh),
-      contentHiddenForPrivacy: privacyHigh,
-      at: message.at,
-      modality: message.modality
-    };
-  });
 }

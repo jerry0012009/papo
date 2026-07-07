@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { makeId } from "./ids";
+import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { normalizeSharedMemoryText, toCreatureMemoryVoice } from "./memory";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
@@ -9,13 +10,20 @@ const memoryKindSchema = z.enum(["user_preference", "long_theme", "creature_self
 const writePolicySchema = z.enum(["auto", "ask_user", "wait_feedback", "do_not_save"]);
 const decayPolicySchema = z.enum(["stable", "decay_without_feedback", "forget_if_dismissed"]);
 const optionalText = (max: number) =>
-  z.preprocess((value) => (typeof value === "string" && !value.trim() ? undefined : value), z.string().min(1).max(max).optional());
+  z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
 const optionalTextArray = (maxItems: number, maxText: number) =>
   z
-    .array(z.preprocess((value) => (typeof value === "string" ? value.trim() : value), z.string().max(maxText)).optional())
+    .array(z.preprocess((value) => cleanOptionalText(value, maxText), z.string().optional()))
     .transform((values) => values.filter((value): value is string => Boolean(value)))
     .pipe(z.array(z.string().min(1).max(maxText)).max(maxItems))
     .optional();
+
+function cleanOptionalText(value: unknown, max: number) {
+  if (value === null) return undefined;
+  if (typeof value !== "string") return value;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, max) : undefined;
+}
 
 const semanticMemorySchema = z.object({
   candidates: z
@@ -42,18 +50,17 @@ type SemanticMemorySuggestion = z.infer<typeof semanticMemorySchema>;
 
 export async function semanticDecideMemory(profile: CreatureProfile, candidates: MemoryCandidate[], provider: ModelProvider): Promise<MemoryCandidate[]> {
   const activeCandidates = candidates.filter((candidate) => candidate.status === "candidate");
-  if (!provider.usesRealModel || !activeCandidates.length) return candidates;
+  if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for memory decisions.");
+  if (!activeCandidates.length) return candidates;
 
-  try {
-    const raw = await provider.generateJson<unknown>(buildSemanticMemoryPrompt(profile, activeCandidates));
-    const parsed = semanticMemorySchema.safeParse(raw);
-    if (!parsed.success) return candidates;
-    const applied = applySemanticMemorySuggestion(profile, activeCandidates, parsed.data);
-    if (applied > 0) recordMemorySemanticRun(profile, provider, `llm memory decision applied to ${applied} candidate(s)`);
-    return candidates;
-  } catch {
-    return candidates;
-  }
+  const raw = await provider.generateJson<unknown>(buildSemanticMemoryPrompt(profile, activeCandidates));
+  if (!raw) throw new Error("empty memory model result");
+  const parsed = semanticMemorySchema.safeParse(raw);
+  if (!parsed.success) throw new Error(`invalid memory JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
+  const applied = applySemanticMemorySuggestion(profile, activeCandidates, parsed.data);
+  if (applied <= 0) throw new Error("memory model did not decide any active candidate");
+  recordMemorySemanticRun(profile, provider, `llm memory decision applied to ${applied} candidate(s)`);
+  return candidates;
 }
 
 function applySemanticMemorySuggestion(profile: CreatureProfile, candidates: MemoryCandidate[], suggestion: SemanticMemorySuggestion) {
@@ -110,7 +117,7 @@ function safeMemoryProcessText(text?: string) {
 }
 
 function containsInternalMemoryLanguage(text: string) {
-  return /LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|prompt|JSON|score|阈值|总分|fallback/i.test(text);
+  return /LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|prompt|JSON|score|阈值|总分/i.test(text);
 }
 
 function hasPrivacyRisk(text: string) {
@@ -176,10 +183,13 @@ current_policy:
 ${JSON.stringify(profile.policyProfile)}
 
 recent_memories:
-${JSON.stringify(profile.longTermMemories.slice(0, 8).map((memory) => ({ id: memory.id, kind: memory.kind, text: toCreatureMemoryVoice(memory.text), weight: memory.weight, tags: memory.tags })))}
+${JSON.stringify(modelMemoryContext(profile.longTermMemories, { creatureVoice: true }))}
+
+recent_conversation_newest_first:
+${JSON.stringify(modelConversationContext(profile))}
 
 recent_feedback:
-${JSON.stringify(profile.feedbackHistory.slice(0, 6).map((item) => ({ kind: item.kind, inputText: item.inputText, learningNote: item.learningNote, targetId: item.targetId })))}
+${JSON.stringify(modelFeedbackContext(profile.feedbackHistory))}
 
 candidates:
 ${JSON.stringify(candidates.map((candidate) => {
