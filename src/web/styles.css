@@ -892,6 +892,52 @@ meter {
   line-height: 1.5;
 }
 
+.demo-contrast {
+  display: grid;
+  gap: 10px;
+}
+
+.demo-input-line {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 250, 240, 0.74);
+  border: 1px solid rgba(31, 36, 33, 0.08);
+}
+
+.demo-input-line span,
+.demo-contrast-grid article span {
+  color: #69756c;
+  font-size: 0.78rem;
+}
+
+.demo-input-line p,
+.demo-contrast-grid article p {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.demo-contrast-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.demo-contrast-grid article {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #fffaf0;
+  border: 1px solid rgba(31, 36, 33, 0.08);
+}
+
+.demo-contrast-grid article:first-child {
+  background: #e9f3eb;
+  border-color: rgba(79, 139, 118, 0.18);
+}
+
 .episode-card h3 {
   font-size: 1rem;
   line-height: 1.45;
@@ -1085,6 +1131,10 @@ meter {
   }
 
   .composer-tools {
+    grid-template-columns: 1fr;
+  }
+
+  .demo-contrast-grid {
     grid-template-columns: 1fr;
   }
 

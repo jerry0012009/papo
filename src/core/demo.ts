@@ -52,9 +52,10 @@ function actionTone(action: string) {
 
 function summarizeVisibleStyle(result: CaptureResult) {
   return summarizeText(
-    result.events[0]?.creatureExperience.actionFeeling ??
+    result.response ??
+      result.events[0]?.creatureExperience.actionFeeling ??
       result.events[0]?.actionDecision.reason ??
-      result.response
+      ""
   );
 }
 

@@ -69,10 +69,19 @@ interface SpeechRecognitionEventLike {
 type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
 
 interface DemoSummary {
-  attention: string;
-  feedback: string;
-  contrast: string;
-  emergence: string;
+  attention?: string;
+  feedback?: string;
+  contrast?: string;
+  emergence?: string;
+  contrastDetail?: DemoContrastDetail;
+}
+
+interface DemoContrastDetail {
+  input: string;
+  deepName: string;
+  quietName: string;
+  deepReply: string;
+  quietReply: string;
 }
 
 interface EmergenceSurface {
@@ -581,6 +590,7 @@ export function App() {
         deepResult,
         quietResult
       });
+      const contrastDetail = createDemoContrastDetail(input, deepResult.profile, quietResult.profile, deepResult, quietResult);
 
       setProfiles(await listProfiles());
       setProfile(emerged.profile);
@@ -591,6 +601,7 @@ export function App() {
         attention: `Papo 听过 ${curiousResult.curiousSession?.totalSegments ?? demoCuriousSegments.length} 段生活，只接住 ${curiousResult.events.length} 段真正需要回应的内容。`,
         feedback: learned || "Papo 已经听见“帮我记住”和“再想一会儿”，这会影响它后面怎么接你的话。",
         contrast,
+        contrastDetail,
         emergence: emerged.emergence.text
       });
       setDemoNote("Papo 小团刚走完一圈：先听见生活内容，再被你的反馈养一下，之后在合适的时候把真实记住的事带回来。");
@@ -608,8 +619,8 @@ export function App() {
       let aProfile = aFirst.profile;
       let bProfile = bFirst.profile;
       for (let i = 0; i < 3; i += 1) {
-        aProfile = (await sendFeedback(a.userId, "continue", aFirst.episodes[0].id)).profile;
-        bProfile = (await sendFeedback(b.userId, "not_now", bFirst.episodes[0].id)).profile;
+        aProfile = (await sendFeedback(a.userId, "continue", aFirst.episodes[0]?.id)).profile;
+        bProfile = (await sendFeedback(b.userId, "not_now", bFirst.episodes[0]?.id)).profile;
       }
       const aResult = await buttonCapture(a.userId, input);
       const bResult = await buttonCapture(b.userId, input);
@@ -619,12 +630,18 @@ export function App() {
         deepResult: aResult,
         quietResult: bResult
       });
+      const contrastDetail = createDemoContrastDetail(input, aResult.profile, bResult.profile, aResult, bResult);
       setProfiles(await listProfiles());
       setProfile(aResult.profile);
       setLastResult(aResult);
-      setLearningNote(contrast);
-      setDemoNote(`${aProfile.creatureName} 和 ${bProfile.creatureName} 刚被你用不同反馈养了一小会儿。${contrast}`);
-      setTab("home");
+      setLearningNote(undefined);
+      setDemoSummary({
+        feedback: `${aProfile.creatureName} 连续听见“再想一会儿”，${bProfile.creatureName} 连续听见“先安静点”。`,
+        contrast,
+        contrastDetail
+      });
+      setDemoNote(`${aProfile.creatureName} 和 ${bProfile.creatureName} 刚被你用不同反馈养了一小会儿。`);
+      setTab("demo");
     });
   }
 
@@ -1413,12 +1430,15 @@ function DemoView(props: {
         <p className="response">用几段日常内容，看 Papo 怎么听见、回应、被你养一下，再在合适的时候想起真实记住的事。</p>
         {props.note ? <section className="learning-note">{props.note}</section> : null}
         {props.summary ? (
-          <section className="demo-checklist">
-            <p><Check size={16} /> {props.summary.attention}</p>
-            <p><Check size={16} /> {props.summary.feedback}</p>
-            <p><Check size={16} /> {props.summary.contrast}</p>
-            <p><Check size={16} /> {props.summary.emergence}</p>
-          </section>
+          <>
+            <section className="demo-checklist">
+              {props.summary.attention ? <p><Check size={16} /> {props.summary.attention}</p> : null}
+              {props.summary.feedback ? <p><Check size={16} /> {props.summary.feedback}</p> : null}
+              {props.summary.contrast ? <p><Check size={16} /> {props.summary.contrast}</p> : null}
+              {props.summary.emergence ? <p><Check size={16} /> {props.summary.emergence}</p> : null}
+            </section>
+            {props.summary.contrastDetail ? <DemoContrast detail={props.summary.contrastDetail} /> : null}
+          </>
         ) : null}
         <button className="primary" onClick={props.onRunGuided} disabled={props.busy}>
           <Wand2 size={18} />
@@ -1436,6 +1456,45 @@ function DemoView(props: {
           <Lightbulb size={18} />
           问问 Papo 想到什么
         </button>
+      </div>
+    </section>
+  );
+}
+
+function createDemoContrastDetail(
+  input: string,
+  deepProfile: CreatureProfile,
+  quietProfile: CreatureProfile,
+  deepResult: CaptureResult,
+  quietResult: CaptureResult
+): DemoContrastDetail {
+  return {
+    input,
+    deepName: deepProfile.creatureName || "Papo 小想",
+    quietName: quietProfile.creatureName || "Papo 小静",
+    deepReply: visiblePapoReplyText(deepResult.response),
+    quietReply: visiblePapoReplyText(quietResult.response)
+  };
+}
+
+function DemoContrast({ detail }: { detail: DemoContrastDetail }) {
+  return (
+    <section className="demo-contrast">
+      <div className="demo-input-line">
+        <span>同一句话</span>
+        <p>{detail.input}</p>
+      </div>
+      <div className="demo-contrast-grid">
+        <article>
+          <strong>{detail.deepName}</strong>
+          <span>连续收到“再想一会儿”</span>
+          <p>{detail.deepReply}</p>
+        </article>
+        <article>
+          <strong>{detail.quietName}</strong>
+          <span>连续收到“先安静点”</span>
+          <p>{detail.quietReply}</p>
+        </article>
       </div>
     </section>
   );

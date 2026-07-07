@@ -431,6 +431,12 @@ describe("App", () => {
     expect(screen.queryByText(/场景 1|场景 2|场景 3|一键准备/)).not.toBeInTheDocument();
     expect(screen.queryByText("场景 2：生成 A/B 养成对比")).not.toBeInTheDocument();
     expect(screen.queryByText("后续任务")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "看两只 Papo 被养成不同样子" }));
+    expect(await screen.findByText("同一句话")).toBeInTheDocument();
+    expect(screen.getByText("我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要。")).toBeInTheDocument();
+    expect(screen.getByText("连续收到“再想一会儿”")).toBeInTheDocument();
+    expect(screen.getByText("连续收到“先安静点”")).toBeInTheDocument();
+    expect(screen.getAllByText(/我接住了这件刚发生/).length).toBeGreaterThan(0);
   }, 10_000);
 });
 
