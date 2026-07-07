@@ -96,6 +96,7 @@ Internal channel names, memory kinds, batch ids, and numeric weights are develop
 The memory page is Papo's subjective remembering surface. It should use first-person creature language for what Papo is holding, how familiar the memory feels, why it kept the moment, and how the user can help it remember accurately or let go. Hiding technical fields is necessary but not sufficient UX.
 Memory-page feedback is still interaction, not administration: when the user teaches Papo how to keep, soften, continue, or forget a memory, optional text/audio feedback should enter the same `learn` loop as episode feedback.
 Correcting a long-term memory is also a teaching moment: the memory text is rule-updated, and the user correction plus Papo's confirmation should be written into the conversation timeline with `relatedMemoryIds`.
+Anything written into the user-facing conversation timeline from memory correction must be normalized into Papo's subjective voice first. Raw persisted memory can contain legacy or model phrasing, but Papo should not say "用户希望小动物..." when it means "你希望我...".
 Harness traces and implementation backlog belong to Brain/development docs, not the Home or Demo experience. The user-facing path should show what Papo noticed, remembered, learned, or wondered, not pipeline step names such as `sense` or `semantic`.
 User-facing pages should not label the companionship flow as `Curious Mode` or expose `image_summary` / `audio_transcript`; use "陪我看一小段世界", "照片", "录音转写", "小片段", and "这一小段" language instead. Keep the raw type names in code, API contracts, tests, and Brain diagnostics only.
 Demo entry copy should guide a person through Papo's life loop rather than sound like a script runner. Prefer "带 Papo 走一圈", "先递 8 段生活", and "问问 Papo 想到什么" over "一键", "场景 1/2/3", or setup-task language on user-facing surfaces.
@@ -288,6 +289,7 @@ Done:
   - Memory-page feedback now accepts text or audio-transcribed teaching before the user asks Papo to keep thinking, quiet down, remember steadily, or let a memory go, so memory feedback flows through the same interaction loop as episode feedback.
   - Feedback conversation messages now keep related long-term memory ids when the user teaches Papo about a specific memory, preserving the connection between dialogue history and memory.
   - Long-term memory correction now writes a user teaching message and Papo confirmation into conversation history, linked back to the corrected memory.
+  - Long-term memory correction dialogue now normalizes raw memory wording before it reaches the conversation timeline, so Papo says "你希望我..." instead of leaking "用户希望小动物...".
 
 Verified:
 

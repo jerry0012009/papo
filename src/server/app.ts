@@ -7,7 +7,7 @@ import { applyFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { enrichEmergenceNarration, enrichFeedbackNarration } from "../core/narration";
 import { createModelProvider, type ModelProvider } from "../core/provider";
-import { promoteEpisode, updateLongTermMemory } from "../core/memory";
+import { normalizeSharedMemoryText, promoteEpisode, updateLongTermMemory } from "../core/memory";
 import { wakeCreature } from "../core/rhythm";
 import { summarizeText } from "../core/text";
 import type { CreatureProfile, StreamSegment } from "../core/types";
@@ -289,10 +289,12 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const memory = updateLongTermMemory(profile, req.params.memoryId, body.text);
       if (!memory) throw new HttpError(404, "Memory not found");
       const at = new Date().toISOString();
+      const taughtText = memoryCorrectionDialogueText(body.text, 140);
+      const rememberedText = memoryCorrectionDialogueText(memory.text, 120);
       appendInputMessage(profile, {
         channel: "feedback",
         role: "user",
-        text: `帮我记准：${summarizeText(body.text, 140)}`,
+        text: `帮我记准：${taughtText}`,
         sourceId: `${memory.id}:edit:input`,
         modality: "text",
         observedAt: at,
@@ -301,7 +303,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       });
       appendPapoMessage(profile, {
         channel: "feedback",
-        text: `我把这条记忆改准了：${summarizeText(memory.text, 120)}。之后它再从我里面回来时，我会按你刚教的版本想起。`,
+        text: `我把这条记忆改准了：${rememberedText}。之后它再从我里面回来时，我会按你刚教的版本想起。`,
         sourceId: `${memory.id}:edit`,
         relatedMemoryIds: [memory.id],
         at
@@ -376,6 +378,15 @@ function feedbackRelatedMemoryIds(profile: CreatureProfile, targetId?: string, t
     }
   }
   return [...ids];
+}
+
+function memoryCorrectionDialogueText(text: string, maxLength: number) {
+  return summarizeText(
+    normalizeSharedMemoryText(text)
+      .replace(/小动物/g, "我")
+      .replace(/^(你主动|你确认|你后来教我)[：:]\s*/, ""),
+    maxLength
+  );
 }
 
 function sensingProvider(provider: ModelProvider, modality: "vision" | "audio") {
