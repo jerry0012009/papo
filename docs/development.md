@@ -182,7 +182,8 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 ## Next Work
 
 1. Run a real-user pilot on the deployed mobile UI and record friction in the first five minutes: first message, photo upload, continuous listening, memory feedback, and proactive unread flow.
-2. Add browser-level screenshot checks for mobile and desktop app states so future UI changes catch overflow, hidden composers, and broken Brain Mode popovers before demo use.
-3. Verify OpenRouter vision/audio model routing with real accounts periodically, using cost-effective models first and switching only when a real scenario proves the current model weak.
-4. Improve the Shiba animation only where it helps the interaction, such as clearer listening, thinking, resting, and happy states tied to model-chosen actions.
-5. Prepare a short demo script using real inputs and real model calls, not seeded fake life material, so the commercial demo proves the harness rather than the happy path.
+2. Add real backend conversation pagination before user history grows large. The current web UI renders only the latest pages and can load older records, but the API still returns the full profile.
+3. Add browser-level screenshot checks for mobile and desktop app states so future UI changes catch overflow, hidden composers, and broken Brain Mode popovers before demo use.
+4. Verify OpenRouter vision/audio model routing with real accounts periodically, using cost-effective models first and switching only when a real scenario proves the current model weak.
+5. Improve the Shiba animation only where it helps the interaction, such as clearer listening, thinking, resting, and happy states tied to model-chosen actions.
+6. Prepare a short demo script using real inputs and real model calls, not seeded fake life material, so the commercial demo proves the harness rather than the happy path.

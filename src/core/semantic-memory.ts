@@ -152,10 +152,12 @@ JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 - 应该写成什么记忆文本。
 - 它属于哪种 memoryKind：user_preference, long_theme, creature_self_memory, safety_rule, future_review, relationship, habit, open_question。
 - confidence、writePolicy、whyConsolidate、privacyReason、decayPolicy、tags。
-- 如果 sourceEpisode 带 attachments，说明原始图片资产会跟随这条记忆一起保存；你看到的文本是视觉模型摘要和用户补充，不是全部信息。带图片的候选通常比普通闲聊更值得保留；除非重复、无意义、误触、隐私不适合或没有可复用信息，不要轻易 shouldKeepCandidate=false。
+- 如果 sourceEpisode 带 attachments，说明原始图片资产会跟随这条记忆一起保存；你看到的文本是视觉模型摘要和用户补充，不是全部信息。用户主动上传照片通常意味着照片对这次互动有意义；除非重复、无意义、误触、隐私不适合或确实没有可复用信息，应至少保留为候选。
 - 照片记忆的 candidateText 必须写出图片里的关键可见内容、用户补充说明、以及可用的 observedAt/location provenance。不要写成“用户上传了一张照片”这种空泛描述；也不要只保留视觉摘要而忽略用户为什么发这张图。
+- 当照片、语音或文字表达了稳定偏好、习惯、关系、真实生活事件、未来要回看的事，且不涉及高隐私和明显重复时，不要过度保守。你可以选择 writePolicy=auto 直接形成长期记忆；如果只是保存意图或隐私边界不确定，再用 ask_user 或 wait_feedback。
+- 如果候选已经包含用户明确表达的喜欢/讨厌、经常做的事、重要的人或宠物、正在推进的计划、希望以后提醒或回看的内容，通常比普通闲聊更值得长期留下。
 - writePolicy 的含义：
-  - auto：规则会立刻写入长期记忆，只在用户明确要求记住、稳定偏好/习惯、或非常适合长期留下时使用。
+  - auto：规则会立刻写入长期记忆。用于用户明确要求记住、稳定偏好/习惯/关系、带照片的重要生活事实、未来回看线索，或非常适合长期留下的内容。
   - ask_user：需要用户确认后再长期保存。
   - wait_feedback：先作为轻量候选等后续互动。
   - do_not_save：不保留为候选。

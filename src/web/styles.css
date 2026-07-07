@@ -256,6 +256,94 @@ select {
   line-height: 1.48;
 }
 
+.home-brain-peek {
+  position: relative;
+  margin-top: 8px;
+}
+
+.home-brain-peek summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 5px 9px;
+  border-radius: 8px;
+  border: 1px solid rgba(70, 82, 72, 0.16);
+  background: rgba(255, 255, 255, 0.68);
+  color: #46524a;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.home-brain-peek summary::-webkit-details-marker {
+  display: none;
+}
+
+.home-brain-peek[open] summary {
+  background: var(--surface-strong);
+}
+
+.home-brain-peek .state-policy-snapshot {
+  position: absolute;
+  z-index: 8;
+  top: 36px;
+  left: 0;
+  width: min(82vw, 360px);
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(70, 82, 72, 0.18);
+  background: var(--surface-strong);
+  box-shadow: var(--shadow-lift);
+}
+
+.state-policy-snapshot {
+  display: grid;
+  gap: 10px;
+}
+
+.state-policy-snapshot section {
+  display: grid;
+  gap: 7px;
+}
+
+.state-policy-snapshot strong {
+  font-size: 0.82rem;
+}
+
+.state-policy-snapshot small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.state-meter {
+  display: grid;
+  grid-template-columns: 38px minmax(64px, 1fr) 28px;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.76rem;
+}
+
+.state-meter span,
+.state-meter b {
+  color: #46524a;
+  font-weight: 700;
+}
+
+.state-meter div {
+  height: 7px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(63, 127, 102, 0.14);
+}
+
+.state-meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green), var(--amber));
+}
+
 .shiba {
   width: 124px;
   aspect-ratio: 1;
@@ -813,6 +901,16 @@ select {
   gap: 10px;
 }
 
+.load-older-button {
+  justify-self: center;
+  min-height: 34px;
+  padding: 6px 11px;
+  border-color: rgba(81, 127, 164, 0.18);
+  background: #f4f8fb;
+  color: #425c72;
+  font-size: 0.82rem;
+}
+
 .chat-presence {
   display: grid;
   grid-template-columns: 82px minmax(0, 1fr);
@@ -852,7 +950,7 @@ select {
 
 .composer-tools {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -1378,7 +1476,17 @@ select {
   }
 
   .composer-tools {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .composer-tools .primary {
+    grid-column: 1 / -1;
+  }
+
+  .home-brain-peek .state-policy-snapshot {
+    left: auto;
+    right: 0;
+    width: min(88vw, 360px);
   }
 
   .chat-presence {

@@ -13,7 +13,7 @@ import {
   Sparkles,
   UserRound
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toCreatureMemoryVoice } from "../core/memory";
 import type {
   ActionResult,
@@ -69,6 +69,9 @@ type ConversationSection =
   | { kind: "batch"; id: string; batchId: string; messages: ConversationMessage[] }
   | { kind: "single"; id: string; message: ConversationMessage };
 
+const CHAT_PAGE_SIZE = 24;
+const INITIAL_CHAT_VISIBLE_COUNT = CHAT_PAGE_SIZE * 2;
+
 interface AudioSliceMeta {
   index: number;
   observedAt: string;
@@ -91,6 +94,7 @@ export function App() {
   const [emergence, setEmergence] = useState<EmergenceSurface>();
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
+  const [quickRecording, setQuickRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const mediaStreamRef = useRef<MediaStream | null>(null);
@@ -279,6 +283,77 @@ export function App() {
       }
       setTab("chat");
     });
+  }
+
+  async function recordQuickAudioObservation() {
+    if (!profile || listening || quickRecording) return;
+    const Recorder = getMediaRecorder();
+    if (!Recorder) {
+      setError("当前浏览器不支持直接录音。你可以继续上传音频或开始陪我听。");
+      return;
+    }
+
+    let stream: MediaStream | undefined;
+    try {
+      stream = await navigator.mediaDevices?.getUserMedia?.({ audio: true });
+    } catch {
+      setError("我还听不到麦克风。你可以上传音频，或者先用文字告诉 Papo。");
+      return;
+    }
+    if (!stream) {
+      setError("我还没有听到可用的麦克风声音。你可以上传音频，或者先用文字告诉 Papo。");
+      return;
+    }
+
+    setQuickRecording(true);
+    setBusy(true);
+    setError(undefined);
+    const chunks: Blob[] = [];
+    const mimeType = preferredAudioMimeType(Recorder);
+    let recorder: MediaRecorder | undefined;
+    try {
+      recorder = new Recorder(stream, mimeType ? { mimeType } : undefined);
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) chunks.push(event.data);
+      };
+      await new Promise<void>((resolve, reject) => {
+        const timeout = window.setTimeout(() => {
+          if (recorder?.state === "recording") recorder.stop();
+        }, 10_000);
+        recorder!.onstop = () => {
+          window.clearTimeout(timeout);
+          resolve();
+        };
+        recorder!.onerror = () => {
+          window.clearTimeout(timeout);
+          reject(new Error("这次录音断开了"));
+        };
+        recorder!.start();
+      });
+      const totalSize = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
+      if (totalSize <= 0) return;
+      const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || chunks[0]?.type || "audio/webm" });
+      const dataUrl = await blobToDataUrl(blob);
+      const result = await observeAudio(dataUrl, "刚录的一段声音");
+      const content = sensingSegmentContent(result.observation);
+      if (!content) return;
+      const segment = makeSegment(`chat-mic-${Date.now()}`, "audio_observation", "刚录的一段声音", content, {
+        observedAt: new Date().toISOString(),
+        batchId: currentBatchId()
+      });
+      segment.sensingTrace = result.sensingTrace;
+      setChatSegments((current) => [
+        ...current,
+        { ...segment, label: `麦克风 ${current.length + 1}`, batchId: current[0]?.batchId ?? segment.batchId }
+      ]);
+      setTab("chat");
+    } catch (caught) {
+      setError(errorMessage(caught));
+    } finally {
+      stream.getTracks().forEach((track) => track.stop());
+      setQuickRecording(false);
+      setBusy(false);
+    }
   }
 
   async function giveFeedback(kind: FeedbackKind, targetId?: string, content?: string, modality: "text" | "audio_observation" | "button" = content ? "text" : "button") {
@@ -682,8 +757,10 @@ export function App() {
           onSubmitMoment={submitChatMoment}
           onUploadImage={uploadChatImageSummary}
           onUploadAudio={uploadChatAudioObservation}
+          onRecordAudio={recordQuickAudioObservation}
           listening={listening}
           listeningElapsed={listeningElapsed}
+          quickRecording={quickRecording}
           onStartListening={startListening}
           onStopListening={stopListening}
         />
@@ -720,6 +797,7 @@ function HomeView(props: {
   const longTermCount = (props.profile.longTermMemories ?? []).filter((memory) => memory.kind !== "creature_self_memory" && memory.weight > 0).length;
   const candidateCount = (props.profile.memoryCandidates ?? []).filter((candidate) => candidate.status === "candidate").length;
   const latestMemory = latestVisibleMemoryLine(props.profile);
+  const actionLine = papoVisibleActionLine(props.profile.state);
   return (
     <section className="stack">
       <div className="hero">
@@ -727,7 +805,8 @@ function HomeView(props: {
         <div className="hero-copy">
           <p className="eyebrow">Papo 在这里</p>
           <h2>{props.profile.creatureName}</h2>
-          {latestReply ? <p>{latestReply}</p> : null}
+          <p>{latestReply || actionLine}</p>
+          <HomeBrainPeek profile={props.profile} />
         </div>
       </div>
       <div className="home-status-grid" aria-label="Papo 当前的陪伴状态">
@@ -843,6 +922,72 @@ function ShibaAvatar({ state, idle = false }: { state?: CreatureState; idle?: bo
   );
 }
 
+function HomeBrainPeek({ profile }: { profile: CreatureProfile }) {
+  return (
+    <details className="home-brain-peek">
+      <summary>
+        <Eye size={14} />
+        小眼睛
+      </summary>
+      <StatePolicySnapshot profile={profile} />
+    </details>
+  );
+}
+
+function StatePolicySnapshot({ profile }: { profile: CreatureProfile }) {
+  const state = profile.state;
+  const policy = profile.policyProfile;
+  const recentRuns = (profile.semanticBrainHistory ?? []).slice(0, 3);
+  return (
+    <div className="state-policy-snapshot">
+      <section>
+        <strong>状态</strong>
+        <StateMeter label="好奇" value={state.curiosity} />
+        <StateMeter label="亲近" value={state.attachment} />
+        <StateMeter label="精力" value={state.energy} />
+        <StateMeter label="确信" value={state.confidence} />
+      </section>
+      <section>
+        <strong>性格倾向</strong>
+        <StateMeter label="深聊" value={policy.preferDepth} />
+        <StateMeter label="主动" value={policy.preferProactivity} />
+        <StateMeter label="回想" value={policy.recallTendency} />
+        <StateMeter label="安静" value={policy.quietTendency} />
+      </section>
+      {recentRuns.length ? (
+        <section>
+          <strong>最近模型阶段</strong>
+          {recentRuns.map((run) => (
+            <small key={run.id}>{stageLabel(run.stage ?? run.source)} · {run.model ?? run.providerName} · {run.status}</small>
+          ))}
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
+function StateMeter({ label, value }: { label: string; value: number }) {
+  const safeValue = Math.max(0, Math.min(100, Math.round(value)));
+  return (
+    <div className="state-meter">
+      <span>{label}</span>
+      <div aria-hidden="true">
+        <i style={{ width: `${safeValue}%` }} />
+      </div>
+      <b>{safeValue}</b>
+    </div>
+  );
+}
+
+function papoVisibleActionLine(state: CreatureState) {
+  if (state.energy < 35) return "Papo 趴低了一点，慢慢眨着眼。";
+  if (state.attachment > 72) return "Papo 靠近了一点，尾巴轻轻晃着。";
+  if (state.curiosity > 72) return "Papo 抬头看着你，耳朵竖起来。";
+  if (state.safety > 76) return "Papo 安静地坐着，先陪在旁边。";
+  if (state.mood === "bright") return "Papo 小跑了两步，尾巴摇得很快。";
+  return "Papo 趴在旁边，等你说下一件事。";
+}
+
 function ChatView(props: {
   profile: CreatureProfile;
   busy: boolean;
@@ -851,16 +996,41 @@ function ChatView(props: {
   onSubmitMoment: (text: string) => Promise<void>;
   onUploadImage: (file?: File) => void;
   onUploadAudio: (file?: File) => void;
+  onRecordAudio: () => void;
   listening: boolean;
   listeningElapsed: number;
+  quickRecording: boolean;
   onStartListening: () => void;
   onStopListening: () => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [visibleCount, setVisibleCount] = useState(INITIAL_CHAT_VISIBLE_COUNT);
   const composerRef = useRef<HTMLDivElement>(null);
-  const messages = [...(props.profile.conversation ?? [])].filter((message) => message.channel !== "wake").slice(0, 50).reverse();
+  const allMessages = useMemo(
+    () => [...(props.profile.conversation ?? [])].filter((message) => message.channel !== "wake"),
+    [props.profile.conversation]
+  );
+  const messages = allMessages.slice(0, visibleCount).reverse();
   const sections = groupConversationSections(messages);
   const canSubmit = Boolean(draft.trim() || props.stagedSegments.some((segment) => segment.content.trim()));
+  const hasOlderMessages = allMessages.length > visibleCount;
+
+  const loadOlderMessages = useCallback(() => {
+    setVisibleCount((current) => Math.min(allMessages.length, current + CHAT_PAGE_SIZE));
+  }, [allMessages.length]);
+
+  useEffect(() => {
+    setVisibleCount(INITIAL_CHAT_VISIBLE_COUNT);
+  }, [props.profile.userId]);
+
+  useEffect(() => {
+    if (!hasOlderMessages) return;
+    const onScroll = () => {
+      if (window.scrollY < 120) loadOlderMessages();
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [hasOlderMessages, loadOlderMessages]);
 
   useLayoutEffect(() => {
     window.requestAnimationFrame(() => {
@@ -895,6 +1065,11 @@ function ChatView(props: {
         </section>
         {messages.length ? (
           <div className="chat-list">
+            {hasOlderMessages ? (
+              <button className="load-older-button" onClick={loadOlderMessages}>
+                看更早的消息
+              </button>
+            ) : null}
             {sections.map((section) =>
               section.kind === "batch" ? (
                 <section className="chat-batch" key={section.id}>
@@ -951,8 +1126,26 @@ function ChatView(props: {
               />
             </label>
             <label className="upload-button compact-upload">
+              <ImagePlus size={16} />
+              拍一张
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                capture="environment"
+                onChange={(event) => {
+                  props.onUploadImage(event.currentTarget.files?.[0]);
+                  event.currentTarget.value = "";
+                }}
+                disabled={props.busy}
+              />
+            </label>
+            <button onClick={props.onRecordAudio} disabled={props.busy || props.listening || props.quickRecording}>
               <Mic size={16} />
-              加录音
+              {props.quickRecording ? "录音中" : "录一段"}
+            </button>
+            <label className="upload-button compact-upload">
+              <Mic size={16} />
+              传录音
               <input
                 type="file"
                 accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg,audio/aac"
@@ -1077,6 +1270,10 @@ function DeveloperTraceBody({ trace, sensingTraces, profile }: { trace?: Convers
   const allSensingTraces = uniqueSensingTraces([...(sensingTraces ?? []), ...(trace?.sensingTraces ?? [])]);
   return (
       <div className="developer-trace-body">
+        <section>
+          <strong>状态与性格快照</strong>
+          <StatePolicySnapshot profile={profile} />
+        </section>
         {allSensingTraces.length ? (
           <section className="cognition-flow">
             <strong>感知流程</strong>
