@@ -435,8 +435,6 @@ select {
 
 .panel,
 .episode-card,
-.attention-card,
-.state-item,
 .memory-surface {
   border: 1px solid rgba(31, 36, 33, 0.1);
   border-radius: 8px;
@@ -467,80 +465,26 @@ select {
   margin-bottom: 12px;
 }
 
-.state-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.state-item {
-  padding: 10px;
-}
-
-.state-item div {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.state-item span,
-.attention-card small,
 .episode-card small,
 .memory-surface span,
 .memory-surface small,
-.change-row span,
 .muted {
   color: #69756c;
 }
 
-meter {
-  width: 100%;
-  height: 9px;
-}
-
-.response {
-  margin: 0;
-  line-height: 1.6;
-}
-
-.event-list {
-  display: grid;
-  gap: 10px;
-}
-
-.session-audit {
-  display: grid;
-  gap: 6px;
-  padding: 10px;
-  border-radius: 8px;
-  background: rgba(233, 243, 235, 0.7);
-}
-
-.session-audit p {
-  margin: 0;
-  line-height: 1.45;
-}
-
-.attention-card,
 .episode-card,
-.memory-surface,
-.change-row {
+.memory-surface {
   padding: 12px;
 }
 
-.attention-card div,
-.attention-card footer,
 .episode-head {
   display: flex;
   justify-content: space-between;
   gap: 10px;
 }
 
-.attention-card p,
 .episode-card p,
-.memory-surface p,
-.change-row p {
+.memory-surface p {
   margin: 8px 0;
   line-height: 1.55;
 }
@@ -569,29 +513,6 @@ meter {
 .memory-main strong {
   color: #1f2421;
   font-size: 0.95rem;
-}
-
-.attention-card footer {
-  margin-top: 10px;
-  color: #4f8b76;
-  font-size: 0.82rem;
-}
-
-.brain-details {
-  margin-top: 10px;
-  color: #465248;
-}
-
-.brain-details summary {
-  cursor: pointer;
-  font-size: 0.86rem;
-}
-
-.score-list {
-  display: grid;
-  gap: 6px;
-  margin-top: 8px;
-  font-size: 0.8rem;
 }
 
 .episode-card {
@@ -628,115 +549,6 @@ meter {
 .episode-moment strong {
   font-size: 1rem;
   font-weight: 700;
-}
-
-.learning-note {
-  border-radius: 8px;
-  background: #1f2421;
-  color: #fffaf0;
-  padding: 12px;
-  line-height: 1.55;
-}
-
-.feedback-impact {
-  display: grid;
-  gap: 8px;
-  border-radius: 8px;
-  background: #fff0cf;
-  border: 1px solid rgba(169, 87, 45, 0.18);
-  padding: 12px;
-}
-
-.feedback-impact p {
-  margin: 0;
-  line-height: 1.45;
-}
-
-.feedback-impact div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.feedback-impact span {
-  border-radius: 999px;
-  background: rgba(255, 250, 240, 0.82);
-  border: 1px solid rgba(31, 36, 33, 0.08);
-  padding: 5px 8px;
-  color: #465248;
-  font-size: 0.78rem;
-}
-
-.episode-flow {
-  border-radius: 8px;
-  background: #f3f7f1;
-  border: 1px solid rgba(79, 139, 118, 0.18);
-  padding: 10px 12px;
-}
-
-.episode-flow summary {
-  cursor: pointer;
-  color: #37594d;
-  font-size: 0.88rem;
-  font-weight: 700;
-}
-
-.episode-flow ol {
-  position: relative;
-  display: grid;
-  gap: 10px;
-  list-style: none;
-  margin: 12px 0 0;
-  padding: 0;
-}
-
-.episode-flow ol::before {
-  content: "";
-  position: absolute;
-  top: 13px;
-  bottom: 13px;
-  left: 12px;
-  width: 2px;
-  background: rgba(79, 139, 118, 0.22);
-}
-
-.episode-flow li {
-  position: relative;
-  display: grid;
-  grid-template-columns: 26px minmax(0, 1fr);
-  gap: 9px;
-  align-items: start;
-}
-
-.episode-flow .flow-dot {
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: #4f8b76;
-  color: #fffaf0;
-  font-size: 0.72rem;
-  font-weight: 800;
-}
-
-.episode-flow strong {
-  display: block;
-  color: #1f2421;
-  font-size: 0.8rem;
-  line-height: 1.3;
-}
-
-.episode-flow p {
-  margin: 3px 0 0;
-  color: #465248;
-  font-size: 0.88rem;
-  line-height: 1.5;
-}
-
-.compact-flow {
-  background: rgba(243, 247, 241, 0.72);
 }
 
 .chat-bubble span {
@@ -1026,17 +838,6 @@ meter {
   gap: 10px;
 }
 
-.developer-entry {
-  opacity: 0.82;
-}
-
-.developer-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 10px;
-}
-
 .memory-actions {
   display: flex;
   gap: 8px;
@@ -1111,10 +912,6 @@ meter {
     grid-template-columns: 1fr;
     text-align: center;
     justify-items: center;
-  }
-
-  .state-grid {
-    grid-template-columns: 1fr;
   }
 
   .composer-tools {

@@ -1,5 +1,4 @@
 import {
-  Brain,
   Check,
   CircleOff,
   Eye,
@@ -18,12 +17,10 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toCreatureMemoryVoice } from "../core/memory";
 import type {
-  AttentionEvent,
   CaptureResult,
   CreatureProfile,
   CreatureState,
   EpisodeMemory,
-  FeedbackRecord,
   FeedbackKind,
   SegmentKind,
   StreamSegment
@@ -34,7 +31,6 @@ import {
   createProfile,
   curiousCapture,
   getProfile,
-  getProvider,
   listProfiles,
   makeSegment,
   sendFeedback,
@@ -42,18 +38,14 @@ import {
   observeAudio,
   updateLongTermMemory,
   wakeProfile,
-  type ProfileSummary,
-  type ProviderInfo
+  type ProfileSummary
 } from "./api";
 
-type Tab = "home" | "chat" | "memory" | "brain" | "profile";
+type Tab = "home" | "chat" | "memory" | "profile";
 
 interface EmergenceSurface {
   text: string;
   memoryId?: string;
-  whyNow?: string;
-  driveSource?: string;
-  ruleTrace?: string[];
 }
 
 type ConversationMessage = CreatureProfile["conversation"][number];
@@ -71,14 +63,11 @@ const feedbacks: Array<{ kind: FeedbackKind; label: string; icon: typeof Check }
 
 export function App() {
   const [tab, setTab] = useState<Tab>("home");
-  const [provider, setProvider] = useState<ProviderInfo>();
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [profile, setProfile] = useState<CreatureProfile>();
   const [chatSegments, setChatSegments] = useState<StreamSegment[]>([]);
   const [lastResult, setLastResult] = useState<CaptureResult>();
   const [emergence, setEmergence] = useState<EmergenceSurface>();
-  const [learningNote, setLearningNote] = useState<string>();
-  const [lastFeedback, setLastFeedback] = useState<FeedbackRecord>();
   const [readPapoMessageId, setReadPapoMessageId] = useState<string>();
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
@@ -118,8 +107,7 @@ export function App() {
   async function bootstrap() {
     try {
       setBusy(true);
-      const [providerInfo, existingProfiles] = await Promise.all([getProvider(), listProfiles()]);
-      setProvider(providerInfo);
+      const existingProfiles = await listProfiles();
       let nextProfiles = existingProfiles;
       let active = existingProfiles[0] ? await getProfile(existingProfiles[0].userId) : undefined;
       if (!active) {
@@ -158,7 +146,6 @@ export function App() {
       const result = await buttonCapture(profile.userId, cleanText);
       setLastResult(result);
       setProfile(result.profile);
-      setLearningNote(undefined);
       setTab(nextTab);
     });
   }
@@ -182,7 +169,6 @@ export function App() {
       setChatSegments([]);
       setLastResult(result);
       setProfile(result.profile);
-      setLearningNote(undefined);
       setTab("chat");
     });
   }
@@ -229,10 +215,8 @@ export function App() {
   async function giveFeedback(kind: FeedbackKind, targetId?: string, content?: string, modality: "text" | "audio_observation" | "button" = content ? "text" : "button") {
     if (!profile) return;
     await run(async () => {
-      const { profile: next, feedback } = await sendFeedback(profile.userId, kind, targetId, { content, modality });
+      const { profile: next } = await sendFeedback(profile.userId, kind, targetId, { content, modality });
       setProfile(next);
-      setLearningNote(feedback.replyText);
-      setLastFeedback(feedback);
       setLastResult((current) => (current ? { ...current, profile: next } : current));
     });
   }
@@ -380,8 +364,6 @@ export function App() {
       profileRef.current = result.profile;
       setProfile(result.profile);
       setLastResult(result);
-      setLearningNote(undefined);
-      setLastFeedback(undefined);
     } catch (caught) {
       setError(`Papo 刚才听到一点声音，但整理时断开了。${errorMessage(caught)}`);
     }
@@ -481,8 +463,6 @@ export function App() {
           lastResult={lastResult}
           selectedEpisode={selectedEpisode}
           emergence={emergence}
-          learningNote={learningNote}
-          lastFeedback={lastFeedback}
           busy={busy}
           onFeedback={giveFeedback}
           onObserveFeedbackAudio={observeFeedbackAudio}
@@ -507,14 +487,12 @@ export function App() {
         />
       ) : null}
       {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} /> : null}
-      {tab === "brain" ? <BrainView profile={profile} provider={provider} /> : null}
       {tab === "profile" ? (
         <ProfileView
           profiles={profiles}
           activeId={profile.userId}
           onSelect={selectProfile}
           onAdd={addProfile}
-          onOpenBrain={() => setTab("brain")}
         />
       ) : null}
 
@@ -532,8 +510,6 @@ function HomeView(props: {
   lastResult?: CaptureResult;
   selectedEpisode?: EpisodeMemory;
   emergence?: EmergenceSurface;
-  learningNote?: string;
-  lastFeedback?: FeedbackRecord;
   busy: boolean;
   onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
   onObserveFeedbackAudio: (file: File) => Promise<string>;
@@ -563,8 +539,6 @@ function HomeView(props: {
       </div>
 
       {props.emergence?.text ? <EmergenceCard emergence={props.emergence} /> : null}
-      {props.lastFeedback ? <FeedbackImpactCard feedback={props.lastFeedback} /> : null}
-      {!props.lastFeedback && props.learningNote ? <section className="learning-note">{visibleCreatureText(props.learningNote)}</section> : null}
 
       {props.selectedEpisode ? (
         <div className="home-episode-slot">
@@ -1054,121 +1028,11 @@ function MemoryFeedbackBox(props: {
   );
 }
 
-function BrainView({ profile, provider }: { profile: CreatureProfile; provider?: ProviderInfo }) {
-  const latestEpisode = profile.episodes[0];
-  const latestEmergence = profile.emergenceHistory?.[0];
-  const semanticRuns = profile.semanticBrainHistory ?? [];
-  return (
-    <section className="stack">
-      <StateGrid state={profile.state} />
-      <div className="panel">
-        <PanelTitle icon={Brain} title="模型路由" />
-        {provider ? (
-          <div className="state-grid">
-            {providerRouteRows(provider).map((row) => (
-              <div className="state-item" key={row.label}>
-                <div>
-                  <span>{row.label}</span>
-                  <strong>{row.value}</strong>
-                </div>
-                <small>{row.detail}</small>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="muted">还没有模型路由信息。</p>
-        )}
-      </div>
-      <div className="panel">
-        <PanelTitle icon={Brain} title="语义脑诊断" />
-        {semanticRuns.length ? (
-          semanticRuns.slice(0, 5).map((run) => (
-            <article className="change-row" key={run.id}>
-              <p>{semanticStatusText(run.status)}：{run.message}</p>
-              <span>{run.providerName} · {run.source} · {new Date(run.at).toLocaleString("zh-CN")}</span>
-            </article>
-          ))
-        ) : (
-          <p className="muted">还没有语义脑运行记录。</p>
-        )}
-      </div>
-      <div className="panel">
-        <PanelTitle icon={Brain} title="反馈策略" />
-        <div className="state-grid">
-          {Object.entries(profile.policyProfile ?? {}).map(([key, value]) => (
-            <div className="state-item" key={key}>
-              <div>
-                <span>{policyLabel(key)}</span>
-                <strong>{value}</strong>
-              </div>
-              <meter min={0} max={100} value={Number(value)} />
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="panel">
-        <PanelTitle icon={Eye} title="最近决策" />
-        {latestEpisode?.actionDecision ? (
-          <article className="change-row">
-            <p>{actionText(latestEpisode.actionDecision.action)}：{latestEpisode.actionDecision.reason}</p>
-            <span>{latestEpisode.actionDecision.ruleTrace.join(" -> ")}</span>
-          </article>
-        ) : (
-          <p className="muted">还没有行动决策。</p>
-        )}
-      </div>
-      <div className="panel">
-        <PanelTitle icon={Sparkles} title="最近浮现" />
-        {latestEmergence ? (
-          <article className="change-row">
-            <p>{latestEmergence.message}</p>
-            <span>{latestEmergence.whyNow} · {latestEmergence.ruleTrace.join(" -> ")}</span>
-          </article>
-        ) : (
-          <p className="muted">还没有主动浮现历史。</p>
-        )}
-      </div>
-      <div className="panel">
-        <PanelTitle icon={Save} title="记忆候选" />
-        {(profile.memoryCandidates ?? []).slice(0, 5).map((candidate) => (
-          <article className="change-row" key={candidate.id}>
-            <p>{candidate.candidateText}</p>
-            <span>{candidate.memoryKind} · {candidate.writePolicy} · confidence {candidate.confidence}</span>
-          </article>
-        ))}
-      </div>
-      <div className="panel">
-        <PanelTitle icon={Brain} title="最近变化" />
-        {profile.stateChanges.length ? (
-          profile.stateChanges.map((change) => (
-            <article className="change-row" key={`${change.at}-${change.reason}`}>
-              <p>{change.reason}</p>
-              <span>{new Date(change.at).toLocaleString("zh-CN")}</span>
-            </article>
-          ))
-        ) : (
-          <p className="muted">还没有反馈造成的状态变化。</p>
-        )}
-      </div>
-      <div className="panel">
-        <PanelTitle icon={Check} title="反馈历史" />
-        {profile.feedbackHistory.map((feedback) => (
-          <article className="change-row" key={feedback.id}>
-            <p>{visibleCreatureText(feedback.effect)}</p>
-            <span>{feedback.kind}</span>
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-
 function ProfileView(props: {
   profiles: ProfileSummary[];
   activeId: string;
   onSelect: (userId: string) => void;
   onAdd: () => void;
-  onOpenBrain: () => void;
 }) {
   return (
     <section className="stack">
@@ -1191,15 +1055,6 @@ function ProfileView(props: {
           再养一只 Papo
         </button>
       </div>
-      <details className="episode-flow compact-flow developer-entry">
-        <summary>开发查看</summary>
-        <div className="developer-actions">
-          <button onClick={props.onOpenBrain}>
-            <Brain size={16} />
-            脑态诊断
-          </button>
-        </div>
-      </details>
     </section>
   );
 }
@@ -1359,44 +1214,6 @@ function EmergenceCard({ emergence }: { emergence: EmergenceSurface }) {
   );
 }
 
-function FeedbackImpactCard({ feedback }: { feedback: FeedbackRecord }) {
-  const learning = visibleCreatureText(feedback.replyText ?? "");
-  if (!learning) return null;
-  return (
-    <section className="feedback-impact">
-      <strong>我接住了你的反馈</strong>
-      <p>{learning}</p>
-    </section>
-  );
-}
-
-function StateGrid({ state }: { state: CreatureState }) {
-  const rows = useMemo(
-    () => [
-      ["好奇心", state.curiosity],
-      ["依恋度", state.attachment],
-      ["精力", state.energy],
-      ["唤醒度", state.arousal],
-      ["安全感", state.safety],
-      ["表达自信", state.confidence]
-    ],
-    [state]
-  );
-  return (
-    <section className="state-grid">
-      {rows.map(([label, value]) => (
-        <div className="state-item" key={label}>
-          <div>
-            <span>{label}</span>
-            <strong>{value}</strong>
-          </div>
-          <meter min={0} max={100} value={Number(value)} />
-        </div>
-      ))}
-    </section>
-  );
-}
-
 function memorySourceEpisode(memory: CreatureProfile["longTermMemories"][number], profile: CreatureProfile) {
   return memory.sourceEpisodeId ? profile.episodes.find((episode) => episode.id === memory.sourceEpisodeId) : undefined;
 }
@@ -1444,7 +1261,7 @@ function visibleCreatureText(text: string | undefined) {
   return text.replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, "$1$2").trim();
 }
 
-function PanelTitle({ icon: Icon, title }: { icon: typeof Brain; title: string }) {
+function PanelTitle({ icon: Icon, title }: { icon: typeof Check; title: string }) {
   return (
     <div className="panel-title">
       <Icon size={18} />
@@ -1453,7 +1270,7 @@ function PanelTitle({ icon: Icon, title }: { icon: typeof Brain; title: string }
   );
 }
 
-function NavButton(props: { active: boolean; icon: typeof Brain; label: string; unread?: boolean; onClick: () => void }) {
+function NavButton(props: { active: boolean; icon: typeof Check; label: string; unread?: boolean; onClick: () => void }) {
   return (
     <button className={props.active ? "active" : ""} onClick={props.onClick}>
       <props.icon size={19} />
@@ -1491,33 +1308,6 @@ function presenceSentence(profile: CreatureProfile) {
   return "你可以继续说，也可以传照片、录音，或让 Papo 听一会儿。";
 }
 
-function actionText(action: AttentionEvent["suggestedAction"]) {
-  const map = {
-    observe: "观察",
-    respond: "回应",
-    ask: "提问确认",
-    save_episode: "保存本次经历",
-    save_long_term: "长期记忆",
-    recall: "回忆",
-    review: "复盘",
-    quiet: "安静",
-    draft_reminder: "稍后回看",
-    draft_question_list: "分开想想"
-  };
-  return map[action];
-}
-
-function semanticStatusText(status: NonNullable<CreatureProfile["semanticBrainHistory"]>[number]["status"]) {
-  const map = {
-    skipped: "未运行",
-    applied: "LLM 已参与",
-    empty: "LLM 空输出",
-    invalid: "LLM 输出无效",
-    failed: "LLM 调用失败"
-  };
-  return map[status];
-}
-
 function messageTitle(message: CreatureProfile["conversation"][number]) {
   if (message.role === "papo") return "Papo";
   if (message.channel === "feedback") return "你的反馈";
@@ -1536,40 +1326,6 @@ function messageContextText(message: CreatureProfile["conversation"][number]) {
 function locationText(location: NonNullable<StreamSegment["location"]>) {
   const accuracy = typeof location.accuracy === "number" ? `，约 ${Math.round(location.accuracy)} 米` : "";
   return location.label ?? `位置 ${location.latitude.toFixed(5)}, ${location.longitude.toFixed(5)}${accuracy}`;
-}
-
-function providerRouteRows(provider: ProviderInfo) {
-  const diagnostics = provider.diagnostics ?? {};
-  return [
-    {
-      label: "语义脑",
-      value: diagnostics.textProvider ?? provider.kind,
-      detail: diagnostics.textModel ?? provider.name
-    },
-    {
-      label: "视觉感知",
-      value: diagnostics.visionProvider ?? provider.kind,
-      detail: diagnostics.visionModel ?? "未单独配置"
-    },
-    {
-      label: "声音感知",
-      value: diagnostics.audioProvider ?? provider.kind,
-      detail: [diagnostics.audioModel, diagnostics.audioRoute].filter(Boolean).join(" · ") || "未单独配置"
-    }
-  ];
-}
-
-function policyLabel(key: string) {
-  const map: Record<string, string> = {
-    preferDepth: "深入倾向",
-    preferProactivity: "主动倾向",
-    privacySensitivity: "隐私敏感",
-    saveThreshold: "保存阈值",
-    askThreshold: "询问阈值",
-    recallTendency: "回忆倾向",
-    quietTendency: "安静倾向"
-  };
-  return map[key] ?? key;
 }
 
 function errorMessage(error: unknown) {

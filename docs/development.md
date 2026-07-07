@@ -90,7 +90,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - The semantic harness strips rule-created visible drafts before model action/wording. Papo's final visible reply must come from a model.
 - `attention.ts` creates neutral candidates only. It must not write creature-facing replies, semantic "noticed" explanations, keyword tags, related-memory guesses, curious reports, or mixed-preference dialogue.
 - Curious stream input starts with zero attention events. `semanticDecideAttention` must select segments with the model before episodes or memory candidates are created.
-- Action selection code is a guardrail baseline, not a semantic classifier. Without an LLM suggestion it should stay at observe/quiet/ask safety behavior and avoid keyword-driven review/reminder/recall decisions.
+- Action selection code is an enum executor, not a semantic classifier. It must not locally replace a model-selected visible action because of mood, energy, keywords, or confidence heuristics.
 - Memory candidates keep user text and provenance only. Memory kind, tags, consolidation wording, and long-term meaning must come from `semanticDecideMemory` before they are treated as product cognition.
 - Long-term memory writes happen only when the model-selected action is `save_long_term` or the model-selected memory `writePolicy` is `auto`; rules execute that decision and persist it.
 - The web UI must not fill empty Papo replies with "我听见了" or other local placeholder speech. If the model chose quiet or failed to provide a visible reply, the product should show no forged reply.

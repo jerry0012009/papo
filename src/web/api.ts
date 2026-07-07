@@ -107,7 +107,7 @@ export async function updateLongTermMemory(userId: string, memoryId: string, tex
 }
 
 export async function activeEmergence(userId: string) {
-  return request<{ profile: CreatureProfile; emergence: { text: string; memoryId?: string; whyNow?: string; driveSource?: string; ruleTrace?: string[] } }>(
+  return request<{ profile: CreatureProfile; emergence: { text: string; memoryId?: string } }>(
     `/api/profiles/${userId}/emergence`,
     { method: "POST" }
   );
