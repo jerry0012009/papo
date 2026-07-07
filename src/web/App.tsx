@@ -937,6 +937,13 @@ function ChatView(props: {
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={MessagesSquare} title="和 Papo 的小日常" />
+        <section className="chat-presence">
+          <ShibaAvatar state={props.profile.state} />
+          <div>
+            <strong>{props.listening ? "Papo 正在旁边听" : "Papo 趴在旁边等你"}</strong>
+            <p>{props.listening ? `已经陪了 ${formatListeningTime(props.listeningElapsed)}。听不清的声音会被当成路过的背景。` : "你可以直接说一件事，也可以让它陪在旁边。"}</p>
+          </div>
+        </section>
         {messages.length ? (
           <div className="chat-list">
             {sections.map((section) =>
@@ -956,15 +963,15 @@ function ChatView(props: {
             )}
           </div>
         ) : (
-          <p className="muted">还没有对话。等你给 Papo 文字、照片或声音，它的注意和回应会在这里连成一条时间线。</p>
+          <p className="muted">还没有对话。第一件小事会从这里开始。</p>
         )}
         <section className="listening-panel">
           <div>
-            <strong>{props.listening ? "Papo 正在听这一会儿" : "Papo 可以陪你听一会儿"}</strong>
+            <strong>{props.listening ? "正在陪你听" : "陪你听一会儿"}</strong>
             <p>
               {props.listening
-                ? `已经陪了 ${formatListeningTime(props.listeningElapsed)}。听清的事会自己进对话，嘈杂时就轻轻放过去。`
-                : "听清的事会自己进对话，嘈杂时就轻轻放过去；你也可以继续打字或加照片。"}
+                ? "听清的事会自己进对话，嘈杂时就轻轻放过去。"
+                : "开始后你仍然可以继续打字或加照片。"}
             </p>
           </div>
           <button onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
@@ -1139,8 +1146,8 @@ function MemoryView(props: {
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={History} title="我记住的事" />
-        <p className="muted">这里放着你告诉过我的事，以及我从这些事里记住的结果。你也可以随时教我记准，或者让我放下。</p>
+        <PanelTitle icon={History} title="Papo 记得的生活" />
+        <p className="muted">这里慢慢留下你们一起经历过的事。每条都可以被你改准，或者让 Papo 放下。</p>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一找哪件事" />
         {otherMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
@@ -1186,19 +1193,19 @@ function MemoryView(props: {
         {otherMemories.length ? null : <p className="muted">我还没有真正记下一件和你有关的事。</p>}
       </div>
       <div className="panel">
-        <PanelTitle icon={Brain} title="你教我的习惯" />
+        <PanelTitle icon={Brain} title="Papo 被你改过的地方" />
         {selfMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             <div className="memory-main">
-              <span>你教会我</span>
+              <span>Papo 学会</span>
               <p>{memoryResultLine(memory)}</p>
             </div>
           </article>
         ))}
-        {selfMemories.length ? null : <p className="muted">你还没有教出稳定的偏好，之后可以慢慢纠正我。</p>}
+        {selfMemories.length ? null : <p className="muted">你还没有把 Papo 改出稳定的偏好。</p>}
       </div>
       <div className="panel">
-        <PanelTitle icon={Eye} title="刚发生的事" />
+        <PanelTitle icon={Eye} title="最近一起经历过" />
         {props.profile.episodes.map((episode) => (
           <EpisodeCard
             key={episode.id}
@@ -1525,7 +1532,7 @@ function DemoView(props: {
         </button>
         <button onClick={props.onEmerge} disabled={props.busy}>
           <Lightbulb size={18} />
-          问问 Papo 想到什么
+          轻轻碰一下 Papo
         </button>
       </div>
     </section>

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleButtonCapture, handleCuriousStream } from "../src/core/attention";
 import { createActiveEmergence } from "../src/core/emergence";
-import { applyFeedback } from "../src/core/feedback";
+import { applyFeedback, semanticReflectFeedback } from "../src/core/feedback";
 import { runButtonHarness } from "../src/core/harness";
 import { memoryKeepReasonToCreatureVoice, promoteEpisode, toCreatureMemoryVoice } from "../src/core/memory";
 import { createCreatureProfile } from "../src/core/profile";
@@ -158,6 +158,57 @@ describe("creature core", () => {
     expect(profile.longTermMemories[0].tags).toContain("更愿意多想");
     expect(feedback.stateDeltas?.some((item) => item.key === "curiosity" && item.delta > 0)).toBe(true);
     expect(feedback.policyDeltas?.some((item) => item.key === "preferDepth" && item.delta > 0)).toBe(true);
+  });
+
+  it("LLM feedback reflection can shape state, policy, memory weight, and self memory inside guardrails", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "feedback model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          responseAction: "ask_follow_up",
+          stateDeltas: { curiosity: 5, arousal: -4 },
+          policyDeltas: { preferDepth: 6, recallTendency: 5, quietTendency: -2 },
+          memoryWeightDelta: 7,
+          learningNote: "我学到这件事不能浅浅带过，下次相近的时候要多停一下。",
+          followUpText: "下次再碰到这类事，我会先多听一会儿。",
+          effect: "你这次是在鼓励我更认真地接住相近的事。",
+          creatureSelfMemory: {
+            text: "你教我遇到这类让你在意的事时，不要太快放过去，要先多听一会儿。",
+            tags: ["更愿意多想", "多听一会儿"]
+          },
+          trace: ["feedback means more depth"]
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    handleButtonCapture(profile, "我最近总是把妈妈复查这件事拖到很晚，想让你认真听一下。");
+    const episode = profile.episodes[0];
+    const beforeWeight = episode.weight;
+    const beforeCuriosity = profile.state.curiosity;
+    const beforeArousal = profile.state.arousal;
+    const beforePreferDepth = profile.policyProfile.preferDepth;
+
+    const feedback = applyFeedback(profile, { kind: "continue", targetId: episode.id, content: "这里别轻轻带过，请多想一点。" });
+    await semanticReflectFeedback(profile, feedback, provider);
+
+    expect(profile.state.curiosity).toBe(beforeCuriosity + 13);
+    expect(profile.state.arousal).toBe(beforeArousal - 4);
+    expect(profile.policyProfile.preferDepth).toBe(beforePreferDepth + 14);
+    expect(profile.policyProfile.recallTendency).toBe(63);
+    expect(profile.policyProfile.quietTendency).toBe(30);
+    expect(episode.weight).toBe(beforeWeight + 19);
+    expect(feedback.responseAction).toBe("ask_follow_up");
+    expect(feedback.learningNote).toContain("我学到");
+    expect(feedback.followUpText).toContain("多听一会儿");
+    expect(feedback.stateDeltas?.find((item) => item.key === "curiosity")?.delta).toBe(13);
+    expect(feedback.policyDeltas?.find((item) => item.key === "preferDepth")?.delta).toBe(14);
+    expect(profile.longTermMemories.some((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("LLM理解反馈"))).toBe(true);
+    expect(profile.semanticBrainHistory[0]).toMatchObject({ source: "feedback", status: "applied" });
   });
 
   it("wake rhythm applies time-based state recovery and records a presence event", () => {

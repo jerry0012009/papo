@@ -260,7 +260,7 @@ export interface WakeEvent {
 export interface SemanticBrainRecord {
   id: string;
   at: string;
-  source: AttentionSource;
+  source: AttentionSource | "feedback" | "emergence";
   providerKind: ProviderKind;
   providerName: string;
   status: "skipped" | "applied" | "empty" | "invalid" | "failed";

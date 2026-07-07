@@ -363,8 +363,9 @@ describe("App", () => {
     expect(screen.queryByRole("button", { name: "陪我" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "陪我一会儿" }));
     expect(screen.getByText("和 Papo 的小日常")).toBeInTheDocument();
-    expect(screen.getByText("Papo 可以陪你听一会儿")).toBeInTheDocument();
-    expect(screen.getByText(/听清的事会自己进对话，嘈杂时就轻轻放过去/)).toBeInTheDocument();
+    expect(screen.getByText("Papo 趴在旁边等你")).toBeInTheDocument();
+    expect(screen.getByText("陪你听一会儿")).toBeInTheDocument();
+    expect(screen.getByText("开始后你仍然可以继续打字或加照片。")).toBeInTheDocument();
     expect(screen.queryByText(/最多 3 分钟|每 30 秒/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "开始陪我听" })).toBeInTheDocument();
     expect(screen.getByLabelText("加照片")).toBeInTheDocument();
@@ -399,18 +400,18 @@ describe("App", () => {
     expect(screen.queryByText("我刚刚醒着，你一打开我就还在这里。")).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "记忆" }));
-    expect(screen.getByText("我记住的事")).toBeInTheDocument();
-    expect(screen.getByText("这里放着你告诉过我的事，以及我从这些事里记住的结果。你也可以随时教我记准，或者让我放下。")).toBeInTheDocument();
+    expect(screen.getByText("Papo 记得的生活")).toBeInTheDocument();
+    expect(screen.getByText("这里慢慢留下你们一起经历过的事。每条都可以被你改准，或者让 Papo 放下。")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("找一找哪件事")).toBeInTheDocument();
-    expect(screen.getByText("你教我的习惯")).toBeInTheDocument();
-    expect(screen.getByText("刚发生的事")).toBeInTheDocument();
+    expect(screen.getByText("Papo 被你改过的地方")).toBeInTheDocument();
+    expect(screen.getByText("最近一起经历过")).toBeInTheDocument();
     expect(screen.getAllByText("你当时说").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Papo 当时回你").length).toBeGreaterThan(0);
     expect(screen.getAllByText("后来记住").length).toBeGreaterThan(0);
     expect(screen.getAllByText((_, element) =>
       Boolean(element?.textContent?.includes("如果你能说话") && element.textContent.includes("你就说句话给我听"))
     ).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("你教会我").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Papo 学会").length).toBeGreaterThan(0);
     expect(screen.getByText(/你教我不要浅浅带过/)).toBeInTheDocument();
     expect(screen.queryByText("我正在学习注意")).not.toBeInTheDocument();
     expect(screen.queryByText("我记得比较清楚。以后聊到相近内容时，我会想起这一段。")).not.toBeInTheDocument();
@@ -468,7 +469,7 @@ describe("App", () => {
     expect(screen.queryByText("带它完整走一圈")).not.toBeInTheDocument();
     expect(screen.getByText("先递 8 段生活")).toBeInTheDocument();
     expect(screen.getByText("看两只 Papo 被养成不同样子")).toBeInTheDocument();
-    expect(screen.getByText("问问 Papo 想到什么")).toBeInTheDocument();
+    expect(screen.getByText("轻轻碰一下 Papo")).toBeInTheDocument();
     expect(screen.queryByText("先给它 8 段生活")).not.toBeInTheDocument();
     expect(screen.queryByText("问问它现在想到什么")).not.toBeInTheDocument();
     expect(screen.queryByText("演示模式")).not.toBeInTheDocument();

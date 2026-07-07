@@ -53,8 +53,9 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByText("你给 Papo 看了照片")).toBeVisible();
   await expect(page.getByText("Papo", { exact: true }).first()).toBeVisible();
   await expect(page.getByLabel("有未读 Papo 回复")).toHaveCount(0);
-  await expect(page.getByText("Papo 可以陪你听一会儿")).toBeVisible();
-  await expect(page.getByText(/听清的事会自己进对话，嘈杂时就轻轻放过去/)).toBeVisible();
+  await expect(page.getByText("Papo 趴在旁边等你")).toBeVisible();
+  await expect(page.getByText("陪你听一会儿")).toBeVisible();
+  await expect(page.getByText("开始后你仍然可以继续打字或加照片。")).toBeVisible();
   await expect(page.getByText(/最多 3 分钟|每 30 秒/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "开始陪我听" })).toBeVisible();
   await expect(page.getByText("加照片", { exact: true })).toBeVisible();
@@ -64,7 +65,7 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   expect(chatScreenshot.byteLength).toBeGreaterThan(30_000);
 
   await page.getByRole("button", { name: "记忆" }).click();
-  await expect(page.getByRole("heading", { name: "我记住的事" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Papo 记得的生活" })).toBeVisible();
   await expect(page.getByText("你当时说").first()).toBeVisible();
   await expect(page.getByText("Papo 当时回你").first()).toBeVisible();
   await expect(page.getByText("后来记住").first()).toBeVisible();

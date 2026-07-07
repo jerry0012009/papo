@@ -3,7 +3,7 @@ import express from "express";
 import { z } from "zod";
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
 import { createActiveEmergence } from "../core/emergence";
-import { applyFeedback } from "../core/feedback";
+import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { enrichEmergenceNarration, enrichFeedbackNarration } from "../core/narration";
 import { createModelProvider, type ModelProvider } from "../core/provider";
@@ -250,6 +250,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const body = feedbackSchema.parse(req.body);
       const targetMemoryBefore = body.targetId ? profile.longTermMemories.find((memory) => memory.id === body.targetId) : undefined;
       const feedback = applyFeedback(profile, body);
+      await semanticReflectFeedback(profile, feedback, provider);
       await enrichFeedbackNarration(profile, feedback, provider);
       const relatedMemoryIds = feedbackRelatedMemoryIds(profile, body.targetId, targetMemoryBefore?.id);
       appendInputMessage(profile, {

@@ -749,6 +749,33 @@ meter {
   gap: 10px;
 }
 
+.chat-presence {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(255, 250, 240, 0.94), rgba(233, 243, 235, 0.82));
+  border: 1px solid rgba(79, 139, 118, 0.14);
+}
+
+.chat-presence .shiba {
+  width: 82px;
+}
+
+.chat-presence strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.chat-presence p {
+  margin: 5px 0 0;
+  color: #465248;
+  line-height: 1.45;
+  font-size: 0.9rem;
+}
+
 .chat-composer {
   display: grid;
   gap: 8px;
@@ -1099,7 +1126,7 @@ meter {
   transform: translateX(-50%);
   width: min(calc(100% - 24px), 680px);
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 6px;
   padding: 7px;
   border-radius: 16px;
@@ -1153,6 +1180,14 @@ meter {
 
   .composer-tools {
     grid-template-columns: 1fr;
+  }
+
+  .chat-presence {
+    grid-template-columns: 66px minmax(0, 1fr);
+  }
+
+  .chat-presence .shiba {
+    width: 66px;
   }
 
   .demo-contrast-grid {
