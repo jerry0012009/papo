@@ -18,12 +18,13 @@ const address = server.address();
 if (!address || typeof address === "string") throw new Error("failed to bind smoke server");
 
 const base = `http://127.0.0.1:${address.port}/api`;
+const requestTimeoutMs = Number(process.env.REAL_SMOKE_REQUEST_TIMEOUT_MS ?? 180_000);
 
 try {
-  const created = await post<{ profile: { userId: string } }>("/profiles", { creatureName: "Papo Smoke" }, 201);
+  const created = await post<{ profile: { userId: string } }>("create profile", "/profiles", { creatureName: "Papo Smoke" }, 201);
   const userId = created.profile.userId;
   const inputText = "请记住：我喜欢晚上去游泳，但是泳池人太多的时候我会有点烦。你可以自然地回应我一句。";
-  const capture = await post<any>(`/profiles/${userId}/button`, { text: inputText });
+  const capture = await post<any>("explicit dialogue", `/profiles/${userId}/button`, { text: inputText });
   assert.equal(capture.provider, provider.kind);
   assert.ok(capture.events?.length >= 1, "attention model should select the explicit user message");
   assert.ok(capture.response?.trim(), "action model should produce a visible reply for this explicit dialogue");
@@ -42,7 +43,7 @@ try {
   assert.equal(profile.stateChanges.some((change) => change.reason.startsWith("llm action ")), true, "action model should decide at least one state change for this explicit interaction");
   assert.ok(trace.eventDecisions?.[0]?.stateDeltas?.length, "action cognition trace should expose model-chosen state deltas");
 
-  const recallCapture = await post<any>(`/profiles/${userId}/button`, { text: "上一句话我刚才说了什么？请直接回答。" });
+  const recallCapture = await post<any>("multi-turn context recall", `/profiles/${userId}/button`, { text: "上一句话我刚才说了什么？请直接回答。" });
   assert.ok(recallCapture.response?.trim(), "context follow-up should produce a visible reply");
   assert.match(recallCapture.response, /游泳|泳池|人太多|晚上/i, "context follow-up should use recent conversation instead of a fixed template");
   const afterRecall = await store.getProfile(userId);
@@ -53,7 +54,7 @@ try {
 
   const keptEpisode = trace.episodeDecisions?.find((episode) => episode.kept);
   assert.ok(keptEpisode, "explicit remember request should keep an episode");
-  const feedback = await post<any>(`/profiles/${userId}/feedback`, {
+  const feedback = await post<any>("remember feedback reflection", `/profiles/${userId}/feedback`, {
     kind: "remember",
     targetId: keptEpisode.episodeId,
     content: "对，这条很重要，记成我关于游泳的偏好。",
@@ -71,7 +72,7 @@ try {
     "feedback trace should expose the related long-term memory result"
   );
 
-  const imageCapture = await post<any>(`/profiles/${userId}/curious`, {
+  const imageCapture = await post<any>("meaningful image memory path", `/profiles/${userId}/curious`, {
     segments: [{
       id: "smoke-image-1",
       kind: "image_summary",
@@ -103,7 +104,7 @@ try {
   const imageCandidate = imageCapture.profile.memoryCandidates.find((candidate: any) => candidate.sourceEpisodeId === imageEpisode?.id);
   assert.ok(imageCandidate?.attachments?.length, "image memory candidate should keep the original image asset reference");
 
-  const emergence = await post<any>(`/profiles/${userId}/emergence`, {});
+  const emergence = await post<any>("manual emergence", `/profiles/${userId}/emergence`, {});
   assert.ok(emergence.emergence.cognitionTrace, "emergence response should carry cognition trace even when quiet");
   assert.equal(emergence.emergence.cognitionTrace.modelRuns.some((run: { stage?: string; status: string }) => run.stage === "emergence" && run.status === "applied"), true);
 
@@ -120,13 +121,22 @@ try {
   server.close();
 }
 
-async function post<T>(path: string, body: unknown, expectedStatus = 200): Promise<T> {
-  const response = await fetch(`${base}${path}`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body)
-  });
-  const payload = await response.json().catch(async () => ({ raw: await response.text() }));
-  assert.equal(response.status, expectedStatus, JSON.stringify(payload));
-  return payload as T;
+async function post<T>(step: string, path: string, body: unknown, expectedStatus = 200): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error(`real cognition smoke timed out during ${step} after ${requestTimeoutMs}ms`)), requestTimeoutMs);
+  try {
+    const response = await fetch(`${base}${path}`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body)
+    });
+    const payload = await response.json().catch(async () => ({ raw: await response.text() }));
+    assert.equal(response.status, expectedStatus, `${step}: ${JSON.stringify(payload)}`);
+    return payload as T;
+  } catch (error) {
+    throw new Error(`${step} failed: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
