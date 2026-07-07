@@ -679,7 +679,7 @@ export function App() {
           <h1>{profile.creatureName}</h1>
           <p className="eyebrow">正在陪着你</p>
         </div>
-        <button className="icon-button" onClick={askEmergence} disabled={busy} aria-label="问问 Papo 想到了什么">
+        <button className="icon-button" onClick={askEmergence} disabled={busy} aria-label="轻轻碰一下 Papo">
           <Sparkles size={19} />
         </button>
       </header>

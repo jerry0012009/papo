@@ -240,7 +240,8 @@ describe("App", () => {
     expect(screen.queryByText(/触发了醒来节律|重新计算/)).not.toBeInTheDocument();
     expect(screen.getByText("收到了你刚给的事")).toBeInTheDocument();
     expect(screen.getByText("文字、照片或声音会留在同一次对话里，让 Papo 接着回应。")).toBeInTheDocument();
-    await userEvent.click(screen.getByLabelText("问问 Papo 想到了什么"));
+    expect(screen.queryByLabelText("问问 Papo 想到了什么")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText("轻轻碰一下 Papo"));
     expect(await screen.findByText("Papo 安静了一下")).toBeInTheDocument();
     expect(screen.getByText(/先只是陪在这里/)).toBeInTheDocument();
     expect(screen.queryByText(/足够稳定|真的和你一起经历过|真实内容/)).not.toBeInTheDocument();
