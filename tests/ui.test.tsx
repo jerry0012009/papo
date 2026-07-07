@@ -211,13 +211,15 @@ describe("App", () => {
     expect(screen.getByText("你想怎么补充")).toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText("也可以补一句：哪里懂对了、哪里先放下、要怎么记准"), "这里请多想一点");
     await userEvent.click(screen.getByRole("button", { name: "再想一会儿" }));
-    expect(await screen.findByText("我这一下变了一点")).toBeInTheDocument();
+    expect(await screen.findByText("Papo 刚学会一点")).toBeInTheDocument();
+    expect(screen.getAllByText(/我学到：这个主题你希望我不要浅浅带过/).length).toBeGreaterThan(0);
     expect(screen.getByText("你刚才还告诉我：这里请多想一点")).toBeInTheDocument();
     expect(screen.getByText("下次遇到相似内容，我会多停一下，愿意展开一点。")).toBeInTheDocument();
     expect(screen.getByText("我刚认真用过一点力，接下来会先少说一点。")).toBeInTheDocument();
     expect(screen.queryByText("好奇心 +8")).not.toBeInTheDocument();
     expect(screen.queryByText("深入倾向 +8")).not.toBeInTheDocument();
     expect(screen.queryByText("这次养成变化")).not.toBeInTheDocument();
+    expect(screen.queryByText("我这一下变了一点")).not.toBeInTheDocument();
     expect(screen.queryByText("下次遇到相似的小片段，它会多停一下，愿意展开一点。")).not.toBeInTheDocument();
     expect(screen.queryByText("Papo 新说")).not.toBeInTheDocument();
     expect(screen.queryByText("桌面提醒")).not.toBeInTheDocument();

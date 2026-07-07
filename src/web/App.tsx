@@ -742,8 +742,8 @@ function HomeView(props: {
       </div>
 
       {props.emergence ? <EmergenceCard emergence={props.emergence} /> : null}
-      {props.learningNote ? <section className="learning-note">{visibleCreatureText(props.learningNote)}</section> : null}
       {props.lastFeedback ? <FeedbackImpactCard feedback={props.lastFeedback} /> : null}
+      {!props.lastFeedback && props.learningNote ? <section className="learning-note">{visibleCreatureText(props.learningNote)}</section> : null}
 
       {props.lastResult ? (
         <section className="panel">
@@ -1592,10 +1592,12 @@ function FeedbackImpactCard({ feedback }: { feedback: FeedbackRecord }) {
   const stateDeltas = feedback.stateDeltas ?? [];
   const policyDeltas = feedback.policyDeltas ?? [];
   const changes = feedbackChangeLines(stateDeltas, policyDeltas);
+  const learning = visibleCreatureText(feedback.replyText ?? feedback.learningNote);
   if (!changes.length) return null;
   return (
     <section className="feedback-impact">
-      <strong>我这一下变了一点</strong>
+      <strong>Papo 刚学会一点</strong>
+      <p>{learning}</p>
       {feedback.inputText ? <p>你刚才还告诉我：{feedback.inputText}</p> : null}
       <div>
         {changes.map((line) => (
