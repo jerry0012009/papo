@@ -782,23 +782,9 @@ function HomeView(props: {
 
       {props.lastResult ? (
         <section className="panel">
-          <PanelTitle icon={Eye} title="刚才 Papo 回应的内容" />
+          <PanelTitle icon={Eye} title="刚才 Papo 说" />
           <p className="response">{visibleCreatureText(props.lastResult.response)}</p>
-          {props.lastResult.curiousSession ? (
-            <div className="session-audit">
-              <p>{visibleCreatureText(props.lastResult.curiousSession.creatureReport)}</p>
-              {props.lastResult.curiousSession.ignored.slice(0, 4).map((item) => (
-                <small key={item.segmentId}>
-                  暂时略过 {item.label}：{visibleCreatureText(item.whyIgnored)}
-                </small>
-              ))}
-            </div>
-          ) : null}
-          <div className="event-list">
-            {props.lastResult.events.map((event) => (
-              <AttentionCard key={event.id} event={event} />
-            ))}
-          </div>
+          <ResultReflectionDetails result={props.lastResult} />
         </section>
       ) : null}
 
@@ -814,6 +800,31 @@ function HomeView(props: {
         </div>
       ) : null}
     </section>
+  );
+}
+
+function ResultReflectionDetails({ result }: { result: CaptureResult }) {
+  const curiousSteps = result.curiousSession
+    ? [
+        { label: "这次陪伴", text: result.curiousSession.creatureReport },
+        ...result.curiousSession.ignored.slice(0, 4).map((item) => ({
+          label: `暂时略过 ${item.label}`,
+          text: item.whyIgnored
+        }))
+      ]
+    : [];
+  const noticedSteps = result.events.flatMap((event) => [
+    { label: `Papo 接住 ${event.triggerLabel}`, text: summarizeForEpisode(visibleCreatureText(event.triggerContent)) },
+    { label: "为什么回应", text: event.creatureExperience.earReason }
+  ]);
+  const steps = [...curiousSteps, ...noticedSteps];
+  if (!steps.length) return null;
+
+  return (
+    <details className="episode-flow compact-flow">
+      <summary>{result.curiousSession ? "看看这次 Papo 注意了什么" : "看看这次怎么被听见"}</summary>
+      <FlowSteps steps={steps} />
+    </details>
   );
 }
 
@@ -1513,34 +1524,6 @@ function DemoContrast({ detail }: { detail: DemoContrastDetail }) {
   );
 }
 
-function AttentionCard({ event }: { event: AttentionEvent }) {
-  return (
-    <article className="attention-card">
-      <div>
-        <span>{event.triggerLabel}</span>
-        <strong>{attentionStrengthText(event.attentionStrength)}</strong>
-      </div>
-      <p>{summarizeForEpisode(visibleCreatureText(event.triggerContent))}</p>
-      <details className="episode-flow compact-flow">
-        <summary>看看 Papo 怎么处理的</summary>
-        <FlowSteps
-          steps={[
-            { label: "听见什么", text: event.noticed },
-            { label: "怎么理解", text: event.creatureExperience.earReason },
-            { label: "想起什么", text: event.creatureExperience.rememberedScene ?? "这次没有关联到以前的事。" },
-            { label: "接下来做什么", text: event.creatureExperience.actionFeeling },
-            { label: "怎么留下", text: event.creatureExperience.saveFeeling }
-          ]}
-        />
-      </details>
-      <footer>
-        <span>{visibleActionText(event.actionDecision.action)}</span>
-        <span>{privacyFeelingText(event.privacyRisk)}</span>
-      </footer>
-    </article>
-  );
-}
-
 function EpisodeCard(props: {
   episode: EpisodeMemory;
   sourceMessages?: ConversationMessage[];
@@ -1847,19 +1830,6 @@ function feedbackChangeLines(
   return lines.length ? [...new Set(lines)] : ["你的反馈会影响我后面的回应方式。"];
 }
 
-function attentionStrengthText(strength: number) {
-  if (strength >= 82) return "认真盯住";
-  if (strength >= 62) return "需要回应";
-  if (strength >= 42) return "轻轻注意";
-  return "先放过去";
-}
-
-function privacyFeelingText(risk: number) {
-  if (risk >= 55) return "这段我会先小心放着";
-  if (risk >= 25) return "这段先不急着留下太重";
-  return "这段可以先记住";
-}
-
 function emergenceDriveText(drive: string) {
   const map: Record<string, string> = {
     safety: "谨慎感更高，所以先轻轻碰一下这段。",
@@ -2078,22 +2048,6 @@ function actionText(action: AttentionEvent["suggestedAction"]) {
     review: "复盘",
     quiet: "安静",
     draft_reminder: "稍后回看",
-    draft_question_list: "分开想想"
-  };
-  return map[action];
-}
-
-function visibleActionText(action: AttentionEvent["suggestedAction"]) {
-  const map = {
-    observe: "先听着",
-    respond: "已经回应",
-    ask: "想确认一下",
-    save_episode: "认真放在心上",
-    save_long_term: "这件事很重要",
-    recall: "想起旧事",
-    review: "陪你整理",
-    quiet: "少说一点",
-    draft_reminder: "之后再看",
     draft_question_list: "分开想想"
   };
   return map[action];
