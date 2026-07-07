@@ -1,7 +1,7 @@
 :root {
   color: #202522;
   background: #eef3ef;
-  --bottom-nav-space: calc(96px + env(safe-area-inset-bottom, 0px));
+  --bottom-nav-space: calc(86px + env(safe-area-inset-bottom, 0px));
   --surface: rgba(255, 253, 247, 0.94);
   --surface-strong: #fffdf7;
   --surface-soft: #f3f8f1;
@@ -116,7 +116,7 @@ select {
   height: calc(100dvh - var(--bottom-nav-space));
   min-height: 0;
   margin: 0 auto;
-  padding: 12px 14px 20px;
+  padding: 12px 14px 12px;
   overflow-y: auto;
 }
 
@@ -129,6 +129,11 @@ select {
   place-content: center;
   gap: 16px;
   text-align: center;
+}
+
+.shell.loading {
+  height: 100dvh;
+  overflow: hidden;
 }
 
 .topbar {
@@ -296,8 +301,7 @@ select {
   margin-top: 8px;
 }
 
-.home-brain-peek summary {
-  list-style: none;
+.home-brain-trigger {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -311,15 +315,11 @@ select {
   cursor: pointer;
 }
 
-.home-brain-peek summary::-webkit-details-marker {
-  display: none;
-}
-
-.home-brain-peek[open] summary {
+.home-brain-trigger[aria-expanded="true"] {
   background: var(--surface-strong);
 }
 
-.home-brain-peek .state-policy-snapshot {
+.home-brain-panel {
   position: fixed;
   z-index: 40;
   top: max(78px, env(safe-area-inset-top, 0px) + 16px);
@@ -328,11 +328,20 @@ select {
   max-height: min(72dvh, calc(100dvh - 132px));
   overflow: auto;
   transform: translateX(-50%);
+  display: grid;
+  gap: 10px;
   padding: 12px;
   border-radius: 8px;
   border: 1px solid rgba(70, 82, 72, 0.18);
   background: var(--surface-strong);
   box-shadow: var(--shadow-lift);
+}
+
+.home-brain-close {
+  justify-self: end;
+  min-height: 32px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
 }
 
 .state-policy-snapshot {
@@ -938,6 +947,7 @@ select {
 .chat-list {
   display: grid;
   gap: 10px;
+  width: min(100%, 760px);
 }
 
 .chat-screen {
@@ -995,6 +1005,7 @@ select {
   flex: 1 1 auto;
   display: grid;
   align-content: end;
+  justify-items: center;
   min-height: 38dvh;
   padding: 6px 0 2px;
 }
@@ -1015,6 +1026,8 @@ select {
   z-index: 8;
   display: grid;
   gap: 8px;
+  justify-self: center;
+  width: min(100%, 760px);
   border-radius: 8px;
   background: rgba(255, 253, 247, 0.94);
   border: 1px solid rgba(255, 255, 255, 0.78);
@@ -1100,7 +1113,7 @@ select {
 .chat-batch {
   display: grid;
   gap: 8px;
-  width: min(96%, 590px);
+  width: min(96%, 680px);
   justify-self: center;
   padding: 10px;
   border-radius: 8px;
@@ -1123,7 +1136,7 @@ select {
 }
 
 .chat-bubble {
-  width: min(92%, 560px);
+  width: min(88%, 620px);
   border-radius: 8px;
   padding: 12px;
   background: rgba(255, 253, 247, 0.96);
@@ -1548,23 +1561,42 @@ select {
 
   .home-screen {
     grid-template-rows: auto auto auto auto;
+    gap: 10px;
   }
 
   .home-stage {
-    min-height: clamp(370px, 58dvh, 470px);
+    grid-template-rows: auto minmax(142px, 1fr) auto;
+    min-height: clamp(318px, 46dvh, 380px);
     padding: 12px;
+  }
+
+  .home-stage::before {
+    bottom: 92px;
   }
 
   .home-avatar-wrap .shiba {
-    width: min(68vw, 210px);
+    width: min(56vw, 176px);
   }
 
   .home-speech {
-    padding: 12px;
+    padding: 10px 12px;
+  }
+
+  .home-speech h2 {
+    font-size: clamp(1.55rem, 7.4vw, 2.15rem);
+  }
+
+  .home-speech p {
+    font-size: 0.92rem;
   }
 
   .home-actions {
     grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .home-actions button {
+    min-height: 50px;
   }
 
   .composer-tools {
@@ -1629,6 +1661,14 @@ select {
     column-gap: 18px;
     padding: 20px;
     overflow: hidden;
+  }
+
+  .shell.loading {
+    width: min(100%, 720px);
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr;
+    column-gap: 0;
+    padding: 20px;
   }
 
   .topbar {
@@ -1724,7 +1764,7 @@ select {
     height: 100%;
     overflow: auto;
     align-content: end;
-    padding: 8px 4px;
+    padding: 8px 0;
   }
 
   .chat-composer {
@@ -1732,6 +1772,7 @@ select {
     grid-row: 2;
     position: sticky;
     bottom: 0;
+    width: min(100%, 760px);
   }
 
   .chat-top {
@@ -1760,11 +1801,11 @@ select {
   }
 
   .chat-bubble {
-    width: min(74%, 620px);
+    width: min(86%, 620px);
   }
 
   .chat-batch {
-    width: min(86%, 680px);
+    width: min(96%, 700px);
   }
 
   .memory-section {

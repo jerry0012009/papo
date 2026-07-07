@@ -910,14 +910,22 @@ function ShibaAvatar({ state, idle = false }: { state?: CreatureState; idle?: bo
 }
 
 function HomeBrainPeek({ profile }: { profile: CreatureProfile }) {
+  const [open, setOpen] = useState(false);
   return (
-    <details className="home-brain-peek">
-      <summary>
+    <div className="home-brain-peek">
+      <button className="home-brain-trigger" type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
         <Eye size={14} />
         小眼睛
-      </summary>
-      <StatePolicySnapshot profile={profile} />
-    </details>
+      </button>
+      {open ? (
+        <div className="home-brain-panel" role="dialog" aria-label="Papo 状态和模型阶段">
+          <button className="home-brain-close" type="button" onClick={() => setOpen(false)}>
+            收起
+          </button>
+          <StatePolicySnapshot profile={profile} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
