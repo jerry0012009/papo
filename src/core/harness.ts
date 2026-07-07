@@ -9,27 +9,35 @@ import type { ModelProvider } from "./provider";
 import type { ActionKind, CaptureResult, CreatureProfile, SemanticBrainRecord, StreamSegment } from "./types";
 
 const actionSchema = z.enum(["observe", "respond", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list"]);
+const optionalText = (max: number) =>
+  z.preprocess((value) => (typeof value === "string" && !value.trim() ? undefined : value), z.string().min(1).max(max).optional());
+const optionalTextArray = (maxItems: number, maxText: number) =>
+  z
+    .array(z.preprocess((value) => (typeof value === "string" ? value.trim() : value), z.string().max(maxText)).optional())
+    .transform((values) => values.filter((value): value is string => Boolean(value)))
+    .pipe(z.array(z.string().min(1).max(maxText)).max(maxItems))
+    .optional();
 
 const brainSuggestionSchema = z.object({
-  response: z.string().min(1).max(900).optional(),
+  response: optionalText(900),
   interaction: z
     .object({
-      userIntent: z.string().min(1).max(260).optional(),
-      emotionalTone: z.string().min(1).max(160).optional(),
-      visibleReaction: z.string().min(1).max(260).optional(),
+      userIntent: optionalText(260),
+      emotionalTone: optionalText(160),
+      visibleReaction: optionalText(260),
       shouldReply: z.boolean().optional(),
       suggestedAction: actionSchema.optional(),
-      reply: z.string().min(1).max(700).optional(),
-      memoryCandidateText: z.string().min(1).max(500).optional(),
-      memoryTags: z.array(z.string().min(1).max(40)).max(8).optional()
+      reply: optionalText(700),
+      memoryCandidateText: optionalText(500),
+      memoryTags: optionalTextArray(8, 40)
     })
     .optional(),
   events: z
     .array(
       z.object({
         id: z.string(),
-        noticed: z.string().min(1).max(260).optional(),
-        reason: z.string().min(1).max(420).optional(),
+        noticed: optionalText(260),
+        reason: optionalText(420),
         suggestedAction: actionSchema.optional()
       })
     )
@@ -38,20 +46,20 @@ const brainSuggestionSchema = z.object({
     .array(
       z.object({
         eventId: z.string(),
-        possibleIntent: z.string().min(1).max(260).optional(),
-        importanceReason: z.string().min(1).max(360).optional(),
-        creatureResponse: z.string().min(1).max(700).optional()
+        possibleIntent: optionalText(260),
+        importanceReason: optionalText(360),
+        creatureResponse: optionalText(700)
       })
     )
     .optional(),
   curiousSession: z
     .object({
-      creatureReport: z.string().min(1).max(900).optional(),
+      creatureReport: optionalText(900),
       selected: z
         .array(
           z.object({
             segmentId: z.string(),
-            whySelected: z.string().min(1).max(360)
+            whySelected: optionalText(360)
           })
         )
         .max(8)
@@ -60,14 +68,14 @@ const brainSuggestionSchema = z.object({
         .array(
           z.object({
             segmentId: z.string(),
-            whyIgnored: z.string().min(1).max(360)
+            whyIgnored: optionalText(360)
           })
         )
         .max(12)
         .optional()
     })
     .optional(),
-  trace: z.array(z.string().min(1).max(160)).max(8).optional()
+  trace: optionalTextArray(8, 160)
 }).refine(
   (value) =>
     Boolean(
@@ -232,12 +240,12 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
     ];
     if (primaryEpisode) {
       if (interaction.userIntent) primaryEpisode.possibleIntent = safeProcessText(interaction.userIntent, primaryEpisode.possibleIntent) ?? primaryEpisode.possibleIntent;
-      const safeReply = safeCreatureFacingText(interaction.reply, primaryEpisode.creatureResponse);
+      const safeReply = safeExternalReplyText(interaction.reply, primaryEpisode.creatureResponse, primaryEvent.triggerContent);
       if (safeReply) primaryEpisode.creatureResponse = safeReply;
       if (interaction.memoryTags?.length) primaryEpisode.tags = interaction.memoryTags;
       updateMemoryCandidate(result, primaryEpisode.id, interaction.memoryCandidateText, interaction.memoryTags);
     }
-    const safeReply = safeCreatureFacingText(interaction.reply, result.response);
+    const safeReply = safeExternalReplyText(interaction.reply, result.response, primaryEvent.triggerContent);
     if (safeReply && interaction.reply) {
       result.response = safeReply;
     } else if (interaction.shouldReply === false && suggestedAction) {
@@ -269,7 +277,8 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
     if (episodeSuggestion.possibleIntent) episode.possibleIntent = safeProcessText(episodeSuggestion.possibleIntent, episode.possibleIntent) ?? episode.possibleIntent;
     if (episodeSuggestion.importanceReason) episode.importanceReason = safeProcessText(episodeSuggestion.importanceReason, episode.importanceReason) ?? episode.importanceReason;
     if (episodeSuggestion.creatureResponse) {
-      episode.creatureResponse = safeCreatureFacingText(episodeSuggestion.creatureResponse, episode.creatureResponse) ?? episode.creatureResponse;
+      const event = result.events.find((item) => item.id === episodeSuggestion.eventId);
+      episode.creatureResponse = safeExternalReplyText(episodeSuggestion.creatureResponse, episode.creatureResponse, event?.triggerContent) ?? episode.creatureResponse;
     }
     episode.decisionTrace = [
       ...(episode.decisionTrace ?? []),
@@ -297,7 +306,7 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
   recordMemoryResonance(profile, result);
 
   if (suggestion.response && !shouldSuppressTopLevelResponse(suggestion.interaction)) {
-    result.response = safeCreatureFacingText(suggestion.response, result.response) ?? result.response;
+    result.response = safeExternalReplyText(suggestion.response, result.response, primaryEvent?.triggerContent) ?? result.response;
   }
   if (primaryEpisode && result.response) {
     primaryEpisode.creatureResponse = result.response;
@@ -439,6 +448,13 @@ function safeCreatureFacingText(text?: string, fallback?: string) {
   return normalized;
 }
 
+function safeExternalReplyText(text?: string, fallback?: string, sourceText?: string) {
+  const normalized = safeCreatureFacingText(text, fallback);
+  if (!normalized) return fallback;
+  if (containsFullInputEcho(normalized, sourceText)) return fallback;
+  return normalized;
+}
+
 function safeProcessText(text?: string, fallback?: string) {
   const raw = text?.trim();
   if (!raw) return fallback;
@@ -448,7 +464,21 @@ function safeProcessText(text?: string, fallback?: string) {
 }
 
 function containsInternalProcessLanguage(text: string) {
-  return /LLM|语义|用户意图|用户在|用户希望|用户可能|用户主动|用户确认|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|长期留下|要不要长期记|prompt|JSON|score|阈值|总分|fallback|小动物|我注意到这段|我注意到这个片段|片段可能|我先听你说完|这件事我会先当作|确认我有没有听对|我为什么注意|我想起了什么|我猜你在做|我当时的状态|我选择|显著性|记忆策略/i.test(text);
+  return /LLM|语义|用户意图|用户在|用户希望|用户可能|用户主动|用户确认|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|长期留下|要不要长期记|prompt|JSON|score|阈值|总分|fallback|小动物|我注意到这段|我注意到这个片段|片段可能|认真理解|路过的背景声|我先听你说完|这件事我会先当作|确认我有没有听对|我为什么注意|我想起了什么|我猜你在做|我当时的状态|我选择|显著性|记忆策略/i.test(text);
+}
+
+function containsFullInputEcho(reply: string, sourceText?: string) {
+  const input = compactText(sourceText);
+  const output = compactText(reply);
+  if (input.length < 22 || output.length < 80) return false;
+  if (output.includes(input)) return true;
+  const head = input.slice(0, 18);
+  const tail = input.slice(-10);
+  return output.includes(head) && output.includes(tail);
+}
+
+function compactText(text?: string) {
+  return (text ?? "").replace(/[，。！？、\s:：,.!?]/g, "");
 }
 
 function trimSentence(text: string) {

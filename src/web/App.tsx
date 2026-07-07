@@ -1086,7 +1086,7 @@ function MemoryView(props: {
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={History} title="我记住的事" />
-        <p className="muted">这里放着我和你一起经历过、你希望我记住的事。你也可以随时教我记准，或者让我放下。</p>
+        <p className="muted">这里放着你告诉过我的事，以及我从这些事里记住的结果。你也可以随时教我记准，或者让我放下。</p>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一找哪件事" />
         {otherMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
@@ -1136,7 +1136,7 @@ function MemoryView(props: {
         {selfMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             <div className="memory-main">
-              <span>你教会 Papo</span>
+              <span>你教会我</span>
               <p>{memoryResultLine(memory)}</p>
             </div>
           </article>
@@ -1599,7 +1599,7 @@ function EpisodeProcessDetails({ episode }: { episode: EpisodeMemory }) {
           { label: "你可能想说", text: episode.possibleIntent },
           { label: "当时的影响", text: episodeStateText(episode) },
           { label: "接下来做什么", text: episode.creatureExperience?.actionFeeling ?? episode.actionDecision?.reason },
-          { label: "怎么留下", text: episode.creatureExperience?.saveFeeling ?? "先作为这次经历保存，等你的反馈决定。" }
+          { label: "会不会留下", text: episode.creatureExperience?.saveFeeling ?? "我会先等你的反馈。" }
         ]}
       />
     </details>
@@ -1696,14 +1696,16 @@ function FeedbackImpactCard({ feedback }: { feedback: FeedbackRecord }) {
   if (!changes.length) return null;
   return (
     <section className="feedback-impact">
-      <strong>Papo 刚学会一点</strong>
+      <strong>我接住了你的反馈</strong>
       <p>{learning}</p>
-      {feedback.inputText ? <p>你刚才还告诉我：{feedback.inputText}</p> : null}
-      <div>
-        {changes.map((line) => (
-          <span key={line}>{line}</span>
-        ))}
-      </div>
+      <details className="episode-flow compact-flow">
+        <summary>这次怎么影响我</summary>
+        <div>
+          {changes.map((line) => (
+            <span key={line}>{line}</span>
+          ))}
+        </div>
+      </details>
     </section>
   );
 }
@@ -1753,7 +1755,7 @@ function feedbackChangeLines(
     lines.push("我学会少打扰一点，不是每次听见都追问你。");
   }
   if ((policy.get("privacySensitivity") ?? 0) > 0 || (state.get("safety") ?? 0) > 0) {
-    lines.push("我会更小心守住边界，保存前多等你的意思。");
+    lines.push("我会更小心守住边界，留下前多等你的意思。");
   }
   if ((state.get("confidence") ?? 0) > 0) {
     lines.push("我会更敢把自己的理解轻轻说出来。");
@@ -1773,7 +1775,7 @@ function attentionStrengthText(strength: number) {
 
 function privacyFeelingText(risk: number) {
   if (risk >= 55) return "这段我会先小心放着";
-  if (risk >= 25) return "这段先不急着长期留下";
+  if (risk >= 25) return "这段先不急着留下太重";
   return "这段可以先记住";
 }
 
@@ -1803,14 +1805,14 @@ function memoryResultLine(memory: CreatureProfile["longTermMemories"][number]) {
 function memoryUseLine(memory: CreatureProfile["longTermMemories"][number]) {
   if (memory.weight <= 0) return "这件事已经放轻，除非你再提起。";
   const map = {
-    user_preference: "以后遇到相近时刻，Papo 会按这个偏好靠近你。",
-    long_theme: "以后聊到相近主题，Papo 会更容易想起它。",
-    creature_self_memory: "这是你教 Papo 的一种回应习惯。",
-    safety_rule: "以后碰到相近边界，Papo 会先放慢一点。",
-    future_review: "以后这件事回来时，Papo 会更容易接上。",
-    relationship: "它会帮助 Papo 更认识你一点。",
-    habit: "以后类似习惯再次出现时，Papo 会更容易听出来。",
-    open_question: "以后你继续说这件事时，Papo 会从这里接着想。"
+    user_preference: "以后遇到相近时刻，我会按这个偏好靠近你。",
+    long_theme: "以后聊到相近主题，我会更容易想起它。",
+    creature_self_memory: "这是你教我的一种回应习惯。",
+    safety_rule: "以后碰到相近边界，我会先放慢一点。",
+    future_review: "以后这件事回来时，我会更容易接上。",
+    relationship: "它会帮助我更认识你一点。",
+    habit: "以后类似习惯再次出现时，我会更容易听出来。",
+    open_question: "以后你继续说这件事时，我会从这里接着想。"
   };
   return map[memory.kind];
 }
@@ -1874,9 +1876,10 @@ function visibleCreatureText(text: string | undefined) {
   return text
     .replace(/我会把这次你叫我说话的小片段先记成一段情景记忆。?/g, "你刚才是在叫我说话，我会先回应你。")
     .replace(/这会先成为一条轻量情景记忆，等你的反馈决定要不要长久留下。?/g, "我会记住这次说话，之后按你的反馈调整。")
-    .replace(/我会先形成情景记忆，不把它无脑塞进长期记忆。?/g, "我会记住这次发生了什么，但不会擅自长期保存。")
+    .replace(/我会先形成情景记忆，不把它无脑塞进长期记忆。?/g, "我会记住这次发生了什么，但不会自己把它放得太重。")
+    .replace(/长期保存/g, "一直留下")
     .replace(/情景记忆/g, "这次经历")
-    .replace(/长期记忆/g, "长期记住的事")
+    .replace(/长期记忆/g, "一直记得的事")
     .replace(/写入/g, "记住")
     .replace(/后台分析/g, "沉默处理")
     .replace(/竖起耳朵/g, "开始回应")

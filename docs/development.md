@@ -425,6 +425,10 @@ Verified:
 - Memory cards default to the user's shared moment and the resulting remembered content; attention reasons, action choice, and consolidation rationale stay in expandable process details.
 - Expandable process details are still product experience, not raw backend output. Rule and LLM process fields should use "你/我" wording and avoid "用户可能", "语义理解", "后台流程", or "系统选择" phrasing unless the user is on a technical Brain diagnostic surface.
 - The semantic brain owns semantic interpretation, action suggestions, visible replies, and memory candidate wording; rule code owns flow classes, safety guards, budgets, and fallback behavior.
+- Model-written replies are rejected if they mix cognitive notes with a full echo of the user's input. In that case Papo falls back to the nearest external reply, because the chat surface is for behavior and speech, not for showing the thinking trace.
+- Semantic-brain schemas should tolerate empty optional strings from real models by treating them as missing fields. A blank optional field must not invalidate useful non-empty action/reply/memory semantics from the same model call.
+- Feedback impact is an interaction first: the default surface shows Papo's short learning reply, while state/policy effects are tucked into an expandable detail. Do not duplicate the user's feedback text as a separate receipt if the learning reply already includes it.
+- User-facing learning and memory-feeling copy should say "记得更稳", "留下", or "等你的意思"; avoid "长期记忆", "长期保存", and write-policy language outside Brain diagnostics.
 - Demo contrast copy now frames A/B conditioning as two named Papos receiving the same worry differently after feedback, rather than as policy or action summaries.
 - Core tests protect memory candidates and consolidation reasons from internal developer wording.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.

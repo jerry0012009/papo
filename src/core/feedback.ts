@@ -116,7 +116,7 @@ function effectText(kind: FeedbackKind): string {
     case "not_now":
       return "你说这次先不用，我会把声音收小一点，学会不急着打扰你。";
     case "remember":
-      return "你让我帮你记住，我会把这段共同经历抱得更稳。";
+      return "你让我帮你记住，我会把这件事记得更准一点。";
     case "forget":
       return "你让我放下它，我会让这段变轻，也更小心守住边界。";
   }
@@ -143,8 +143,8 @@ function createFeedbackFollowUp(
   if (action === "note_memory") {
     if (kind === "remember") {
       return inputText?.trim()
-        ? `我会把你刚补的这点贴到${topic}旁边，让这条记忆更稳。`
-        : `我会把${topic}记稳一点，之后它更容易从我里面冒出来。`;
+        ? `我会把你刚补的这点和${topic}放在一起，之后更容易接上。`
+        : `我会把${topic}记稳一点，之后更容易接上。`;
     }
     return inputText?.trim()
       ? `我会先把你补的这点和${topic}放在一起，当成还没完全记稳的想法守着。`
@@ -152,7 +152,7 @@ function createFeedbackFollowUp(
   }
   if (action === "quiet") {
     if (kind === "forget" && context.forgetResult?.purged) {
-      return `我已经把${topic}从一直记着的地方拿掉，只留下边界：下次类似内容先问你。`;
+      return `我已经把${topic}彻底放下，只留下边界：下次类似内容先问你。`;
     }
     if (kind === "forget") {
       return `我先把${topic}放轻到最低，之后不把它当成会自己冒出来的小事。`;
@@ -201,7 +201,7 @@ function createSafetyMemoryFromForget(
     id: makeId("ltm"),
     createdAt: now,
     kind: "safety_rule",
-    text: `你让我放下类似内容。以后遇到相关主题时，我应该先问，不要自己抢着保存：${text.slice(0, 80)}`,
+    text: `你让我放下类似内容。以后遇到相关主题时，我应该先问，不要自己急着留下：${text.slice(0, 80)}`,
     weight: 70,
     tags: episode?.tags ?? memory?.tags ?? [],
     consolidatedBecause: "你用放下这一下教我先小心边界。"

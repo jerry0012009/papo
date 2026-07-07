@@ -273,9 +273,11 @@ describe("App", () => {
     expect(screen.getByText("你想怎么补充")).toBeInTheDocument();
     await userEvent.type(screen.getByPlaceholderText("也可以补一句：哪里懂对了、哪里先放下、要怎么记准"), "这里请多想一点");
     await userEvent.click(screen.getByRole("button", { name: "再想一会儿" }));
-    expect(await screen.findByText("Papo 刚学会一点")).toBeInTheDocument();
+    expect(await screen.findByText("我接住了你的反馈")).toBeInTheDocument();
     expect(screen.getAllByText(/我学到：这个主题你希望我不要浅浅带过/).length).toBeGreaterThan(0);
-    expect(screen.getByText("你刚才还告诉我：这里请多想一点")).toBeInTheDocument();
+    expect(screen.queryByText("你刚才还告诉我：这里请多想一点")).not.toBeInTheDocument();
+    expect(screen.getByText("这次怎么影响我")).toBeInTheDocument();
+    await userEvent.click(screen.getByText("这次怎么影响我"));
     expect(screen.getByText("下次遇到相似内容，我会多停一下，愿意展开一点。")).toBeInTheDocument();
     expect(screen.getByText("我刚认真用过一点力，接下来会先少说一点。")).toBeInTheDocument();
     expect(screen.queryByText("好奇心 +8")).not.toBeInTheDocument();
@@ -367,7 +369,7 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "记忆" }));
     expect(screen.getByText("我记住的事")).toBeInTheDocument();
-    expect(screen.getByText("这里放着我和你一起经历过、你希望我记住的事。你也可以随时教我记准，或者让我放下。")).toBeInTheDocument();
+    expect(screen.getByText("这里放着你告诉过我的事，以及我从这些事里记住的结果。你也可以随时教我记准，或者让我放下。")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("找一找哪件事")).toBeInTheDocument();
     expect(screen.getByText("你教我的习惯")).toBeInTheDocument();
     expect(screen.getByText("刚发生的事")).toBeInTheDocument();
@@ -376,7 +378,7 @@ describe("App", () => {
     expect(screen.getAllByText((_, element) =>
       Boolean(element?.textContent?.includes("如果你能说话") && element.textContent.includes("你就说句话给我听"))
     ).length).toBeGreaterThan(0);
-    expect(screen.getAllByText("你教会 Papo").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("你教会我").length).toBeGreaterThan(0);
     expect(screen.getByText("我正在学习注意")).toBeInTheDocument();
     expect(screen.queryByText("我记得比较清楚。以后聊到相近内容时，我会想起这一段。")).not.toBeInTheDocument();
     expect(screen.queryByText("我留下它，是因为这件事以后可能还会回来找你。")).not.toBeInTheDocument();

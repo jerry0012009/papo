@@ -103,9 +103,9 @@ export function createLearningNote(kind: FeedbackKind, tags: string[] = [], feed
     case "not_now":
       return `我学到：不是每次注意到东西都要打扰你。以后遇到${topic}，我会更安静。${userLine}`;
     case "remember":
-      return `我学到：${topic}值得成为我们之间更稳定的长期记忆。${userLine}`;
+      return `我学到：${topic}你希望我记得更稳。以后再遇到相近的事，我会更容易接上。${userLine}`;
     case "forget":
-      return `我学到：${topic}要更谨慎。以后我会先问你，不会直接长期保存。${userLine}`;
+      return `我学到：${topic}要更谨慎。以后我会先等你的意思，不会自己留下。${userLine}`;
   }
 }
 
@@ -154,8 +154,8 @@ function raisedActionFeeling(action: ActionKind, profile: CreatureProfile) {
 }
 
 function saveFeeling(action: ActionKind, privacyRisk: number) {
-  if (privacyRisk > 65) return "这里有隐私风险，我不会直接长期保存。";
-  if (action === "save_long_term") return "它像是可以长期记住的东西，但我会等确认。";
-  if (action === "save_episode" || action === "recall" || action === "respond") return "我会记住这次发生了什么，但不会擅自把它当成长期记忆。";
-  return "这次我先不急着长期记住。";
+  if (privacyRisk > 65) return "这里可能有隐私边界，我会先等你的意思。";
+  if (action === "save_long_term") return "它像是值得记稳的事，但我会等你点头。";
+  if (action === "save_episode" || action === "recall" || action === "respond") return "我会记住这次发生了什么，但不会自己把它放得太重。";
+  return "这次我先不急着记得太重。";
 }

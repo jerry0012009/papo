@@ -286,7 +286,7 @@ describe("creature core", () => {
     expect(profile.longTermMemories.some((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("更小心边界"))).toBe(true);
     const secondForget = applyFeedback(profile, { kind: "forget", targetId });
     expect(profile.longTermMemories.find((memory) => memory.id === targetId)).toBeUndefined();
-    expect(secondForget.followUpText).toContain("从一直记着的地方拿掉");
+    expect(secondForget.followUpText).toContain("彻底放下");
     expect(profile.state.safety).toBeGreaterThan(58);
   });
 
@@ -305,7 +305,7 @@ describe("creature core", () => {
     });
 
     expect(feedback.responseAction).toBe("note_memory");
-    expect(feedback.followUpText).toContain("贴到");
+    expect(feedback.followUpText).toContain("放在一起");
     expect(memory.text).toContain("医保卡");
     expect(memory.text).toContain("检查报告");
     expect(memory.tags.some((tag) => tag.includes("医保"))).toBe(true);
@@ -567,6 +567,46 @@ describe("creature core", () => {
     expect(result.memoryCandidates?.[0].candidateText).not.toMatch(/用户|Papo|episode|candidate/);
   });
 
+  it("keeps useful LLM semantics when optional text fields are empty strings", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "interaction model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          response: "",
+          interaction: {
+            userIntent: "",
+            emotionalTone: "",
+            visibleReaction: "",
+            shouldReply: true,
+            suggestedAction: "respond",
+            reply: "游泳这件事你是喜欢的，只是人太多会让它没那么舒服。",
+            memoryCandidateText: "你最近每天游泳，喜欢游泳消耗卡路里效率高，但不喜欢游泳馆人太多。",
+            memoryTags: ["游泳", ""]
+          },
+          events: [],
+          trace: [""]
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(
+      profile,
+      "我准备去游泳最近每天我都游泳游泳是一个消耗卡路里效率很高的运动我很喜欢但是我不喜欢游泳馆人太多",
+      provider
+    );
+
+    expect(result.events[0].semanticSource).toBe("llm");
+    expect(result.events[0].actionDecision.action).toBe("respond");
+    expect(result.response).toContain("游泳这件事");
+    expect(result.memoryCandidates?.[0].candidateText).toContain("游泳");
+    expect(result.episodes[0].tags).toEqual(["游泳"]);
+  });
+
   it("does not expose LLM userIntent as Papo visible experience copy", async () => {
     const provider: ModelProvider = {
       kind: "generic",
@@ -655,6 +695,44 @@ describe("creature core", () => {
     expect(visible).not.toMatch(/LLM|语义|用户意图|后台|流程|candidate|episode|写入|系统/);
     expect(result.response).toContain("听见");
     expect(result.events[0].noticed).toContain("回应");
+  });
+
+  it("rejects model replies that mix cognition notes with a full input echo", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "echoing model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          response:
+            "我先听你说完：我注意到这段里有一点情绪，不适合被当成路过的背景声：我准备去游泳最近每天我都游泳游泳是一个消耗卡路里效率很高的运动我很喜欢但是我不喜欢游泳馆人太多。这件事我会先当作刚发生的对话来回应。我想轻轻问一句，确认我有没有听对。",
+          interaction: {
+            userIntent: "你在分享最近坚持游泳，也提到游泳馆人太多会影响体验。",
+            emotionalTone: "轻松里带一点烦",
+            shouldReply: true,
+            suggestedAction: "respond",
+            reply:
+              "我先听你说完：我注意到这段里有一点情绪，不适合被当成路过的背景声：我准备去游泳最近每天我都游泳游泳是一个消耗卡路里效率很高的运动我很喜欢但是我不喜欢游泳馆人太多。这件事我会先当作刚发生的对话来回应。我想轻轻问一句，确认我有没有听对。",
+            memoryCandidateText: "你最近每天去游泳，喜欢它消耗卡路里效率高，但不喜欢游泳馆人太多。",
+            memoryTags: ["游泳", "运动"]
+          },
+          trace: ["llm: leaked cognition into reply"]
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(
+      profile,
+      "我准备去游泳最近每天我都游泳游泳是一个消耗卡路里效率很高的运动我很喜欢但是我不喜欢游泳馆人太多",
+      provider
+    );
+
+    expect(result.response).not.toMatch(/我注意到这段|路过的背景声|确认我有没有听对|刚发生的对话/);
+    expect(result.episodes[0].creatureResponse).not.toMatch(/我注意到这段|路过的背景声|确认我有没有听对|刚发生的对话/);
+    expect(result.response).toContain("听见");
   });
 
   it("does not let positive rule heuristics override the LLM interaction flow", async () => {
