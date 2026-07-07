@@ -26,11 +26,11 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByText("我会先保护隐私和边界")).toHaveCount(0);
   await expect(page.getByText("耳朵竖起来，尾巴轻快地摆")).toHaveCount(0);
   await expect(page.getByText("我会先找最让我在意的一小段")).toHaveCount(0);
-  await expect(page.getByText("我被你养成的样子")).toBeVisible();
-  await expect(page.getByText("你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先想起以前的小事再回应")).toBeVisible();
+  await expect(page.getByText("我被你养成的样子")).toHaveCount(0);
+  await expect(page.getByText("你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先想起以前的小事再回应")).toHaveCount(0);
   await expect(page.getByText(/preferDepth|quietTendency|深入倾向|安静倾向/)).toHaveCount(0);
-  await expect(page.getByText("Papo 抬头看了你一眼")).toBeVisible();
-  await expect(page.getByText("我醒来时又碰到妈妈复查这件小事。")).toBeVisible();
+  await expect(page.getByText("Papo 抬头看了你一眼")).toHaveCount(0);
+  await expect(page.getByText("我醒来时又碰到妈妈复查这件小事。")).toHaveCount(0);
   await expect(page.getByLabel("有未读 Papo 回复")).toBeVisible();
   await expect(page.getByPlaceholder("也可以补一句：哪里懂对了、哪里先放下、要怎么记准")).toBeVisible();
   await expect(page.getByText("查看后台流程")).toBeVisible();

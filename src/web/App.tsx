@@ -136,8 +136,6 @@ export function App() {
   const [emergence, setEmergence] = useState<EmergenceSurface>();
   const [learningNote, setLearningNote] = useState<string>();
   const [lastFeedback, setLastFeedback] = useState<FeedbackRecord>();
-  const [wakeMessage, setWakeMessage] = useState<string>();
-  const [wakeThought, setWakeThought] = useState<string>();
   const [demoNote, setDemoNote] = useState<string>();
   const [demoSummary, setDemoSummary] = useState<DemoSummary>();
   const [readPapoMessageId, setReadPapoMessageId] = useState<string>();
@@ -187,8 +185,6 @@ export function App() {
       const woke = await wakeProfile(active.userId);
       setProfiles(nextProfiles);
       setProfile(woke.profile);
-      setWakeMessage(woke.wake.message);
-      setWakeThought(woke.wake.innerThought);
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
@@ -200,8 +196,6 @@ export function App() {
     const active = await getProfile(userId);
     const woke = await wakeProfile(active.userId);
     setProfile(woke.profile);
-    setWakeMessage(woke.wake.message);
-    setWakeThought(woke.wake.innerThought);
     setTab("home");
   }
 
@@ -211,8 +205,6 @@ export function App() {
     setProfiles(await listProfiles());
     const woke = await wakeProfile(next.userId);
     setProfile(woke.profile);
-    setWakeMessage(woke.wake.message);
-    setWakeThought(woke.wake.innerThought);
   }
 
   async function submitTextCapture(text: string, nextTab: Tab = "chat") {
@@ -709,8 +701,6 @@ export function App() {
           emergence={emergence}
           learningNote={learningNote}
           lastFeedback={lastFeedback}
-          wakeMessage={wakeMessage}
-          wakeThought={wakeThought}
           busy={busy}
           onFeedback={giveFeedback}
           onTranscribeFeedbackAudio={transcribeFeedbackAudio}
@@ -779,8 +769,6 @@ function HomeView(props: {
   emergence?: EmergenceSurface;
   learningNote?: string;
   lastFeedback?: FeedbackRecord;
-  wakeMessage?: string;
-  wakeThought?: string;
   busy: boolean;
   onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_transcript" | "button") => void;
   onTranscribeFeedbackAudio: (file: File) => Promise<string>;
@@ -809,18 +797,9 @@ function HomeView(props: {
         </button>
       </div>
 
-      {props.wakeMessage ? (
-        <section className="wake-note">
-          <span>Papo 抬头看了你一眼</span>
-          <p>{visibleCreatureText(props.wakeMessage)}</p>
-          {props.wakeThought ? <p>{visibleCreatureText(props.wakeThought)}</p> : null}
-        </section>
-      ) : null}
       {props.emergence ? <EmergenceCard emergence={props.emergence} /> : null}
       {props.learningNote ? <section className="learning-note">{visibleCreatureText(props.learningNote)}</section> : null}
       {props.lastFeedback ? <FeedbackImpactCard feedback={props.lastFeedback} /> : null}
-
-      <RaisedShape profile={props.profile} />
 
       {props.lastResult ? (
         <section className="panel">
@@ -1823,39 +1802,6 @@ function StateGrid({ state }: { state: CreatureState }) {
   );
 }
 
-function RaisedShape({ profile }: { profile: CreatureProfile }) {
-  const lines = raisedShapeLines(profile);
-  if (!lines.length) return null;
-  return (
-    <section className="raising-shape">
-      <strong>我被你养成的样子</strong>
-      <div>
-        {lines.map((line) => (
-          <span key={line}>{line}</span>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function raisedShapeLines(profile: CreatureProfile) {
-  const selfMemoryLines = profile.longTermMemories
-    .filter((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("被你养成") && memory.weight > 0)
-    .sort((a, b) => b.weight - a.weight)
-    .map((memory) => normalizeMemoryText(memory.text))
-    .slice(0, 2);
-  if (selfMemoryLines.length) return selfMemoryLines;
-
-  const lines: string[] = [];
-  const policy = profile.policyProfile;
-  if (policy.preferDepth >= 55) lines.push("你把我养得更愿意多停一下，再把以前的小事连起来。");
-  if (policy.quietTendency >= 50) lines.push("你把我养得更会先安静陪着，不急着追问。");
-  if (policy.privacySensitivity >= 65) lines.push("你把我养得更小心边界，保存前会多等你的意思。");
-  if (policy.recallTendency >= 58 && lines.length < 2) lines.push("你把我养得更容易从以前的小事里想起相近的片段。");
-  if (!lines.length) lines.push("我还在慢慢学你的偏好，等你教我哪些要多想，哪些先放下。");
-  return lines.slice(0, 2);
-}
-
 function feedbackChangeLines(
   stateDeltas: NonNullable<FeedbackRecord["stateDeltas"]>,
   policyDeltas: NonNullable<FeedbackRecord["policyDeltas"]>
@@ -2026,12 +1972,10 @@ function stateHeadline(profile: CreatureProfile) {
   if (latest?.role === "papo") {
     if (latest.channel === "button") return "刚听见你说话";
     if (latest.channel === "curious") return "刚陪你听了一会儿";
-    if (latest.channel === "feedback") return "正在把你的意思记进身体里";
+    if (latest.channel === "feedback") return "刚被你教了一下";
     if (latest.channel === "emergence") return "刚想起一件旧事";
   }
   if (latest?.role === "user" || latest?.role === "world") return "刚收到你说的事";
-  const wake = profile.wakeHistory?.[0];
-  if (wake) return wake.elapsedMinutes >= 60 ? "刚从小睡里醒来" : "刚抬头看见你";
   return restingHeadline(profile);
 }
 
@@ -2042,15 +1986,12 @@ function stateSentence(profile: CreatureProfile) {
   if (latest?.role === "papo" && latest.channel === "feedback") return "你刚刚教过我一次，我会把这种偏好带到后面相似的回应里。";
   if (latest?.role === "papo" && latest.channel === "emergence") return "我刚想起一件旧事，会带着它继续听你说。";
   if (latest?.role === "papo" && latest.channel === "curious") return "我刚陪你听了一会儿，先回应最需要回应的部分。";
-  if (latest?.role === "papo" && latest.channel === "button") return "刚才那句话需要回应，我正在决定是回答、追问，还是先安静陪着。";
+  if (latest?.role === "papo" && latest.channel === "button") return "刚才那句话需要回应，我会先把回答放在对话里。";
   if (latest?.role === "user" || latest?.role === "world") return "我已经收到你给的文字、照片或声音，会放在同一次对话里理解。";
   if (latestChange?.reason.includes("button capture")) return "刚才那句话叫住了我，我会先回应你。";
   if (latestChange?.reason.includes("feedback")) return "我刚被你养成了一点，之后遇到相似片段会更接近你的意思。";
-  if (latestChange?.reason.includes("wake")) return "这次重新见到你以后，我先安静下来，等你继续说。";
   const memory = strongestSharedMemory(profile);
   if (memory) return `我还记得这件旧事：${normalizeMemoryText(memory.text)}。如果之后聊到相近内容，我会想起它。`;
-  const raisedMemory = strongestRaisedMemory(profile);
-  if (raisedMemory) return `你教过我的这点还在身体里：${normalizeMemoryText(raisedMemory.text)}。我会带着这种听法等你下一段。`;
   if (!profile.episodes.length) return "我还没有和你经历过多少事。你可以直接跟我说话，也可以给我照片或声音。";
   if (state.energy < 35) return "我会短一点回应，先把重要的部分说清楚。";
   if (state.safety > 74) return "如果内容涉及隐私或长期保存，我会更谨慎。";
@@ -2061,7 +2002,6 @@ function stateSentence(profile: CreatureProfile) {
 
 function restingHeadline(profile: CreatureProfile) {
   if (strongestSharedMemory(profile)) return "想起以前的事";
-  if (strongestRaisedMemory(profile)) return "带着你教过的听法";
   if (!profile.episodes.length) return "等第一段生活靠近";
   const state = profile.state;
   if (state.energy < 35) return "趴着听你";
@@ -2076,12 +2016,6 @@ function restingHeadline(profile: CreatureProfile) {
 function strongestSharedMemory(profile: CreatureProfile) {
   return profile.longTermMemories
     .filter((memory) => memory.weight > 0 && memory.kind !== "creature_self_memory" && Boolean(memory.sourceEpisodeId))
-    .sort((a, b) => b.weight - a.weight)[0];
-}
-
-function strongestRaisedMemory(profile: CreatureProfile) {
-  return profile.longTermMemories
-    .filter((memory) => memory.weight > 0 && memory.kind === "creature_self_memory" && memory.tags.includes("被你养成"))
     .sort((a, b) => b.weight - a.weight)[0];
 }
 

@@ -438,7 +438,6 @@ select {
 .episode-card,
 .attention-card,
 .state-item,
-.wake-note,
 .memory-surface {
   border: 1px solid rgba(31, 36, 33, 0.1);
   border-radius: 8px;
@@ -489,7 +488,6 @@ select {
 .state-item span,
 .attention-card small,
 .episode-card small,
-.wake-note span,
 .memory-surface span,
 .memory-surface small,
 .change-row span,
@@ -527,7 +525,6 @@ meter {
 
 .attention-card,
 .episode-card,
-.wake-note,
 .memory-surface,
 .change-row {
   padding: 12px;
@@ -559,7 +556,6 @@ meter {
 
 .attention-card p,
 .episode-card p,
-.wake-note p,
 .memory-surface p,
 .change-row p {
   margin: 8px 0;
@@ -629,26 +625,6 @@ meter {
   padding: 5px 8px;
   color: #465248;
   font-size: 0.78rem;
-}
-
-.raising-shape {
-  display: grid;
-  gap: 8px;
-  border-radius: 8px;
-  background: #eaf1e7;
-  border: 1px solid rgba(79, 139, 118, 0.18);
-  padding: 12px;
-}
-
-.raising-shape div {
-  display: grid;
-  gap: 6px;
-}
-
-.raising-shape span {
-  line-height: 1.5;
-  color: #465248;
-  font-size: 0.88rem;
 }
 
 .episode-flow {
