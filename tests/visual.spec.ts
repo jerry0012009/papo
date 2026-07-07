@@ -88,7 +88,11 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByRole("combobox")).toHaveCount(0);
   await expect(page.getByText("Curious Mode")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "演示" }).click();
+  await expect(page.getByRole("button", { name: "脑态" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "演示" })).toHaveCount(0);
+  await page.getByLabel("看看哪只 Papo 在身边").click();
+  await page.getByText("开发查看").click();
+  await page.getByRole("button", { name: "演示回路" }).click();
   await expect(page.getByText("带 Papo 走一圈")).toBeVisible();
   await expect(page.getByRole("button", { name: "带 Papo 完整走一圈" })).toBeVisible();
   await expect(page.getByText(/场景 1|一键准备/)).toHaveCount(0);

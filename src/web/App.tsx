@@ -719,7 +719,16 @@ export function App() {
       ) : null}
       {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onTranscribeFeedbackAudio={transcribeFeedbackAudio} onEditMemory={editLongTermMemory} /> : null}
       {tab === "brain" ? <BrainView profile={profile} provider={provider} /> : null}
-      {tab === "profile" ? <ProfileView profiles={profiles} activeId={profile.userId} onSelect={selectProfile} onAdd={addProfile} /> : null}
+      {tab === "profile" ? (
+        <ProfileView
+          profiles={profiles}
+          activeId={profile.userId}
+          onSelect={selectProfile}
+          onAdd={addProfile}
+          onOpenBrain={() => setTab("brain")}
+          onOpenDemo={() => setTab("demo")}
+        />
+      ) : null}
       {tab === "demo" ? (
         <DemoView
           onRunGuided={runGuidedDemo}
@@ -736,8 +745,6 @@ export function App() {
         <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => setTab("home")} />
         <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" unread={hasUnreadPapoMessage} onClick={() => setTab("chat")} />
         <NavButton active={tab === "memory"} icon={History} label="记忆" onClick={() => setTab("memory")} />
-        <NavButton active={tab === "brain"} icon={Brain} label="脑态" onClick={() => setTab("brain")} />
-        <NavButton active={tab === "demo"} icon={Wand2} label="演示" onClick={() => setTab("demo")} />
       </nav>
     </main>
   );
@@ -1437,26 +1444,43 @@ function ProfileView(props: {
   activeId: string;
   onSelect: (userId: string) => void;
   onAdd: () => void;
+  onOpenBrain: () => void;
+  onOpenDemo: () => void;
 }) {
   return (
-    <section className="panel">
-      <PanelTitle icon={UserRound} title="哪只 Papo 在你身边" />
-      <div className="profile-list">
-        {props.profiles.map((profile) => (
-          <button
-            className={profile.userId === props.activeId ? "profile-pill active" : "profile-pill"}
-            key={profile.userId}
-            onClick={() => props.onSelect(profile.userId)}
-          >
-            <UserRound size={18} />
-            <span>{profile.creatureName}</span>
-          </button>
-        ))}
+    <section className="stack">
+      <div className="panel">
+        <PanelTitle icon={UserRound} title="哪只 Papo 在你身边" />
+        <div className="profile-list">
+          {props.profiles.map((profile) => (
+            <button
+              className={profile.userId === props.activeId ? "profile-pill active" : "profile-pill"}
+              key={profile.userId}
+              onClick={() => props.onSelect(profile.userId)}
+            >
+              <UserRound size={18} />
+              <span>{profile.creatureName}</span>
+            </button>
+          ))}
+        </div>
+        <button className="primary" onClick={props.onAdd}>
+          <Plus size={18} />
+          再养一只 Papo
+        </button>
       </div>
-      <button className="primary" onClick={props.onAdd}>
-        <Plus size={18} />
-        再养一只 Papo
-      </button>
+      <details className="episode-flow compact-flow developer-entry">
+        <summary>开发查看</summary>
+        <div className="developer-actions">
+          <button onClick={props.onOpenBrain}>
+            <Brain size={16} />
+            脑态诊断
+          </button>
+          <button onClick={props.onOpenDemo}>
+            <Wand2 size={16} />
+            演示回路
+          </button>
+        </div>
+      </details>
     </section>
   );
 }

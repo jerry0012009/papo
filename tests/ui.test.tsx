@@ -445,14 +445,22 @@ describe("App", () => {
     expect(screen.queryByText("来源细节")).not.toBeInTheDocument();
     expect(screen.queryByText(/batch manual-1|segment segment-photo/)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("button", { name: "脑态" }));
+    expect(screen.queryByRole("button", { name: "脑态" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "演示" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByLabelText("看看哪只 Papo 在身边"));
+    expect(screen.getByText("开发查看")).toBeInTheDocument();
+    expect(screen.queryByText("脑态诊断")).not.toBeVisible();
+    await userEvent.click(screen.getByText("开发查看"));
+    await userEvent.click(screen.getByRole("button", { name: "脑态诊断" }));
     expect(screen.getByText("最近变化")).toBeInTheDocument();
     expect(screen.getByText("模型路由")).toBeInTheDocument();
     expect(screen.getByText("语义脑诊断")).toBeInTheDocument();
     expect(screen.getByText("声音感知")).toBeInTheDocument();
     expect(screen.getAllByText("fallback").length).toBeGreaterThan(0);
 
-    await userEvent.click(screen.getByRole("button", { name: "演示" }));
+    await userEvent.click(screen.getByLabelText("看看哪只 Papo 在身边"));
+    await userEvent.click(screen.getByText("开发查看"));
+    await userEvent.click(screen.getByRole("button", { name: "演示回路" }));
     expect(screen.getByText("带 Papo 走一圈")).toBeInTheDocument();
     expect(screen.getByText("用几段日常内容，看 Papo 怎么听见、回应、被你养一下，再在合适的时候想起真实记住的事。")).toBeInTheDocument();
     expect(screen.getByText("带 Papo 完整走一圈")).toBeInTheDocument();
