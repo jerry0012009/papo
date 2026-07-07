@@ -4,7 +4,6 @@ import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
-import { applyStateDelta } from "./state";
 import type { AttentionSource, CaptureResult, CreatureProfile, SemanticBrainRecord } from "./types";
 
 const optionalText = (max: number) =>
@@ -146,14 +145,6 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
 
   const episodes = events.map((event) => createEpisodeFromEvent(event, "", now));
   profile.episodes.unshift(...episodes);
-  if (events.length) {
-    applyStateDelta(
-      profile,
-      { curiosity: 5, energy: -4 - Math.max(0, events.length - 1), arousal: events.length > 1 ? 4 : 1, attachment: 1 },
-      `model selected ${source} attention`,
-      now
-    );
-  }
   const memoryCandidates = episodes.map((episode) => createMemoryCandidateFromEpisode(profile, episode, { now }));
 
   result.events = events;

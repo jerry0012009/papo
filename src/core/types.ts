@@ -100,6 +100,13 @@ export interface ActionDecision {
   ruleTrace: string[];
 }
 
+export type CreatureStateDeltaRecord = {
+  key: keyof Omit<CreatureState, "mood">;
+  before: number;
+  after: number;
+  delta: number;
+};
+
 export interface CreatureExperience {
   earReason: string;
   rememberedScene?: string;
@@ -147,6 +154,7 @@ export interface AttentionEvent {
   suggestedAction: ActionKind;
   actionDecision: ActionDecision;
   actionResult?: ActionResult;
+  actionStateDeltas?: CreatureStateDeltaRecord[];
   scoreBreakdown?: SegmentScore;
   creatureExperience: CreatureExperience;
   tags: string[];
@@ -229,12 +237,7 @@ export interface FeedbackRecord {
   followUpText?: string;
   replyText?: string;
   memoryCandidateIds?: string[];
-  stateDeltas?: Array<{
-    key: keyof Omit<CreatureState, "mood">;
-    before: number;
-    after: number;
-    delta: number;
-  }>;
+  stateDeltas?: CreatureStateDeltaRecord[];
   policyDeltas?: Array<{
     key: keyof FeedbackPolicyProfile;
     before: number;
@@ -288,6 +291,7 @@ export interface MessageCognitionTrace {
     reason: string;
     visibleReply?: string;
     actionResult?: ActionResult;
+    stateDeltas?: CreatureStateDeltaRecord[];
     episodeKept: boolean;
     memoryCandidateKept: boolean;
     relatedMemoryIds: string[];

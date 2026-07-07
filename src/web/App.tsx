@@ -1022,6 +1022,7 @@ function DeveloperTraceBody({ trace, sensingTraces, profile }: { trace?: Convers
                 <TraceBlock title={`2. 行动 · ${actionLabel(event.action)}`}>
                   <p>{event.visibleReply ? `说出口：${event.visibleReply}` : "这一步没有外显回复。"}</p>
                   <ActionResultView result={event.actionResult} />
+                  <TraceList items={actionStateDeltaItems(event.stateDeltas ?? [])} />
                   <TraceList items={actionTraceItems(event.decisionTrace)} />
                 </TraceBlock>
                 <TraceBlock title="3. 记忆">
@@ -1271,7 +1272,11 @@ function ActionResultView({ result }: { result?: ActionResult }) {
 }
 
 function actionTraceItems(items: string[]) {
-  return items.filter((item) => /^(intent=|action_reason=|should_reply=|action_result=|guardrail: action=)/.test(item));
+  return items.filter((item) => /^(intent=|action_reason=|should_reply=|action_result=|state_delta=|guardrail: action=)/.test(item));
+}
+
+function actionStateDeltaItems(items?: Array<{ key: string; before: number; after: number; delta: number }>) {
+  return (items ?? []).map((item) => `状态 ${item.key}: ${item.before} -> ${item.after} (${item.delta > 0 ? "+" : ""}${item.delta})`);
 }
 
 function memoryTraceItems(items: string[]) {

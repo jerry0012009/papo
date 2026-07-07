@@ -5,10 +5,21 @@ import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
+import { applyStateDelta } from "./state";
 import type { ActionResult, CaptureResult, CreatureProfile, SemanticBrainRecord } from "./types";
 
 const actionSchema = z.enum(["observe", "respond", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list"]);
 const actionResultKindSchema = z.enum(["none", "visible_reply", "memory_intent", "reminder_draft", "question_list_draft"]);
+const stateDeltaSchema = z
+  .object({
+    curiosity: z.number().min(-12).max(12).optional(),
+    attachment: z.number().min(-12).max(12).optional(),
+    energy: z.number().min(-12).max(12).optional(),
+    arousal: z.number().min(-12).max(12).optional(),
+    safety: z.number().min(-12).max(12).optional(),
+    confidence: z.number().min(-12).max(12).optional()
+  })
+  .partial();
 const optionalText = (max: number) =>
   z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
 const optionalTextArray = (maxItems: number, maxTextLength: number) =>
@@ -33,6 +44,7 @@ const semanticActionSchema = z.object({
         userIntent: optionalText(260),
         emotionalTone: optionalText(160),
         reason: optionalText(420),
+        stateDeltas: stateDeltaSchema,
         shouldCreateEpisode: z.boolean(),
         shouldConsiderMemory: z.boolean(),
         shouldReply: z.boolean().optional(),
@@ -89,6 +101,7 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
 
     const guarded = guardActionDecision(event, profile, decision.action);
     const relatedMemoryIds = validRelatedMemoryIds(profile, decision.relatedMemoryIds);
+    const stateDeltas = cleanStateDeltas(decision.stateDeltas);
     event.actionDecision = guarded;
     event.suggestedAction = guarded.action;
     if (decision.noticed) event.noticed = safeProcessText(decision.noticed, event.noticed) ?? event.noticed;
@@ -106,6 +119,7 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
       `memory_candidate=${decision.shouldConsiderMemory}`,
       decision.shouldReply === undefined ? "should_reply=not_provided" : `should_reply=${decision.shouldReply}`,
       `action_result=${actionResult.kind}`,
+      `state_delta=${stateDeltaTrace(stateDeltas)}`,
       `guardrail: action=${guarded.action}`
     ];
 
@@ -143,6 +157,11 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
       }
     }
     validatePersistenceDecision(decision);
+    if (Object.keys(stateDeltas).length) {
+      const change = applyStateDelta(profile, stateDeltas, `llm action ${guarded.action}`, event.createdAt);
+      event.actionStateDeltas = stateChangeDeltas(change);
+      if (episode) episode.stateSnapshot = structuredClone(profile.state);
+    }
     applyPersistenceDecision(profile, result, episode, decision);
     applied += 1;
   }
@@ -250,6 +269,33 @@ function validRelatedMemoryIds(profile: CreatureProfile, ids?: string[]) {
   return [...new Set(ids)].filter((id) => allowed.has(id)).slice(0, 6);
 }
 
+function cleanStateDeltas(deltas: ActionDecisionSuggestion["stateDeltas"]) {
+  const cleaned: Partial<Record<"curiosity" | "attachment" | "energy" | "arousal" | "safety" | "confidence", number>> = {};
+  for (const [key, value] of Object.entries(deltas ?? {})) {
+    if (!Number.isFinite(value)) continue;
+    const rounded = Math.round(Number(value));
+    if (rounded !== 0) cleaned[key as keyof typeof cleaned] = rounded;
+  }
+  return cleaned;
+}
+
+function stateDeltaTrace(deltas: ReturnType<typeof cleanStateDeltas>) {
+  const entries = Object.entries(deltas);
+  return entries.length ? entries.map(([key, value]) => `${key}:${value}`).join(",") : "none";
+}
+
+function stateChangeDeltas(change: ReturnType<typeof applyStateDelta>) {
+  const keys = ["curiosity", "attachment", "energy", "arousal", "safety", "confidence"] as const;
+  return keys
+    .map((key) => ({
+      key,
+      before: change.before[key],
+      after: change.after[key],
+      delta: change.after[key] - change.before[key]
+    }))
+    .filter((item) => item.delta !== 0);
+}
+
 function safeExternalText(text?: string) {
   const normalized = safeProcessText(text);
   if (!normalized) {
@@ -304,11 +350,13 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 
 护栏会再次校验：
 - action 必须在白名单内。
-- 你不能改状态数值或直接写记忆。
+- stateDeltas 每项必须在 -12 到 12 之间，规则会负责 clamp、保存和记录 before/after。
+- 你不能直接写长期记忆，只能通过 shouldCreateEpisode、shouldConsiderMemory 和 memoryCandidateText 把材料交给记忆脑。
 - JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 
 判断口径：
 - conversation timeline 会保存用户和 Papo 的对话；这不等于每句话都要形成 episode。
+- stateDeltas 必须返回。由你判断这次行动对 Papo 当下状态的真实影响；如果确实没有变化，返回 {}。不要用固定模板，每项只写小幅变化。
 - shouldCreateEpisode 由你判断：只有之后回看仍有意义的经历、上下文或互动才需要留下 episode。
 - shouldConsiderMemory 由你判断：它比 episode 更窄，只用于可能值得进入后续记忆模型判断的内容。
 - 如果你只是想当下陪用户聊一句，不要把它送进记忆候选；如果这段输入没有可用生活信息，也可以选择不说话。
@@ -326,6 +374,7 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
       "userIntent": "...",
       "emotionalTone": "...",
       "reason": "...",
+      "stateDeltas": {"curiosity": 2, "attachment": 1, "energy": -1, "arousal": 0, "safety": 0, "confidence": 1},
       "shouldCreateEpisode": true,
       "shouldConsiderMemory": false,
       "shouldReply": true,

@@ -39,6 +39,8 @@ try {
   assert.equal(trace.modelRuns.some((run) => run.stage === "attention" && run.status === "applied"), true);
   assert.equal(trace.modelRuns.some((run) => run.stage === "action" && run.status === "applied"), true);
   assert.equal(trace.modelRuns.some((run) => run.stage === "harness" && run.status === "applied"), true);
+  assert.equal(profile.stateChanges.some((change) => change.reason.startsWith("llm action ")), true, "action model should decide at least one state change for this explicit interaction");
+  assert.ok(trace.eventDecisions?.[0]?.stateDeltas?.length, "action cognition trace should expose model-chosen state deltas");
 
   const recallCapture = await post<any>(`/profiles/${userId}/button`, { text: "上一句话我刚才说了什么？请直接回答。" });
   assert.ok(recallCapture.response?.trim(), "context follow-up should produce a visible reply");
