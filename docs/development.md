@@ -433,6 +433,7 @@ Verified:
 - Continuous listening may still batch internally every 30 seconds, but the companion surface should say it is periodically organizing what it hears rather than asking the user to manage recording segments.
 - Demo contrast copy now frames A/B conditioning as two named Papos receiving the same worry differently after feedback, rather than as policy or action summaries.
 - Demo contrast should show the two Papos' actual visible replies to the same input, not only a prose summary. The point is to let a viewer see that feedback changed the creature's behavior without reading policy numbers or action enums.
+- Active emergence on Home defaults to the surfaced thought only. Why-now, drive source, and memory linkage remain available in expandable details so the product preserves auditability without making Papo speak its cognitive trace.
 - Core tests protect memory candidates and consolidation reasons from internal developer wording.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
 - Public nginx deployment:

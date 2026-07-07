@@ -1738,12 +1738,20 @@ function noticedText(text: string) {
 
 function EmergenceCard({ emergence }: { emergence: EmergenceSurface }) {
   const hasMemory = Boolean(emergence.memoryId);
+  const flowSteps = [
+    emergence.whyNow ? { label: "为什么这时", text: visibleCreatureText(emergence.whyNow) } : undefined,
+    emergence.driveSource ? { label: "什么带回来的", text: emergenceDriveText(emergence.driveSource) } : undefined,
+    { label: "连到什么", text: hasMemory ? "这次连着一件已经记住的事。" : "这次没有拉起具体旧事，只是安静等你继续说。" }
+  ].filter(Boolean) as { label: string; text?: string }[];
+
   return (
     <section className="memory-surface active">
       <strong>{hasMemory ? "Papo 想起一件事" : "Papo 安静了一下"}</strong>
       <p>{visibleCreatureText(emergence.text)}</p>
-      {emergence.whyNow ? <small>{visibleCreatureText(emergence.whyNow)}</small> : null}
-      {emergence.driveSource ? <span>{emergenceDriveText(emergence.driveSource)}</span> : null}
+      <details className="episode-flow compact-flow">
+        <summary>看看为什么这时想起</summary>
+        <FlowSteps steps={flowSteps} />
+      </details>
     </section>
   );
 }
@@ -1841,15 +1849,15 @@ function privacyFeelingText(risk: number) {
 
 function emergenceDriveText(drive: string) {
   const map: Record<string, string> = {
-    safety: "因为我现在更谨慎",
-    curiosity: "因为我还想继续想",
-    attachment: "因为我想起以前相关的事",
-    rhythm: "因为安静时想起以前的事",
-    wake_rhythm: "因为醒来时想起以前的事",
-    wake_self_memory: "因为醒来时碰到你养出来的听法",
-    memory_resonance: "因为这次内容关联到以前的事"
+    safety: "谨慎感更高，所以先轻轻碰一下这段。",
+    curiosity: "好奇心更高，所以还想继续想一会儿。",
+    attachment: "这段和以前的共同经历连上了。",
+    rhythm: "安静了一阵之后，旧片段自己冒了出来。",
+    wake_rhythm: "醒来以后，节律把旧片段带了回来。",
+    wake_self_memory: "醒来以后，碰到了你养出来的听法。",
+    memory_resonance: "这次内容和以前记住的事连上了。"
   };
-  return map[drive] ?? "因为我现在的状态把这段带了回来";
+  return map[drive] ?? "当前状态把这段带了回来。";
 }
 
 function memorySourceLine(memory: CreatureProfile["longTermMemories"][number], profile: CreatureProfile) {

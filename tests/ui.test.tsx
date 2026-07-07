@@ -227,6 +227,12 @@ describe("App", () => {
     await userEvent.click(screen.getByLabelText("问问 Papo 想到了什么"));
     expect(await screen.findByText("Papo 安静了一下")).toBeInTheDocument();
     expect(screen.getByText(/真的和你一起经历过的事/)).toBeInTheDocument();
+    const emergenceReason = screen.getByText("我有点想继续想，但还没有足够稳定的真实内容。");
+    expect(screen.getByText("看看为什么这时想起")).toBeInTheDocument();
+    expect(emergenceReason).not.toBeVisible();
+    await userEvent.click(screen.getByText("看看为什么这时想起"));
+    expect(emergenceReason).toBeVisible();
+    expect(screen.getByText("好奇心更高，所以还想继续想一会儿。")).toBeVisible();
     expect(screen.queryByText("Papo 想起一件事")).not.toBeInTheDocument();
     expect(screen.queryByText(/小情景|递来的一小段|情景记忆/)).not.toBeInTheDocument();
     expect(screen.queryByText(/材料|模拟一段信息流|录音分段/)).not.toBeInTheDocument();
