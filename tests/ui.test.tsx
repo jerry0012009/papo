@@ -279,11 +279,10 @@ describe("App", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "对话" }));
     expect(screen.getByText("和 Papo 的小日常")).toBeInTheDocument();
-    expect(screen.getByText("5 条你给的内容")).toBeInTheDocument();
-    expect(screen.getByText("3 次 Papo 回应")).toBeInTheDocument();
-    expect(screen.getAllByText("同一次事件").length).toBeGreaterThan(1);
+    expect(screen.queryByText(/条你给的内容|次 Papo 回应/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("同一次事件")).toHaveLength(1);
     expect(screen.getByText("2 条内容")).toBeInTheDocument();
-    expect(screen.getByText("1 条内容")).toBeInTheDocument();
+    expect(screen.queryByText("1 条内容")).not.toBeInTheDocument();
     expect(screen.queryByText("manual-1 · 1 条素材")).not.toBeInTheDocument();
     expect(screen.queryByText(/对话和注意流|注意素材|小素材|刚才的注意事件/)).not.toBeInTheDocument();
     expect(screen.queryByText(/批次 manual-1/)).not.toBeInTheDocument();

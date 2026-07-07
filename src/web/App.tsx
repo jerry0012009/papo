@@ -258,7 +258,7 @@ export function App() {
           location
         })
       ]);
-      setDemoNote(result.error ? "照片先留在这次对话里，等你补一句我再一起看。" : result.semanticSource === "llm" ? "照片已经整理成可修改的描述，会和这半分钟里的话一起给我看。" : "照片先留在这次对话里，提交时会一起给我看。");
+      setDemoNote(result.error ? "照片先留在这次对话里，等你补一句我再一起看。" : result.semanticSource === "llm" ? "照片已经整理成可修改的描述，会和这次对话里的话一起给我看。" : "照片先留在这次对话里，提交时会一起给我看。");
       setTab("chat");
     });
   }
@@ -276,7 +276,7 @@ export function App() {
           batchId: current[0]?.batchId ?? currentBatchId()
         })
       ]);
-      setDemoNote(result.error ? "录音先留在这次对话里，等你补一句我再一起听。" : result.semanticSource === "llm" ? "录音已经整理成可修改的文字，会和这半分钟里的话一起给我听。" : "录音先留在这次对话里，提交时会一起给我听。");
+      setDemoNote(result.error ? "录音先留在这次对话里，等你补一句我再一起听。" : result.semanticSource === "llm" ? "录音已经整理成可修改的文字，会和这次对话里的话一起给我听。" : "录音先留在这次对话里，提交时会一起给我听。");
       setTab("chat");
     });
   }
@@ -864,8 +864,6 @@ function ChatView(props: {
   const [draft, setDraft] = useState("");
   const messages = [...(props.profile.conversation ?? [])].filter((message) => message.channel !== "wake").slice(0, 50).reverse();
   const sections = groupConversationSections(messages);
-  const inputCount = messages.filter((message) => message.role !== "papo").length;
-  const papoCount = messages.filter((message) => message.role === "papo").length;
   const canSubmit = Boolean(draft.trim() || props.stagedSegments.some((segment) => segment.content.trim()));
 
   function updateStagedSegment(index: number, patch: Partial<StreamSegment>) {
@@ -886,10 +884,6 @@ function ChatView(props: {
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={MessagesSquare} title="和 Papo 的小日常" />
-        <div className="conversation-summary">
-          <span>{inputCount} 条你给的内容</span>
-          <span>{papoCount} 次 Papo 回应</span>
-        </div>
         {messages.length ? (
           <div className="chat-list">
             {sections.map((section) =>
@@ -1034,7 +1028,7 @@ function ChatBubble({ message }: { message: ConversationMessage }) {
 }
 
 function groupConversationSections(messages: ConversationMessage[]): ConversationSection[] {
-  return messages.reduce<ConversationSection[]>((sections, message) => {
+  const sections = messages.reduce<ConversationSection[]>((sections, message) => {
     if (message.role !== "papo" && message.batchId) {
       const previous = sections[sections.length - 1];
       if (previous?.kind === "batch" && previous.batchId === message.batchId) {
@@ -1048,6 +1042,11 @@ function groupConversationSections(messages: ConversationMessage[]): Conversatio
     sections.push({ kind: "single", id: message.id, message });
     return sections;
   }, []);
+  return sections.flatMap((section) =>
+    section.kind === "batch" && section.messages.length === 1
+      ? [{ kind: "single" as const, id: section.messages[0].id, message: section.messages[0] }]
+      : [section]
+  );
 }
 
 function MemoryView(props: {
