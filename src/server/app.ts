@@ -108,11 +108,12 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         });
       } catch (error) {
         res.json({
-          summary: `图片已上传，但视觉模型暂时没有返回摘要。请手动补充这张截图里值得注意的生活信息。${error instanceof Error ? ` (${error.message})` : ""}`,
+          summary: "图片已上传，但我暂时没有看清里面的内容。你可以补一句这张图里发生了什么。",
           provider: sensingProvider(provider, "vision"),
           model: provider.diagnostics?.visionModel,
           route: "chat_completions",
-          semanticSource: "fallback"
+          semanticSource: "fallback",
+          error: sensingError(error)
         });
       }
     } catch (error) {
@@ -137,11 +138,12 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         });
       } catch (error) {
         res.json({
-          transcript: `音频已上传，但音频模型暂时没有返回转写。请手动补充这段录音里值得注意的生活信息。${error instanceof Error ? ` (${error.message})` : ""}`,
+          transcript: "录音已接住，但我暂时没有听清里面的话。你可以补一句这段声音里发生了什么。",
           provider: sensingProvider(provider, "audio"),
           model: provider.diagnostics?.audioModel,
           route: provider.diagnostics?.audioRoute,
-          semanticSource: "fallback"
+          semanticSource: "fallback",
+          error: sensingError(error)
         });
       }
     } catch (error) {
@@ -380,6 +382,10 @@ function sensingProvider(provider: ModelProvider, modality: "vision" | "audio") 
   return modality === "vision"
     ? provider.diagnostics?.visionProvider ?? provider.kind
     : provider.diagnostics?.audioProvider ?? provider.kind;
+}
+
+function sensingError(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }
 
 class HttpError extends Error {

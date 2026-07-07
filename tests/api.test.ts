@@ -174,6 +174,51 @@ describe("api", () => {
       });
   });
 
+  it("keeps sensing provider errors out of user-editable fallback text", async () => {
+    const provider = {
+      ...createModelProvider({}),
+      kind: "generic" as const,
+      name: "failing sensing model",
+      usesRealModel: true,
+      diagnostics: {
+        visionProvider: "generic" as const,
+        visionModel: "gpt-5.5",
+        audioProvider: "generic" as const,
+        audioRoute: "audio_transcriptions" as const,
+        audioModel: "gpt-4o-mini-transcribe"
+      },
+      summarizeImage: async () => {
+        throw new Error("Vision provider failed: 403 provider denied image");
+      },
+      transcribeAudio: async () => {
+        throw new Error("Audio provider failed: 400 unsupported_format");
+      }
+    };
+    const app = createApp({ store: new MemoryProfileStore(), provider });
+
+    await request(app)
+      .post("/api/image-summary")
+      .send({ dataUrl: `data:image/png;base64,${"A".repeat(80)}`, label: "坏图" })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.semanticSource).toBe("fallback");
+        expect(response.body.summary).toContain("你可以补一句");
+        expect(response.body.summary).not.toMatch(/provider failed|403|denied/i);
+        expect(response.body.error).toContain("Vision provider failed");
+      });
+
+    await request(app)
+      .post("/api/audio-transcript")
+      .send({ dataUrl: `data:audio/wav;base64,${"A".repeat(80)}`, label: "坏录音" })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.semanticSource).toBe("fallback");
+        expect(response.body.transcript).toContain("你可以补一句");
+        expect(response.body.transcript).not.toMatch(/provider failed|unsupported_format|400/i);
+        expect(response.body.error).toContain("Audio provider failed");
+      });
+  });
+
   it("reports the actual modality provider when audio is routed away from the semantic brain", async () => {
     const provider = {
       ...createModelProvider({}),
