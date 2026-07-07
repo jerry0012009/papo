@@ -921,9 +921,73 @@ describe("creature core", () => {
     const profile = createCreatureProfile();
     const result = await runButtonHarness(profile, "为什么说“先回应你”，你还想后干啥？", provider);
 
-    expect(result.response).toContain("我刚才那句说得别扭");
+    expect(result.response).toContain("那句确实别扭");
     expect(result.response).toContain("后面没有藏什么复杂的事");
     expect(result.response).not.toMatch(/先回应你|回应流程/);
+  });
+
+  it("passes recent conversation to semantic dialogue prompts without exposing private text", async () => {
+    const prompts: string[] = [];
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "context aware dialogue model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+        prompts.push(prompt);
+        const id = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "";
+        if (prompt.includes("行动选择脑")) {
+          return {
+            decisions: [
+              {
+                eventId: id,
+                action: "respond",
+                shouldReply: true,
+                reply: "我明白了，你是在接着上一句问我为什么那样说。"
+              }
+            ]
+          } as T;
+        }
+        return {
+          response: "那句话确实容易让人误会。我只是想说我听见你了，不是还有什么后续动作。",
+          interaction: {
+            shouldReply: true,
+            suggestedAction: "respond",
+            reply: "那句话确实容易让人误会。我只是想说我听见你了，不是还有什么后续动作。"
+          }
+        } as T;
+      }
+    };
+    const profile = createCreatureProfile();
+    profile.conversation.unshift(
+      {
+        id: "msg-private",
+        at: "2026-07-07T10:00:00.000Z",
+        role: "user",
+        channel: "button",
+        text: "我的 secret token 是 abc",
+        relatedMemoryIds: []
+      },
+      {
+        id: "msg-papo",
+        at: "2026-07-07T10:00:01.000Z",
+        role: "papo",
+        channel: "button",
+        text: "我在，听见了。你刚才是在叫我说话，我会先回应你。",
+        relatedMemoryIds: []
+      }
+    );
+
+    const result = await runButtonHarness(profile, "为什么说“先回应你”，你还想后干啥？", provider);
+
+    expect(result.response).toContain("容易让人误会");
+    expect(prompts.filter((prompt) => prompt.includes("recent_conversation_newest_first")).length).toBeGreaterThanOrEqual(2);
+    expect(prompts.join("\n")).toContain("我会先回应你");
+    expect(prompts.join("\n")).not.toMatch(/secret token|abc/i);
+    expect(prompts.join("\n")).toContain("contentHiddenForPrivacy");
   });
 
   it("redacts high privacy button content before action, wording, and memory model prompts", async () => {

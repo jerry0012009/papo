@@ -4,6 +4,7 @@ import { isHighPrivacySegmentContent } from "./attention";
 import { makeId } from "./ids";
 import { normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
+import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ActionKind, CaptureResult, CreatureProfile, SemanticBrainRecord } from "./types";
 
 const actionSchema = z.enum(["observe", "respond", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list"]);
@@ -107,7 +108,7 @@ function quietActionResponse(action: ActionKind) {
 
 function safeExternalText(text?: string, fallback?: string, sourceText?: string) {
   if (sourceText && isPapoWordingQuestion(sourceText) && text && containsInternalProcessLanguage(text)) {
-    return "我刚才那句说得别扭。我的意思只是：我听见你了，想回你一声；后面没有藏什么复杂的事。";
+    return "如果我刚才那样说，那句确实别扭。我的意思只是：我听见你了，想回你一声；后面没有藏什么复杂的事。";
   }
   const normalized = safeProcessText(text, fallback);
   if (!normalized) return fallback;
@@ -209,10 +210,19 @@ current_policy:
 ${JSON.stringify(profile.policyProfile)}
 
 recent_memories:
-${JSON.stringify(profile.longTermMemories.slice(0, 8).map((memory) => ({ id: memory.id, kind: memory.kind, text: memory.text, weight: memory.weight, tags: memory.tags })))}
+${JSON.stringify(profile.longTermMemories.slice(0, 8).map((memory) => {
+  const privacyHigh = hasHighPrivacyText(`${memory.text} ${memory.tags.join(" ")}`);
+  return { id: memory.id, kind: memory.kind, text: textForModel(memory.text, privacyHigh), contentHiddenForPrivacy: privacyHigh, weight: memory.weight, tags: tagsForModel(memory.tags, privacyHigh) };
+}))}
+
+recent_conversation_newest_first:
+${JSON.stringify(recentConversationForModel(profile))}
 
 recent_feedback:
-${JSON.stringify(profile.feedbackHistory.slice(0, 6).map((item) => ({ kind: item.kind, inputText: item.inputText, learningNote: item.learningNote, targetId: item.targetId })))}
+${JSON.stringify(profile.feedbackHistory.slice(0, 6).map((item) => {
+  const privacyHigh = hasHighPrivacyText(`${item.inputText ?? ""} ${item.learningNote}`);
+  return { kind: item.kind, inputText: textForModel(item.inputText, privacyHigh), learningNote: textForModel(item.learningNote, privacyHigh), contentHiddenForPrivacy: privacyHigh, targetId: item.targetId };
+}))}
 
 events:
 ${JSON.stringify(result.events.map((event) => ({
@@ -237,4 +247,18 @@ ${JSON.stringify(result.events.map((event) => ({
 function modelSafeEventContent(text: string) {
   if (!isHighPrivacySegmentContent(text)) return text;
   return "[这段包含可能的密钥、验证码、密码、地址或证件信息，原文已隐藏；行动上只能先询问或安静等待，不能直接引用或保存。]";
+}
+
+function recentConversationForModel(profile: CreatureProfile) {
+  return (profile.conversation ?? []).slice(0, 10).map((message) => {
+    const privacyHigh = hasHighPrivacyText(message.text);
+    return {
+      role: message.role,
+      channel: message.channel,
+      text: textForModel(message.text, privacyHigh),
+      contentHiddenForPrivacy: privacyHigh,
+      at: message.at,
+      modality: message.modality
+    };
+  });
 }

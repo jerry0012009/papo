@@ -6,6 +6,7 @@ import { createCuriousCreatureReport } from "./experience";
 import { makeId } from "./ids";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
+import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import { semanticSelectAction } from "./semantic-action";
 import { semanticDecideAttention } from "./semantic-attention";
 import { semanticDecideMemory } from "./semantic-memory";
@@ -474,7 +475,7 @@ function safeCreatureFacingText(text?: string, fallback?: string) {
 
 function safeExternalReplyText(text?: string, fallback?: string, sourceText?: string) {
   if (sourceText && isPapoWordingQuestion(sourceText) && text && containsInternalProcessLanguage(text)) {
-    return "我刚才那句说得别扭。我的意思只是：我听见你了，想回你一声；后面没有藏什么复杂的事。";
+    return "如果我刚才那样说，那句确实别扭。我的意思只是：我听见你了，想回你一声；后面没有藏什么复杂的事。";
   }
   const normalized = safeCreatureFacingText(text, fallback);
   if (!normalized) return fallback;
@@ -588,7 +589,13 @@ profile_state:
 ${JSON.stringify(profile.state)}
 
 recent_long_term_memories:
-${JSON.stringify(profile.longTermMemories.slice(0, 6).map((memory) => ({ id: memory.id, kind: memory.kind, text: memory.text, weight: memory.weight, tags: memory.tags })))}
+${JSON.stringify(profile.longTermMemories.slice(0, 6).map((memory) => {
+  const privacyHigh = hasHighPrivacyText(`${memory.text} ${memory.tags.join(" ")}`);
+  return { id: memory.id, kind: memory.kind, text: textForModel(memory.text, privacyHigh), contentHiddenForPrivacy: privacyHigh, weight: memory.weight, tags: tagsForModel(memory.tags, privacyHigh) };
+}))}
+
+recent_conversation_newest_first:
+${JSON.stringify(recentConversationForModel(profile))}
 
 source:
 ${source}
@@ -658,4 +665,18 @@ function modelSafeSegmentContent(text: string) {
 function modelSafeTags(text: string, tags: string[]) {
   if (!isHighPrivacySegmentContent(text)) return tags;
   return [];
+}
+
+function recentConversationForModel(profile: CreatureProfile) {
+  return (profile.conversation ?? []).slice(0, 10).map((message) => {
+    const privacyHigh = hasHighPrivacyText(message.text);
+    return {
+      role: message.role,
+      channel: message.channel,
+      text: textForModel(message.text, privacyHigh),
+      contentHiddenForPrivacy: privacyHigh,
+      at: message.at,
+      modality: message.modality
+    };
+  });
 }
