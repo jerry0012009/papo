@@ -247,7 +247,7 @@ describe("App", () => {
     expect(screen.getByPlaceholderText("找一找我记着哪一段")).toBeInTheDocument();
     expect(screen.getByText("我学会认识自己")).toBeInTheDocument();
     expect(screen.getByText("刚刚一起经历的")).toBeInTheDocument();
-    expect(screen.getByText("这件事以后可能还会来，我先替你记着：妈妈周五复查，需要提前准备病历")).toBeInTheDocument();
+    expect(screen.getByText("这件事以后可能还会来，我先替你记着：你希望我解释自己为什么注意到重点")).toBeInTheDocument();
     expect(screen.getByText("我对自己留下一点小理解：我正在学习注意")).toBeInTheDocument();
     expect(screen.getByText((_, element) => element?.textContent === "我记得比较清楚。到时候我会把它想起来。")).toBeInTheDocument();
     expect(screen.getByText("我当时愿意留下它，是因为这一小段有未来价值")).toBeInTheDocument();
@@ -270,7 +270,7 @@ describe("App", () => {
     expect(screen.queryByText("future_review · weight 80")).not.toBeInTheDocument();
     expect(screen.queryByText("记忆细节")).not.toBeInTheDocument();
     expect(screen.queryByText(/资料库|memory_resonance|scoreBreakdown|decisionTrace|weight \d|confidence \d|细节记录/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/用户|episode|candidate|长期保存/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/用户|小动物|episode|candidate|长期保存/)).not.toBeInTheDocument();
     expect(screen.getAllByText("来自半分钟里的一小段").length).toBeGreaterThan(0);
     expect(screen.queryByText(/批次 manual-1/)).not.toBeInTheDocument();
     expect(screen.queryByText("来源细节")).not.toBeInTheDocument();
@@ -370,7 +370,7 @@ function profileFixture() {
         id: "m2",
         createdAt: new Date().toISOString(),
         kind: "future_review",
-        text: "用户确认：妈妈周五复查，需要提前准备病历。",
+        text: "用户希望小动物解释自己为什么注意到重点。",
         weight: 80,
         tags: ["妈妈复查"],
         consolidatedBecause: "这条 episode 有未来价值。"

@@ -1937,6 +1937,7 @@ function normalizeMemoryText(text: string) {
     .replace(/用户反馈/g, "你后来教我")
     .replace(/用户/g, "你")
     .replace(/Papo/g, "我")
+    .replace(/小动物/g, "我")
     .replace(/^(你主动|你确认|你后来教我)[：:]\s*/, "")
     .replace(/这条\s*episode/gi, "这一小段")
     .replace(/episode/gi, "小片段")

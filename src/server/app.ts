@@ -383,7 +383,6 @@ function feedbackRelatedMemoryIds(profile: CreatureProfile, targetId?: string, t
 function memoryCorrectionDialogueText(text: string, maxLength: number) {
   return summarizeText(
     normalizeSharedMemoryText(text)
-      .replace(/小动物/g, "我")
       .replace(/^(你主动|你确认|你后来教我)[：:]\s*/, ""),
     maxLength
   );

@@ -43,9 +43,9 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
 
   await page.getByRole("button", { name: "记忆" }).click();
   await expect(page.getByText("我记得的你和我")).toBeVisible();
-  await expect(page.getByText("这件事以后可能还会来，我先替你记着：妈妈周五复查，需要提前准备病历")).toBeVisible();
+  await expect(page.getByText("这件事以后可能还会来，我先替你记着：你希望我解释自己为什么注意到重点")).toBeVisible();
   await expect(page.getByText("我当时愿意留下它，是因为这一小段有未来价值")).toBeVisible();
-  await expect(page.getByText(/用户|episode|candidate|长期保存/)).toHaveCount(0);
+  await expect(page.getByText(/用户|小动物|episode|candidate|长期保存/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "帮我记准" })).toBeVisible();
   await expect(page.getByRole("button", { name: "帮我先放下" })).toBeVisible();
   await expect(page.getByText("来自半分钟里的一小段")).toBeVisible();
@@ -183,7 +183,7 @@ function profileFixture() {
         createdAt: now,
         sourceEpisodeId: "episode-review",
         kind: "future_review",
-        text: "用户确认：妈妈周五复查，需要提前准备病历。",
+        text: "用户希望小动物解释自己为什么注意到重点。",
         weight: 82,
         tags: ["妈妈复查", "病历"],
         consolidatedBecause: "这条 episode 有未来价值。"
