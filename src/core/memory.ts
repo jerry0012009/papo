@@ -62,7 +62,7 @@ export function createMemoryCandidateFromEpisode(
   return candidate;
 }
 
-export function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new Date().toISOString()) {
+function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new Date().toISOString()) {
   const episode = profile.episodes.find((item) => item.id === episodeId);
   if (!episode) return undefined;
   if (episode.promotedToLongTerm) {

@@ -6,7 +6,6 @@ import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { createModelProvider, type ModelProvider } from "../core/provider";
-import { promoteEpisode } from "../core/memory";
 import { wakeCreature } from "../core/rhythm";
 import type { CreatureProfile, StreamSegment } from "../core/types";
 import { JsonProfileStore, type ProfileStore } from "./store";
@@ -234,17 +233,6 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       appendPapoMessage(profile, { channel: "feedback", text: feedback.replyText, sourceId: feedback.id, relatedMemoryIds });
       await store.saveProfile(profile);
       res.json({ profile, feedback });
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post("/api/profiles/:userId/episodes/:episodeId/promote", async (req, res, next) => {
-    try {
-      const profile = await requireProfile(store, req.params.userId);
-      const memory = promoteEpisode(profile, req.params.episodeId);
-      await store.saveProfile(profile);
-      res.json({ profile, memory });
     } catch (error) {
       next(error);
     }
