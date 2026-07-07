@@ -467,6 +467,8 @@ describe("App", () => {
     expect(screen.getByText("我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要。")).toBeInTheDocument();
     expect(screen.getByText("连续收到“再想一会儿”")).toBeInTheDocument();
     expect(screen.getByText("连续收到“先安静点”")).toBeInTheDocument();
+    expect(screen.getByText(/你教我不要浅浅带过|你把我教得会多停一下/)).toBeInTheDocument();
+    expect(screen.getByText("你把我教得先轻声陪着，不急着追问。")).toBeInTheDocument();
     expect(screen.getAllByText(/我接住了这件刚发生/).length).toBeGreaterThan(0);
   }, 10_000);
 });

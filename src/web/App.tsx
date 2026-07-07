@@ -80,6 +80,8 @@ interface DemoContrastDetail {
   input: string;
   deepName: string;
   quietName: string;
+  deepRaised: string;
+  quietRaised: string;
   deepReply: string;
   quietReply: string;
 }
@@ -1500,9 +1502,22 @@ function createDemoContrastDetail(
     input,
     deepName: deepProfile.creatureName || "Papo 小想",
     quietName: quietProfile.creatureName || "Papo 小静",
+    deepRaised: raisedStyleLine(deepProfile, "deep"),
+    quietRaised: raisedStyleLine(quietProfile, "quiet"),
     deepReply: visiblePapoReplyText(deepResult.response),
     quietReply: visiblePapoReplyText(quietResult.response)
   };
+}
+
+function raisedStyleLine(profile: CreatureProfile, kind: "deep" | "quiet") {
+  const targetTags = kind === "deep" ? ["更愿意多想", "更愿意记稳", "被确认"] : ["更安静", "更小心边界"];
+  const memory = profile.longTermMemories.find(
+    (item) => item.kind === "creature_self_memory" && item.tags.includes("被你养成") && targetTags.some((tag) => item.tags.includes(tag))
+  );
+  if (memory) return summarizeForEpisode(extractRememberedMoment(memory.text));
+  return kind === "deep"
+    ? "你把我教得会多停一下，不要太快放过去。"
+    : "你把我教得先轻声陪着，不急着追问。";
 }
 
 function DemoContrast({ detail }: { detail: DemoContrastDetail }) {
@@ -1516,11 +1531,13 @@ function DemoContrast({ detail }: { detail: DemoContrastDetail }) {
         <article>
           <strong>{detail.deepName}</strong>
           <span>连续收到“再想一会儿”</span>
+          <p>{detail.deepRaised}</p>
           <p>{detail.deepReply}</p>
         </article>
         <article>
           <strong>{detail.quietName}</strong>
           <span>连续收到“先安静点”</span>
+          <p>{detail.quietRaised}</p>
           <p>{detail.quietReply}</p>
         </article>
       </div>

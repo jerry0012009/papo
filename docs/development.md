@@ -437,6 +437,7 @@ Verified:
 - Companion listening can keep 3-minute/30-second limits internally, but the visible dialogue surface should not present those scheduler numbers as product instructions. Say Papo is listening with the user, and that clear things enter the conversation while noisy stretches pass by.
 - Demo contrast copy now frames A/B conditioning as two named Papos receiving the same worry differently after feedback, rather than as policy or action summaries.
 - Demo contrast should show the two Papos' actual visible replies to the same input, not only a prose summary. The point is to let a viewer see that feedback changed the creature's behavior without reading policy numbers or action enums.
+- Demo contrast cards should also show the listening style each Papo learned from feedback, preferably from feedback-shaped self-memory. The viewer should see how the creature was raised, not infer it from configuration or labels.
 - Active emergence on Home defaults to the surfaced thought only. Why-now, drive source, and memory linkage remain available in expandable details so the product preserves auditability without making Papo speak its cognitive trace.
 - Core tests protect memory candidates and consolidation reasons from internal developer wording.
 - Public demo store was reset to a life-context profile so old development/investor smoke text is not used as creature interaction material.
