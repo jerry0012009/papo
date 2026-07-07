@@ -1,5 +1,5 @@
 import { makeId } from "./ids";
-import { normalizeSharedMemoryText } from "./memory";
+import { toCreatureMemoryVoice } from "./memory";
 import { applyStateDelta } from "./state";
 import { summarizeText } from "./text";
 import type { CreatureProfile, EmergenceRecord, LongTermMemory, WakeEvent } from "./types";
@@ -136,5 +136,5 @@ function wakeEmergenceMessage(memory: LongTermMemory) {
 }
 
 function wakeMemoryText(text: string) {
-  return summarizeText(normalizeSharedMemoryText(text), 92).replace(/[。！？.!?]+$/, "");
+  return summarizeText(toCreatureMemoryVoice(text), 92).replace(/[。！？.!?]+$/, "");
 }

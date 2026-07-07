@@ -251,6 +251,7 @@ Done:
   - Conversation bubbles no longer show system-channel labels such as "认真注意后"; Papo replies are shown as Papo speaking, with light context only for user/world inputs.
   - Memory page no longer defaults to database labels such as `future_review`, batch ids, or numeric weights. It shows Papo's own memory language and keeps time/location as part of the shared moment; raw details belong in Brain/developer diagnostics instead.
   - Memory page is now treated as Papo's subjective memory surface, not a diagnostics surface: titles, memory text wrappers, familiarity labels, and edit/forget controls use first-person creature language, while raw `kind`/`weight` details stay out of the default page.
+  - Legacy/model memory text is translated through a shared creature-memory voice before appearing on Memory, wake, active emergence, or memory-correction dialogue surfaces, so phrases such as "用户希望小动物", "当前事件", `episode`, or "未来价值" remain backend/raw-memory material rather than Papo speech.
   - Active emergence on Home now shows Papo's resurfaced thought plus why it surfaced and which drive brought it back, while technical trace remains in Brain.
   - Home and Demo no longer expose harness trace lines or development backlog cards; technical diagnostics stay in Brain/developer surfaces.
   - Home topbar no longer exposes provider names or "LLM configured" technical text. It presents Papo as a small companion, while model/provider routing lives in Brain diagnostics.

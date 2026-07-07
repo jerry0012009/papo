@@ -1,5 +1,5 @@
 import { makeId } from "./ids";
-import { normalizeSharedMemoryText } from "./memory";
+import { toCreatureMemoryVoice } from "./memory";
 import { summarizeText } from "./text";
 import type { AttentionEvent, CreatureProfile, EmergenceRecord, LongTermMemory } from "./types";
 
@@ -181,7 +181,7 @@ function memoryBackMessage(driveSource: string, messagePrefix: string, memoryTex
 }
 
 function emergenceMemoryText(text: string, max: number) {
-  return summarizeText(normalizeSharedMemoryText(text), max).replace(/[。！？.!?]+$/, "");
+  return summarizeText(toCreatureMemoryVoice(text), max).replace(/[。！？.!?]+$/, "");
 }
 
 function topMemory(profile: CreatureProfile, kind?: LongTermMemory["kind"]) {

@@ -241,6 +241,30 @@ export function normalizeSharedMemoryText(text: string) {
     .replace(/[。！？.!?]+$/, "");
 }
 
+export function toCreatureMemoryVoice(text: string) {
+  return normalizeSharedMemoryText(text)
+    .replace(/^(你刚递给我的这件小事|我刚才注意到|我注意到|你曾经对我说)[：:]\s*/g, "")
+    .replace(/^我把这条记忆改准了[：:]\s*/g, "")
+    .replace(/^你希望我/g, "你那时希望我")
+    .replace(/^你想让我/g, "你那时想让我")
+    .replace(/^你让我/g, "你那时让我")
+    .replace(/我还没把它和旧事连起来，会先当作这一次的小经历/g, "我当时还没和旧事连起来，就先把它当成这一次的小经历")
+    .replace(/这段我会先放轻一点，等你告诉我能不能留下/g, "我当时决定先放轻一点，等你告诉我能不能留下")
+    .replace(/这条小片段有未来价值/g, "它以后可能还会回来找你")
+    .replace(/有未来价值/g, "以后可能还会回来找你")
+    .replace(/(\p{Script=Han})\s+(\p{Script=Han})/gu, "$1$2")
+    .replace(/[。！？.!?]+$/, "");
+}
+
+export function memoryKeepReasonToCreatureVoice(reason: string) {
+  return toCreatureMemoryVoice(reason)
+    .replace(/^这一小段以后可能还会回来找你$/, "它以后可能还会回来找你")
+    .replace(/^这件事已经多次回到我这里，我想把它抱成一个长期主题$/, "它已经几次回到我耳边，我想把它记稳一点")
+    .replace(/^我刚才确实认真停了一下，先把这段留成可以被你确认的小记忆$/, "我当时真的停了一下，想先轻轻抱住，等你教我能不能记稳")
+    .replace(/^这段值得成为我们之间更稳定的一直记着的事$/, "你教我这段值得在我们之间记稳")
+    .replace(/[。！？.!?]+$/, "");
+}
+
 function sharedResponseText(response: string, scene: string) {
   const text = normalizeSharedMemoryText(stripSourceMetadata(response));
   if (text.length < 6) return "";

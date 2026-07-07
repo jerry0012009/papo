@@ -43,9 +43,9 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
 
   await page.getByRole("button", { name: "记忆" }).click();
   await expect(page.getByText("我抱着的小事")).toBeVisible();
-  await expect(page.getByText(/这件事以后可能还会回来，我先抱着：你刚递给我的这件小事：如果你能说话/)).toBeVisible();
-  await expect(page.getByText("我当时把它抱住，是因为这一小段有未来价值")).toBeVisible();
-  await expect(page.getByText(/用户|小动物|episode|candidate|长期保存|当前事件|保存意图/)).toHaveCount(0);
+  await expect(page.getByText(/它以后可能还会回来找你，我先抱着：如果你能说话/)).toBeVisible();
+  await expect(page.getByText("我留下它，是因为它以后可能还会回来找你。")).toBeVisible();
+  await expect(page.getByText(/用户|小动物|episode|candidate|长期保存|当前事件|保存意图|未来价值/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "教我记准" })).toBeVisible();
   await expect(page.getByRole("button", { name: "帮我先放下" })).toBeVisible();
   await expect(page.getByText("来自半分钟里的一小段")).toBeVisible();

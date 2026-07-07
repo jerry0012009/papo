@@ -3,7 +3,7 @@ import { handleButtonCapture, handleCuriousStream } from "../src/core/attention"
 import { createActiveEmergence } from "../src/core/emergence";
 import { applyFeedback } from "../src/core/feedback";
 import { runButtonHarness } from "../src/core/harness";
-import { promoteEpisode } from "../src/core/memory";
+import { memoryKeepReasonToCreatureVoice, promoteEpisode, toCreatureMemoryVoice } from "../src/core/memory";
 import { createCreatureProfile } from "../src/core/profile";
 import { createModelProvider, type ModelProvider } from "../src/core/provider";
 import { wakeCreature } from "../src/core/rhythm";
@@ -213,9 +213,22 @@ describe("creature core", () => {
 
     const wake = wakeCreature(profile, "2026-07-06T08:00:00.000Z");
 
-    expect(wake.innerThought).toContain("你刚递给我的这件小事");
-    expect(wake.innerThought).toContain("这段我会先放轻一点");
-    expect(wake.innerThought).not.toMatch(/我先试着理解|当前事件|用户|小动物|旧记忆|保存意图|情景片段/);
+    expect(wake.innerThought).toContain("如果你能说话");
+    expect(wake.innerThought).toContain("我当时决定先放轻一点");
+    expect(wake.innerThought).not.toMatch(/我先试着理解|当前事件|用户|小动物|旧记忆|保存意图|情景片段|你刚递给我的这件小事/);
+  });
+
+  it("renders old memory material in Papo's subjective voice", () => {
+    const text = toCreatureMemoryVoice(
+      "用户希望小动物解释自己为什么注意到重点。我还没有强烈联想到旧记忆，所以先把它作为新的情景片段。这段需要用户确认，尤其是隐私、情绪或保存意图还不够明确。"
+    );
+    const reason = memoryKeepReasonToCreatureVoice("这条 episode 有未来价值。");
+
+    expect(text).toContain("你那时希望我解释自己为什么注意到重点");
+    expect(text).toContain("我当时还没和旧事连起来");
+    expect(text).toContain("我当时决定先放轻一点");
+    expect(text).not.toMatch(/用户|小动物|当前事件|保存意图|情景片段|旧记忆/);
+    expect(reason).toBe("它以后可能还会回来找你");
   });
 
   it("remember promotes an episode to long-term memory", () => {
@@ -338,9 +351,9 @@ describe("creature core", () => {
 
     const emergence = createActiveEmergence(profile);
 
-    expect(emergence.text).toContain("你刚递给我的这件小事");
-    expect(emergence.text).toContain("这段我会先放轻一点");
-    expect(emergence.text).not.toMatch(/我先试着理解|当前事件|用户|小动物|旧记忆|保存意图|情景片段/);
+    expect(emergence.text).toContain("如果你能说话");
+    expect(emergence.text).toContain("我当时决定先放轻一点");
+    expect(emergence.text).not.toMatch(/我先试着理解|当前事件|用户|小动物|旧记忆|保存意图|情景片段|你刚递给我的这件小事/);
   });
 
   it("active emergence treats feedback-shaped self-memory as a raised habit, not an old event", () => {

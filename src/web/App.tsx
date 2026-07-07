@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createContrastSummary } from "../core/demo";
-import { normalizeSharedMemoryText } from "../core/memory";
+import { memoryKeepReasonToCreatureVoice, toCreatureMemoryVoice } from "../core/memory";
 import type {
   AttentionEvent,
   CaptureResult,
@@ -1893,14 +1893,14 @@ function memoryFamiliarityText(weight: number) {
 
 function memoryKindText(kind: CreatureProfile["longTermMemories"][number]["kind"]) {
   const map = {
-    user_preference: "下次我会照着这个方式靠近你",
-    long_theme: "这是会反复回来找我的主题",
-    creature_self_memory: "这是我认识自己的小痕迹",
-    safety_rule: "这是你教我的边界",
-    future_review: "到时候我会把它想起来",
-    relationship: "这是我们之间变熟的一小段",
-    habit: "这是我闻出来的习惯",
-    open_question: "这是我还想继续歪头想的事"
+    user_preference: "下次遇到相近时刻，我会照这个方式靠近你",
+    long_theme: "它像一条会反复回到我耳边的小线索",
+    creature_self_memory: "这是你在我身上养出的一点听法",
+    safety_rule: "这是我会先守住的边界",
+    future_review: "以后它靠近你时，我会先想起这一段",
+    relationship: "它让我更认识你一点",
+    habit: "我听见这里有个反复出现的小习惯",
+    open_question: "这件事我还没有想完"
   };
   return map[kind];
 }
@@ -1916,24 +1916,24 @@ function memoryCreatureLine(memory: CreatureProfile["longTermMemories"][number])
   const rawText = memory.text.trim();
   const text = normalizeMemoryText(rawText);
   const map = {
-    user_preference: `我记住你喜欢我这样做：${text}`,
-    long_theme: `我会把这件事放在耳边，之后听见相近的声音就想起它：${text}`,
-    creature_self_memory: `我身上长出一点新习惯：${text}`,
+    user_preference: `我记住你喜欢我这样靠近：${text}`,
+    long_theme: `这件事会反复来找我们，我先抱着：${text}`,
+    creature_self_memory: `你这样养过我：${text}`,
     safety_rule: `这条边界我会先守住：${text}`,
-    future_review: `这件事以后可能还会回来，我先抱着：${text}`,
+    future_review: `它以后可能还会回来找你，我先抱着：${text}`,
     relationship: `这段让我更认识你一点：${text}`,
-    habit: `我闻到一个反复出现的小习惯：${text}`,
+    habit: `我听见一个反复出现的小习惯：${text}`,
     open_question: `这件事我还会歪头想一想：${text}`
   };
   return map[memory.kind];
 }
 
 function memoryKeptBecauseText(reason: string) {
-  return `我当时把它抱住，是因为${normalizeMemoryText(reason)}`;
+  return `我留下它，是因为${memoryKeepReasonToCreatureVoice(reason)}。`;
 }
 
 function normalizeMemoryText(text: string) {
-  return normalizeSharedMemoryText(text)
+  return toCreatureMemoryVoice(text)
     .replace(/^(你主动|你确认|你后来教我)[：:]\s*/, "")
     .replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, "$1$2")
     .replace(/[。！？.!?]+$/, "");

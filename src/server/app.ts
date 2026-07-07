@@ -7,7 +7,7 @@ import { applyFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { enrichEmergenceNarration, enrichFeedbackNarration } from "../core/narration";
 import { createModelProvider, type ModelProvider } from "../core/provider";
-import { normalizeSharedMemoryText, promoteEpisode, updateLongTermMemory } from "../core/memory";
+import { promoteEpisode, toCreatureMemoryVoice, updateLongTermMemory } from "../core/memory";
 import { wakeCreature } from "../core/rhythm";
 import { summarizeText } from "../core/text";
 import type { CreatureProfile, StreamSegment } from "../core/types";
@@ -382,7 +382,7 @@ function feedbackRelatedMemoryIds(profile: CreatureProfile, targetId?: string, t
 
 function memoryCorrectionDialogueText(text: string, maxLength: number) {
   return summarizeText(
-    normalizeSharedMemoryText(text)
+    toCreatureMemoryVoice(text)
       .replace(/^(你主动|你确认|你后来教我)[：:]\s*/, ""),
     maxLength
   );
