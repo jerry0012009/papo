@@ -80,6 +80,7 @@ When the LLM returns structured interaction understanding but omits an explicit 
 LLM narration cannot change state, policy, action, memory ids, or persistence. Emergence narration is accepted only when it stays anchored to a real memory already selected by rules.
 Visual and audio models are treated as `sense` adapters only: they may create `image_summary` and `audio_transcript` text, but they do not choose memories, actions, or state changes. Those generated segments remain user-editable before entering Curious Mode.
 Attention is a conversation phase, not a separate product mode: user/world multimodal inputs enter the conversation timeline first, then the harness decides what Papo attends to, remembers, says, or ignores.
+In Curious Mode, rules create scored attention candidates and own the attention budget. When a real semantic model is available, it may promote a near-threshold ignored candidate into the selected set if the segment already exists in the rule-scored candidates and still fits the budget. Rules still create the final attention event, action decision, episode, privacy handling, and memory candidate.
 Button Capture remains a harness primitive, but it is no longer a standalone user-facing mode. Direct text input should appear in the dialogue composer and then flow through the same attention/memory/action loop.
 The user-facing conversation unit should often be a short shared moment, not a single database row: text, photo summaries, and audio transcripts with the same 30-second `batchId` are presented together before Papo's attention response.
 Episode memories keep provenance back to their source segment/batch/time/location when available, so a memory card can show the shared moment that gave birth to it.
@@ -306,10 +307,11 @@ Done:
   - Papo's SVG Shiba avatar has a more standard cartoon Shiba silhouette: larger triangular ears, clearer urajiro forehead/face/chest, curled tail, round paws, toe marks, and softened muzzle/eye proportions.
   - Active emergence, wake resurfacing, and LLM emergence narration now share the same subjective memory normalization as the Memory page, so raw analysis phrasing cannot leak when Papo says what it remembered.
   - LLM interaction understanding now remains authoritative even when the model omits explicit `suggestedAction`: `shouldReply=false` creates a semantic quiet/observe default before guardrails run, so future/reminder keywords cannot push Papo into reminder drafting after the model understood the user wanted no interruption.
+  - Real-model Curious Mode can now correct a rule-only miss by promoting a near-threshold ignored segment into attention while rules enforce the attention budget, privacy limits, action guardrails, episode persistence, and memory candidate creation.
 
 Verified:
 
-- `npm test`: 53 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
+- `npm test`: 54 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -324,6 +326,7 @@ Verified:
 - LLM action suggestions go through rule guardrails.
 - LLM action suggestions are not overwritten by positive keyword heuristics such as future value when no boundary guardrail applies.
 - LLM `shouldReply=false` interaction understanding suppresses keyword reminder flow even when the input contains future/reminder words, unless guardrails require a safer action such as asking.
+- LLM Curious selection can promote a near-threshold ignored segment into a real attention event while staying within the rule-owned attention budget.
 - LLM feedback narration cannot mutate rule-owned state.
 - LLM emergence narration must stay anchored to an existing long-term memory or it is rejected.
 - Curious Mode creature report uses user-life material and explains selected/ignored segments.

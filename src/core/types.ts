@@ -318,5 +318,10 @@ export interface CaptureResult {
   response: string;
   harnessTrace?: string[];
   curiousSession?: CuriousSessionAudit;
+  attentionCandidates?: Array<{
+    segment: StreamSegment;
+    score: SegmentScore;
+    selectedByRules: boolean;
+  }>;
   memoryCandidates?: MemoryCandidate[];
 }

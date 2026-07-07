@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { guardActionDecision } from "./action";
 import { createMemoryResonanceEmergence } from "./emergence";
-import { handleButtonCapture, handleCuriousStream } from "./attention";
+import { buildAttentionEvent, composeCreatureResponse, handleButtonCapture, handleCuriousStream } from "./attention";
 import { createCuriousCreatureReport } from "./experience";
 import { makeId } from "./ids";
-import { normalizeSharedMemoryText } from "./memory";
+import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
 import type { ActionKind, CaptureResult, CreatureProfile, SemanticBrainRecord, StreamSegment } from "./types";
 
@@ -327,18 +327,76 @@ function applyCuriousSessionSuggestion(result: CaptureResult, suggestion: BrainS
   if (!session || !narrative) return;
 
   const selectedById = new Map(session.selected.map((item) => [item.segmentId, item]));
+  const ignoredById = new Map(session.ignored.map((item) => [item.segmentId, item]));
   for (const item of narrative.selected ?? []) {
     const selected = selectedById.get(item.segmentId);
-    if (selected) selected.whySelected = item.whySelected.trim();
+    if (selected) {
+      selected.whySelected = item.whySelected.trim();
+      continue;
+    }
+    promoteCuriousCandidate(result, item.segmentId, item.whySelected.trim());
   }
 
-  const ignoredById = new Map(session.ignored.map((item) => [item.segmentId, item]));
   for (const item of narrative.ignored ?? []) {
     const ignored = ignoredById.get(item.segmentId);
     if (ignored) ignored.whyIgnored = item.whyIgnored.trim();
   }
 
   session.creatureReport = narrative.creatureReport?.trim() || createCuriousCreatureReport(session);
+}
+
+function promoteCuriousCandidate(result: CaptureResult, segmentId: string, whySelected: string) {
+  const session = result.curiousSession;
+  if (!session) return;
+  if (session.selected.some((item) => item.segmentId === segmentId)) return;
+  if (session.selected.length >= session.attentionBudget) return;
+  const candidate = result.attentionCandidates?.find((item) => item.segment.id === segmentId);
+  const ignored = session.ignored.find((item) => item.segmentId === segmentId);
+  if (!candidate || !ignored) return;
+  if (!canPromoteCuriousCandidate(candidate.score)) return;
+
+  const now = result.events[0]?.createdAt ?? new Date().toISOString();
+  const event = buildAttentionEvent(result.profile, {
+    source: "curious_stream",
+    triggerSegmentId: candidate.segment.id,
+    triggerBatchId: candidate.segment.batchId,
+    triggerObservedAt: candidate.segment.observedAt,
+    triggerLocation: candidate.segment.location,
+    triggerLabel: candidate.segment.label,
+    triggerContent: candidate.segment.content,
+    reasonPrefix: whySelected,
+    score: candidate.score,
+    now
+  });
+  event.semanticSource = "llm";
+  event.decisionTrace = [
+    ...(event.decisionTrace ?? []),
+    "llm: promoted near-threshold curious segment",
+    `guardrail: attention_budget=${session.attentionBudget}`,
+    `guardrail: score_total=${candidate.score.total}`
+  ];
+  const response = composeCreatureResponse(result.profile, event);
+  const episode = createEpisodeFromEvent(event, response, now);
+  const memoryCandidate = createMemoryCandidateFromEpisode(result.profile, episode, { now });
+
+  result.events.push(event);
+  result.episodes.push(episode);
+  result.memoryCandidates ??= [];
+  result.memoryCandidates.push(memoryCandidate);
+  result.profile.episodes.unshift(episode);
+  session.selected.push({
+    segmentId: ignored.segmentId,
+    label: ignored.label,
+    score: ignored.score,
+    whySelected
+  });
+  session.ignored = session.ignored.filter((item) => item.segmentId !== segmentId);
+}
+
+function canPromoteCuriousCandidate(score: NonNullable<CaptureResult["attentionCandidates"]>[number]["score"]) {
+  if (score.total < 32) return false;
+  if (score.privacyRisk > 82) return false;
+  return true;
 }
 
 function interactionExperience(interaction: NonNullable<BrainSuggestion["interaction"]>, event: CaptureResult["events"][number]) {
@@ -403,7 +461,7 @@ function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "b
 - 改写 noticed/reason，让它更像小动物真的注意到了什么。
 - 给出 suggestedAction，但只能从 observe, respond, ask, save_episode, save_long_term, recall, review, quiet, draft_reminder, draft_question_list 选择。
 - 改写 episode 的 possibleIntent/importanceReason/creatureResponse。
-- 如果 source 是 curious_stream，可以改写 curiousSession.selected/ignored 的 whySelected/whyIgnored 和 creatureReport；只能解释规则层已经选中或放过的片段，不能新增、删除、排序或改变分数。
+- 如果 source 是 curious_stream，可以改写 curiousSession.selected/ignored 的 whySelected/whyIgnored 和 creatureReport；也可以在 selected 里放入 attention_candidates 中一个被规则忽略但语义上重要的 segmentId。规则会限制预算、阈值、隐私和最终 action，不能新增不存在的片段。
 - 给出一条 memoryCandidateText，必须是这次真实互动可记住的小回忆，不要写流程说明。
 - 写一段 response，给用户展示这次小动物的整体回应。
 
@@ -446,6 +504,19 @@ ${JSON.stringify(result.events.map((event) => ({
   suggestedAction: event.suggestedAction,
   tags: event.tags
 })))}
+
+attention_candidates:
+${JSON.stringify(result.attentionCandidates?.map((item) => ({
+  segmentId: item.segment.id,
+  label: item.segment.label,
+  content: item.segment.content,
+  selectedByRules: item.selectedByRules,
+  scoreTotal: item.score.total,
+  privacyRisk: item.score.privacyRisk,
+  redundancyPenalty: item.score.redundancyPenalty,
+  relatedIds: item.score.relatedIds,
+  tags: item.score.tags
+})) ?? [])}
 
 curious_session_rule_audit:
 ${JSON.stringify(result.curiousSession ? {

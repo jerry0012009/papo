@@ -147,6 +147,10 @@ export function handleCuriousStream(
     episodes,
     response: composeStreamSummary(events, curiousSession),
     curiousSession,
+    attentionCandidates: [
+      ...focused.map((item) => ({ segment: item.segment, score: item.score, selectedByRules: true })),
+      ...ignored.map((item) => ({ segment: item.segment, score: item.score, selectedByRules: false }))
+    ],
     memoryCandidates
   };
 }
@@ -203,7 +207,7 @@ export function scoreSegment(
   };
 }
 
-function buildAttentionEvent(
+export function buildAttentionEvent(
   profile: CreatureProfile,
   input: {
     source: AttentionEvent["source"];
@@ -271,7 +275,7 @@ function buildAttentionEvent(
   };
 }
 
-function composeCreatureResponse(profile: CreatureProfile, event: AttentionEvent): string {
+export function composeCreatureResponse(profile: CreatureProfile, event: AttentionEvent): string {
   if (event.actionDecision.action === "respond") {
     const memoryLine = event.relatedMemoryIds.length
       ? "这句话还碰到了我们以前的一点记忆，我会带着那段一起听。"

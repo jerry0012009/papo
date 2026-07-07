@@ -205,6 +205,50 @@ describe("creature brain v0.2", () => {
     expect(profile.semanticBrainHistory[0].status).toBe("applied");
   });
 
+  it("LLM can promote a near-threshold curious segment while rules keep the attention budget", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "semantic model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>() =>
+        ({
+          response: "我先盯住你担心复查这件事，也把明天要带资料检查这点叼出来，因为它会影响这件家事能不能真的准备好。",
+          curiousSession: {
+            creatureReport: "我没有总结全部，只把担心复查和明天带资料检查这两点认真叼住。",
+            selected: [
+              { segmentId: "s2", whySelected: "这段说的是复查担心，情绪比较重。" },
+              { segmentId: "s3", whySelected: "虽然规则分数接近阈值，但它补上了明天要带资料检查这个具体准备动作。" }
+            ],
+            ignored: [{ segmentId: "s1", whyIgnored: "这只是背景声，我先放过去。" }]
+          },
+          trace: ["llm: promoted near-threshold preparation segment"]
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    const result = await runCuriousHarness(
+      profile,
+      [
+        segment("s1", "背景", "今天只是普通记录。"),
+        segment("s2", "担心", "我担心妈妈复查这件事又被拖到睡前。"),
+        segment("s3", "准备", "明天带资料检查")
+      ],
+      provider
+    );
+
+    expect(result.curiousSession?.selected.map((item) => item.segmentId)).toContain("s3");
+    expect(result.curiousSession?.ignored.map((item) => item.segmentId)).not.toContain("s3");
+    expect(result.events.some((event) => event.triggerSegmentId === "s3")).toBe(true);
+    const promoted = result.events.find((event) => event.triggerSegmentId === "s3");
+    expect(promoted?.semanticSource).toBe("llm");
+    expect(promoted?.decisionTrace?.join(" ")).toContain("promoted near-threshold");
+    expect(result.events.length).toBeLessThanOrEqual(result.curiousSession?.attentionBudget ?? 3);
+    expect(result.harnessTrace?.join(" ")).toContain("llm interpretation applied");
+  });
+
   it("LLM can narrate feedback learning without mutating rule-owned state", async () => {
     const provider: ModelProvider = {
       kind: "generic",
