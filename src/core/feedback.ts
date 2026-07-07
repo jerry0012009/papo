@@ -175,7 +175,9 @@ export async function semanticReflectFeedback(
   if (!parsed.success) {
     throw new Error(`invalid feedback JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   }
+  assertSemanticFeedbackVisibleOutput(parsed.data);
   applySemanticFeedbackSuggestion(profile, feedback, parsed.data);
+  removeRuleCreatedFeedbackSelfMemories(profile, feedback);
   recordFeedbackSemanticRun(profile, provider, "applied", "llm feedback reflection applied");
   return feedback;
 }
@@ -239,6 +241,25 @@ function applySemanticFeedbackSuggestion(profile: CreatureProfile, feedback: Fee
   }
 
   feedback.replyText = composeFeedbackReplyText(feedback);
+}
+
+function assertSemanticFeedbackVisibleOutput(suggestion: SemanticFeedbackSuggestion) {
+  const learningNote = safeCreatureText(suggestion.learningNote);
+  if (!learningNote || !learningNote.startsWith("我学到")) throw new Error("feedback model did not provide a usable learning note");
+  const effect = safeCreatureText(suggestion.effect);
+  if (!effect) throw new Error("feedback model did not provide a usable effect");
+}
+
+function removeRuleCreatedFeedbackSelfMemories(profile: CreatureProfile, feedback: FeedbackRecord) {
+  profile.longTermMemories = profile.longTermMemories.filter(
+    (memory) =>
+      !(
+        memory.kind === "creature_self_memory" &&
+        memory.createdAt === feedback.at &&
+        memory.tags.includes("被你养成") &&
+        !memory.tags.includes("LLM理解反馈")
+      )
+  );
 }
 
 function cleanNumberDeltas<T extends Record<string, number | undefined> | undefined>(deltas: T) {

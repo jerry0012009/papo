@@ -217,7 +217,8 @@ describe("creature core", () => {
         return {
           responseAction: "quiet",
           learningNote: "我学到这类内容要先等你确认。",
-          followUpText: "这类内容我先不直接留下。"
+          followUpText: "这类内容我先不直接留下。",
+          effect: "你是在教我遇到这类内容要先收住，等你确认后再处理。"
         } as T;
       }
     };
@@ -244,6 +245,28 @@ describe("creature core", () => {
     expect(promptSeen).toContain("contentHiddenForPrivacy");
     expect(feedback.replyText).not.toMatch(/secret|token|abc/i);
     expect(profile.longTermMemories.some((memory) => /secret|token|abc/i.test(`${memory.text} ${memory.tags.join(" ")}`) && memory.kind === "creature_self_memory")).toBe(false);
+  });
+
+  it("feedback reflection must provide visible learning output instead of keeping rule text", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "incomplete feedback model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          responseAction: "acknowledge",
+          stateDeltas: { curiosity: 2 }
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "我最近总是把妈妈复查这件事拖到很晚。");
+    const feedback = applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id, content: "这里请多想一点。" });
+
+    await expect(semanticReflectFeedback(profile, feedback, provider)).rejects.toThrow(/usable learning note|usable effect/);
   });
 
   it("rejects private terms from feedback narration output", async () => {

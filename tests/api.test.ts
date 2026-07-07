@@ -290,7 +290,11 @@ function testProvider(): ModelProvider {
           memoryWeightDelta: 8,
           learningNote: "我学到这件事要记得更稳一点。",
           followUpText: "我会把你补的这点和原来的事放在一起。",
-          effect: "你让我帮你把这件事记准一点。"
+          effect: "你让我帮你把这件事记准一点。",
+          creatureSelfMemory: {
+            text: "你教我遇到妈妈复查这类准备线索时，要记得更稳一点，也要等你的反馈来校准。",
+            tags: ["更愿意记稳", "复查"]
+          }
         } as T;
       }
       if (prompt.includes("反馈学习结果")) {
