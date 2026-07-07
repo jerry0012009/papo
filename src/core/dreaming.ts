@@ -43,24 +43,31 @@ const dreamSchema = z.object({
 type DreamSuggestion = z.infer<typeof dreamSchema>;
 type DreamOperation = DreamSuggestion["operations"][number];
 
+const DREAMING_COOLDOWN_MS = 12 * 60 * 60 * 1000;
+
 export async function semanticDreamMemories(
   profile: CreatureProfile,
   provider: ModelProvider,
-  input: { force?: boolean; now?: string } = {}
+  input: { force?: boolean; now?: string; recordQuiet?: boolean } = {}
 ): Promise<DreamRecord | undefined> {
   if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for dreaming.");
   if (!input.force && !shouldDreamStructurally(profile)) return undefined;
 
+  const now = input.now ?? new Date().toISOString();
   const raw = await provider.generateJson<unknown>(buildDreamPrompt(profile, Boolean(input.force)));
   if (!raw) throw new Error("empty dreaming model result");
   const parsed = dreamSchema.safeParse(raw);
   if (!parsed.success) throw new Error(`invalid dreaming JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   if (!parsed.data.shouldDream) {
+    const quietDream = quietDreamRecord(parsed.data, now);
+    if (input.recordQuiet || input.force) {
+      profile.dreamHistory.unshift(quietDream);
+      profile.dreamHistory = profile.dreamHistory.slice(0, 20);
+    }
     recordDreamSemanticRun(profile, provider, "llm dreaming chose no operation");
-    return undefined;
+    return input.recordQuiet || input.force ? quietDream : undefined;
   }
 
-  const now = input.now ?? new Date().toISOString();
   const applied = applyDreamSuggestion(profile, parsed.data, now);
   if (!applied.operations.length) throw new Error("dreaming model returned no applicable operation");
   profile.dreamHistory.unshift(applied);
@@ -73,6 +80,39 @@ export function shouldDreamStructurally(profile: CreatureProfile) {
   const activeLongTerm = profile.longTermMemories.filter((memory) => memory.weight > 0).length;
   const activeCandidates = profile.memoryCandidates.filter((candidate) => candidate.status === "candidate").length;
   return activeLongTerm > 35 || activeCandidates > 55;
+}
+
+export function isDreamingDue(profile: CreatureProfile, now = new Date().toISOString()) {
+  if (!shouldDreamStructurally(profile)) return { due: false, reason: "below_threshold" as const };
+  const latestDreamAt = newestDreamAt(profile);
+  if (!latestDreamAt) return { due: true, reason: "threshold_reached" as const };
+  const nextCheckAt = new Date(latestDreamAt + DREAMING_COOLDOWN_MS).toISOString();
+  if (Date.parse(now) < Date.parse(nextCheckAt)) return { due: false, reason: "cooldown" as const, nextCheckAt };
+  return { due: true, reason: "cooldown_elapsed" as const };
+}
+
+export function recordDreamingFailure(profile: CreatureProfile, provider: ModelProvider, now: string, reason: string) {
+  profile.dreamHistory.unshift({
+    id: makeId("dream"),
+    at: now,
+    summary: "后台记忆整理没有完成，稍后再试。",
+    operations: [],
+    ruleTrace: ["provider_error: dreaming deferred", reason.slice(0, 180)]
+  });
+  profile.dreamHistory = profile.dreamHistory.slice(0, 20);
+  profile.semanticBrainHistory.unshift({
+    id: makeId("semantic"),
+    at: now,
+    source: "dreaming",
+    stage: "dreaming",
+    providerKind: provider.kind,
+    providerName: provider.name,
+    model: provider.diagnostics?.textModel,
+    status: "failed",
+    message: "dreaming provider call failed; deferred by cooldown record",
+    ruleTrace: [`provider=${provider.kind}`, "source=dreaming", "status=failed", reason.slice(0, 180)]
+  });
+  profile.semanticBrainHistory = profile.semanticBrainHistory.slice(0, 30);
 }
 
 function applyDreamSuggestion(profile: CreatureProfile, suggestion: DreamSuggestion, now: string): DreamRecord {
@@ -90,6 +130,16 @@ function applyDreamSuggestion(profile: CreatureProfile, suggestion: DreamSuggest
     operations,
     stateDeltas,
     ruleTrace: ["llm: dreaming plan parsed", `applied=${operations.length}`]
+  };
+}
+
+function quietDreamRecord(suggestion: DreamSuggestion, now: string): DreamRecord {
+  return {
+    id: makeId("dream"),
+    at: now,
+    summary: normalizeSharedMemoryText(suggestion.summary),
+    operations: [],
+    ruleTrace: ["llm: dreaming plan parsed", "applied=0", ...(suggestion.trace ?? []).map((item) => `llm: ${item}`)]
   };
 }
 
@@ -205,6 +255,11 @@ function recordDreamSemanticRun(profile: CreatureProfile, provider: ModelProvide
     ruleTrace: [`provider=${provider.kind}`, "source=dreaming", "status=applied"]
   });
   profile.semanticBrainHistory = profile.semanticBrainHistory.slice(0, 30);
+}
+
+function newestDreamAt(profile: CreatureProfile) {
+  const timestamps = profile.dreamHistory.map((record) => Date.parse(record.at)).filter((value) => Number.isFinite(value));
+  return timestamps.length ? Math.max(...timestamps) : undefined;
 }
 
 function buildDreamPrompt(profile: CreatureProfile, force: boolean) {

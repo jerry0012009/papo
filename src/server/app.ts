@@ -5,7 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
-import { semanticDreamMemories } from "../core/dreaming";
+import { isDreamingDue, recordDreamingFailure, semanticDreamMemories } from "../core/dreaming";
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
@@ -442,9 +442,10 @@ export function startProactiveEmergenceLoop(store: ProfileStore, provider: Model
     if (running) return;
     running = true;
     try {
+      await runAutomaticDreamingSweep(store, provider);
       await runProactiveEmergenceSweep(store, provider);
     } catch (error) {
-      console.error("Proactive emergence sweep failed", error);
+      console.error("Background cognition sweep failed", error);
     } finally {
       running = false;
     }
@@ -453,6 +454,34 @@ export function startProactiveEmergenceLoop(store: ProfileStore, provider: Model
   timer.unref?.();
   void tick();
   return () => clearInterval(timer);
+}
+
+export async function runAutomaticDreamingSweep(store: ProfileStore, provider: ModelProvider, now = new Date().toISOString()) {
+  const summaries = await store.listProfiles();
+  let checked = 0;
+  let applied = 0;
+  let quiet = 0;
+  let deferred = 0;
+  for (const summary of summaries) {
+    const profile = await store.getProfile(summary.userId);
+    if (!profile) continue;
+    const due = isDreamingDue(profile, now);
+    if (!due.due) continue;
+    checked += 1;
+    try {
+      const dream = await semanticDreamMemories(profile, provider, { now, recordQuiet: true });
+      if (dream?.operations.length) applied += 1;
+      else quiet += 1;
+      await store.saveProfile(profile);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Automatic dreaming failed for ${summary.userId}`, error);
+      recordDreamingFailure(profile, provider, now, message);
+      await store.saveProfile(profile);
+      deferred += 1;
+    }
+  }
+  return { checked, applied, quiet, deferred };
 }
 
 export async function runProactiveEmergenceSweep(store: ProfileStore, provider: ModelProvider, now = new Date().toISOString()) {
