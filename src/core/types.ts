@@ -66,7 +66,20 @@ export interface StreamSegment {
     accuracy?: number;
     label?: string;
   };
+  attachments?: MediaAttachment[];
   sensingTrace?: SensingTrace;
+}
+
+export interface MediaAttachment {
+  id: string;
+  kind: "image";
+  label: string;
+  mime: "image/png" | "image/jpeg" | "image/webp";
+  url: string;
+  createdAt: string;
+  observedAt?: string;
+  location?: StreamSegment["location"];
+  sizeBytes?: number;
 }
 
 export interface SensingTrace {
@@ -143,6 +156,7 @@ export interface AttentionEvent {
   triggerBatchId?: string;
   triggerObservedAt?: string;
   triggerLocation?: StreamSegment["location"];
+  attachments?: MediaAttachment[];
   triggerLabel: string;
   triggerContent: string;
   noticed: string;
@@ -171,6 +185,7 @@ export interface EpisodeMemory {
   sourceBatchId?: string;
   sourceObservedAt?: string;
   sourceLocation?: StreamSegment["location"];
+  attachments?: MediaAttachment[];
   inputSummary: string;
   noticed: string;
   possibleIntent: string;
@@ -206,6 +221,7 @@ export interface LongTermMemory {
   consolidatedBecause?: string;
   weight: number;
   tags: string[];
+  attachments?: MediaAttachment[];
   lastReferencedAt?: string;
 }
 
@@ -222,6 +238,7 @@ export interface MemoryCandidate {
   decayPolicy: "stable" | "decay_without_feedback" | "forget_if_dismissed";
   status: "candidate" | "promoted" | "dismissed";
   tags: string[];
+  attachments?: MediaAttachment[];
 }
 
 export interface FeedbackRecord {
@@ -326,7 +343,7 @@ export interface MessageCognitionTrace {
     memoryChanges: Array<{
       targetId: string;
       targetType: "memory" | "episode";
-      operation: "updated" | "purged" | "unchanged";
+      operation: "created" | "updated" | "purged" | "unchanged";
       beforeText?: string;
       afterText?: string;
       beforeKind?: LongTermMemory["kind"];
@@ -363,6 +380,7 @@ export interface CreatureMessage {
   batchId?: string;
   observedAt?: string;
   location?: StreamSegment["location"];
+  attachments?: MediaAttachment[];
   sensingTrace?: SensingTrace;
   cognitionTrace?: MessageCognitionTrace;
 }

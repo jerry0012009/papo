@@ -65,6 +65,43 @@ try {
   const feedbackTrace = afterFeedback?.conversation.find((message) => message.channel === "feedback" && message.cognitionTrace)?.cognitionTrace;
   assert.ok(feedbackTrace, "feedback should carry cognition trace");
   assert.equal(feedbackTrace.modelRuns.some((run) => run.stage === "feedback" && run.status === "applied"), true);
+  assert.ok((afterFeedback?.longTermMemories.length ?? 0) > 0, "remember feedback should create or keep a long-term memory");
+  assert.ok(
+    feedbackTrace.feedbackDecision?.memoryChanges.some((change) => change.targetType === "memory" && (change.operation === "created" || change.operation === "updated" || change.operation === "unchanged")),
+    "feedback trace should expose the related long-term memory result"
+  );
+
+  const imageCapture = await post<any>(`/profiles/${userId}/curious`, {
+    segments: [{
+      id: "smoke-image-1",
+      kind: "image_summary",
+      label: "你给 Papo 看了照片",
+      content: "照片里是我的蓝色泳镜和泳帽，旁边有一张写着今晚去游泳的便签。我想让 Papo 记住这是我最近认真游泳的装备。",
+      observedAt: "2026-07-07T20:30:00.000Z",
+      batchId: "smoke-image-batch",
+      location: { latitude: 31.2304, longitude: 121.4737, accuracy: 80, label: "上海" },
+      attachments: [{
+        id: "img_smoke_image_asset",
+        kind: "image",
+        label: "游泳装备照片",
+        mime: "image/png",
+        url: "/api/assets/img_smoke_image_asset.png",
+        createdAt: "2026-07-07T20:30:00.000Z",
+        observedAt: "2026-07-07T20:30:00.000Z",
+        location: { latitude: 31.2304, longitude: 121.4737, accuracy: 80, label: "上海" },
+        sizeBytes: 1234
+      }]
+    }]
+  });
+  const imageTrace = imageCapture.profile.conversation.find((message: any) => message.sourceId === "smoke-image-1")?.cognitionTrace;
+  assert.ok(imageTrace, "image summary input should carry cognition trace");
+  assert.equal(imageTrace.modelRuns.some((run: { stage?: string; status: string }) => run.stage === "attention" && run.status === "applied"), true);
+  assert.equal(imageTrace.eventDecisions?.[0]?.episodeKept, true, "meaningful photo input should usually keep an episode");
+  assert.equal(imageTrace.eventDecisions?.[0]?.memoryCandidateKept, true, "meaningful photo input should be handed to memory consideration");
+  const imageEpisode = imageCapture.profile.episodes.find((episode: any) => episode.sourceSegmentId === "smoke-image-1" || episode.sourceBatchId === "smoke-image-batch");
+  assert.ok(imageEpisode?.attachments?.length, "image episode should keep the original image asset reference");
+  const imageCandidate = imageCapture.profile.memoryCandidates.find((candidate: any) => candidate.sourceEpisodeId === imageEpisode?.id);
+  assert.ok(imageCandidate?.attachments?.length, "image memory candidate should keep the original image asset reference");
 
   const emergence = await post<any>(`/profiles/${userId}/emergence`, {});
   assert.ok(emergence.emergence.cognitionTrace, "emergence response should carry cognition trace even when quiet");

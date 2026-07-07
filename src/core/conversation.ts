@@ -48,6 +48,7 @@ export function appendInputMessage(
     batchId?: string;
     observedAt?: string;
     location?: StreamSegment["location"];
+    attachments?: StreamSegment["attachments"];
     relatedMemoryIds?: string[];
     sensingTrace?: SensingTrace;
     cognitionTrace?: MessageCognitionTrace;
@@ -74,6 +75,7 @@ export function appendInputMessage(
     batchId: input.batchId,
     observedAt: input.observedAt,
     location: input.location,
+    attachments: input.attachments ?? [],
     sensingTrace: input.sensingTrace,
     cognitionTrace: input.cognitionTrace
   };

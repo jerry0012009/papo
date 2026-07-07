@@ -359,6 +359,9 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - stateDeltas 必须返回。由你判断这次行动对 Papo 当下状态的真实影响；如果确实没有变化，返回 {}。不要用固定模板，每项只写小幅变化。
 - shouldCreateEpisode 由你判断：只有之后回看仍有意义的经历、上下文或互动才需要留下 episode。
 - shouldConsiderMemory 由你判断：它比 episode 更窄，只用于可能值得进入后续记忆模型判断的内容。
+- 如果用户明确要求 Papo 记住、保存、以后记得、把某事当成偏好/习惯，除非内容不可用或不应保存，必须 shouldCreateEpisode=true，并且通常 shouldConsiderMemory=true；action 应优先选择 save_episode、save_long_term 或带记忆意图的 respond。
+- 如果输入来自 image_summary 或事件带 attachments，说明用户主动给 Papo 看了照片，且原始图片资产可作为记忆的一部分被回看。照片通常是用户认为重要、想分享或想让 Papo 形成情景记忆的素材；除非图片摘要重复、无意义、不可用、明显只是误触或不适合保存，否则应倾向 shouldCreateEpisode=true，并在图片内容或用户说明值得日后回看时 shouldConsiderMemory=true。
+- 对带图片的事件形成 memoryCandidateText 时，要覆盖图片可见内容、用户给的说明、照片时间和地点；不要只写“用户上传了一张照片”。
 - 如果你只是想当下陪用户聊一句，不要把它送进记忆候选；如果这段输入没有可用生活信息，也可以选择不说话。
 - observe 和 quiet 表示不说话，不能同时填写 reply 或 shouldReply=true；如果要说话，请选择 respond、ask、recall、review、draft_reminder 或 draft_question_list。
 - draft_reminder 和 draft_question_list 是有结构化产物的动作，不能只写 reply。必须在 actionResult 里返回草稿内容；reply 是 Papo 对用户说出口的自然短回应。
@@ -433,6 +436,14 @@ ${JSON.stringify(result.events.map((event) => ({
   sourceBatchId: event.triggerBatchId,
   sourceObservedAt: event.triggerObservedAt,
   sourceLocation: event.triggerLocation,
+  attachments: (event.attachments ?? []).map((attachment) => ({
+    id: attachment.id,
+    kind: attachment.kind,
+    label: attachment.label,
+    mime: attachment.mime,
+    observedAt: attachment.observedAt,
+    location: attachment.location
+  })),
   label: event.triggerLabel,
   content: modelSafeEventContent(event.triggerContent),
   contentHiddenForPrivacy: isHighPrivacySegmentContent(event.triggerContent),

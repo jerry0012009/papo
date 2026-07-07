@@ -1,5 +1,8 @@
 import cors from "cors";
 import express from "express";
+import { createHash } from "node:crypto";
+import { mkdir, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { z } from "zod";
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
 import { semanticDecideEmergence } from "../core/emergence";
@@ -7,7 +10,7 @@ import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { createModelProvider, type ModelProvider } from "../core/provider";
 import { wakeCreature } from "../core/rhythm";
-import type { CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, MessageCognitionTrace, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
+import type { CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, MediaAttachment, MessageCognitionTrace, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
 const createProfileSchema = z.object({
@@ -33,6 +36,25 @@ const sensingTraceSchema = z.object({
   ruleTrace: z.array(z.string().max(240)).max(12)
 });
 
+const locationSchema = z.object({
+  latitude: z.number().min(-90).max(90),
+  longitude: z.number().min(-180).max(180),
+  accuracy: z.number().nonnegative().optional(),
+  label: z.string().min(1).max(120).optional()
+});
+
+const mediaAttachmentSchema = z.object({
+  id: z.string().min(1).max(80),
+  kind: z.literal("image"),
+  label: z.string().min(1).max(120),
+  mime: z.enum(["image/png", "image/jpeg", "image/webp"]),
+  url: z.string().min(1).max(300),
+  createdAt: z.string().datetime(),
+  observedAt: z.string().datetime().optional(),
+  location: locationSchema.optional(),
+  sizeBytes: z.number().int().nonnegative().optional()
+});
+
 const curiousSchema = z.object({
   segments: z
     .array(
@@ -43,14 +65,8 @@ const curiousSchema = z.object({
         content: z.string().max(4000),
         observedAt: z.string().datetime().optional(),
         batchId: z.string().min(1).max(80).optional(),
-        location: z
-          .object({
-            latitude: z.number().min(-90).max(90),
-            longitude: z.number().min(-180).max(180),
-            accuracy: z.number().nonnegative().optional(),
-            label: z.string().min(1).max(120).optional()
-          })
-          .optional(),
+        location: locationSchema.optional(),
+        attachments: z.array(mediaAttachmentSchema).max(6).optional(),
         sensingTrace: sensingTraceSchema.optional()
       })
     )
@@ -105,14 +121,26 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     });
   });
 
+  app.get("/api/assets/:filename", async (req, res, next) => {
+    try {
+      const filename = req.params.filename;
+      if (!/^img_[a-f0-9]{24}\.(png|jpg|webp)$/.test(filename)) throw new HttpError(404, "Asset not found");
+      res.sendFile(path.join(imageAssetDir(), filename));
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post("/api/image-summary", async (req, res, next) => {
     try {
       const body = imageSummarySchema.parse(req.body);
+      const asset = await saveImageAsset(body.dataUrl, body.label ?? "照片");
       const prompt = `请用中文把这张图片压缩成一段 80 字以内的生活场景摘要，给 Curious Mode 当 image_summary。标签：${body.label ?? "截图"}`;
       const summary = (await provider.summarizeImage(body.dataUrl, prompt)).slice(0, 600);
       const trace = imageSensingTrace(provider, body.label ?? "截图", summary);
       res.json({
         summary,
+        asset,
         provider: sensingProvider(provider, "vision"),
         model: provider.diagnostics?.visionModel,
         route: "chat_completions",
@@ -233,6 +261,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
           batchId: segment.batchId,
           observedAt: segment.observedAt,
           location: segment.location,
+          attachments: segment.attachments,
           sensingTrace: segment.sensingTrace as SensingTrace | undefined,
           cognitionTrace
         });
@@ -371,6 +400,41 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
   return app;
 }
 
+function imageAssetDir() {
+  return path.join(process.cwd(), "data", "assets", "images");
+}
+
+async function saveImageAsset(dataUrl: string, label: string): Promise<MediaAttachment> {
+  const parsed = parseImageDataUrl(dataUrl);
+  const hash = createHash("sha256").update(parsed.buffer).digest("hex");
+  const id = `img_${hash.slice(0, 24)}`;
+  const filename = `${id}.${parsed.extension}`;
+  const dir = imageAssetDir();
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, filename), parsed.buffer);
+  const now = new Date().toISOString();
+  return {
+    id,
+    kind: "image",
+    label: label.trim() || "照片",
+    mime: parsed.mime,
+    url: `/api/assets/${filename}`,
+    createdAt: now,
+    sizeBytes: parsed.buffer.byteLength
+  };
+}
+
+function parseImageDataUrl(dataUrl: string): { mime: MediaAttachment["mime"]; extension: "png" | "jpg" | "webp"; buffer: Buffer } {
+  const match = dataUrl.match(/^data:(image\/(?:png|jpe?g|webp));base64,(.+)$/);
+  if (!match) throw new HttpError(400, "Invalid image data URL");
+  const rawMime = match[1] === "image/jpg" ? "image/jpeg" : match[1];
+  const mime = rawMime as MediaAttachment["mime"];
+  const extension = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
+  const buffer = Buffer.from(match[2], "base64");
+  if (!buffer.byteLength) throw new HttpError(400, "Empty image asset");
+  return { mime, extension, buffer };
+}
+
 async function requireProfile(store: ProfileStore, userId: string) {
   const profile = await store.getProfile(userId);
   if (!profile) throw new HttpError(404, "Profile not found");
@@ -492,23 +556,38 @@ interface FeedbackTargetSnapshot {
   text?: string;
   kind?: CreatureProfile["longTermMemories"][number]["kind"];
   weight?: number;
+  relatedMemories: FeedbackMemorySnapshot[];
+}
+
+interface FeedbackMemorySnapshot {
+  id: string;
+  text: string;
+  kind: CreatureProfile["longTermMemories"][number]["kind"];
+  weight: number;
 }
 
 function feedbackTargetSnapshot(profile: CreatureProfile, targetId?: string): FeedbackTargetSnapshot | undefined {
   if (!targetId) return undefined;
   const memory = profile.longTermMemories.find((item) => item.id === targetId);
   if (memory) {
-    return { id: memory.id, type: "memory", text: memory.text, kind: memory.kind, weight: memory.weight };
+    return { id: memory.id, type: "memory", text: memory.text, kind: memory.kind, weight: memory.weight, relatedMemories: [snapshotMemory(memory)] };
   }
   const episode = profile.episodes.find((item) => item.id === targetId);
   if (episode) {
-    return { id: episode.id, type: "episode", text: episode.inputSummary, weight: episode.weight };
+    return {
+      id: episode.id,
+      type: "episode",
+      text: episode.inputSummary,
+      weight: episode.weight,
+      relatedMemories: profile.longTermMemories.filter((item) => item.sourceEpisodeId === episode.id).map(snapshotMemory)
+    };
   }
   return undefined;
 }
 
 function feedbackMemoryChanges(profile: CreatureProfile, before?: FeedbackTargetSnapshot): NonNullable<MessageCognitionTrace["feedbackDecision"]>["memoryChanges"] {
   if (!before) return [];
+  const changes: NonNullable<MessageCognitionTrace["feedbackDecision"]>["memoryChanges"] = [];
   const afterMemory = before.type === "memory" ? profile.longTermMemories.find((item) => item.id === before.id) : undefined;
   const afterEpisode = before.type === "episode" ? profile.episodes.find((item) => item.id === before.id) : undefined;
   const after = afterMemory
@@ -518,28 +597,80 @@ function feedbackMemoryChanges(profile: CreatureProfile, before?: FeedbackTarget
       : undefined;
 
   if (!after) {
-    return [{
+    changes.push({
       targetId: before.id,
       targetType: before.type,
       operation: "purged",
       beforeText: before.text,
       beforeKind: before.kind,
       beforeWeight: before.weight
-    }];
+    });
+  } else {
+    const changed = before.text !== after.text || before.kind !== after.kind || before.weight !== after.weight;
+    changes.push({
+      targetId: before.id,
+      targetType: before.type,
+      operation: changed ? "updated" : "unchanged",
+      beforeText: before.text,
+      afterText: after.text,
+      beforeKind: before.kind,
+      afterKind: after.kind,
+      beforeWeight: before.weight,
+      afterWeight: after.weight
+    });
   }
 
-  const changed = before.text !== after.text || before.kind !== after.kind || before.weight !== after.weight;
-  return [{
-    targetId: before.id,
-    targetType: before.type,
-    operation: changed ? "updated" : "unchanged",
-    beforeText: before.text,
-    afterText: after.text,
-    beforeKind: before.kind,
-    afterKind: after.kind,
-    beforeWeight: before.weight,
-    afterWeight: after.weight
-  }];
+  const relatedBefore = new Map(before.relatedMemories.map((item) => [item.id, item]));
+  const relatedAfter = relatedFeedbackMemories(profile, before);
+  for (const memory of relatedAfter) {
+    const old = relatedBefore.get(memory.id);
+    if (!old) {
+      changes.push({
+        targetId: memory.id,
+        targetType: "memory",
+        operation: "created",
+        afterText: memory.text,
+        afterKind: memory.kind,
+        afterWeight: memory.weight
+      });
+      continue;
+    }
+    const changed = old.text !== memory.text || old.kind !== memory.kind || old.weight !== memory.weight;
+    changes.push({
+      targetId: memory.id,
+      targetType: "memory",
+      operation: changed ? "updated" : "unchanged",
+      beforeText: old.text,
+      afterText: memory.text,
+      beforeKind: old.kind,
+      afterKind: memory.kind,
+      beforeWeight: old.weight,
+      afterWeight: memory.weight
+    });
+    relatedBefore.delete(memory.id);
+  }
+  for (const old of relatedBefore.values()) {
+    changes.push({
+      targetId: old.id,
+      targetType: "memory",
+      operation: "purged",
+      beforeText: old.text,
+      beforeKind: old.kind,
+      beforeWeight: old.weight
+    });
+  }
+  return changes;
+}
+
+function relatedFeedbackMemories(profile: CreatureProfile, before: FeedbackTargetSnapshot) {
+  if (before.type === "memory") {
+    return profile.longTermMemories.filter((item) => item.id === before.id).map(snapshotMemory);
+  }
+  return profile.longTermMemories.filter((item) => item.sourceEpisodeId === before.id).map(snapshotMemory);
+}
+
+function snapshotMemory(memory: CreatureProfile["longTermMemories"][number]): FeedbackMemorySnapshot {
+  return { id: memory.id, text: memory.text, kind: memory.kind, weight: memory.weight };
 }
 
 function emergenceCognitionTrace(

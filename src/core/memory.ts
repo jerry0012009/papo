@@ -16,6 +16,7 @@ export function createEpisodeFromEvent(
     sourceBatchId: event.triggerBatchId,
     sourceObservedAt: event.triggerObservedAt,
     sourceLocation: event.triggerLocation,
+    attachments: event.attachments ?? [],
     inputSummary: summarizeText(event.triggerContent, 140),
     noticed: event.noticed,
     possibleIntent: "",
@@ -54,7 +55,8 @@ export function createMemoryCandidateFromEpisode(
     writePolicy: "wait_feedback",
     decayPolicy: "decay_without_feedback",
     status: "candidate",
-    tags: []
+    tags: [],
+    attachments: episode.attachments ?? []
   };
 
   profile.memoryCandidates.unshift(candidate);
@@ -78,6 +80,7 @@ function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new D
     candidate.status = "promoted";
     duplicate.weight = Math.min(100, Math.max(duplicate.weight + 8, episode.weight + 18));
     duplicate.tags = unique([...duplicate.tags, ...candidate.tags]);
+    duplicate.attachments = mergeAttachments(duplicate.attachments, candidate.attachments);
     duplicate.lastReferencedAt = now;
     if (!duplicate.consolidatedBecause && candidate.whyConsolidate) duplicate.consolidatedBecause = candidate.whyConsolidate;
     return duplicate;
@@ -90,7 +93,8 @@ function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new D
     sourceEpisodeId: episode.id,
     consolidatedBecause: candidate.whyConsolidate,
     weight: Math.min(100, episode.weight + 18),
-    tags: candidate.tags
+    tags: candidate.tags,
+    attachments: candidate.attachments ?? []
   };
   episode.promotedToLongTerm = true;
   candidate.status = "promoted";
@@ -181,6 +185,14 @@ export function memoryKeepReasonToCreatureVoice(reason: string) {
 
 function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))];
+}
+
+export function mergeAttachments<T extends { id: string }>(left: T[] | undefined, right: T[] | undefined): T[] {
+  const byId = new Map<string, T>();
+  for (const attachment of [...(left ?? []), ...(right ?? [])]) {
+    byId.set(attachment.id, attachment);
+  }
+  return [...byId.values()];
 }
 
 function stripSourceMetadata(text: string) {

@@ -128,6 +128,7 @@ export function buildAttentionEvent(
     triggerBatchId?: string;
     triggerObservedAt?: string;
     triggerLocation?: StreamSegment["location"];
+    attachments?: StreamSegment["attachments"];
     triggerLabel: string;
     triggerContent: string;
     reasonPrefix: string;
@@ -153,6 +154,7 @@ export function buildAttentionEvent(
     triggerBatchId: input.triggerBatchId,
     triggerObservedAt: input.triggerObservedAt,
     triggerLocation: input.triggerLocation,
+    attachments: input.attachments ?? [],
     triggerLabel: input.triggerLabel,
     triggerContent: input.triggerContent,
     noticed: buildNoticed(input.triggerContent),
@@ -202,7 +204,8 @@ function mergeSegmentsByInterval(segments: StreamSegment[], now: string): Stream
       position: index + 1,
       observedAt: first.observedAt ?? now,
       batchId,
-      location: items.find((item) => item.location)?.location
+      location: items.find((item) => item.location)?.location,
+      attachments: items.flatMap((item) => item.attachments ?? [])
     };
   });
 }

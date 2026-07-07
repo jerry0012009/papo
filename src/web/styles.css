@@ -515,6 +515,30 @@ select {
   font-size: 0.95rem;
 }
 
+.attachment-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.attachment-thumb {
+  width: min(144px, 42vw);
+  aspect-ratio: 4 / 3;
+  border: 1px solid rgba(31, 36, 33, 0.12);
+  border-radius: 8px;
+  overflow: hidden;
+  background: rgba(255, 250, 240, 0.72);
+  display: block;
+}
+
+.attachment-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .memory-details,
 .memory-feedback,
 .memory-trace-list {

@@ -34,6 +34,7 @@ import {
   getProfile,
   listProfiles,
   makeSegment,
+  resolveAssetUrl,
   sendFeedback,
   summarizeImage,
   observeAudio,
@@ -203,10 +204,19 @@ export function App() {
       const result = await summarizeImage(dataUrl, file.name || "对话照片");
       const content = sensingSegmentContent(result.summary);
       if (!content) return;
+      const asset = result.asset
+        ? {
+            ...result.asset,
+            label: file.name || result.asset.label,
+            observedAt,
+            location
+          }
+        : undefined;
       const segment = makeSegment(`chat-image-${Date.now()}`, "image_summary", file.name || "照片", content, {
         observedAt,
         batchId: currentBatchId(),
-        location
+        location,
+        attachments: asset ? [asset] : []
       });
       segment.sensingTrace = result.sensingTrace;
       if (listening) {
@@ -904,6 +914,7 @@ function ChatView(props: {
                     rows={3}
                     placeholder={stagedSegmentPlaceholder(segment.kind)}
                   />
+                  <AttachmentStrip attachments={segment.attachments} />
                   <button onClick={() => removeStagedSegment(index)} disabled={props.busy}>
                     <RefreshCcw size={16} />
                     这次先不带
@@ -949,6 +960,7 @@ function ChatBubble({ message, profile }: { message: ConversationMessage; profil
         {message.cognitionTrace || message.sensingTrace ? <DeveloperTrace trace={message.cognitionTrace} sensingTrace={message.sensingTrace} profile={profile} /> : null}
       </div>
       <p>{visibleMessageText(message)}</p>
+      <AttachmentStrip attachments={message.attachments} />
       {message.observedAt || message.location ? (
         <small>
           {[
@@ -960,6 +972,20 @@ function ChatBubble({ message, profile }: { message: ConversationMessage; profil
         </small>
       ) : null}
     </article>
+  );
+}
+
+function AttachmentStrip({ attachments }: { attachments?: NonNullable<StreamSegment["attachments"]> }) {
+  const images = (attachments ?? []).filter((attachment) => attachment.kind === "image");
+  if (!images.length) return null;
+  return (
+    <div className="attachment-strip">
+      {images.map((image) => (
+        <a href={resolveAssetUrl(image.url)} target="_blank" rel="noreferrer" className="attachment-thumb" key={image.id}>
+          <img src={resolveAssetUrl(image.url)} alt={image.label} loading="lazy" />
+        </a>
+      ))}
+    </div>
   );
 }
 
@@ -1318,10 +1344,11 @@ function feedbackDeltaItems(items: Array<{ key: string; before: number; after: n
 
 function feedbackMemoryChangeTitle(change: {
   targetType: "memory" | "episode";
-  operation: "updated" | "purged" | "unchanged";
+  operation: "created" | "updated" | "purged" | "unchanged";
 }) {
   const target = change.targetType === "memory" ? "记忆" : "经历";
   const operation = {
+    created: "已创建",
     updated: "已更新",
     purged: "已删除",
     unchanged: "未改变"
@@ -1483,6 +1510,7 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
         <span>{new Date(memory.createdAt).toLocaleString("zh-CN")}</span>
         <strong>{memoryResultLine(memory)}</strong>
       </div>
+      <AttachmentStrip attachments={memory.attachments} />
       {sourceEpisode ? (
         <details className="memory-details">
           <summary>详情</summary>
@@ -1490,6 +1518,7 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
             <div>
               <span>你当时说</span>
               <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode))}</p>
+              <AttachmentStrip attachments={sourceEpisode.attachments} />
             </div>
             {episodePapoLine(sourceEpisode) ? (
               <div>
@@ -1535,6 +1564,7 @@ function memoryTraceMessages(memory: CreatureProfile["longTermMemories"][number]
       if (message.relatedMemoryIds?.includes(memory.id)) return true;
       if (trace.feedbackDecision?.targetId === memory.id) return true;
       if (trace.feedbackDecision?.memoryChanges?.some((change) => change.targetId === memory.id)) return true;
+      if (sourceEpisodeId && trace.feedbackDecision?.memoryChanges?.some((change) => change.targetId === sourceEpisodeId)) return true;
       if (sourceEpisodeId && trace.memoryDecisions?.some((decision) => decision.sourceEpisodeId === sourceEpisodeId)) return true;
       return false;
     })

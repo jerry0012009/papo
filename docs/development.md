@@ -71,7 +71,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Model ids are configurable per modality.
 - Default semantic models should prefer the strongest available configured model, currently `openai/gpt-5.5` for OpenRouter or `gpt-5.5` for generic.
 - Vision sensing currently uses the verified OpenRouter default `nex-agi/nex-n2-mini`.
-- Audio sensing should prefer native audio-capable multimodal models. The current OpenRouter default is `mistralai/voxtral-small-24b-2507`, verified through chat completions audio input with a speech sample.
+- Audio sensing should prefer native audio-capable multimodal models. The current OpenRouter default is `xiaomi/mimo-v2.5`, whose OpenRouter metadata exposes text+image+audio+video input. `xiaomi/mimo-v2.5-pro` remains a strong text model but is text-only on OpenRouter, so it should not be selected for audio sensing there.
 - Audio chat models that only accept mp3/wav receive browser-recorded chunks after server-side wav transcoding.
 - Mixed routing is allowed: for example, Mimo can be the semantic provider while OpenRouter handles image/audio sensing, or OpenRouter can be the semantic provider while generic audio uses a native audio chat model. Transcription endpoints are used only when explicitly configured with a transcription/whisper model id, not as the default listening path.
 - Provider errors are product errors. They should be visible through API errors and diagnostics instead of being hidden behind local wording.
@@ -108,6 +108,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Visible reply validation is structural only. Do not use local substring/keyword rules to block a model reply for echoing user text; repeating or quoting user text may be exactly what the user asked for, so that judgment belongs in the action prompt and the model decision.
 - `draft_reminder` and `draft_question_list` are real action types, not alternate labels for a chat reply. The model must return `actionResult` with the reminder draft or question-list draft; otherwise the request fails loudly.
 - Save actions may return `actionResult.kind=memory_intent` to show the action brain chose to hand the event to memory. This is not proof that long-term memory was written; the memory model result remains authoritative.
+- Explicit user requests to remember or save something are semantic action requirements, not local keyword rules. The action model must normally keep an episode and hand it to memory consideration unless it judges the content unusable or inappropriate to save; real smoke tests should catch regressions here.
 - `semanticSelectAction` owns the persistence decision for attended input. It must explicitly return whether to keep an episode and whether to keep a memory candidate; rules may prune temporary structures but must not default every input into memory.
 - Memory candidates keep user text and provenance only. Initial kind, confidence, and write policy are storage placeholders, not cognition. Memory kind, tags, consolidation wording, write policy, and long-term meaning must come from `semanticDecideMemory` before they are treated as product cognition.
 - Long-term memory tags are copied from the model-decided memory candidate only. Rules must not synthesize fallback tags from user text.
@@ -127,6 +128,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Creature self-memory created from feedback must use model-provided text, tags, consolidation reason, and weight. Rules may dedupe and clamp values, but must not inject hardcoded semantic tags or creature-voice explanations.
 - Memory correction uses `FeedbackKind=correct`; for a long-term memory target, the feedback model must return `memoryOperation.update_memory` with corrected text before the stored memory changes.
 - Feedback reflection may store internal learning notes and policy/state deltas, but ordinary chat only shows `replyText` when the model chooses a visible response.
+- Feedback Brain Mode must show actual storage effects, including long-term memories created or updated from an episode promotion. A feedback trace that only says the feedback model ran, without showing the resulting memory/state/policy changes, is not enough for developer audit.
 - If the model chooses a visible action such as `respond`, `ask`, `recall`, or `review`, a visible reply is required.
 - If the model chooses `observe` or `quiet`, it must not provide a visible reply; the API may persist the user's input without adding a Papo reply.
 - Recent conversation, memories, and feedback are passed into model prompts through `model-context.ts`.
@@ -145,6 +147,8 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - New Papo messages persist `cognitionTrace` with the real model stages, attention/action/memory decisions, feedback effects, emergence choices, visible reply, persistence outcomes, and structural rule checks that produced that visible reply. This supports developer audit without proving the mechanism in the main UI.
 - When the model chooses quiet, ignores input, or feedback produces no visible reply, the product must not create a blank/fake Papo message. The same cognition trace should attach to the relevant user/world input message so Brain Mode can still inspect the complete decision path.
 - Audio and image segments that enter the conversation carry a sensing trace from the modality model before the attention trace. Brain Mode should show whether the model found usable life information, whether rules routed it into the 30-second attention batch, or whether the slice/upload was settled as empty/unreadable without creating a fake event.
+- Photo uploads are usually deliberate life material. After visual sensing produces an `image_summary`, the action and memory models should usually preserve a meaningful photo as an episode/memory candidate unless the model judges it repeated, meaningless, accidental, private, or otherwise unsuitable. Photo memories should include visible image content plus user-provided text, time, and location provenance where available.
+- Photo uploads are multimodal memory material, not just text summaries. `/api/image-summary` stores the original image as a local asset and returns a `MediaAttachment`; the web client attaches it to the `image_summary` segment with observed time/location. Attention events, episodes, memory candidates, long-term memories, and conversation messages all propagate that attachment. LLM stages still decide whether to attend, form an episode, and keep a memory candidate; the structural path only prevents uploaded images from being discarded before cognition.
 
 ## Verification Checklist
 

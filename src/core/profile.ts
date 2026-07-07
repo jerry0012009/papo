@@ -56,6 +56,16 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
 
   for (const episode of profile.episodes) {
     episode.memoryCandidateIds ??= [];
+    episode.attachments ??= [];
+  }
+  for (const memory of profile.longTermMemories) {
+    memory.attachments ??= [];
+  }
+  for (const candidate of profile.memoryCandidates) {
+    candidate.attachments ??= [];
+  }
+  for (const message of profile.conversation) {
+    message.attachments ??= [];
   }
   for (const feedback of profile.feedbackHistory) {
     feedback.learningNote ??= feedback.effect;

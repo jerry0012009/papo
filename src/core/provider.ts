@@ -51,7 +51,7 @@ export function createModelProvider(env: NodeJS.ProcessEnv = process.env): Model
 function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
   const textModel = merged.OPENROUTER_MODEL ?? "openai/gpt-5.5";
   const visionModel = merged.OPENROUTER_VISION_MODEL ?? "nex-agi/nex-n2-mini";
-  const audioModel = merged.OPENROUTER_AUDIO_MODEL ?? "mistralai/voxtral-small-24b-2507";
+  const audioModel = merged.OPENROUTER_AUDIO_MODEL ?? "xiaomi/mimo-v2.5";
   return openAiCompatibleProvider({
     kind: "openrouter",
     name: "OpenRouter",

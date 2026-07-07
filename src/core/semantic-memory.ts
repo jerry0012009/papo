@@ -145,12 +145,15 @@ function buildSemanticMemoryPrompt(profile: CreatureProfile, candidates: MemoryC
 initialMemoryKind、initialConfidence、initialWritePolicy 是存储结构占位，不代表规则已经判断过这件事。
 你必须自己决定是否保留、怎么写、分到哪一类、是否长期保存。
 JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
+只返回一个完整、可直接 JSON.parse 的紧凑 JSON object；不要 Markdown、代码块、注释、尾随逗号或解释文字。
 
 你可以决定：
 - 这条候选是否应该保留为候选。
 - 应该写成什么记忆文本。
 - 它属于哪种 memoryKind：user_preference, long_theme, creature_self_memory, safety_rule, future_review, relationship, habit, open_question。
 - confidence、writePolicy、whyConsolidate、privacyReason、decayPolicy、tags。
+- 如果 sourceEpisode 带 attachments，说明原始图片资产会跟随这条记忆一起保存；你看到的文本是视觉模型摘要和用户补充，不是全部信息。带图片的候选通常比普通闲聊更值得保留；除非重复、无意义、误触、隐私不适合或没有可复用信息，不要轻易 shouldKeepCandidate=false。
+- 照片记忆的 candidateText 必须写出图片里的关键可见内容、用户补充说明、以及可用的 observedAt/location provenance。不要写成“用户上传了一张照片”这种空泛描述；也不要只保留视觉摘要而忽略用户为什么发这张图。
 - writePolicy 的含义：
   - auto：规则会立刻写入长期记忆，只在用户明确要求记住、稳定偏好/习惯、或非常适合长期留下时使用。
   - ask_user：需要用户确认后再长期保存。
@@ -170,6 +173,7 @@ JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 - contentHiddenForPrivacy=true 时不能使用 writePolicy=auto；如果确实值得记住，应使用 ask_user 并说明需要用户确认。
 - 普通用户看到的是 Papo 记得的生活，不看这些分类。
 - 如果候选只是普通寒暄、临时问候、一次性闲聊、噪音或没有可复用意义的片段，应 shouldKeepCandidate=false。
+- candidateText 控制在 160 个中文字符以内，whyConsolidate 控制在 80 个中文字符以内，trace 最多 2 条短句；不要为了说明流程写长段落。
 
 返回严格 JSON：
 {
@@ -224,6 +228,14 @@ ${JSON.stringify(candidates.map((candidate) => {
           sourceBatchId: episode.sourceBatchId,
           sourceObservedAt: episode.sourceObservedAt,
           sourceLocation: episode.sourceLocation,
+          attachments: (episode.attachments ?? []).map((attachment) => ({
+            id: attachment.id,
+            kind: attachment.kind,
+            label: attachment.label,
+            mime: attachment.mime,
+            observedAt: attachment.observedAt,
+            location: attachment.location
+          })),
           inputSummary: textForModel(episode.inputSummary, privacyHigh),
           possibleIntent: textForModel(episode.possibleIntent, privacyHigh),
           importanceReason: textForModel(episode.importanceReason, privacyHigh),

@@ -1,4 +1,4 @@
-import type { CaptureResult, CreatureProfile, FeedbackKind, FeedbackRecord, MessageCognitionTrace, SegmentKind, SensingTrace, StreamSegment, WakeEvent } from "../core/types";
+import type { CaptureResult, CreatureProfile, FeedbackKind, FeedbackRecord, MediaAttachment, MessageCognitionTrace, SegmentKind, SensingTrace, StreamSegment, WakeEvent } from "../core/types";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 const apiBase = import.meta.env.VITE_API_BASE as string | undefined;
@@ -52,8 +52,8 @@ export async function wakeProfile(userId: string): Promise<{ profile: CreaturePr
   return request<{ profile: CreatureProfile; wake: WakeEvent }>(`/api/profiles/${userId}/wake`, { method: "POST" });
 }
 
-export async function summarizeImage(dataUrl: string, label: string): Promise<{ summary: string; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }> {
-  return request<{ summary: string; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }>("/api/image-summary", {
+export async function summarizeImage(dataUrl: string, label: string): Promise<{ summary: string; asset?: MediaAttachment; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }> {
+  return request<{ summary: string; asset?: MediaAttachment; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }>("/api/image-summary", {
     method: "POST",
     headers: jsonHeaders,
     body: JSON.stringify({ dataUrl, label })
@@ -115,6 +115,11 @@ export async function activeEmergence(userId: string) {
 
 export function makeSegment(id: string, kind: SegmentKind, label: string, content: string, extra: Partial<StreamSegment> = {}): StreamSegment {
   return { id, kind, label, content, ...extra };
+}
+
+export function resolveAssetUrl(url: string) {
+  if (/^https?:\/\//.test(url)) return url;
+  return resolveApiPath(url);
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {

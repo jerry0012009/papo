@@ -121,6 +121,7 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
       triggerBatchId: candidate.segment.batchId,
       triggerObservedAt: candidate.segment.observedAt,
       triggerLocation: candidate.segment.location,
+      attachments: candidate.segment.attachments,
       triggerLabel: candidate.segment.label,
       triggerContent: candidate.segment.content,
       reasonPrefix: safeCreatureText(decision?.whySelected) ?? "",
@@ -250,6 +251,7 @@ function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureR
 - 它是否自然关联到 recent_memories 里的旧记忆。
 - 如果都只是背景声、空白、误触或没有可用生活信息，可以 shouldAttend=false。
 - 用户主动发来的直接消息通常值得注意；但仍由你判断是否只是误触、空白或无需进入后续 cognition。
+- 如果候选带 attachments，说明原始图片资产仍然可被长期回看；不要只把它当一段普通文字摘要。图片摘要、用户补充、拍摄/上传时间和地点一起构成这次输入。
 - JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 
 护栏会校验：
@@ -304,6 +306,14 @@ ${JSON.stringify((result.attentionCandidates ?? []).map((candidate) => ({
   batchId: candidate.segment.batchId,
   observedAt: candidate.segment.observedAt,
   location: candidate.segment.location,
+  attachments: (candidate.segment.attachments ?? []).map((attachment) => ({
+    id: attachment.id,
+    kind: attachment.kind,
+    label: attachment.label,
+    mime: attachment.mime,
+    observedAt: attachment.observedAt,
+    location: attachment.location
+  })),
   content: modelSafeSegmentContent(candidate.segment.content),
   contentHiddenForPrivacy: isHighPrivacySegmentContent(candidate.segment.content),
   alreadySelected: candidate.selectedByModel,
