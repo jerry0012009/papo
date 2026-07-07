@@ -314,10 +314,12 @@ function hasMixedPreference(text: string) {
 }
 
 function composeStreamSummary(events: AttentionEvent[], session: CuriousSessionAudit): string {
-  if (!events.length) return "我刚才没有找到足够清晰的重点，所以先安静陪着你。";
+  if (!events.length) return "我刚才先安静听着，没有打断你。";
   const ignoredPrivacy = session.ignored.filter((item) => item.score.privacyRisk > 0).map((item) => item.label);
-  const privacyLine = ignoredPrivacy.length ? ` ${ignoredPrivacy.join("、")} 因为隐私风险被压低或需要先问。` : "";
-  return `我刚才扫过 ${session.totalSegments} 段，只注意到了 ${events.length} 件事：${events.map((event) => event.triggerLabel).join("、")}。${session.stateInfluence}${privacyLine}`;
+  const names = events.map((event) => event.triggerLabel).join("、");
+  const privacyLine = ignoredPrivacy.length ? " 有些内容我会先放轻，等你的意思。" : "";
+  const mainLine = events.length === 1 ? `我刚才听见最需要回应的是：${names}。` : `我刚才听见几件需要回应的事：${names}。`;
+  return `${mainLine}${privacyLine}`;
 }
 
 function buildNoticed(text: string, relatedCount: number): string {
@@ -357,22 +359,22 @@ function explainScore(score: SegmentScore): string {
   const strong = score.contributions.filter((item) => item.value >= 12 && item.key !== "privacy_risk");
   const reasons = strong.map(creatureReasonForContribution);
   if (score.privacyRisk > 0) reasons.push("这里有一点隐私味道，我需要放轻");
-  if (score.redundancyPenalty > 0) reasons.push("它和我刚盯住的小事太像了");
+  if (score.redundancyPenalty > 0) reasons.push("它和刚才回应过的事太像了");
   return reasons.length ? `需要回应，因为${reasons.join("，")}。` : "需要回应，因为它比周围背景更像正在发生的事。";
 }
 
 function explainSelected(score: SegmentScore) {
   const positives = score.contributions.filter((item) => item.value > 0).sort((a, b) => b.value - a.value).slice(0, 3);
   const reasons = positives.map(creatureReasonForContribution);
-  return reasons.length ? `需要回应，因为${reasons.join("，")}。` : "这段更像正在发生的事，需要先回应。";
+  return reasons.length ? `需要回应，因为${reasons.join("，")}。` : "这件事更像正在发生，需要先回应。";
 }
 
 function explainIgnored(score: SegmentScore, selectedCount: number, budget: number) {
-  if (selectedCount >= budget) return `我先放过它，因为这一轮我只能认真盯住 ${budget} 段，不能假装全都记住。`;
-  if (score.privacyRisk > 45) return "我先放轻它，因为这里有隐私味道，不能自己偷偷长期留下。";
-  if (score.redundancyPenalty > 0) return "暂时略过，因为它和刚才已经回应过的内容太像了。";
-  if (score.total < 38) return "暂时略过，因为它更像路过的背景声。";
-  return "暂时略过，因为相比刚才回应过的内容，它还没有那么重要。";
+  if (selectedCount >= budget) return "我先不打断，因为刚才已经有更需要回应的事。";
+  if (score.privacyRisk > 45) return "我先放轻它，因为这里有一点隐私味道，要等你的意思。";
+  if (score.redundancyPenalty > 0) return "我先不重复回应，因为它和刚才说过的事太像了。";
+  if (score.total < 38) return "我先安静听过，不打断你。";
+  return "我先不打断，因为刚才那件事更需要回应。";
 }
 
 function creatureReasonForContribution(item: ScoreContribution) {

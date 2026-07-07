@@ -252,7 +252,8 @@ describe("creature brain v0.2", () => {
 
     expect(result.harnessTrace?.join(" ")).toContain("llm interpretation applied");
     expect(visible).not.toMatch(/semantic|harness|后台|流程|score|总分|阈值|candidate|写入|fallback/);
-    expect(result.curiousSession?.creatureReport).toContain("先回应");
+    expect(result.curiousSession?.creatureReport).toContain("需要回应");
+    expect(result.curiousSession?.creatureReport).not.toMatch(/扫过|分段|批量|直接记住|先回应其中/);
   });
 
   it("LLM can promote a near-threshold curious segment while rules keep the attention budget", async () => {

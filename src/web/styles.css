@@ -601,7 +601,17 @@ meter {
 
 .episode-moment {
   display: grid;
-  gap: 7px;
+  gap: 8px;
+}
+
+.episode-moment div {
+  display: grid;
+  gap: 3px;
+}
+
+.episode-moment span {
+  color: #69756c;
+  font-size: 0.78rem;
 }
 
 .episode-moment p,

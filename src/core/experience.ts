@@ -83,11 +83,10 @@ export function createCuriousCreatureReport(session: CuriousSessionAudit): strin
   const privacyIgnored = session.ignored.find((item) => item.score.privacyRisk > 0);
   const repeatedIgnored = session.ignored.find((item) => item.score.redundancyPenalty > 0);
   const parts = [
-    `我刚才陪你听了 ${session.totalSegments} 段，先回应其中 ${selectedCount} 段。`,
-    session.selected[0] ? `${session.selected[0].label} 更需要回应：${session.selected[0].whySelected}` : "这组信息都很轻，我没有强行记住全部。",
-    privacyIgnored ? `${privacyIgnored.label} 可能有隐私内容，我没有直接记住。` : undefined,
-    repeatedIgnored ? `${repeatedIgnored.label} 和前面太像，我把它当作重复声音放低了。` : undefined,
-    `当时我选择得更谨慎：${session.stateInfluence}`
+    selectedCount > 0 ? "我刚才听见了需要回应的事。" : "我刚才先安静陪着，没有打断你。",
+    session.selected[0] ? `${session.selected[0].label} 更需要回应：${session.selected[0].whySelected}` : undefined,
+    privacyIgnored ? `${privacyIgnored.label} 里可能有隐私内容，我会等你的意思。` : undefined,
+    repeatedIgnored ? `${repeatedIgnored.label} 和前面太像，我先不重复回应。` : undefined
   ].filter(Boolean);
   return parts.join(" ");
 }

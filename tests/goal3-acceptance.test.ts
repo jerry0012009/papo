@@ -19,8 +19,8 @@ describe("goal 3 acceptance flow", () => {
     const curious = handleCuriousStream(main, lifeSegments(), "2026-07-06T06:01:00.000Z");
     expect(curious.curiousSession?.totalSegments).toBe(8);
     expect(curious.events).toHaveLength(2);
-    expect(curious.curiousSession?.creatureReport).toContain("我刚才陪你听了 8 段");
-    expect(curious.curiousSession?.creatureReport).toContain("先回应其中 2 段");
+    expect(curious.curiousSession?.creatureReport).toContain("我刚才听见了需要回应的事");
+    expect(curious.curiousSession?.creatureReport).not.toMatch(/陪你听了 8 段|先回应其中 2 段|扫过|批量/);
     expect(curious.curiousSession?.selected.every((item) => item.whySelected)).toBe(true);
     expect(curious.curiousSession?.ignored.every((item) => item.whyIgnored)).toBe(true);
 

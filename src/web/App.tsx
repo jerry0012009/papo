@@ -1215,7 +1215,11 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
         <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode))}</p>
       </div>
       <div>
-        <span>Papo 记住</span>
+        <span>Papo 当时回你</span>
+        <p>{episodePapoLine(sourceEpisode)}</p>
+      </div>
+      <div>
+        <span>后来记住</span>
         <strong>{memoryResultLine(memory)}</strong>
       </div>
     </div>
@@ -1231,7 +1235,8 @@ function MemoryProcessDetails({ memory, profile }: { memory: CreatureProfile["lo
       <FlowSteps
         steps={[
           ...sourceSteps,
-          { label: "Papo 记住", text: memoryResultLine(memory) },
+          sourceEpisode ? { label: "当时回应", text: episodePapoLine(sourceEpisode) } : { label: "当时回应", text: undefined },
+          { label: "记忆结果", text: memoryResultLine(memory) },
           { label: "为什么留下", text: memory.consolidatedBecause ? memoryKeptBecauseText(memory.consolidatedBecause) : sourceEpisode?.importanceReason },
           { label: "之后怎么用", text: memoryUseLine(memory) }
         ]}
@@ -1570,8 +1575,14 @@ function EpisodeCard(props: {
         <span>{props.episode.source === "button" ? "你告诉我的事" : "Papo 回应过的事"}</span>
       </div>
       <div className="episode-moment">
-        <p>{userLine}</p>
-        <strong>{papoLine}</strong>
+        <div>
+          <span>你</span>
+          <p>{userLine}</p>
+        </div>
+        <div>
+          <span>Papo</span>
+          <strong>{papoLine}</strong>
+        </div>
       </div>
       {!props.compact ? <EpisodeProcessDetails episode={props.episode} /> : null}
       <EpisodeSourceMoment episode={props.episode} messages={props.sourceMessages ?? []} compact={props.compact} />

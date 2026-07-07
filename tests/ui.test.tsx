@@ -227,7 +227,7 @@ describe("App", () => {
 
     render(<App />);
 
-    await waitFor(() => expect(screen.getByText("Papo")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { name: "Papo" })).toBeInTheDocument());
     expect(screen.getByText("住在手机里的小狗")).toBeInTheDocument();
     expect(screen.getByText("正在陪着你")).toBeInTheDocument();
     expect(screen.queryByText("Fallback demo brain")).not.toBeInTheDocument();
@@ -403,7 +403,8 @@ describe("App", () => {
     expect(screen.getByText("你教我的习惯")).toBeInTheDocument();
     expect(screen.getByText("刚发生的事")).toBeInTheDocument();
     expect(screen.getAllByText("你当时说").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Papo 记住").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Papo 当时回你").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("后来记住").length).toBeGreaterThan(0);
     expect(screen.getAllByText((_, element) =>
       Boolean(element?.textContent?.includes("如果你能说话") && element.textContent.includes("你就说句话给我听"))
     ).length).toBeGreaterThan(0);
