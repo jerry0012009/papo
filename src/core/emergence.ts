@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { makeId } from "./ids";
 import { toCreatureMemoryVoice } from "./memory";
+import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
 import { summarizeText } from "./text";
 import type { AttentionEvent, CreatureProfile, EmergenceRecord, LongTermMemory } from "./types";
@@ -316,7 +317,7 @@ function availableSemanticMemories(profile: CreatureProfile) {
 }
 
 function hasMemoryPrivacyRisk(memory: LongTermMemory) {
-  return /token|secret|密码|验证码|身份证|银行卡|api key|apikey/i.test(memory.text);
+  return hasHighPrivacyText(`${memory.text} ${memory.tags.join(" ")}`);
 }
 
 function safeCreatureText(text?: string) {
@@ -417,21 +418,49 @@ current_policy:
 ${JSON.stringify(profile.policyProfile)}
 
 recent_episodes:
-${JSON.stringify(profile.episodes.slice(0, 6).map((item) => ({ id: item.id, inputSummary: item.inputSummary, creatureResponse: item.creatureResponse, tags: item.tags, weight: item.weight })))}
+${JSON.stringify(profile.episodes.slice(0, 6).map((item) => {
+  const privacyHigh = hasHighPrivacyText(`${item.inputSummary} ${item.noticed} ${item.creatureResponse}`);
+  return {
+    id: item.id,
+    inputSummary: textForModel(item.inputSummary, privacyHigh),
+    creatureResponse: textForModel(item.creatureResponse, privacyHigh),
+    tags: tagsForModel(item.tags, privacyHigh),
+    weight: item.weight,
+    contentHiddenForPrivacy: privacyHigh
+  };
+}))}
 
 recent_feedback:
-${JSON.stringify(profile.feedbackHistory.slice(0, 6).map((item) => ({ kind: item.kind, inputText: item.inputText, learningNote: item.learningNote, targetId: item.targetId })))}
+${JSON.stringify(profile.feedbackHistory.slice(0, 6).map((item) => {
+  const privacyHigh = hasHighPrivacyText(`${item.inputText ?? ""} ${item.learningNote}`);
+  return {
+    kind: item.kind,
+    inputText: textForModel(item.inputText, privacyHigh),
+    learningNote: textForModel(item.learningNote, privacyHigh),
+    targetId: item.targetId,
+    contentHiddenForPrivacy: privacyHigh
+  };
+}))}
 
 recent_emergence:
-${JSON.stringify(profile.emergenceHistory.slice(0, 5).map((item) => ({ at: item.at, driveSource: item.driveSource, relatedMemoryIds: item.relatedMemoryIds, message: item.message })))}
+${JSON.stringify(profile.emergenceHistory.slice(0, 5).map((item) => {
+  const privacyHigh = hasHighPrivacyText(`${item.whyNow} ${item.message}`);
+  return {
+    at: item.at,
+    driveSource: item.driveSource,
+    relatedMemoryIds: item.relatedMemoryIds,
+    message: textForModel(item.message, privacyHigh),
+    contentHiddenForPrivacy: privacyHigh
+  };
+}))}
 
 candidate_memories:
 ${JSON.stringify(availableSemanticMemories(profile).slice(0, 12).map((memory) => ({
   id: memory.id,
   kind: memory.kind,
-  text: toCreatureMemoryVoice(memory.text),
+  text: textForModel(toCreatureMemoryVoice(memory.text), hasMemoryPrivacyRisk(memory)),
   weight: memory.weight,
-  tags: memory.tags,
+  tags: tagsForModel(memory.tags, hasMemoryPrivacyRisk(memory)),
   lastReferencedAt: memory.lastReferencedAt,
   sourceEpisodeId: memory.sourceEpisodeId
 })))}

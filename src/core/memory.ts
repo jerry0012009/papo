@@ -1,4 +1,5 @@
 import { makeId } from "./ids";
+import { hasHighPrivacyText } from "./privacy";
 import { extractTags, keywordOverlap, summarizeText } from "./text";
 import type { AttentionEvent, CreatureProfile, EpisodeMemory, LongTermMemory, MemoryCandidate } from "./types";
 
@@ -94,7 +95,7 @@ export function createMemoryCandidateFromEpisode(
 }
 
 function hasHighPrivacyMemoryText(text: string) {
-  return /隐私|密码|token|key|secret|验证码|身份证|银行卡|api key|apikey|私钥|地址/i.test(text);
+  return hasHighPrivacyText(text);
 }
 
 function buildPrivateMemoryCandidateText(episode: EpisodeMemory) {

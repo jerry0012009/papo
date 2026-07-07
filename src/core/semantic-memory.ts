@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { makeId } from "./ids";
 import { normalizeSharedMemoryText, toCreatureMemoryVoice } from "./memory";
+import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
 import type { CreatureProfile, MemoryCandidate } from "./types";
 
@@ -113,7 +114,7 @@ function containsInternalMemoryLanguage(text: string) {
 }
 
 function hasPrivacyRisk(text: string) {
-  return /隐私|密码|token|key|secret|验证码|身份证|银行卡|地址|api key|apikey/i.test(text);
+  return hasHighPrivacyText(text);
 }
 
 function recordMemorySemanticRun(profile: CreatureProfile, provider: ModelProvider, message: string) {
@@ -195,11 +196,11 @@ ${JSON.stringify(candidates.map((candidate) => {
     sourceEpisode: episode
       ? {
           id: episode.id,
-          inputSummary: modelSafeMemoryText(episode.inputSummary, privacyHigh),
-          possibleIntent: modelSafeMemoryText(episode.possibleIntent, privacyHigh),
-          importanceReason: modelSafeMemoryText(episode.importanceReason, privacyHigh),
-          creatureResponse: modelSafeMemoryText(episode.creatureResponse, privacyHigh),
-          tags: privacyHigh ? [] : episode.tags,
+          inputSummary: textForModel(episode.inputSummary, privacyHigh),
+          possibleIntent: textForModel(episode.possibleIntent, privacyHigh),
+          importanceReason: textForModel(episode.importanceReason, privacyHigh),
+          creatureResponse: textForModel(episode.creatureResponse, privacyHigh),
+          tags: tagsForModel(episode.tags, privacyHigh),
           action: episode.actionDecision?.action
         }
       : undefined
@@ -209,6 +210,5 @@ ${JSON.stringify(candidates.map((candidate) => {
 }
 
 function modelSafeMemoryText(text: string | undefined, privacyHigh: boolean) {
-  if (!privacyHigh) return text;
-  return "[这段包含可能的密钥、验证码、密码、地址或证件信息，原文已隐藏；只能判断保存策略，不能直接引用或写入。]";
+  return textForModel(text, privacyHigh);
 }

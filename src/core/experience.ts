@@ -1,4 +1,5 @@
 import { summarizeText } from "./text";
+import { hasHighPrivacyText } from "./privacy";
 import type {
   ActionKind,
   AttentionEvent,
@@ -93,7 +94,7 @@ export function createCuriousCreatureReport(session: CuriousSessionAudit): strin
 
 export function createLearningNote(kind: FeedbackKind, tags: string[] = [], feedbackText?: string): string {
   const topic = tags.length ? "这个主题" : "这类内容";
-  const userLine = feedbackText?.trim() ? ` 你还补充说：${summarizeText(feedbackText, 72)}。` : "";
+  const userLine = feedbackText?.trim() && !hasHighPrivacyText(feedbackText) ? ` 你还补充说：${summarizeText(feedbackText, 72)}。` : "";
   switch (kind) {
     case "understood":
       return `我学到：这次理解方向是对的。以后遇到${topic}，我会更相信这种注意方式。${userLine}`;

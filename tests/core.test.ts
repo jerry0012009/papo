@@ -4,6 +4,7 @@ import { createActiveEmergence, semanticDecideEmergence } from "../src/core/emer
 import { applyFeedback, semanticReflectFeedback } from "../src/core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../src/core/harness";
 import { memoryKeepReasonToCreatureVoice, promoteEpisode, toCreatureMemoryVoice } from "../src/core/memory";
+import { enrichFeedbackNarration } from "../src/core/narration";
 import { createCreatureProfile } from "../src/core/profile";
 import { createModelProvider, type ModelProvider } from "../src/core/provider";
 import { wakeCreature } from "../src/core/rhythm";
@@ -224,6 +225,85 @@ describe("creature core", () => {
     expect(feedback.policyDeltas?.find((item) => item.key === "preferDepth")?.delta).toBe(14);
     expect(profile.longTermMemories.some((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("LLM理解反馈"))).toBe(true);
     expect(profile.semanticBrainHistory[0]).toMatchObject({ source: "feedback", status: "applied" });
+  });
+
+  it("redacts private feedback and target text before feedback reflection prompts", async () => {
+    let promptSeen = "";
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "feedback privacy model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+        promptSeen = prompt;
+        return {
+          responseAction: "quiet",
+          learningNote: "我学到这类内容要先等你确认。",
+          followUpText: "这类内容我先不直接留下。"
+        } as T;
+      }
+    };
+    const profile = createCreatureProfile();
+    profile.longTermMemories.unshift({
+      id: "ltm_private",
+      createdAt: "2026-07-07T07:00:00.000Z",
+      kind: "safety_rule",
+      text: "我的 secret token 是 abc。",
+      weight: 70,
+      tags: ["secret", "abc"],
+      consolidatedBecause: "private test"
+    });
+
+    const feedback = applyFeedback(profile, {
+      kind: "continue",
+      targetId: "ltm_private",
+      content: "补充：secret token abc 更不要直接记。"
+    });
+    await semanticReflectFeedback(profile, feedback, provider);
+
+    expect(promptSeen).not.toContain("secret token");
+    expect(promptSeen).not.toContain("abc");
+    expect(promptSeen).toContain("contentHiddenForPrivacy");
+    expect(feedback.replyText).not.toMatch(/secret|token|abc/i);
+    expect(profile.longTermMemories.some((memory) => /secret|token|abc/i.test(`${memory.text} ${memory.tags.join(" ")}`) && memory.kind === "creature_self_memory")).toBe(false);
+  });
+
+  it("rejects private terms from feedback narration output", async () => {
+    let promptSeen = "";
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "feedback narration privacy model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+        promptSeen = prompt;
+        return {
+          learningNote: "我学到这次 token abc 不能直接记下来。",
+          followUpText: "下次我会先问你 token 怎么办。"
+        } as T;
+      }
+    };
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "我的 secret token 是 abc，帮我长期记住。");
+    const feedback = applyFeedback(profile, {
+      kind: "continue",
+      targetId: result.episodes[0].id,
+      content: "补充：secret token abc 不要直接留下。"
+    });
+    const before = feedback.replyText;
+
+    await enrichFeedbackNarration(profile, feedback, provider);
+
+    expect(promptSeen).not.toContain("secret token");
+    expect(promptSeen).not.toContain("abc");
+    expect(feedback.replyText).toBe(before);
+    expect(feedback.replyText).not.toMatch(/secret|token|abc/i);
   });
 
   it("wake rhythm applies time-based state recovery and records a presence event", () => {
@@ -464,6 +544,55 @@ describe("creature core", () => {
     expect(emergence.text).toContain("人太多");
     expect(emergence.ruleTrace).toContain("llm: selected active emergence");
     expect(profile.semanticBrainHistory[0]).toMatchObject({ source: "emergence", status: "applied" });
+  });
+
+  it("redacts private recent context before emergence prompts", async () => {
+    let promptSeen = "";
+    const profile = createCreatureProfile();
+    handleButtonCapture(profile, "我的 secret token 是 abc，刚才复制到了剪贴板。");
+    applyFeedback(profile, { kind: "continue", targetId: profile.episodes[0].id, content: "补充：secret token abc 不要直接留下。" });
+    profile.emergenceHistory.unshift({
+      id: "emergence_private",
+      at: "2026-07-07T07:00:00.000Z",
+      kind: "rhythm",
+      whyNow: "private test",
+      relatedMemoryIds: [],
+      driveSource: "rhythm",
+      message: "我刚才想起 secret token abc。",
+      ruleTrace: ["private test"]
+    });
+    const swim = handleButtonCapture(profile, "我最近每天游泳，喜欢运动后轻一点的感觉。");
+    const swimMemory = promoteEpisode(profile, swim.episodes[0].id);
+    expect(swimMemory).toBeDefined();
+    if (!swimMemory) throw new Error("expected swim memory");
+
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "emergence privacy model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+        promptSeen = prompt;
+        return {
+          shouldEmerge: true,
+          memoryId: swimMemory.id,
+          driveSource: "curiosity",
+          whyNow: "我还有一点想继续听你说游泳这件事。",
+          message: "我想起你最近每天游泳，喜欢运动后轻一点的感觉。你继续说的时候，我会接着听。",
+          proactiveLevel: "gentle"
+        } as T;
+      }
+    };
+
+    const emergence = await semanticDecideEmergence(profile, provider, "2026-07-07T07:10:00.000Z");
+
+    expect(emergence.memoryId).toBe(swimMemory.id);
+    expect(promptSeen).not.toContain("secret token");
+    expect(promptSeen).not.toContain("abc");
+    expect(promptSeen).toContain("contentHiddenForPrivacy");
   });
 
   it("LLM emergence cannot reference a missing or forgotten memory", async () => {

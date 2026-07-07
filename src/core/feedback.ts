@@ -3,6 +3,7 @@ import { clampPolicy, updatePolicyFromFeedback } from "./drive";
 import { makeId } from "./ids";
 import { createLearningNote } from "./experience";
 import { adjustMemoryWeight, createMemoryCandidateFromEpisode, forgetMemory, normalizeSharedMemoryText, promoteEpisode } from "./memory";
+import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
 import { applyStateDelta, deltaForFeedback } from "./state";
 import { extractTags, summarizeText } from "./text";
@@ -291,7 +292,7 @@ function upsertSemanticFeedbackSelfMemory(
 ) {
   const safeText = safeCreatureText(memory.text);
   if (!safeText || hasPrivacyRisk(safeText)) return;
-  const tags = unique(["被你养成", "LLM理解反馈", ...(memory.tags ?? []), ...extractTags(safeText)]);
+  const tags = safeStoredTags(["被你养成", "LLM理解反馈", ...(memory.tags ?? []), ...extractTags(safeText)]);
   const sourceEpisodeId = targetEpisode?.id ?? targetLongTerm?.sourceEpisodeId;
   const existing = profile.longTermMemories.find(
     (item) => item.kind === "creature_self_memory" && item.tags.includes("LLM理解反馈") && sourceEpisodeId && item.sourceEpisodeId === sourceEpisodeId
@@ -299,7 +300,7 @@ function upsertSemanticFeedbackSelfMemory(
   if (existing) {
     existing.text = normalizeSharedMemoryText(safeText);
     existing.weight = Math.min(100, existing.weight + 8);
-    existing.tags = unique([...existing.tags, ...tags]);
+    existing.tags = safeStoredTags([...existing.tags, ...tags]);
     existing.lastReferencedAt = feedback.at;
     return;
   }
@@ -318,6 +319,7 @@ function upsertSemanticFeedbackSelfMemory(
 function safeCreatureText(text?: string) {
   const normalized = normalizeSharedMemoryText(text?.trim() ?? "");
   if (!normalized) return undefined;
+  if (hasPrivacyRisk(normalized)) return undefined;
   if (/(LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|candidate|episode|score|阈值|字段|JSON|prompt|fallback|数据库|写入|长期记忆|情景记忆)/i.test(normalized)) {
     return undefined;
   }
@@ -346,6 +348,10 @@ function recordFeedbackSemanticRun(
 function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: FeedbackRecord) {
   const targetEpisode = profile.episodes.find((item) => item.id === feedback.targetId);
   const targetLongTerm = profile.longTermMemories.find((item) => item.id === feedback.targetId);
+  const feedbackPrivacyHigh = hasPrivacyRisk(feedback.inputText ?? "");
+  const targetPrivacyHigh = hasPrivacyRisk(
+    `${targetEpisode?.inputSummary ?? ""} ${targetEpisode?.noticed ?? ""} ${targetEpisode?.creatureResponse ?? ""} ${targetEpisode?.tags.join(" ") ?? ""} ${targetLongTerm?.text ?? ""} ${targetLongTerm?.tags.join(" ") ?? ""}`
+  );
   return `请作为 Papo 的反馈反思脑，根据这次用户反馈，决定 Papo 应该怎样被养成。
 
 规则层已经做了一个保守 baseline。你可以在护栏内追加或修正：
@@ -377,14 +383,36 @@ function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: Feedbac
 }
 
 feedback:
-${JSON.stringify(feedback)}
+${JSON.stringify({
+  ...feedback,
+  inputText: textForModel(feedback.inputText, feedbackPrivacyHigh),
+  effect: textForModel(feedback.effect, feedbackPrivacyHigh),
+  learningNote: textForModel(feedback.learningNote, feedbackPrivacyHigh),
+  followUpText: textForModel(feedback.followUpText, feedbackPrivacyHigh),
+  replyText: textForModel(feedback.replyText, feedbackPrivacyHigh),
+  contentHiddenForPrivacy: feedbackPrivacyHigh
+})}
 
 target:
 ${JSON.stringify(
   targetEpisode
-    ? { type: "episode", inputSummary: targetEpisode.inputSummary, creatureResponse: targetEpisode.creatureResponse, tags: targetEpisode.tags, feedback: targetEpisode.feedback }
+    ? {
+        type: "episode",
+        inputSummary: textForModel(targetEpisode.inputSummary, targetPrivacyHigh),
+        creatureResponse: textForModel(targetEpisode.creatureResponse, targetPrivacyHigh),
+        tags: tagsForModel(targetEpisode.tags, targetPrivacyHigh),
+        feedback: targetEpisode.feedback,
+        contentHiddenForPrivacy: targetPrivacyHigh
+      }
     : targetLongTerm
-      ? { type: "memory", kind: targetLongTerm.kind, text: targetLongTerm.text, weight: targetLongTerm.weight, tags: targetLongTerm.tags }
+      ? {
+          type: "memory",
+          kind: targetLongTerm.kind,
+          text: textForModel(targetLongTerm.text, targetPrivacyHigh),
+          weight: targetLongTerm.weight,
+          tags: tagsForModel(targetLongTerm.tags, targetPrivacyHigh),
+          contentHiddenForPrivacy: targetPrivacyHigh
+        }
       : { type: "none" }
 )}
 
@@ -395,10 +423,29 @@ current_policy:
 ${JSON.stringify(profile.policyProfile)}
 
 recent_feedback:
-${JSON.stringify(profile.feedbackHistory.slice(0, 6).map((item) => ({ kind: item.kind, inputText: item.inputText, learningNote: item.learningNote, targetId: item.targetId })))}
+${JSON.stringify(profile.feedbackHistory.slice(0, 6).map((item) => {
+  const privacyHigh = hasPrivacyRisk(`${item.inputText ?? ""} ${item.learningNote}`);
+  return {
+    kind: item.kind,
+    inputText: textForModel(item.inputText, privacyHigh),
+    learningNote: textForModel(item.learningNote, privacyHigh),
+    targetId: item.targetId,
+    contentHiddenForPrivacy: privacyHigh
+  };
+}))}
 
 recent_memories:
-${JSON.stringify(profile.longTermMemories.slice(0, 8).map((item) => ({ id: item.id, kind: item.kind, text: item.text, weight: item.weight, tags: item.tags })))}
+${JSON.stringify(profile.longTermMemories.slice(0, 8).map((item) => {
+  const privacyHigh = hasPrivacyRisk(`${item.text} ${item.tags.join(" ")}`);
+  return {
+    id: item.id,
+    kind: item.kind,
+    text: textForModel(item.text, privacyHigh),
+    weight: item.weight,
+    tags: tagsForModel(item.tags, privacyHigh),
+    contentHiddenForPrivacy: privacyHigh
+  };
+}))}
 `;
 }
 
@@ -472,16 +519,21 @@ function feedbackTopic(context: FeedbackReplyContext) {
 function usefulFeedbackTag(tag: string) {
   const clean = tag.trim();
   if (clean.length < 2) return false;
+  if (hasPrivacyRisk(clean)) return false;
   if (/续想|请继续/.test(clean)) return false;
   return !/^(请|帮我|继续|这次|这个|这一|刚才|用户)/.test(clean);
 }
 
 function hasPrivacyRisk(text: string) {
-  return /隐私|密码|token|key|secret|验证码|身份证|银行卡|地址/i.test(text);
+  return hasHighPrivacyText(text);
 }
 
 function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))];
+}
+
+function safeStoredTags(tags: string[]) {
+  return unique(tags.filter((tag) => !hasPrivacyRisk(tag)));
 }
 
 function createSafetyMemoryFromForget(
@@ -492,13 +544,16 @@ function createSafetyMemoryFromForget(
 ) {
   const text = episode?.inputSummary ?? memory?.text;
   if (!text) return;
+  const privacyHigh = hasPrivacyRisk(text);
   profile.longTermMemories.unshift({
     id: makeId("ltm"),
     createdAt: now,
     kind: "safety_rule",
-    text: `你让我放下类似内容。以后遇到相关主题时，我应该先问，不要自己急着留下：${text.slice(0, 80)}`,
+    text: privacyHigh
+      ? "你让我放下一段需要保护的内容。以后遇到类似内容时，我应该先问，不要自己急着留下具体细节。"
+      : `你让我放下类似内容。以后遇到相关主题时，我应该先问，不要自己急着留下：${text.slice(0, 80)}`,
     weight: 70,
-    tags: episode?.tags ?? memory?.tags ?? [],
+    tags: privacyHigh ? [] : safeStoredTags(episode?.tags ?? memory?.tags ?? []),
     consolidatedBecause: "你用放下这一下教我先小心边界。"
   });
 }
@@ -518,14 +573,15 @@ function upsertFeedbackSelfMemory(
   const topic = selfMemoryTopic(input);
   const extra = input.inputText && !hasPrivacyRisk(input.inputText) ? ` 你还用自己的话教我：${summarizeText(input.inputText, 80)}。` : "";
   const text = normalizeSharedMemoryText(`${trait.text(topic)}${extra}`);
-  const tags = unique(["被你养成", trait.tag, ...input.tags, ...extractTags(topic)]);
+  const topicPrivacyHigh = hasPrivacyRisk(`${input.inputText ?? ""} ${input.targetEpisode?.inputSummary ?? ""} ${input.targetLongTerm?.text ?? ""} ${input.tags.join(" ")}`);
+  const tags = safeStoredTags(["被你养成", trait.tag, ...(topicPrivacyHigh ? [] : input.tags), ...extractTags(topic)]);
   const sourceEpisodeId = input.targetEpisode?.id ?? input.targetLongTerm?.sourceEpisodeId;
   const existing = profile.longTermMemories.find((memory) => memory.kind === "creature_self_memory" && memory.tags.includes(trait.tag));
 
   if (existing) {
     existing.text = text;
     existing.weight = Math.min(100, existing.weight + 10);
-    existing.tags = unique([...existing.tags, ...tags]);
+    existing.tags = safeStoredTags([...existing.tags, ...tags]);
     existing.lastReferencedAt = input.now;
     existing.sourceEpisodeId ??= sourceEpisodeId;
     existing.consolidatedBecause = "你反复用反馈教我，我更认识自己该怎么靠近你。";
@@ -580,9 +636,12 @@ function selfMemoryTopic(input: {
   targetLongTerm?: LongTermMemory;
   inputText?: string;
 }) {
+  const contextPrivacyHigh = hasPrivacyRisk(`${input.inputText ?? ""} ${input.targetEpisode?.inputSummary ?? ""} ${input.targetLongTerm?.text ?? ""} ${input.tags.join(" ")}`);
+  if (contextPrivacyHigh) return "这类需要保护的内容";
   const tag = input.tags.find((item) => usefulFeedbackTag(item));
   if (tag) return `「${summarizeText(tag, 18)}」`;
   const text = input.targetEpisode?.inputSummary ?? input.targetEpisode?.noticed ?? input.targetLongTerm?.text ?? input.inputText;
+  if (hasPrivacyRisk(text ?? "")) return "这类需要保护的内容";
   if (text) return `「${summarizeText(text, 22)}」`;
   return "这类事";
 }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { composeFeedbackReplyText } from "./feedback";
 import { normalizeSharedMemoryText } from "./memory";
+import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
 import type { CreatureProfile, EmergenceRecord, FeedbackRecord, LongTermMemory } from "./types";
 
@@ -34,6 +35,10 @@ export async function enrichFeedbackNarration(
   if (!provider.usesRealModel) return feedback;
   const targetEpisode = profile.episodes.find((episode) => episode.id === feedback.targetId);
   const targetMemory = profile.longTermMemories.find((memory) => memory.id === feedback.targetId);
+  const feedbackPrivacyHigh = hasHighPrivacyText(`${feedback.inputText ?? ""} ${feedback.effect} ${feedback.learningNote} ${feedback.followUpText ?? ""}`);
+  const targetPrivacyHigh = hasHighPrivacyText(
+    `${targetEpisode?.inputSummary ?? ""} ${targetEpisode?.noticed ?? ""} ${targetEpisode?.tags.join(" ") ?? ""} ${targetMemory?.text ?? ""} ${targetMemory?.tags.join(" ") ?? ""}`
+  );
 
   try {
     const raw = await provider.generateJson<unknown>(
@@ -53,21 +58,33 @@ export async function enrichFeedbackNarration(
 feedback:
 ${JSON.stringify({
   kind: feedback.kind,
-  inputText: feedback.inputText,
+  inputText: textForModel(feedback.inputText, feedbackPrivacyHigh),
   inputModality: feedback.inputModality,
-  effect: feedback.effect,
+  effect: textForModel(feedback.effect, feedbackPrivacyHigh),
   responseAction: feedback.responseAction,
-  ruleLearningNote: feedback.learningNote,
-  ruleFollowUpText: feedback.followUpText,
+  ruleLearningNote: textForModel(feedback.learningNote, feedbackPrivacyHigh),
+  ruleFollowUpText: textForModel(feedback.followUpText, feedbackPrivacyHigh),
+  contentHiddenForPrivacy: feedbackPrivacyHigh,
   memoryCandidateIds: feedback.memoryCandidateIds
 })}
 
 target_episode_or_memory:
 ${JSON.stringify(
   targetEpisode
-    ? { type: "episode", inputSummary: targetEpisode.inputSummary, noticed: targetEpisode.noticed, tags: targetEpisode.tags }
+    ? {
+        type: "episode",
+        inputSummary: textForModel(targetEpisode.inputSummary, targetPrivacyHigh),
+        noticed: textForModel(targetEpisode.noticed, targetPrivacyHigh),
+        tags: tagsForModel(targetEpisode.tags, targetPrivacyHigh),
+        contentHiddenForPrivacy: targetPrivacyHigh
+      }
     : targetMemory
-      ? { type: "long_term_memory", text: targetMemory.text, tags: targetMemory.tags }
+      ? {
+          type: "long_term_memory",
+          text: textForModel(targetMemory.text, targetPrivacyHigh),
+          tags: tagsForModel(targetMemory.tags, targetPrivacyHigh),
+          contentHiddenForPrivacy: targetPrivacyHigh
+        }
       : { type: "none" }
 )}
 
@@ -101,6 +118,8 @@ export async function enrichEmergenceNarration(
     ? profile.longTermMemories.find((item) => item.id === emergence.relatedMemoryIds[0])
     : undefined;
   if (!memory) return withText(emergence);
+  const memoryPrivacyHigh = hasHighPrivacyText(`${memory.text} ${memory.tags.join(" ")}`);
+  const emergencePrivacyHigh = hasHighPrivacyText(`${emergence.whyNow} ${emergence.message}`);
 
   try {
     const feedbackSelfMemory = memory.kind === "creature_self_memory" && memory.tags.includes("被你养成");
@@ -125,14 +144,21 @@ export async function enrichEmergenceNarration(
 emergence_rule_record:
 ${JSON.stringify({
   kind: emergence.kind,
-  whyNow: emergence.whyNow,
+  whyNow: textForModel(emergence.whyNow, emergencePrivacyHigh),
   driveSource: emergence.driveSource,
-  ruleMessage: emergence.message,
+  ruleMessage: textForModel(emergence.message, emergencePrivacyHigh),
+  contentHiddenForPrivacy: emergencePrivacyHigh,
   relatedMemoryIds: emergence.relatedMemoryIds
 })}
 
 related_memory:
-${JSON.stringify(memory ? { id: memory.id, kind: memory.kind, text: normalizeSharedMemoryText(memory.text), tags: memory.tags } : null)}
+${JSON.stringify(memory ? {
+  id: memory.id,
+  kind: memory.kind,
+  text: textForModel(normalizeSharedMemoryText(memory.text), memoryPrivacyHigh),
+  tags: tagsForModel(memory.tags, memoryPrivacyHigh),
+  contentHiddenForPrivacy: memoryPrivacyHigh
+} : null)}
 
 current_state:
 ${JSON.stringify(profile.state)}
@@ -165,6 +191,7 @@ function withText<T extends EmergenceRecord & { text?: string; memoryId?: string
 }
 
 function isSafeCreatureText(text: string) {
+  if (hasHighPrivacyText(text)) return false;
   return !/(投资人|开发|harness|GitHub|nginx|prompt|数据库字段|字段|用户|小动物|语义|系统|后台|流程|candidate|episode|fallback|score|阈值|写入|长期记忆|情景记忆)/i.test(text);
 }
 
@@ -186,7 +213,7 @@ function extractAnchors(memory: LongTermMemory) {
   const stop = new Set(["用户", "这个", "那个", "一次", "以后", "应该", "不要", "直接", "保存", "记忆", "注意", "反馈", "内容"]);
   const anchors = new Set<string>();
   for (const tag of memory.tags) {
-    if (tag.length >= 2 && !stop.has(tag)) anchors.add(tag);
+    if (tag.length >= 2 && !stop.has(tag) && !hasHighPrivacyText(tag)) anchors.add(tag);
   }
   const chunks = memory.text.match(/[\p{Script=Han}A-Za-z0-9]{2,}/gu) ?? [];
   for (const chunk of chunks) {
