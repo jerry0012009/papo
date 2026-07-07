@@ -878,12 +878,34 @@ function DeveloperTrace({ trace, profile }: { trace: NonNullable<ConversationMes
           </section>
         ) : null}
         {trace.feedbackDecision ? (
-          <section>
-            <strong>反馈理解</strong>
-            <TraceBlock title={trace.feedbackDecision.responseAction ?? trace.feedbackDecision.kind}>
-              <p>{trace.feedbackDecision.effect}</p>
-              <small>{trace.feedbackDecision.learningNote}</small>
-            </TraceBlock>
+          <section className="cognition-flow">
+            <strong>反馈流程</strong>
+            <div className="flow-chain">
+              <TraceBlock title="1. 反馈输入">
+                <p>{feedbackKindLabel(trace.feedbackDecision.kind)}</p>
+                {trace.feedbackDecision.inputText ? <small>{trace.feedbackDecision.inputText}</small> : null}
+                {trace.feedbackDecision.targetId ? <small>目标：{trace.feedbackDecision.targetId}</small> : null}
+              </TraceBlock>
+              <TraceBlock title="2. 模型理解">
+                <p>{trace.feedbackDecision.effect}</p>
+                <small>{trace.feedbackDecision.learningNote}</small>
+              </TraceBlock>
+              <TraceBlock title="3. 实际修改">
+                <TraceList items={feedbackDeltaItems(trace.feedbackDecision.stateDeltas, "state")} />
+                <TraceList items={feedbackDeltaItems(trace.feedbackDecision.policyDeltas, "policy")} />
+                {trace.feedbackDecision.memoryCandidateIds.length ? (
+                  <small>关联候选：{trace.feedbackDecision.memoryCandidateIds.join("、")}</small>
+                ) : null}
+                {!trace.feedbackDecision.stateDeltas.length &&
+                !trace.feedbackDecision.policyDeltas.length &&
+                !trace.feedbackDecision.memoryCandidateIds.length ? (
+                  <p>没有写入数值或记忆修改。</p>
+                ) : null}
+              </TraceBlock>
+              <TraceBlock title={`4. 外显回应 · ${trace.feedbackDecision.responseAction ?? "quiet"}`}>
+                <p>{trace.feedbackDecision.replyText ? `说出口：${trace.feedbackDecision.replyText}` : "这一步没有外显回复。"}</p>
+              </TraceBlock>
+            </div>
           </section>
         ) : null}
         {trace.emergenceDecision ? (
@@ -962,6 +984,21 @@ function memoryStatusText(status: string, policy: string) {
     do_not_save: "不保存"
   };
   return `${statusText[status] ?? status} · ${policyText[policy] ?? policy}`;
+}
+
+function feedbackKindLabel(kind: string) {
+  const labels: Record<string, string> = {
+    understood: "用户表示这次懂了",
+    continue: "用户让 Papo 再想一会儿",
+    not_now: "用户让 Papo 先安静",
+    remember: "用户要求记住",
+    forget: "用户要求放下"
+  };
+  return labels[kind] ?? kind;
+}
+
+function feedbackDeltaItems(items: Array<{ key: string; before: number; after: number; delta: number }>, prefix: string) {
+  return items.map((item) => `${prefix}.${item.key}: ${item.before} -> ${item.after} (${item.delta > 0 ? "+" : ""}${item.delta})`);
 }
 
 function stageLabel(stage: string) {

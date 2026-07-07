@@ -110,7 +110,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Feedback capture records the user's teaching. Explicit forget still performs the storage-layer weight/drop operation, but remembering, memory correction, memory promotion, soft dismissal, state changes, policy changes, learning language, and creature self-memory must come from `semanticReflectFeedback`.
 - Feedback reflection may store internal learning notes and policy/state deltas, but ordinary chat only shows `replyText` when the model chooses a visible response.
 - If the model chooses a visible action such as `respond`, `ask`, `recall`, or `review`, a visible reply is required.
-- If the model chooses `observe` or `quiet`, the API may persist the user's input without adding a Papo reply.
+- If the model chooses `observe` or `quiet`, it must not provide a visible reply; the API may persist the user's input without adding a Papo reply.
 - Recent conversation, memories, and feedback are passed into model prompts through `model-context.ts`.
 - Development planning text must not be used as creature interaction material.
 - New Papo messages persist `cognitionTrace` with the real model stages, attention/action/memory decisions, visible reply, persistence outcomes, and structural rule checks that produced that visible reply. This supports developer audit without proving the mechanism in the main UI.

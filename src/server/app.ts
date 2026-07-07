@@ -424,10 +424,15 @@ function feedbackCognitionTrace(
     feedbackDecision: {
       feedbackId: feedback.id,
       kind: feedback.kind,
+      targetId: feedback.targetId,
+      inputText: feedback.inputText,
       effect: feedback.effect,
       learningNote: feedback.learningNote,
       responseAction: feedback.responseAction,
-      memoryCandidateIds: feedback.memoryCandidateIds ?? []
+      replyText: feedback.replyText,
+      memoryCandidateIds: feedback.memoryCandidateIds ?? [],
+      stateDeltas: feedback.stateDeltas ?? [],
+      policyDeltas: feedback.policyDeltas ?? []
     }
   };
 }

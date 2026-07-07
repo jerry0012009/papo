@@ -403,7 +403,7 @@ memoryOperation 使用口径：
 - promote_episode 只能用于 target.type="episode"。
 - update_memory 只能用于 target.type="memory"。
 
-返回严格 JSON：
+返回严格 JSON，最外层必须是对象，不能返回被引号包住的 JSON 字符串：
 {
   "responseAction":"acknowledge",
   "stateDeltas":{"curiosity":0},

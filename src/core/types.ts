@@ -285,10 +285,15 @@ export interface MessageCognitionTrace {
   feedbackDecision?: {
     feedbackId: string;
     kind: FeedbackKind;
+    targetId?: string;
+    inputText?: string;
     effect: string;
     learningNote: string;
     responseAction?: FeedbackResponseAction;
+    replyText?: string;
     memoryCandidateIds: string[];
+    stateDeltas: NonNullable<FeedbackRecord["stateDeltas"]>;
+    policyDeltas: NonNullable<FeedbackRecord["policyDeltas"]>;
   };
   emergenceDecision?: {
     emergenceId: string;
