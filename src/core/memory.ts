@@ -185,12 +185,18 @@ function classifyLongTermKind(episode: EpisodeMemory): LongTermMemory["kind"] {
 }
 
 function buildLongTermText(episode: EpisodeMemory): string {
-  const noticed = stripSourceMetadata(episode.noticed);
-  const scene = noticed.length > 8 ? noticed : `我和你一起经历过这件事：${stripSourceMetadata(episode.inputSummary)}`;
+  const scene = sharedMomentText(episode);
   const moment = episodeMomentText(episode);
   const response = sharedResponseText(episode.creatureResponse, scene);
   const parts = [scene, moment, response ? `当时我回应你：${response}` : ""].filter(Boolean);
   return normalizeSharedMemoryText(parts.join(" "));
+}
+
+function sharedMomentText(episode: EpisodeMemory) {
+  const input = stripSourceMetadata(episode.inputSummary);
+  if (input.length > 0) return `你当时告诉我：${input}`;
+  const noticed = stripSourceMetadata(episode.noticed);
+  return noticed.length > 8 ? `我当时听见这件事：${noticed}` : "我和你一起经历过这件事";
 }
 
 function episodeMomentText(episode: EpisodeMemory) {

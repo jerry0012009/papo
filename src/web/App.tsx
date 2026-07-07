@@ -1828,6 +1828,8 @@ function normalizeMemoryText(text: string) {
 
 function extractRememberedMoment(text: string) {
   const normalized = normalizeMemoryText(text)
+    .replace(/^你当时告诉我[：:]\s*/, "")
+    .replace(/^我当时听见这件事[：:]\s*/, "")
     .replace(/^我和你一起经历过这件事[：:]\s*/, "")
     .replace(/^你刚告诉我的这件事[：:]\s*/, "")
     .replace(/^我接住你刚告诉来的这件事[：:]\s*/, "")

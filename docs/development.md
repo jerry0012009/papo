@@ -385,6 +385,7 @@ Verified:
 - The dialogue page groups same-batch multimodal inputs into a "30-second shared moment" before Papo's response.
 - Episode cards can trace a memory back to the source shared moment, including batch, observed time, location, and matching conversation input when present.
 - Long-term memory candidates generated from sourced episodes include natural time/location context from the shared moment without leaking raw batch ids.
+- Long-term memory candidates use the user's original shared content as the memory body, not the attention `noticed` sentence. Attention wording explains processing; memory text should remember what happened between the user and Papo, plus a short "当时我回应你..." thread when useful.
 - Feedback text and audio transcript content are persisted as conversation input, and Papo's learning response follows it in the same timeline.
 - Feedback with substantive text can produce a rule-owned follow-up or memory note, and the persisted Papo reply includes that continuation.
 - Memory-page feedback can carry the user's written teaching into the same feedback endpoint with the target memory id, rather than acting as a bare management button.

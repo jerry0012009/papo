@@ -59,6 +59,8 @@ describe("creature core", () => {
     expect(result.response).not.toContain("我注意到这个片段可能");
     expect(result.response).not.toContain("我注意到这段");
     expect(result.response).not.toContain("确认我有没有听对");
+    expect(result.memoryCandidates?.[0].candidateText).toContain("你当时告诉我：刚刚医生确认复查时间改到周六上午");
+    expect(result.memoryCandidates?.[0].candidateText).not.toContain("我听见这件事之后可能还会回来");
     expect(result.episodes[0].possibleIntent).not.toContain("认真理解并判断");
   });
 
@@ -120,6 +122,8 @@ describe("creature core", () => {
     expect(result.episodes[0].sourceLocation?.label).toBe("家里");
     expect(result.memoryCandidates?.[0].candidateText).toContain("那一小段的时间是 2026-07-06 10:00:30 UTC");
     expect(result.memoryCandidates?.[0].candidateText).toContain("地点是家里");
+    expect(result.memoryCandidates?.[0].candidateText).toContain("你当时告诉我：我担心自己又把妈妈复查拖到睡前");
+    expect(result.memoryCandidates?.[0].candidateText).not.toContain("我听见这里有一点情绪");
     expect(result.memoryCandidates?.[0].candidateText).not.toContain("batch-core");
     const memory = promoteEpisode(profile, result.episodes[0].id);
     expect(memory?.text).toContain("那一小段的时间是 2026-07-06 10:00:30 UTC");
