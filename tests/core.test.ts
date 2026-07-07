@@ -559,6 +559,41 @@ describe("creature core", () => {
     expect(event.actionDecision.ruleTrace).not.toContain("future_value_action");
     expect(result.response).toContain("我在，先回应你");
   });
+
+  it("LLM shouldReply=false suppresses keyword reminder flow unless guardrails require otherwise", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "interaction model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          interaction: {
+            userIntent: "你只是把明天这件小事递给我注意，不希望我马上追问或生成提醒。",
+            emotionalTone: "轻一点，不想被打扰",
+            shouldReply: false,
+            memoryCandidateText: "你曾经提到明天早上前要看一眼检查单，但当时更希望我安静抱住，不急着提醒。",
+            memoryTags: ["明天", "检查单", "安静"]
+          },
+          trace: ["llm: quiet observation beats keyword reminder"]
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(profile, "明天早上之前提醒我看一眼检查单，但这会儿先别打扰我。", provider);
+    const event = result.events[0];
+
+    expect(event.scoreBreakdown?.futureValue).toBeGreaterThanOrEqual(16);
+    expect(event.semanticSource).toBe("llm");
+    expect(event.actionDecision.action).toBe("observe");
+    expect(event.actionDecision.ruleTrace).toContain("llm_suggested=observe");
+    expect(event.actionDecision.ruleTrace).not.toContain("future_value_action");
+    expect(event.decisionTrace?.join(" ")).toContain("llm_default_action=observe");
+    expect(result.response).toContain("先轻轻抱住");
+    expect(result.response).not.toMatch(/提醒草稿|问题清单/);
+  });
 });
 
 function inRange(state: CreatureState) {

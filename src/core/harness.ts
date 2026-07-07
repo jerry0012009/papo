@@ -6,7 +6,7 @@ import { createCuriousCreatureReport } from "./experience";
 import { makeId } from "./ids";
 import { normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
-import type { CaptureResult, CreatureProfile, SemanticBrainRecord, StreamSegment } from "./types";
+import type { ActionKind, CaptureResult, CreatureProfile, SemanticBrainRecord, StreamSegment } from "./types";
 
 const actionSchema = z.enum(["observe", "respond", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list"]);
 
@@ -138,7 +138,7 @@ async function enrichWithSemanticBrain(
     }
 
     const suggestion = semantic.suggestion;
-    applySuggestion(profile, result, suggestion);
+    applySuggestion(profile, result, suggestion, source);
     result.harnessTrace = [...trace, "semantic: llm interpretation applied", ...(suggestion.trace ?? [])];
     recordSemanticBrainRun(profile, provider, source, "applied", semantic.message);
     return result;
@@ -208,7 +208,7 @@ async function askSemanticBrain(
   return { status: "applied", suggestion: parsed.data, message: "llm interpretation applied" };
 }
 
-function applySuggestion(profile: CreatureProfile, result: CaptureResult, suggestion: BrainSuggestion) {
+function applySuggestion(profile: CreatureProfile, result: CaptureResult, suggestion: BrainSuggestion, source: "button" | "curious_stream") {
   const eventById = new Map(result.events.map((event) => [event.id, event]));
   const episodeByEventId = new Map(result.events.map((event, index) => [event.id, result.episodes[index]]));
   const primaryEvent = result.events[0];
@@ -216,7 +216,7 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
 
   if (suggestion.interaction && primaryEvent) {
     const interaction = suggestion.interaction;
-    const suggestedAction = interaction.suggestedAction ?? (interaction.shouldReply ? "respond" : undefined);
+    const suggestedAction = semanticActionFromInteraction(interaction, profile);
     if (suggestedAction) {
       primaryEvent.actionDecision = guardActionDecision(primaryEvent, profile, suggestedAction);
       primaryEvent.suggestedAction = primaryEvent.actionDecision.action;
@@ -226,6 +226,7 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
       ...(primaryEvent.decisionTrace ?? []),
       "llm: structured interaction understood",
       interaction.userIntent ? `intent=${interaction.userIntent}` : "intent=not_provided",
+      interaction.suggestedAction ? "llm_action=explicit" : suggestedAction ? `llm_default_action=${suggestedAction}` : "llm_action=not_provided",
       `guardrail: action=${primaryEvent.actionDecision.action}`
     ];
     if (primaryEpisode) {
@@ -234,7 +235,11 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
       if (interaction.memoryTags?.length) primaryEpisode.tags = interaction.memoryTags;
       updateMemoryCandidate(result, primaryEpisode.id, interaction.memoryCandidateText, interaction.memoryTags);
     }
-    if (interaction.reply) result.response = interaction.reply;
+    if (interaction.reply) {
+      result.response = interaction.reply;
+    } else if (interaction.shouldReply === false && suggestedAction) {
+      result.response = quietInteractionResponse(primaryEvent.actionDecision.action, source);
+    }
   }
 
   for (const eventSuggestion of suggestion.events ?? []) {
@@ -286,10 +291,34 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
 
   recordMemoryResonance(profile, result);
 
-  if (suggestion.response) result.response = suggestion.response;
+  if (suggestion.response && !shouldSuppressTopLevelResponse(suggestion.interaction)) result.response = suggestion.response;
   if (primaryEpisode && result.response) {
     primaryEpisode.creatureResponse = result.response;
   }
+}
+
+function semanticActionFromInteraction(
+  interaction: NonNullable<BrainSuggestion["interaction"]>,
+  profile: CreatureProfile
+): ActionKind | undefined {
+  if (interaction.suggestedAction) return interaction.suggestedAction;
+  if (interaction.shouldReply === true) return "respond";
+  if (interaction.shouldReply === false) {
+    if (profile.state.energy < 30 || profile.policyProfile.quietTendency > 58) return "quiet";
+    return "observe";
+  }
+  return undefined;
+}
+
+function quietInteractionResponse(action: ActionKind, source: "button" | "curious_stream") {
+  if (action === "ask") return "我听见了，但这段要不要留下还需要你点头，所以我先轻轻问一句。";
+  if (action === "quiet") return "我听见了，这次先安静抱住，不急着追问或提醒你。";
+  if (source === "curious_stream") return "我先把这一小段里真正贴近你的地方抱住，不把每个背景声都拿出来说。";
+  return "我听见了，这次先轻轻抱住，不急着追问或替你生成什么。";
+}
+
+function shouldSuppressTopLevelResponse(interaction?: BrainSuggestion["interaction"]) {
+  return interaction?.shouldReply === false && !interaction.reply;
 }
 
 function applyCuriousSessionSuggestion(result: CaptureResult, suggestion: BrainSuggestion) {

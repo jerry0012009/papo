@@ -76,6 +76,7 @@ LLM owns:
 
 Guardrails always run after LLM suggestions. LLM output cannot directly mutate state values, delete memory, bypass privacy, or write cross-user data. LLM can propose actions such as `respond`, `ask`, `recall`, save, review, or reminders, but rules re-run action guardrails before persistence. Positive rule heuristics such as memory resonance or future value must not override a valid LLM interaction flow; only boundary rules such as privacy, energy, safety, and learned quietness should calibrate it.
 In the normal production path, LLM structured interaction understanding decides which business flow should be proposed. Rule keywords are allowed only as fallback repair after model unavailability/failure, and that fallback status must be visible in diagnostics.
+When the LLM returns structured interaction understanding but omits an explicit `suggestedAction`, the harness still derives a semantic default action from `shouldReply`: `true` becomes `respond`, `false` becomes quiet observation unless guardrails require asking. This prevents rule keyword heuristics such as future/reminder words from overriding a valid semantic "do not reply or remind now" judgment.
 LLM narration cannot change state, policy, action, memory ids, or persistence. Emergence narration is accepted only when it stays anchored to a real memory already selected by rules.
 Visual and audio models are treated as `sense` adapters only: they may create `image_summary` and `audio_transcript` text, but they do not choose memories, actions, or state changes. Those generated segments remain user-editable before entering Curious Mode.
 Attention is a conversation phase, not a separate product mode: user/world multimodal inputs enter the conversation timeline first, then the harness decides what Papo attends to, remembers, says, or ignores.
@@ -304,10 +305,11 @@ Done:
   - The memory page's default controls now frame the user as teaching Papo how to remember, release, or revisit a shared moment, rather than managing database records.
   - Papo's SVG Shiba avatar has a more standard cartoon Shiba silhouette: larger triangular ears, clearer urajiro forehead/face/chest, curled tail, round paws, toe marks, and softened muzzle/eye proportions.
   - Active emergence, wake resurfacing, and LLM emergence narration now share the same subjective memory normalization as the Memory page, so raw analysis phrasing cannot leak when Papo says what it remembered.
+  - LLM interaction understanding now remains authoritative even when the model omits explicit `suggestedAction`: `shouldReply=false` creates a semantic quiet/observe default before guardrails run, so future/reminder keywords cannot push Papo into reminder drafting after the model understood the user wanted no interruption.
 
 Verified:
 
-- `npm test`: 52 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
+- `npm test`: 53 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -321,6 +323,7 @@ Verified:
 - LLM invalid JSON is recorded in `semanticBrainHistory` and surfaced in Brain page diagnostics.
 - LLM action suggestions go through rule guardrails.
 - LLM action suggestions are not overwritten by positive keyword heuristics such as future value when no boundary guardrail applies.
+- LLM `shouldReply=false` interaction understanding suppresses keyword reminder flow even when the input contains future/reminder words, unless guardrails require a safer action such as asking.
 - LLM feedback narration cannot mutate rule-owned state.
 - LLM emergence narration must stay anchored to an existing long-term memory or it is rejected.
 - Curious Mode creature report uses user-life material and explains selected/ignored segments.
