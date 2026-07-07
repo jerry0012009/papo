@@ -1114,7 +1114,7 @@ function MemoryView(props: {
   const memories = props.profile.longTermMemories.filter((memory) =>
     `${memory.text} ${memory.kind} ${memory.tags.join(" ")}`.toLowerCase().includes(query.toLowerCase())
   );
-  const selfMemories = memories.filter((memory) => memory.kind === "creature_self_memory");
+  const selfMemories = memories.filter(isRaisedSelfMemory);
   const otherMemories = memories.filter((memory) => memory.kind !== "creature_self_memory");
 
   return (
@@ -2048,8 +2048,12 @@ function strongestSharedMemory(profile: CreatureProfile) {
 
 function strongestRaisedHabit(profile: CreatureProfile) {
   return profile.longTermMemories
-    .filter((memory) => memory.weight > 0 && memory.kind === "creature_self_memory" && memory.tags.includes("被你养成"))
+    .filter((memory) => memory.weight > 0 && isRaisedSelfMemory(memory))
     .sort((a, b) => b.weight - a.weight)[0];
+}
+
+function isRaisedSelfMemory(memory: CreatureProfile["longTermMemories"][number]) {
+  return memory.kind === "creature_self_memory" && memory.tags.includes("被你养成");
 }
 
 function raisedHabitSentence(memory: CreatureProfile["longTermMemories"][number]) {

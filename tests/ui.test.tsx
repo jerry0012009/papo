@@ -408,7 +408,8 @@ describe("App", () => {
       Boolean(element?.textContent?.includes("如果你能说话") && element.textContent.includes("你就说句话给我听"))
     ).length).toBeGreaterThan(0);
     expect(screen.getAllByText("你教会我").length).toBeGreaterThan(0);
-    expect(screen.getByText("我正在学习注意")).toBeInTheDocument();
+    expect(screen.getByText(/你教我不要浅浅带过/)).toBeInTheDocument();
+    expect(screen.queryByText("我正在学习注意")).not.toBeInTheDocument();
     expect(screen.queryByText("我记得比较清楚。以后聊到相近内容时，我会想起这一段。")).not.toBeInTheDocument();
     expect(screen.queryByText("我留下它，是因为这件事以后可能还会回来找你。")).not.toBeInTheDocument();
     expect(screen.queryByText((_, element) => element?.textContent === "我记得比较清楚。它以后可能会轻轻拽我一下。")).not.toBeInTheDocument();
