@@ -105,6 +105,7 @@ User-facing empty, error, and status copy is part of the creature experience too
 Feedback controls on user-facing memory and episode surfaces should sound like the user is raising Papo, not pressing admin actions. Prefer "再想一会儿", "先安静点", "帮我记住", and first-person learning echoes such as "我会..." while keeping raw feedback kinds in code/API/Brain diagnostics.
 Home should surface stable raising shape in creature language, such as what Papo has learned to do more or less often, without exposing raw policy names or numbers.
 Home presence, active emergence, body signals, and dialogue context should default to Papo speaking from inside the experience. Use first-person "我..." phrasing for what Papo noticed, remembered, learned, or is ready to do; reserve third-person observer language for Brain diagnostics or explicit user navigation labels.
+Home idle presence should be evidence-backed, not a static mood label. With a real shared memory, it can say what old small moment Papo is holding; with only feedback-shaped self-memory, it can say what listening habit the user taught; with no real shared life yet, it should plainly wait for the first text/photo/audio fragment instead of showing copy such as "好奇地贴近".
 Curious results should read like Papo choosing what to hold or let pass. Selected and ignored lines should use "我竖起耳朵" and "我先放过..." rather than report-style phrases such as "Papo 放过了".
 Memory candidates and consolidation reasons may later become user-visible long-term memories, so they must be written as shared-moment language from the start. Avoid "episode", "用户反馈这段", "我和用户", or "forget feedback" in candidate text, long-term memory text, and `consolidatedBecause`.
 Long-term memory candidates should remember a shared moment, not only an extracted fact. When Papo responded or chose a stance, the candidate should include a short "当时我回应你..." thread so future emergence can recall what Papo did with the moment.
@@ -269,6 +270,7 @@ Done:
   - Active emergence now treats feedback-shaped self-memory as a raised habit rather than an old event, and LLM emergence narration receives the same constraint before rewriting.
   - Memory cards now combine familiarity and memory type into Papo's own subjective sentence, so the default memory page reads less like a database record.
   - Home presence copy no longer labels Papo as "current mood" or explains state as calculation. It now prioritizes the latest conversation, feedback, emergence, or wake context before falling back to body-state cues.
+  - Home idle copy now uses real shared memory, raised self-memory, or an explicit "waiting for first real life fragment" state instead of falling back to static mood labels.
   - Home no longer shows raw state meters by default. It translates state into visible body signals such as ears, tail, little head, and boundaries, while Brain keeps numeric meters.
   - User-facing attention and episode cards no longer expose score contributions, numeric confidence, weight, or decision trace details. Those remain in Brain diagnostics while the default cards show Papo's attention strength, caution, memory, action, and save feeling in creature language.
   - Dialogue and shared-moment pages no longer call the user path an "attention flow" or "attention material"; they use "和 Papo 的小日常", "你递来的小片段", and "这一小段" so the interaction reads as a shared experience instead of pipeline input.
@@ -323,6 +325,7 @@ Verified:
 - Curious Mode can preserve photo upload time/place and batch text/photo/audio as one stream before attention selection.
 - Home renders Papo as an animated Shiba Inu SVG whose visible posture changes with mood, energy, curiosity, attachment, and safety.
 - Home presence copy is context-first and does not expose "current mood" or state-calculation wording.
+- Home idle copy does not fall back to a static mood label; a new Papo with no real shared memory says it is waiting for the first real text/photo/audio fragment.
 - Home topbar does not expose provider names, fallback labels, or "LLM configured" text; those diagnostics are visible in Brain only.
 - Home shows state as creature body signals rather than raw meters; numeric state remains in Brain diagnostics.
 - User-facing memory/attention pages do not expose `memory_resonance`, `decisionTrace`, numeric `weight`, or numeric `confidence`; Brain keeps technical diagnostics.

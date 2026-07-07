@@ -1973,18 +1973,6 @@ function NavButton(props: { active: boolean; icon: typeof Brain; label: string; 
   );
 }
 
-function moodText(mood: CreatureState["mood"]) {
-  const map = {
-    curious: "好奇地贴近",
-    calm: "安静地陪着",
-    attached: "更想靠近你",
-    careful: "谨慎地观察",
-    tired: "有点低电量",
-    bright: "亮起来了"
-  };
-  return map[mood];
-}
-
 function stateHeadline(profile: CreatureProfile) {
   const latest = profile.conversation?.[0];
   if (latest?.role === "papo") {
@@ -1995,8 +1983,8 @@ function stateHeadline(profile: CreatureProfile) {
   }
   if (latest?.role === "user" || latest?.role === "world") return "刚收到你递来的一小段";
   const wake = profile.wakeHistory?.[0];
-  if (wake && wake.elapsedMinutes >= 60) return "刚从小睡里醒来";
-  return restingHeadline(profile.state);
+  if (wake) return wake.elapsedMinutes >= 60 ? "刚从小睡里醒来" : "刚抬头看见你";
+  return restingHeadline(profile);
 }
 
 function stateSentence(profile: CreatureProfile) {
@@ -2011,6 +1999,11 @@ function stateSentence(profile: CreatureProfile) {
   if (latestChange?.reason.includes("button capture")) return "刚才那句话让我竖起耳朵，身体还留着一点被你叫住后的反应。";
   if (latestChange?.reason.includes("feedback")) return "我刚被你养成了一点，之后遇到相似片段会更接近你的意思。";
   if (latestChange?.reason.includes("wake")) return "这次重新见到你以后，我先稳住自己，再把耳朵留给新的小片段。";
+  const memory = strongestSharedMemory(profile);
+  if (memory) return `我还抱着这段旧小事：${normalizeMemoryText(memory.text)}。下一段相近的生活靠近时，我会先轻轻想起它。`;
+  const raisedMemory = strongestRaisedMemory(profile);
+  if (raisedMemory) return `你教过我的这点还在身体里：${normalizeMemoryText(raisedMemory.text)}。我会带着这种听法等你下一段。`;
+  if (!profile.episodes.length) return "我还没有和你攒下真实生活片段，所以先把耳朵留给你接下来递来的文字、照片或声音。";
   if (state.energy < 35) return "我会短一点回应，把重要片段先抱住，等有力气再展开。";
   if (state.safety > 74) return "我会先闻一闻边界，隐私和长期保存都会更谨慎。";
   if (state.curiosity > 72) return "我的耳朵现在更容易被新主题牵动，但还是会挑最值得在意的那一小段。";
@@ -2018,14 +2011,30 @@ function stateSentence(profile: CreatureProfile) {
   return "我正安静陪着你，先观察，再决定要不要靠近。";
 }
 
-function restingHeadline(state: CreatureState) {
+function restingHeadline(profile: CreatureProfile) {
+  if (strongestSharedMemory(profile)) return "抱着一小段旧事";
+  if (strongestRaisedMemory(profile)) return "带着你教过的听法";
+  if (!profile.episodes.length) return "等第一段生活靠近";
+  const state = profile.state;
   if (state.energy < 35) return "趴着听你";
   if (state.safety > 74) return "先小心闻一闻";
   if (state.attachment > 68) return "身体往你这边靠";
   if (state.confidence > 70 && state.energy > 55) return "眼睛亮了一点";
   if (state.arousal < 36) return "安静贴着这一刻";
   if (state.curiosity > 62) return "耳朵正朝着你";
-  return moodText(state.mood);
+  return "安静等你靠近";
+}
+
+function strongestSharedMemory(profile: CreatureProfile) {
+  return profile.longTermMemories
+    .filter((memory) => memory.weight > 0 && memory.kind !== "creature_self_memory" && Boolean(memory.sourceEpisodeId))
+    .sort((a, b) => b.weight - a.weight)[0];
+}
+
+function strongestRaisedMemory(profile: CreatureProfile) {
+  return profile.longTermMemories
+    .filter((memory) => memory.weight > 0 && memory.kind === "creature_self_memory" && memory.tags.includes("被你养成"))
+    .sort((a, b) => b.weight - a.weight)[0];
 }
 
 function dogMotionText(state: CreatureState) {

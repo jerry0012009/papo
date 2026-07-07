@@ -9,6 +9,46 @@ describe("App", () => {
     vi.unstubAllGlobals();
   });
 
+  it("renders a new Papo as waiting for real shared life, not a static mood label", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/provider")) {
+        return json({
+          kind: "fallback",
+          name: "Fallback demo brain",
+          available: true,
+          usesRealModel: false,
+          diagnostics: { textProvider: "fallback", visionProvider: "fallback", audioProvider: "fallback", audioRoute: "fallback" }
+        });
+      }
+      if (url.endsWith("/api/profiles") && init?.method === "POST") return json({ profile: blankProfileFixture() }, 201);
+      if (url.endsWith("/api/profiles/u-empty/wake")) {
+        return json({
+          profile: blankProfileFixture(),
+          wake: {
+            id: "wake-empty",
+            at: new Date().toISOString(),
+            elapsedMinutes: 0,
+            message: "我刚刚醒着，你一打开我就还在这里。",
+            innerThought: "",
+            relatedMemoryIds: [],
+            stateDelta: {},
+            ruleTrace: ["elapsed_minutes=0", "state_delta=none"]
+          }
+        });
+      }
+      if (url.endsWith("/api/profiles")) return json({ profiles: [] });
+      return json({ profile: blankProfileFixture() });
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("等第一段生活靠近")).toBeInTheDocument());
+    expect(screen.getByText("我还没有和你攒下真实生活片段，所以先把耳朵留给你接下来递来的文字、照片或声音。")).toBeInTheDocument();
+    expect(screen.queryByText("好奇地贴近")).not.toBeInTheDocument();
+    expect(screen.queryByText("当前心情")).not.toBeInTheDocument();
+  });
+
   it("renders the core mobile-first workbench", async () => {
     let curiousRequest: { segments?: Array<{ kind: string; batchId?: string; content: string }> } | undefined;
     const feedbackRequests: Array<{ kind: string; targetId?: string; content?: string; modality?: string }> = [];
@@ -301,6 +341,51 @@ describe("App", () => {
 
 function json(body: unknown, status = 200) {
   return Promise.resolve(new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } }));
+}
+
+function blankProfileFixture() {
+  return {
+    userId: "u-empty",
+    creatureName: "Papo",
+    createdAt: new Date().toISOString(),
+    lastSeenAt: new Date().toISOString(),
+    state: {
+      curiosity: 66,
+      attachment: 42,
+      energy: 72,
+      arousal: 45,
+      safety: 58,
+      confidence: 48,
+      mood: "curious"
+    },
+    episodes: [],
+    longTermMemories: [
+      {
+        id: "seed-memory",
+        createdAt: new Date().toISOString(),
+        kind: "creature_self_memory",
+        text: "我正在学习先注意、再记住、再根据反馈改变自己，而不是只做一个聊天框。",
+        weight: 62,
+        tags: ["注意", "记忆", "反馈", "小脑袋"]
+      }
+    ],
+    feedbackHistory: [],
+    stateChanges: [],
+    policyProfile: {
+      preferDepth: 45,
+      preferProactivity: 45,
+      privacySensitivity: 55,
+      saveThreshold: 70,
+      askThreshold: 58,
+      recallTendency: 50,
+      quietTendency: 35
+    },
+    memoryCandidates: [],
+    emergenceHistory: [],
+    wakeHistory: [],
+    semanticBrainHistory: [],
+    conversation: []
+  };
 }
 
 function profileFixture() {
