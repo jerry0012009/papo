@@ -40,6 +40,15 @@ try {
   assert.equal(trace.modelRuns.some((run) => run.stage === "action" && run.status === "applied"), true);
   assert.equal(trace.modelRuns.some((run) => run.stage === "harness" && run.status === "applied"), true);
 
+  const recallCapture = await post<any>(`/profiles/${userId}/button`, { text: "上一句话我刚才说了什么？请直接回答。" });
+  assert.ok(recallCapture.response?.trim(), "context follow-up should produce a visible reply");
+  assert.match(recallCapture.response, /游泳|泳池|人太多|晚上/i, "context follow-up should use recent conversation instead of a fixed template");
+  const afterRecall = await store.getProfile(userId);
+  const recallTrace = afterRecall?.conversation.find((message) => message.role === "papo" && message.text === recallCapture.response)?.cognitionTrace;
+  assert.ok(recallTrace, "context follow-up reply should carry cognition trace");
+  assert.equal(recallTrace.modelRuns.some((run) => run.stage === "attention" && run.status === "applied"), true);
+  assert.equal(recallTrace.modelRuns.some((run) => run.stage === "action" && run.status === "applied"), true);
+
   const keptEpisode = trace.episodeDecisions?.find((episode) => episode.kept);
   assert.ok(keptEpisode, "explicit remember request should keep an episode");
   const feedback = await post<any>(`/profiles/${userId}/feedback`, {

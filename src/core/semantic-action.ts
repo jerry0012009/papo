@@ -119,10 +119,10 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
       episode.actionResult = actionResult;
       if (decision.userIntent) episode.possibleIntent = safeProcessText(decision.userIntent, episode.possibleIntent) ?? episode.possibleIntent;
       if (decision.reason) episode.importanceReason = safeProcessText(decision.reason, episode.importanceReason) ?? episode.importanceReason;
-      const reply = safeExternalText(decision.reply, event.triggerContent);
+      const reply = safeExternalText(decision.reply);
       if (reply && decision.reply) episode.creatureResponse = reply;
       if (decision.memoryTags?.length) episode.tags = decision.memoryTags;
-      const reaction = safeExternalText(decision.visibleReaction, event.triggerContent);
+      const reaction = safeExternalText(decision.visibleReaction);
       if (reaction) {
         const baseExperience = episode.creatureExperience ?? event.creatureExperience;
         episode.creatureExperience = {
@@ -135,7 +135,7 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
     }
 
     if (event.id === result.events[0]?.id) {
-      const reply = safeExternalText(decision.reply, event.triggerContent);
+      const reply = safeExternalText(decision.reply);
       if (reply && decision.reply && decision.shouldReply !== false) result.response = reply;
       if (decision.shouldReply === false && !decision.reply) {
         result.response = "";
@@ -250,13 +250,12 @@ function validRelatedMemoryIds(profile: CreatureProfile, ids?: string[]) {
   return [...new Set(ids)].filter((id) => allowed.has(id)).slice(0, 6);
 }
 
-function safeExternalText(text?: string, sourceText?: string) {
+function safeExternalText(text?: string) {
   const normalized = safeProcessText(text);
   if (!normalized) {
     if (text?.trim()) throw new Error("model returned invalid visible text");
     return undefined;
   }
-  if (containsFullInputEcho(normalized, sourceText)) throw new Error("model echoed the full user input in visible reply");
   return normalized;
 }
 
@@ -266,18 +265,6 @@ function safeProcessText(text?: string, previousText?: string) {
   const normalized = normalizeSharedMemoryText(raw).trim();
   if (!normalized) return previousText;
   return normalized;
-}
-
-function containsFullInputEcho(reply: string, sourceText?: string) {
-  const input = compactText(sourceText);
-  const output = compactText(reply);
-  if (input.length < 22 || output.length < 80) return false;
-  if (output.includes(input)) return true;
-  return output.includes(input.slice(0, 18)) && output.includes(input.slice(-10));
-}
-
-function compactText(text?: string) {
-  return (text ?? "").replace(/[，。！？、\s:：,.!?]/g, "");
 }
 
 function trimSentence(text: string) {
@@ -327,6 +314,7 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - 如果你只是想当下陪用户聊一句，不要把它送进记忆候选；如果这段输入没有可用生活信息，也可以选择不说话。
 - observe 和 quiet 表示不说话，不能同时填写 reply 或 shouldReply=true；如果要说话，请选择 respond、ask、recall、review、draft_reminder 或 draft_question_list。
 - draft_reminder 和 draft_question_list 是有结构化产物的动作，不能只写 reply。必须在 actionResult 里返回草稿内容；reply 是 Papo 对用户说出口的自然短回应。
+- 不要默认复述整段用户输入；但如果用户明确要求重复、确认原话或询问上一句话，可以自然引用必要原文。
 
 返回严格 JSON：
 {
