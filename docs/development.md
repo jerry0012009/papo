@@ -120,6 +120,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - When there are no candidate memories, emergence still uses a compact model call that must choose quiet; this is not a local fake quiet response.
 - Quiet emergence must not create a blank or fake Papo conversation message. `/emergence` returns the cognition trace with the response so Brain Mode can inspect the model decision even when there is no visible behavior.
 - Feedback capture records the user's teaching. Explicit forget still performs the storage-layer weight/drop operation, but remembering, importance, reminder intent, memory correction, memory promotion, soft dismissal, state changes, policy changes, learning language, and creature self-memory must come from `semanticReflectFeedback`.
+- Creature self-memory created from feedback must use model-provided text, tags, consolidation reason, and weight. Rules may dedupe and clamp values, but must not inject hardcoded semantic tags or creature-voice explanations.
 - Memory correction uses `FeedbackKind=correct`; for a long-term memory target, the feedback model must return `memoryOperation.update_memory` with corrected text before the stored memory changes.
 - Feedback reflection may store internal learning notes and policy/state deltas, but ordinary chat only shows `replyText` when the model chooses a visible response.
 - If the model chooses a visible action such as `respond`, `ask`, `recall`, or `review`, a visible reply is required.

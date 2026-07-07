@@ -71,7 +71,9 @@ const semanticFeedbackSchema = z
     creatureSelfMemory: optionalObject(z
       .object({
         text: optionalText(420),
-        tags: optionalTextArray(8, 40)
+        tags: optionalTextArray(8, 40),
+        consolidatedBecause: optionalText(360),
+        weight: z.number().min(0).max(100).optional()
       })),
     memoryOperation: optionalObject(z
       .object({
@@ -284,15 +286,19 @@ function upsertSemanticFeedbackSelfMemory(
 ) {
   const safeText = safeCreatureText(memory.text);
   if (!safeText) return;
-  const tags = safeStoredTags(["被你养成", "模型反馈学习", ...(memory.tags ?? [])]);
+  const tags = safeStoredTags(memory.tags ?? []);
   const sourceEpisodeId = targetEpisode?.id ?? targetLongTerm?.sourceEpisodeId;
+  const normalizedText = normalizeSharedMemoryText(safeText);
   const existing = profile.longTermMemories.find(
-    (item) => item.kind === "creature_self_memory" && item.tags.includes("模型反馈学习") && sourceEpisodeId && item.sourceEpisodeId === sourceEpisodeId
+    (item) =>
+      item.kind === "creature_self_memory" &&
+      ((sourceEpisodeId && item.sourceEpisodeId === sourceEpisodeId) || normalizeSharedMemoryText(item.text) === normalizedText)
   );
   if (existing) {
-    existing.text = normalizeSharedMemoryText(safeText);
-    existing.weight = Math.min(100, existing.weight + 8);
-    existing.tags = safeStoredTags([...existing.tags, ...tags]);
+    existing.text = normalizedText;
+    existing.weight = Math.max(0, Math.min(100, Math.round(memory.weight ?? Math.min(100, existing.weight + 8))));
+    if (tags.length) existing.tags = safeStoredTags([...existing.tags, ...tags]);
+    if (memory.consolidatedBecause) existing.consolidatedBecause = safeCreatureText(memory.consolidatedBecause) ?? existing.consolidatedBecause;
     existing.lastReferencedAt = feedback.at;
     return;
   }
@@ -300,11 +306,11 @@ function upsertSemanticFeedbackSelfMemory(
     id: makeId("ltm"),
     createdAt: feedback.at,
     kind: "creature_self_memory",
-    text: normalizeSharedMemoryText(safeText),
+    text: normalizedText,
     sourceEpisodeId,
-    weight: 68,
+    weight: Math.max(0, Math.min(100, Math.round(memory.weight ?? 68))),
     tags,
-    consolidatedBecause: "这次反馈让我更认识自己该怎么靠近你。"
+    consolidatedBecause: safeCreatureText(memory.consolidatedBecause)
   });
 }
 
@@ -396,8 +402,12 @@ function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: Feedbac
   const targetEpisode = profile.episodes.find((item) => item.id === feedback.targetId);
   const targetLongTerm = profile.longTermMemories.find((item) => item.id === feedback.targetId);
   const previousFeedback = profile.feedbackHistory.filter((item) => item.id !== feedback.id);
-  const feedbackPrivacyHigh = false;
-  const targetPrivacyHigh = false;
+  const feedbackPrivacyHigh = hasHighPrivacyText(feedback.inputText);
+  const targetPrivacyHigh = targetEpisode
+    ? hasHighPrivacyText(`${targetEpisode.inputSummary} ${targetEpisode.possibleIntent} ${targetEpisode.importanceReason} ${targetEpisode.creatureResponse}`)
+    : targetLongTerm
+      ? hasHighPrivacyText(targetLongTerm.text)
+      : false;
   return `请作为 Papo 的反馈反思脑，根据这次用户反馈，决定 Papo 应该怎样被养成。
 
 系统只记录了这次反馈和目标对象。你可以在护栏内决定：
@@ -411,7 +421,7 @@ JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 - learningNote：内部学习记录，不给普通用户直接展示；不要写成前端说明或字段解释。
 - followUpText：内部追问意图记录，不给普通用户直接展示。
 - replyText：如果 responseAction 不是 quiet，写一句 Papo 可以直接对用户说的自然短回应；不要解释内部状态、字段、阈值或流程。
-- creatureSelfMemory：如果这次反馈体现了用户正在训练 Papo 的长期回应习惯，写成一条 Papo 自己的成长记忆。
+- creatureSelfMemory：如果这次反馈体现了用户正在训练 Papo 的长期回应习惯，写成一条 Papo 自己的成长记忆；text、tags、consolidatedBecause、weight 都由你决定。
 
 memoryOperation 使用口径：
 - promote_episode：用户明确要求记住某个 episode，或反馈文本把某个经历补准到值得长期记住。必须给 text 和 kind。
@@ -442,7 +452,7 @@ memoryOperation 使用口径：
   "followUpText":"...",
   "replyText":"...",
   "effect":"...",
-  "creatureSelfMemory":{"text":"...", "tags":["..."]},
+  "creatureSelfMemory":{"text":"...", "tags":["..."], "consolidatedBecause":"...", "weight":68},
   "memoryOperation":{
     "type":"promote_episode",
     "text":"...",
