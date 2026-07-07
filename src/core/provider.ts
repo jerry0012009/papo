@@ -200,6 +200,7 @@ function openAiCompatibleProvider(input: {
     },
     async generateJson<T>(prompt: string) {
       const payload = await callChatCompletions(input, prompt, true);
+      if (!payload.content.trim()) throw new Error("Model provider returned empty JSON content");
       return parseJson<T>(payload.content);
     },
     async summarizeImage(dataUrl: string, prompt: string) {
@@ -449,7 +450,13 @@ function parseJson<T>(text: string): T | undefined {
       // Try the next exact JSON candidate from the model output.
     }
   }
-  return undefined;
+  throw new Error(`Model provider returned invalid JSON content (${jsonDiagnostic(text)})`);
+}
+
+function jsonDiagnostic(text: string) {
+  const compact = text.replace(/\s+/g, " ").trim();
+  if (!compact) return "empty";
+  return `length=${text.length}, prefix=${JSON.stringify(compact.slice(0, 120))}`;
 }
 
 function extractJsonBlocks(text: string) {

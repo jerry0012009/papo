@@ -91,6 +91,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 ## Current Implementation Notes
 
 - The provider layer throws when credentials are missing.
+- `generateJson` must distinguish empty model content from invalid JSON content. Invalid JSON is a provider/model contract failure, not an empty result.
 - Sensing endpoints call real model providers directly. Image/audio failures return errors.
 - The semantic harness strips rule-created visible drafts before model action/wording. Papo's final visible reply must come from a model.
 - `attention.ts` creates neutral candidates only. It must not write creature-facing replies, semantic "noticed" explanations, keyword tags, related-memory guesses, curious reports, or mixed-preference dialogue.
