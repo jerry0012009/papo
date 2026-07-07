@@ -156,6 +156,20 @@ export function createHermesBridge(input: { store: ProfileStore; provider: Model
 
 function createCliHermesBridge(input: { store: ProfileStore; provider: ModelProvider }, env: NodeJS.ProcessEnv): HermesBridge {
   const command = env.PAPO_HERMES_CLI_PATH ?? "hermes";
+  const userQueues = new Map<string, Promise<void>>();
+
+  function enqueueCliRun(userId: string, taskId: string) {
+    const previous = userQueues.get(userId) ?? Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(() => runCliTask(userId, taskId))
+      .finally(() => {
+        if (userQueues.get(userId) === next) userQueues.delete(userId);
+      });
+    userQueues.set(userId, next);
+    void next;
+  }
+
   async function runCliTask(userId: string, taskId: string) {
     const profile = await input.store.getProfile(userId);
     const task = profile?.hermes.tasks.find((item) => item.id === taskId);
@@ -216,7 +230,7 @@ function createCliHermesBridge(input: { store: ProfileStore; provider: ModelProv
       profile.hermes.tasks.unshift(...tasks);
       profile.hermes.tasks = profile.hermes.tasks.slice(0, 30);
       await input.store.saveProfile(profile);
-      for (const task of tasks) void runCliTask(profile.userId, task.id);
+      for (const task of tasks) enqueueCliRun(profile.userId, task.id);
       return tasks;
     },
     start() {},
