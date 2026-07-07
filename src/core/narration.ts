@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { composeFeedbackReplyText } from "./feedback";
+import { normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
 import type { CreatureProfile, EmergenceRecord, FeedbackRecord, LongTermMemory } from "./types";
 
@@ -120,7 +121,7 @@ ${JSON.stringify({
 })}
 
 related_memory:
-${JSON.stringify(memory ? { id: memory.id, kind: memory.kind, text: memory.text, tags: memory.tags } : null)}
+${JSON.stringify(memory ? { id: memory.id, kind: memory.kind, text: normalizeSharedMemoryText(memory.text), tags: memory.tags } : null)}
 
 current_state:
 ${JSON.stringify(profile.state)}

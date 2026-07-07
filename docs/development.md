@@ -93,6 +93,7 @@ Active emergence treats zero-weight memories as unavailable: a memory that has b
 Active emergence must not treat seed self-memory as a shared old experience. A memory produced from a real episode may support emergence even if its kind is `creature_self_memory`; if no positive-weight shared memory exists, Papo may express readiness or inner state, but it must not pretend to remember an old moment.
 Feedback-shaped `creature_self_memory` is allowed to support active emergence as "how you have raised me". Rule narration and LLM narration must describe it as a learned habit, listening style, or boundary sense, not as a normal old event.
 Active emergence should prove honesty through structure, not self-explanation. If no memory is related, keep `relatedMemoryIds` empty and say Papo is waiting for the next real fragment; do not show user-facing phrases such as "不装作" or "装成".
+Active emergence and wake resurfacing must treat persisted memory text as raw material, just like the memory page. Before a remembered fragment is spoken back to the user or sent into LLM narration context, normalize legacy/model phrases such as "我先试着理解", "当前事件", "用户确认", "旧记忆", and "保存意图" into Papo's subjective memory language.
 Unread dialogue state is a perception layer for new Papo utterances, not an action planner: rules decide persisted `papo` messages, while the UI only shows a small unread dot on the dialogue entry. Wake notes are presence state and do not create unread notifications.
 Internal channel names, memory kinds, batch ids, and numeric weights are developer facts. User-facing dialogue and memory pages should default to natural creature language; raw `channel`, `kind`, `batchId`, and `weight` belong in details or Brain views.
 The memory page is Papo's subjective remembering surface. It should use first-person creature language for what Papo is holding, how familiar the memory feels, why it kept the moment, and how the user can help it remember accurately or let go. Hiding technical fields is necessary but not sufficient UX; raw phrases such as "用户希望小动物..." must become subjective memory such as "你希望我...".
@@ -302,10 +303,11 @@ Done:
   - Memory page tone now has a shared subjective-normalization path instead of isolated copy patches: raw model/rule phrases such as "我先试着理解", "当前事件", "用户确认", "保存意图", and "旧记忆" are translated before rendering or correction dialogue uses them.
   - The memory page's default controls now frame the user as teaching Papo how to remember, release, or revisit a shared moment, rather than managing database records.
   - Papo's SVG Shiba avatar has a more standard cartoon Shiba silhouette: larger triangular ears, clearer urajiro forehead/face/chest, curled tail, round paws, toe marks, and softened muzzle/eye proportions.
+  - Active emergence, wake resurfacing, and LLM emergence narration now share the same subjective memory normalization as the Memory page, so raw analysis phrasing cannot leak when Papo says what it remembered.
 
 Verified:
 
-- `npm test`: 50 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
+- `npm test`: 52 tests passing across core, v0.2 brain behavior, Goal 3 acceptance/experience, API, and UI.
 - `npm run build`: TypeScript and production build passing.
 - Dev API health returns 200.
 - Dev web entry returns 200.
@@ -368,6 +370,7 @@ Verified:
 - Guided Demo Mode's two-creature section displays how feedback changed their behavior and personality on the same input without exposing policy numbers.
 - `npm run test:e2e`: Playwright Chromium desktop/mobile visual smoke passes for the Shiba avatar, memory page, conversation timeline, source-linked episode card, unread dialogue dot, feedback input, and Curious recording entry.
 - Tests protect active emergence and wake resurfacing from template-reminder or self-audit phrases such as "不是提醒", "内在倾向", "下一次你给我信息流", "不装作", and "装成".
+- Tests protect active emergence and wake resurfacing from leaking raw model-analysis memory text such as "我先试着理解", "当前事件", "用户", "小动物", "旧记忆", "保存意图", and "情景片段".
 - UI and visual smoke protect the memory page's first-person creature voice and ensure raw memory diagnostics or model-analysis phrases stay out of the default surface.
 - UI and visual smoke protect the companionship path from raw source ids and type dropdowns on user-facing pages.
 - UI smoke protects the demo entry from "一键准备" and numbered-scene copy.

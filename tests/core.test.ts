@@ -192,6 +192,25 @@ describe("creature core", () => {
     expect(profile.longTermMemories.find((memory) => memory.id === wake.relatedMemoryIds[0])?.tags).toContain("被你养成");
   });
 
+  it("wake resurfacing speaks normalized creature memory instead of raw analysis text", () => {
+    const profile = createCreatureProfile({ now: "2026-07-06T06:00:00.000Z" });
+    profile.lastSeenAt = "2026-07-06T06:00:00.000Z";
+    profile.longTermMemories.unshift({
+      id: "ltm_raw_llm_memory",
+      createdAt: "2026-07-06T06:01:00.000Z",
+      kind: "future_review",
+      text: "我先试着理解：我注意到这个片段可能是你想让我认真理解的当前事件：如果你能说话 你就说句话给我听。我还没有强烈联想到旧记忆，所以先把它作为新的情景片段。这段需要用户确认，尤其是隐私、情绪或保存意图还不够明确。",
+      weight: 80,
+      tags: ["说话", "确认"]
+    });
+
+    const wake = wakeCreature(profile, "2026-07-06T08:00:00.000Z");
+
+    expect(wake.innerThought).toContain("你刚递给我的这件小事");
+    expect(wake.innerThought).toContain("这段我会先放轻一点");
+    expect(wake.innerThought).not.toMatch(/我先试着理解|当前事件|用户|小动物|旧记忆|保存意图|情景片段/);
+  });
+
   it("remember promotes an episode to long-term memory", () => {
     const profile = createCreatureProfile();
     handleButtonCapture(profile, "用户更喜欢我解释自己为什么注意到某件事。");
@@ -296,6 +315,25 @@ describe("creature core", () => {
     expect(profile.longTermMemories.some((memory) => memory.id === emergence.memoryId && memory.kind !== "creature_self_memory" && memory.weight > 0)).toBe(true);
     expect(emergence.text).toContain("我想起了");
     expect(emergence.text).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|我浮现的是/);
+  });
+
+  it("active emergence speaks normalized creature memory instead of raw analysis text", () => {
+    const profile = createCreatureProfile();
+    profile.state.curiosity = 86;
+    profile.longTermMemories.unshift({
+      id: "ltm_raw_active_memory",
+      createdAt: "2026-07-06T06:01:00.000Z",
+      kind: "future_review",
+      text: "我先试着理解：我注意到这个片段可能是你想让我认真理解的当前事件：如果你能说话 你就说句话给我听。我还没有强烈联想到旧记忆，所以先把它作为新的情景片段。这段需要用户确认，尤其是隐私、情绪或保存意图还不够明确。",
+      weight: 86,
+      tags: ["说话", "确认"]
+    });
+
+    const emergence = createActiveEmergence(profile);
+
+    expect(emergence.text).toContain("你刚递给我的这件小事");
+    expect(emergence.text).toContain("这段我会先放轻一点");
+    expect(emergence.text).not.toMatch(/我先试着理解|当前事件|用户|小动物|旧记忆|保存意图|情景片段/);
   });
 
   it("active emergence treats feedback-shaped self-memory as a raised habit, not an old event", () => {
