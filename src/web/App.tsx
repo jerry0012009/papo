@@ -1757,19 +1757,21 @@ function FeedbackImpactCard({ feedback }: { feedback: FeedbackRecord }) {
   const policyDeltas = feedback.policyDeltas ?? [];
   const changes = feedbackChangeLines(stateDeltas, policyDeltas);
   const learning = visibleCreatureText(feedback.replyText ?? feedback.learningNote);
-  if (!changes.length) return null;
+  if (!learning) return null;
   return (
     <section className="feedback-impact">
       <strong>我接住了你的反馈</strong>
       <p>{learning}</p>
-      <details className="episode-flow compact-flow">
-        <summary>这次怎么影响我</summary>
-        <div>
-          {changes.map((line) => (
-            <span key={line}>{line}</span>
-          ))}
-        </div>
-      </details>
+      {changes.length ? (
+        <details className="episode-flow compact-flow">
+          <summary>这次怎么影响我</summary>
+          <div>
+            {changes.map((line) => (
+              <span key={line}>{line}</span>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </section>
   );
 }
@@ -1827,7 +1829,7 @@ function feedbackChangeLines(
   if ((state.get("energy") ?? 0) < 0) {
     lines.push("我刚认真用过一点力，接下来会先少说一点。");
   }
-  return lines.length ? [...new Set(lines)] : ["你的反馈会影响我后面的回应方式。"];
+  return [...new Set(lines)];
 }
 
 function emergenceDriveText(drive: string) {

@@ -149,7 +149,23 @@ describe("App", () => {
         });
       }
       if (url.endsWith("/api/profiles/u1/feedback")) {
-        feedbackRequests.push(JSON.parse(String(init?.body ?? "{}")));
+        const requestBody = JSON.parse(String(init?.body ?? "{}"));
+        feedbackRequests.push(requestBody);
+        if (requestBody.kind === "forget") {
+          return json({
+            profile: profileWithFeedback(),
+            feedback: {
+              id: "feedback-forget",
+              at: new Date().toISOString(),
+              kind: "forget",
+              targetId: requestBody.targetId,
+              inputText: requestBody.content,
+              inputModality: requestBody.modality,
+              effect: "你让我放下它，我会让这段变轻，也更小心守住边界。",
+              learningNote: "我学到：这件事先不要主动提起，我会把它放轻一点。"
+            }
+          });
+        }
         return json({
           profile: profileWithFeedback(),
           feedback: {
@@ -409,6 +425,10 @@ describe("App", () => {
         modality: "text"
       })
     );
+    await userEvent.click(screen.getByRole("button", { name: "首页" }));
+    expect(screen.getByText("我学到：这件事先不要主动提起，我会把它放轻一点。")).toBeInTheDocument();
+    expect(screen.queryByText("这次怎么影响我")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "记忆" }));
     expect(screen.queryByText("future_review · 权重 80")).not.toBeInTheDocument();
     expect(screen.queryByText("future_review · weight 80")).not.toBeInTheDocument();
     expect(screen.queryByText("记忆细节")).not.toBeInTheDocument();
