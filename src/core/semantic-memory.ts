@@ -144,7 +144,7 @@ function recordMemorySemanticRun(profile: CreatureProfile, provider: ModelProvid
 
 function buildSemanticMemoryPrompt(profile: CreatureProfile, candidates: MemoryCandidate[]) {
   const episodesById = new Map(profile.episodes.map((episode) => [episode.id, episode]));
-  return `请作为 Papo 的记忆决策脑，在规则层给出的候选记忆上做具体判断。
+  return `请作为 Papo 的记忆决策脑，在这次真实互动形成的候选记忆上做具体判断。
 
 你可以决定：
 - 这条候选是否应该保留为候选。
@@ -152,9 +152,9 @@ function buildSemanticMemoryPrompt(profile: CreatureProfile, candidates: MemoryC
 - 它属于哪种 memoryKind：user_preference, long_theme, creature_self_memory, safety_rule, future_review, relationship, habit, open_question。
 - confidence、writePolicy、whyConsolidate、privacyReason、decayPolicy、tags。
 
-规则会校验：
+护栏会校验：
 - candidateId 必须来自候选列表。
-- shouldKeepCandidate=true 时必须给出 candidateText；这是 Papo 真正会留下的记忆候选文本，不能依赖 ruleCandidateText。
+- shouldKeepCandidate=true 时必须给出 candidateText；这是 Papo 真正会留下的记忆候选文本，不能依赖系统预填文本。
 - shouldKeepCandidate=false 时必须给出 whyConsolidate 说明为什么不留下。
 - 隐私高的内容不能 auto 保存。
 - 隐私高时必须给出不泄露具体秘密的 candidateText 和 privacyReason，并把 writePolicy 设为 ask_user 或 do_not_save。
@@ -204,12 +204,12 @@ ${JSON.stringify(candidates.map((candidate) => {
   const privacyHigh = hasPrivacyRisk(`${candidate.candidateText} ${episode?.inputSummary ?? ""} ${episode?.noticed ?? ""}`);
   return {
     candidateId: candidate.id,
-    ruleCandidateText: modelSafeMemoryText(candidate.candidateText, privacyHigh),
+    systemCandidateText: modelSafeMemoryText(candidate.candidateText, privacyHigh),
     contentHiddenForPrivacy: privacyHigh,
-    ruleMemoryKind: candidate.memoryKind,
-    ruleConfidence: candidate.confidence,
-    ruleWritePolicy: candidate.writePolicy,
-    ruleWhyConsolidate: candidate.whyConsolidate,
+    systemMemoryKind: candidate.memoryKind,
+    systemConfidence: candidate.confidence,
+    systemWritePolicy: candidate.writePolicy,
+    systemWhyConsolidate: candidate.whyConsolidate,
     sourceEpisode: episode
       ? {
           id: episode.id,

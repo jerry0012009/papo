@@ -40,14 +40,3 @@ export function extractTags(text: string): string[] {
   }
   return [...tags].slice(0, 10);
 }
-
-export function keywordOverlap(a: string[], b: string[]): number {
-  if (!a.length || !b.length) return 0;
-  const bSet = new Set(b);
-  return a.filter((tag) => bSet.has(tag)).length;
-}
-
-export function includesAny(text: string, words: string[]): boolean {
-  const lower = text.toLowerCase();
-  return words.some((word) => lower.includes(word));
-}

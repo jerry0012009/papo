@@ -4,6 +4,7 @@ import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
+import { applyStateDelta } from "./state";
 import type { CaptureResult, CreatureProfile } from "./types";
 
 const optionalText = (max: number) =>
@@ -124,12 +125,20 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
 
   const episodes = events.map((event) => createEpisodeFromEvent(event, composeCreatureResponse(profile, event), now));
   profile.episodes.unshift(...episodes);
+  if (events.length) {
+    applyStateDelta(
+      profile,
+      { curiosity: 5, energy: -4 - Math.max(0, events.length - 1), arousal: events.length > 1 ? 4 : 1, attachment: 1 },
+      "model selected curious stream attention",
+      now
+    );
+  }
   const memoryCandidates = episodes.map((episode) => createMemoryCandidateFromEpisode(profile, episode, { now }));
 
   result.events = events;
   result.episodes = episodes;
   result.memoryCandidates = memoryCandidates;
-  result.attentionCandidates = candidates.map((candidate) => ({ ...candidate, selectedByRules: selectedIds.has(candidate.segment.id) }));
+  result.attentionCandidates = candidates.map((candidate) => ({ ...candidate, selectedByModel: selectedIds.has(candidate.segment.id) }));
   session.selected = selectedFromModel.map((candidate) => ({
     segmentId: candidate.segment.id,
     label: candidate.segment.label,
@@ -207,15 +216,15 @@ function recordAttentionSemanticRun(profile: CreatureProfile, provider: ModelPro
 }
 
 function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureResult) {
-  return `请作为 Papo 的注意决策脑，从这一组候选生活片段里决定 Papo 此刻要认真回应哪几段。
+  return `请作为 Papo 的注意决策脑，从这一组真实输入片段里决定 Papo 此刻要认真回应哪几段。
 
-规则层已经整理了候选、基础分数、隐私线索、旧记忆关系和注意预算。你负责具体判断：
+系统已经整理了候选片段、隐私线索和注意预算。你负责具体判断：
 - 哪些段值得注意。
 - 哪些段应该暂时略过。
 - 为什么。
 - 如果都只是背景声，可以 shouldAttend=false。
 
-规则会校验：
+护栏会校验：
 - selected.segmentId 必须来自 candidates。
 - selected 数量不能超过 attentionBudget。
 - 高隐私片段不能被强行选中。
@@ -258,8 +267,8 @@ ${JSON.stringify((result.attentionCandidates ?? []).map((candidate) => ({
   label: candidate.segment.label,
   content: modelSafeSegmentContent(candidate.segment.content),
   contentHiddenForPrivacy: isHighPrivacySegmentContent(candidate.segment.content),
-  selectedByRules: candidate.selectedByRules,
-  scoreTotal: candidate.score.total,
+  alreadySelected: candidate.selectedByModel,
+  pacingScore: candidate.score.total,
   privacyRisk: candidate.score.privacyRisk,
   relatedIds: candidate.score.relatedIds,
   tags: modelSafeTags(candidate.segment.content, candidate.score.tags)

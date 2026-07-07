@@ -118,6 +118,6 @@ function explainAction(action: ActionKind, input: ActionSelectionInput) {
     case "draft_question_list":
       return "llm selected question-list drafting within guardrails.";
     default:
-      return "rule baseline keeps the candidate observable until the model decides.";
+      return "structural baseline keeps the candidate observable until the model decides.";
   }
 }

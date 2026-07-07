@@ -6,7 +6,7 @@ import { modelConversationContext, modelFeedbackContext, modelMemoryContext } fr
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
 import { applyStateDelta } from "./state";
-import { extractTags, summarizeText } from "./text";
+import { summarizeText } from "./text";
 import type { CreatureProfile, CreatureState, FeedbackKind, FeedbackPolicyProfile, FeedbackRecord, LongTermMemory, SegmentKind } from "./types";
 
 const stateDeltaSchema = z
@@ -90,7 +90,6 @@ export function applyFeedback(
   const inputText = input.content?.trim();
   const targetEpisode = profile.episodes.find((item) => item.id === input.targetId);
   const targetLongTerm = profile.longTermMemories.find((item) => item.id === input.targetId);
-  const tags = targetEpisode?.tags ?? targetLongTerm?.tags ?? [];
   const record: FeedbackRecord = {
     id: makeId("feedback"),
     at: now,
@@ -98,8 +97,8 @@ export function applyFeedback(
     targetId: input.targetId,
     inputText,
     inputModality: input.modality ?? (inputText ? "text" : "button"),
-    effect: "等待模型理解这次反馈。",
-    learningNote: "我正在理解你刚才教我的这一下。",
+    effect: "",
+    learningNote: "",
     memoryCandidateIds: []
   };
 
@@ -112,16 +111,14 @@ export function applyFeedback(
     const memory = promoteEpisode(profile, input.targetId, now);
     if (memory && inputText && !hasPrivacyRisk(inputText)) {
       memory.text = `${memory.text} 你确认时还补充：${summarizeText(inputText, 120)}`;
-      memory.tags = unique([...memory.tags, ...extractTags(inputText)]);
     }
     if (!memory && targetLongTerm && inputText && !hasPrivacyRisk(inputText)) {
       targetLongTerm.text = normalizeSharedMemoryText(`${targetLongTerm.text} 你确认时还补充：${summarizeText(inputText, 120)}`);
-      targetLongTerm.tags = unique([...targetLongTerm.tags, ...extractTags(inputText)]);
       targetLongTerm.lastReferencedAt = now;
     }
   }
   const forgetResult = input.kind === "forget" ? forgetMemory(profile, input.targetId) : undefined;
-  if (input.kind === "forget" && forgetResult?.changed && !forgetResult.purged) createSafetyMemoryFromForget(profile, targetEpisode, targetLongTerm, now);
+  void forgetResult;
 
   return record;
 }
@@ -255,10 +252,10 @@ function upsertSemanticFeedbackSelfMemory(
 ) {
   const safeText = safeCreatureText(memory.text);
   if (!safeText || hasPrivacyRisk(safeText)) return;
-  const tags = safeStoredTags(["被你养成", "LLM理解反馈", ...(memory.tags ?? []), ...extractTags(safeText)]);
+  const tags = safeStoredTags(["被你养成", "模型反馈学习", ...(memory.tags ?? [])]);
   const sourceEpisodeId = targetEpisode?.id ?? targetLongTerm?.sourceEpisodeId;
   const existing = profile.longTermMemories.find(
-    (item) => item.kind === "creature_self_memory" && item.tags.includes("LLM理解反馈") && sourceEpisodeId && item.sourceEpisodeId === sourceEpisodeId
+    (item) => item.kind === "creature_self_memory" && item.tags.includes("模型反馈学习") && sourceEpisodeId && item.sourceEpisodeId === sourceEpisodeId
   );
   if (existing) {
     existing.text = normalizeSharedMemoryText(safeText);
@@ -320,7 +317,7 @@ function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: Feedbac
   );
   return `请作为 Papo 的反馈反思脑，根据这次用户反馈，决定 Papo 应该怎样被养成。
 
-规则层已经做了一个保守 baseline。你可以在护栏内追加或修正：
+系统只记录了这次反馈和目标对象。你可以在护栏内决定：
 - stateDeltas：curiosity, attachment, energy, arousal, safety, confidence，每项 -15 到 15。
 - policyDeltas：preferDepth, preferProactivity, privacySensitivity, saveThreshold, askThreshold, recallTendency, quietTendency，每项 -15 到 15。
 - memoryWeightDelta：目标 episode 或 memory 的权重变化，-30 到 30。
@@ -421,31 +418,9 @@ function safeStoredTags(tags: string[]) {
 }
 
 function isSystemStoredTag(tag: string) {
-  return tag === "被你养成" || tag === "LLM理解反馈";
+  return tag === "被你养成" || tag === "模型反馈学习";
 }
 
 function containsInternalStoredTag(tag: string) {
   return /用户|小动物|LLM|语义|系统|后台|流程|candidate|episode|score|阈值|JSON|数据库|写入|长期记忆|情景记忆|偏好分类|记忆策略|^他|^她|他希望|她希望|他说|她说/i.test(tag);
-}
-
-function createSafetyMemoryFromForget(
-  profile: CreatureProfile,
-  episode: CreatureProfile["episodes"][number] | undefined,
-  memory: LongTermMemory | undefined,
-  now: string
-) {
-  const text = episode?.inputSummary ?? memory?.text;
-  if (!text) return;
-  const privacyHigh = hasPrivacyRisk(text);
-  profile.longTermMemories.unshift({
-    id: makeId("ltm"),
-    createdAt: now,
-    kind: "safety_rule",
-    text: privacyHigh
-      ? "你让我放下一段需要保护的内容。以后遇到类似内容时，我应该先问，不要自己急着留下具体细节。"
-      : `你让我放下类似内容。以后遇到相关主题时，我应该先问，不要自己急着留下：${text.slice(0, 80)}`,
-    weight: 70,
-    tags: privacyHigh ? [] : safeStoredTags(episode?.tags ?? memory?.tags ?? []),
-    consolidatedBecause: "你用放下这一下教我先小心边界。"
-  });
 }

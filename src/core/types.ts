@@ -321,7 +321,7 @@ export interface CaptureResult {
   attentionCandidates?: Array<{
     segment: StreamSegment;
     score: SegmentScore;
-    selectedByRules: boolean;
+    selectedByModel: boolean;
   }>;
   memoryCandidates?: MemoryCandidate[];
 }

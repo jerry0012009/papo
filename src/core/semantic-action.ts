@@ -165,7 +165,7 @@ function recordActionSemanticRun(profile: CreatureProfile, provider: ModelProvid
 function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResult) {
   return `请作为 Papo 的行动选择脑，为已经被注意到的事件选择下一步动作。
 
-规则层提供可选动作和护栏。你负责判断此刻最自然的小动物行动：
+系统提供可选动作和护栏。你负责判断此刻最自然的小动物行动：
 - observe：听见但先不打断。
 - respond：直接回应用户。
 - ask：轻轻问一句确认。
@@ -177,7 +177,7 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - draft_reminder：形成提醒草稿。
 - draft_question_list：形成问题清单草稿。
 
-规则会再次校验：
+护栏会再次校验：
 - action 必须在白名单内。
 - 高隐私内容不能自动长期保存、提醒或直接引用。
 - 低精力、安静倾向、隐私敏感度会限制动作。
@@ -231,7 +231,7 @@ ${JSON.stringify(result.events.map((event) => ({
   relatedMemoryIds: event.relatedMemoryIds,
   attentionStrength: event.attentionStrength,
   privacyRisk: event.privacyRisk,
-  currentRuleAction: event.actionDecision.action,
+  currentGuardedAction: event.actionDecision.action,
   blockedActions: event.actionDecision.blockedActions,
   safetyNotes: event.actionDecision.safetyNotes,
   tags: isHighPrivacySegmentContent(event.triggerContent) ? [] : event.tags

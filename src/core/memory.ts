@@ -1,25 +1,7 @@
 import { makeId } from "./ids";
 import { hasHighPrivacyText } from "./privacy";
-import { extractTags, keywordOverlap, summarizeText } from "./text";
+import { extractTags, summarizeText } from "./text";
 import type { AttentionEvent, CreatureProfile, EpisodeMemory, LongTermMemory, MemoryCandidate } from "./types";
-
-export function findRelatedMemories(profile: CreatureProfile, tags: string[], limit = 3): LongTermMemory[] {
-  return [...profile.longTermMemories]
-    .filter((memory) => memory.weight > 0 && !isQuietingSelfMemory(memory))
-    .map((memory) => ({
-      memory,
-      overlap: keywordOverlap(tags, memory.tags),
-      score: keywordOverlap(tags, memory.tags) * 2 + memory.weight / 100
-    }))
-    .filter((item) => item.overlap > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, limit)
-    .map((item) => item.memory);
-}
-
-function isQuietingSelfMemory(memory: LongTermMemory) {
-  return memory.kind === "creature_self_memory" && memory.tags.some((tag) => tag === "更安静" || tag === "更小心边界");
-}
 
 export function createEpisodeFromEvent(
   event: AttentionEvent,
@@ -60,7 +42,7 @@ export function createMemoryCandidateFromEpisode(
 ): MemoryCandidate {
   const now = input.now ?? new Date().toISOString();
   const privacyHigh = hasHighPrivacyMemoryText(`${episode.inputSummary} ${episode.noticed}`);
-  const repeatedThemeCount = countSimilarEpisodes(profile, episode.tags);
+  const repeatedThemeCount = 0;
   const kind: LongTermMemory["kind"] = "long_theme";
   const confidence = Math.min(96, Math.max(35, episode.weight + repeatedThemeCount * 8 + (input.feedback === "remember" ? 18 : 0) - (privacyHigh ? 25 : 0)));
   const writePolicy = decideWritePolicy({
@@ -283,10 +265,6 @@ function stripSourceMetadata(text: string) {
     .replace(/观察时间[：:]\s*\S+/g, "")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function countSimilarEpisodes(profile: CreatureProfile, tags: string[]) {
-  return profile.episodes.filter((episode) => keywordOverlap(episode.tags, tags) > 0).length;
 }
 
 function decideWritePolicy(input: {

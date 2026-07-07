@@ -176,14 +176,14 @@ function recordEmergenceSemanticRun(
 function buildSemanticEmergencePrompt(profile: CreatureProfile, now: string) {
   return `请作为 Papo 的主动浮现大脑，决定此刻 Papo 要不要主动想起一件事。
 
-规则层提供候选记忆和当前状态。你负责判断：
+系统提供可用记忆、最近互动和当前状态。你负责判断：
 - 现在要不要浮现。
 - 如果要，选择哪一条 memoryId。
 - 为什么此刻想起它。
 - 这是 curiosity、attachment、safety、rhythm 还是 memory_resonance。
 - Papo 应该说什么，主动程度是 quiet/gentle/active。
 
-规则会校验：
+护栏会校验：
 - memoryId 必须来自 candidate_memories。
 - 不能引用 weight<=0、跨用户、不存在、seed self-memory 或高隐私记忆。
 - message 必须引用被选记忆里的具体内容，不能编造。

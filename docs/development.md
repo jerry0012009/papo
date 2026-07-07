@@ -70,7 +70,7 @@ The boundary is strict: internal thinking, decision traces, scores, ids, and mem
 ## Code Map
 
 - `src/core/provider.ts`: real provider selection and OpenAI-compatible calls.
-- `src/core/attention.ts`: candidate event scoring and safety primitives.
+- `src/core/attention.ts`: structural input candidates, privacy guardrails, and pacing primitives; no semantic scoring.
 - `src/core/harness.ts`: semantic cognition loop and visible-output contract.
 - `src/core/semantic-action.ts`: model action selection.
 - `src/core/semantic-attention.ts`: model attention selection for stream inputs.
@@ -89,9 +89,10 @@ The boundary is strict: internal thinking, decision traces, scores, ids, and mem
 - The provider layer throws when credentials are missing.
 - Sensing endpoints call real model providers directly. Image/audio failures return errors; empty real audio transcripts are non-events.
 - The semantic harness strips rule-created visible drafts before model action/wording. Papo's final visible reply must come from a model.
-- `attention.ts` creates neutral candidates only. It must not write creature-facing replies, semantic "noticed" explanations, curious reports, or mixed-preference dialogue.
-- Rule action selection is a guardrail baseline, not a semantic classifier. Without an LLM suggestion it should stay at observe/quiet/ask safety behavior and avoid keyword-driven review/reminder/recall decisions.
-- Rule memory candidates keep user text and provenance only. Memory kind, tags, consolidation wording, and long-term meaning must be rewritten by `semanticDecideMemory` before they are treated as product cognition.
+- `attention.ts` creates neutral candidates only. It must not write creature-facing replies, semantic "noticed" explanations, keyword tags, related-memory guesses, curious reports, or mixed-preference dialogue.
+- Curious stream input starts with zero attention events. `semanticDecideAttention` must select segments with the model before episodes or memory candidates are created.
+- Action selection code is a guardrail baseline, not a semantic classifier. Without an LLM suggestion it should stay at observe/quiet/ask safety behavior and avoid keyword-driven review/reminder/recall decisions.
+- Memory candidates keep user text and provenance only. Memory kind, tags, consolidation wording, and long-term meaning must be rewritten by `semanticDecideMemory` before they are treated as product cognition.
 - The web UI must not fill empty Papo replies with "我听见了" or other local placeholder speech. If the model chose quiet or failed to provide a visible reply, the product should show no forged reply.
 - The product UI should not ship seeded demo loops or fake life-material buttons. Tests may use fixtures, but the user-facing flow starts from real user text, photos, audio, or continuous listening.
 - Wake rhythm only updates presence/state. It must not pick memories, write emergence records, or feed wake text back into model conversation context.

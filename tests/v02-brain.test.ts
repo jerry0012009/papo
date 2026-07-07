@@ -8,7 +8,7 @@ import { createCreatureProfile } from "../src/core/profile";
 import type { ModelProvider } from "../src/core/provider";
 
 describe("creature brain v0.2", () => {
-  it("curious session selects salient segments from an 8-part stream and audits ignored segments", () => {
+  it("curious session prepares all stream candidates for the model without rule selection", () => {
     const profile = createCreatureProfile();
     handleButtonCapture(profile, "我不希望小动物像工具，它应该先学会注意和反馈。");
 
@@ -24,12 +24,12 @@ describe("creature brain v0.2", () => {
     ]);
 
     expect(result.curiousSession?.totalSegments).toBe(8);
-    expect(result.events.length).toBeGreaterThanOrEqual(1);
-    expect(result.events.length).toBeLessThanOrEqual(3);
-    expect(result.curiousSession?.ignored.length).toBeGreaterThan(0);
-    expect(result.events[0].decisionTrace?.join(" ")).toContain("memory_resonance");
-    const privacyEvent = result.events.find((event) => event.triggerLabel === "隐私");
-    expect(privacyEvent?.actionDecision.action).not.toBe("save_long_term");
+    expect(result.events).toHaveLength(0);
+    expect(result.episodes).toHaveLength(0);
+    expect(result.attentionCandidates?.map((item) => item.segment.id)).toEqual(["s1", "s2", "s3", "s4", "s5", "s6", "s7", "s8"]);
+    expect(result.curiousSession?.ignored.length).toBe(8);
+    const privacyCandidate = result.attentionCandidates?.find((item) => item.segment.id === "s6");
+    expect(privacyCandidate?.score.privacyRisk).toBeGreaterThan(70);
   });
 
   it("action selection changes with state and privacy guardrails", () => {

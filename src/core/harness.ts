@@ -38,7 +38,8 @@ const brainSuggestionSchema = z.object({
       suggestedAction: actionSchema.optional(),
       reply: optionalText(700),
       memoryCandidateText: optionalText(500),
-      memoryTags: optionalTextArray(8, 40)
+      memoryTags: optionalTextArray(8, 40),
+      relatedMemoryIds: optionalTextArray(6, 80)
     })
     .optional(),
   events: z
@@ -47,7 +48,8 @@ const brainSuggestionSchema = z.object({
         id: z.string(),
         noticed: optionalText(260),
         reason: optionalText(420),
-        suggestedAction: actionSchema.optional()
+        suggestedAction: actionSchema.optional(),
+        relatedMemoryIds: optionalTextArray(6, 80)
       })
     )
     .optional(),
@@ -131,20 +133,25 @@ async function enrichWithSemanticBrain(
 ): Promise<CaptureResult> {
   const trace = [
     `sense: ${source}`,
-    "rules: generated candidate attention events",
+    "sense: prepared structural candidates",
     `provider: ${provider.kind}`
   ];
 
   if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for cognition.");
-  if (!result.events.length) throw new Error("Papo did not produce any attention event to interpret.");
 
   if (source === "curious_stream") {
+    if (!result.attentionCandidates?.length) {
+      result.harnessTrace = [...trace, "sense: no content candidates"];
+      return result;
+    }
     await semanticDecideAttention(profile, result, provider);
     if (!result.events.length) {
       result.harnessTrace = [...trace, "semantic: llm ignored all candidates"];
       recordSemanticBrainRun(profile, provider, source, "applied", "llm attention decision ignored all candidates");
       return result;
     }
+  } else if (!result.events.length) {
+    throw new Error("Papo did not produce any attention event to interpret.");
   }
   clearRuleVisibleDrafts(result);
   await semanticSelectAction(profile, result, provider, source);
@@ -202,6 +209,11 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
       const safeReply = actionConflict ? undefined : safeExternalReplyText(interaction.reply, primaryEvent.triggerContent);
       if (safeReply) primaryEpisode.creatureResponse = safeReply;
       if (interaction.memoryTags?.length) primaryEpisode.tags = interaction.memoryTags;
+      const relatedMemoryIds = validRelatedMemoryIds(profile, interaction.relatedMemoryIds);
+      if (relatedMemoryIds.length) {
+        primaryEvent.relatedMemoryIds = relatedMemoryIds;
+        primaryEpisode.relatedMemoryIds = relatedMemoryIds;
+      }
       updateMemoryCandidate(result, primaryEpisode.id, interaction.memoryCandidateText, interaction.memoryTags);
     }
     const safeReply = actionConflict ? undefined : safeExternalReplyText(interaction.reply, primaryEvent.triggerContent);
@@ -219,6 +231,12 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
 
     if (eventSuggestion.noticed) event.noticed = safeProcessText(eventSuggestion.noticed, event.noticed) ?? event.noticed;
     if (eventSuggestion.reason) event.reason = safeProcessText(eventSuggestion.reason, event.reason) ?? event.reason;
+    const relatedMemoryIds = validRelatedMemoryIds(profile, eventSuggestion.relatedMemoryIds);
+    if (relatedMemoryIds.length) {
+      event.relatedMemoryIds = relatedMemoryIds;
+      const episode = episodeByEventId.get(event.id);
+      if (episode) episode.relatedMemoryIds = relatedMemoryIds;
+    }
     if (eventSuggestion.suggestedAction) {
       if (!hasAppliedSemanticAction(event)) {
         event.actionDecision = guardActionDecision(event, profile, eventSuggestion.suggestedAction);
@@ -461,6 +479,12 @@ function updateMemoryCandidate(result: CaptureResult, sourceEpisodeId: string, t
   if (tags?.length) candidate.tags = tags;
 }
 
+function validRelatedMemoryIds(profile: CreatureProfile, ids?: string[]) {
+  if (!ids?.length) return [];
+  const allowed = new Set(profile.longTermMemories.filter((memory) => memory.weight > 0).map((memory) => memory.id));
+  return [...new Set(ids)].filter((id) => allowed.has(id)).slice(0, 6);
+}
+
 function recordSemanticBrainRun(
   profile: CreatureProfile,
   provider: ModelProvider,
@@ -483,7 +507,7 @@ function recordSemanticBrainRun(
 
 function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "button" | "curious_stream") {
   const highPrivacySegmentIds = new Set((result.attentionCandidates ?? []).filter((item) => isHighPrivacySegmentContent(item.segment.content)).map((item) => item.segment.id));
-  return `请作为 Papo 的语义脑，读取规则层产生的候选 attention events，改进语义理解和表达。
+  return `请作为 Papo 的语义脑，读取用户真实输入和已经进入注意的事件，完成理解、行动和外显回应。
 
 你可以：
 - 先判断这是不是一次互动：用户是在呼唤、要求回应、倾诉、要求记住、要求提醒，还是只是给环境素材。
@@ -491,8 +515,9 @@ function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "b
 - 给出 suggestedAction，但只能从 observe, respond, ask, save_episode, save_long_term, recall, review, quiet, draft_reminder, draft_question_list 选择。
 - 改写 episode 的 possibleIntent/importanceReason/creatureResponse。creatureResponse 是外显回应，只能写 Papo 最终对用户说的话。
 - 在 interaction.visibleReaction 里写一句外显行为语言，像 Papo 真的做了什么或准备怎么回应；不要写“用户意图是/语义判断/后台流程/记忆写入”。
-- 如果 source 是 curious_stream，可以改写 curiousSession.selected/ignored 的 whySelected/whyIgnored 和 creatureReport；也可以在 selected 里放入 attention_candidates 中一个被规则忽略但语义上重要的 segmentId。规则会限制预算、阈值、隐私和最终 action，不能新增不存在的片段。
+- 如果 source 是 curious_stream，可以改写 curiousSession.selected/ignored 的 whySelected/whyIgnored 和 creatureReport；也可以在 selected 里放入 attention_candidates 中一个尚未进入事件但语义上重要的 segmentId。护栏会限制预算、隐私和最终 action，不能新增不存在的片段。
 - 给出一条 memoryCandidateText，必须是这次真实互动可记住的小回忆，不要写流程说明。
+- 如果 recent_long_term_memories 里有这次自然联想到的旧记忆，可以在 relatedMemoryIds 里返回对应 id；不能编造不存在的 id。
 - 写一段 response，给用户展示这次小动物的整体回应。
 - response/reply/creatureResponse 必须像自然对话，不要说“我注意到这段...”“这件事我会先当作...”“确认我有没有听对”“要不要长期记”。这些属于内隐认知，不是外显台词。
 - 如果用户追问 Papo 刚才为什么那样说，应该直接解释“我刚才说得别扭，我只是想让你知道我听见了”，不要复读原句，也不要装作没听懂。
@@ -510,8 +535,8 @@ function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "b
 返回严格 JSON：
 {
   "response": "...",
-  "interaction": {"userIntent":"...", "emotionalTone":"...", "visibleReaction":"我抬头回应你，让你知道我听见了。", "shouldReply":true, "suggestedAction":"respond", "reply":"...", "memoryCandidateText":"...", "memoryTags":["..."]},
-  "events": [{"id":"...", "noticed":"...", "reason":"...", "suggestedAction":"..."}],
+  "interaction": {"userIntent":"...", "emotionalTone":"...", "visibleReaction":"我抬头回应你，让你知道我听见了。", "shouldReply":true, "suggestedAction":"respond", "reply":"...", "memoryCandidateText":"...", "memoryTags":["..."], "relatedMemoryIds":["ltm_xxx"]},
+  "events": [{"id":"...", "noticed":"...", "reason":"...", "suggestedAction":"...", "relatedMemoryIds":["ltm_xxx"]}],
   "episodes": [{"eventId":"...", "possibleIntent":"...", "importanceReason":"...", "creatureResponse":"..."}],
   "curiousSession": {"creatureReport":"...", "selected":[{"segmentId":"...", "whySelected":"..."}], "ignored":[{"segmentId":"...", "whyIgnored":"..."}]},
   "trace": ["短审计线索"]
@@ -551,15 +576,14 @@ ${JSON.stringify(result.attentionCandidates?.map((item) => ({
   label: item.segment.label,
   content: modelSafeSegmentContent(item.segment.content),
   contentHiddenForPrivacy: isHighPrivacySegmentContent(item.segment.content),
-  selectedByRules: item.selectedByRules,
-  scoreTotal: item.score.total,
+  selectedByModel: item.selectedByModel,
+  pacingScore: item.score.total,
   privacyRisk: item.score.privacyRisk,
-  redundancyPenalty: item.score.redundancyPenalty,
   relatedIds: item.score.relatedIds,
   tags: modelSafeTags(item.segment.content, item.score.tags)
 })) ?? [])}
 
-curious_session_rule_audit:
+curious_session_structure:
 ${JSON.stringify(result.curiousSession ? {
   totalSegments: result.curiousSession.totalSegments,
   attentionBudget: result.curiousSession.attentionBudget,
@@ -568,7 +592,7 @@ ${JSON.stringify(result.curiousSession ? {
     segmentId: item.segmentId,
     label: item.label,
     whySelected: item.whySelected,
-    scoreTotal: item.score.total,
+    pacingScore: item.score.total,
     privacyRisk: item.score.privacyRisk,
     relatedIds: item.score.relatedIds,
     tags: highPrivacySegmentIds.has(item.segmentId) ? [] : item.score.tags
@@ -577,9 +601,8 @@ ${JSON.stringify(result.curiousSession ? {
     segmentId: item.segmentId,
     label: item.label,
     whyIgnored: item.whyIgnored,
-    scoreTotal: item.score.total,
+    pacingScore: item.score.total,
     privacyRisk: item.score.privacyRisk,
-    redundancyPenalty: item.score.redundancyPenalty,
     tags: highPrivacySegmentIds.has(item.segmentId) ? [] : item.score.tags
   }))
 } : null)}

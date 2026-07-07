@@ -46,7 +46,7 @@ describe("creature core", () => {
     expect(result.episodes[0].creatureResponse).toBe("");
   });
 
-  it("rule candidate path only creates neutral candidates without visible creature speech", () => {
+  it("structural candidate path creates no semantic score or visible creature speech", () => {
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "刚刚医生确认复查时间改到周六上午。");
     const event = result.events[0];
@@ -56,7 +56,9 @@ describe("creature core", () => {
     expect(event.scoreBreakdown).toBeDefined();
     if (!event.scoreBreakdown) throw new Error("expected score breakdown");
     expect(event.noticed).toContain("复查");
-    expect(event.scoreBreakdown.futureValue).toBeGreaterThan(0);
+    expect(event.scoreBreakdown.futureValue).toBe(0);
+    expect(event.scoreBreakdown.emotionalCharge).toBe(0);
+    expect(event.scoreBreakdown.tags).toEqual([]);
     expect(result.response).toBe("");
     expect(result.episodes[0].creatureResponse).toBe("");
     expect(result.episodes[0].possibleIntent).toBe("");
@@ -64,7 +66,7 @@ describe("creature core", () => {
     expect(result.memoryCandidates?.[0].whyConsolidate).toBe("");
   });
 
-  it("rule candidate path does not synthesize mixed-preference dialogue", () => {
+  it("structural candidate path does not synthesize mixed-preference dialogue", () => {
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "我准备去游泳最近每天我都游泳游泳是一个消耗卡路里效率很高的运动我很喜欢但是我不喜欢游泳馆人太多");
 
@@ -73,7 +75,7 @@ describe("creature core", () => {
     expect(result.episodes[0].creatureResponse).toBe(result.response);
   });
 
-  it("curious mode selects salient stream events instead of summarizing everything", () => {
+  it("curious mode prepares real stream candidates without selecting by rules", () => {
     const profile = createCreatureProfile();
     const result = handleCuriousStream(profile, [
       { id: "s1", kind: "text", label: "闲聊", content: "今天午饭还不错。" },
@@ -89,21 +91,14 @@ describe("creature core", () => {
       { id: "s3", kind: "text", label: "未来", content: "下次复查前一天要提醒自己把资料放进包里。" }
     ]);
 
-    expect(result.events.length).toBeGreaterThanOrEqual(1);
-    expect(result.events.length).toBeLessThanOrEqual(3);
-    expect(result.events[0].triggerLabel).toBe("核心");
-    expect(result.events[0].triggerBatchId).toBe("batch-core");
-    expect(result.episodes[0].sourceBatchId).toBe("batch-core");
-    expect(result.episodes[0].sourceLocation?.label).toBe("家里");
-    expect(result.memoryCandidates?.[0].candidateText).toContain("那一小段的时间是 2026-07-06 10:00:30 UTC");
-    expect(result.memoryCandidates?.[0].candidateText).toContain("地点是家里");
-    expect(result.memoryCandidates?.[0].candidateText).toContain("你当时告诉我：我担心自己又把妈妈复查拖到睡前");
-    expect(result.memoryCandidates?.[0].candidateText).not.toContain("我听见这里有一点情绪");
-    expect(result.memoryCandidates?.[0].candidateText).not.toContain("batch-core");
-    const memory = promoteEpisode(profile, result.episodes[0].id);
-    expect(memory?.text).toContain("那一小段的时间是 2026-07-06 10:00:30 UTC");
-    expect(memory?.text).toContain("地点是家里");
-    expect(memory?.text).not.toContain("batch-core");
+    expect(result.events).toHaveLength(0);
+    expect(result.episodes).toHaveLength(0);
+    expect(result.memoryCandidates).toHaveLength(0);
+    expect(result.attentionCandidates?.map((item) => item.segment.id)).toEqual(["s1", "s2", "s3"]);
+    const core = result.attentionCandidates?.find((item) => item.segment.id === "s2");
+    expect(core?.segment.batchId).toBe("batch-core");
+    expect(core?.segment.location?.label).toBe("家里");
+    expect(result.curiousSession?.ignored.map((item) => item.segmentId)).toEqual(["s1", "s2", "s3"]);
   });
 
   it("curious mode keeps high privacy stream content out of attention events and memory candidates", () => {
@@ -117,6 +112,7 @@ describe("creature core", () => {
     expect(result.episodes.map((episode) => episode.sourceSegmentId)).not.toContain("s2");
     expect(result.memoryCandidates?.map((candidate) => candidate.candidateText).join(" ")).not.toContain("secret token");
     expect(result.curiousSession?.ignored.map((item) => item.segmentId)).toContain("s2");
+    expect(result.attentionCandidates?.find((item) => item.segment.id === "s2")?.score.privacyRisk).toBeGreaterThan(70);
   });
 
   it("feedback capture records teaching input without rule-shaped learning", () => {
@@ -132,8 +128,8 @@ describe("creature core", () => {
     expect(inRange(profile.state)).toBe(true);
     expect(profile.feedbackHistory[0].kind).toBe("continue");
     expect(feedback.inputText).toContain("多想一点");
-    expect(feedback.effect).toBe("等待模型理解这次反馈。");
-    expect(feedback.learningNote).toContain("正在理解");
+    expect(feedback.effect).toBe("");
+    expect(feedback.learningNote).toBe("");
     expect(feedback.responseAction).toBeUndefined();
     expect(feedback.followUpText).toBeUndefined();
     expect(feedback.replyText).toBeUndefined();
@@ -192,7 +188,7 @@ describe("creature core", () => {
     expect(feedback.followUpText).toContain("多听一会儿");
     expect(feedback.stateDeltas?.find((item) => item.key === "curiosity")?.delta).toBe(5);
     expect(feedback.policyDeltas?.find((item) => item.key === "preferDepth")?.delta).toBe(6);
-    expect(profile.longTermMemories.some((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("LLM理解反馈"))).toBe(true);
+    expect(profile.longTermMemories.some((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("模型反馈学习"))).toBe(true);
     expect(profile.longTermMemories.some((memory) => memory.tags.includes("用户偏好"))).toBe(false);
     expect(profile.semanticBrainHistory[0]).toMatchObject({ source: "feedback", status: "applied" });
   });
@@ -288,7 +284,7 @@ describe("creature core", () => {
     await semanticReflectFeedback(profile, feedback, provider);
 
     expect(feedback.learningNote).toContain("我学到这件事");
-    expect(profile.longTermMemories.some((memory) => memory.tags.includes("LLM理解反馈"))).toBe(false);
+    expect(profile.longTermMemories.some((memory) => memory.tags.includes("模型反馈学习"))).toBe(false);
   });
 
   it("rejects private terms from feedback narration output", async () => {
@@ -457,10 +453,7 @@ describe("creature core", () => {
 
     expect(profile.longTermMemories.find((memory) => memory.id === targetId)?.weight).toBe(0);
     expect(firstForget.followUpText).toBeUndefined();
-    const safetyMemory = profile.longTermMemories.find((memory) => memory.kind === "safety_rule");
-    expect(safetyMemory?.text).toContain("你让我放下类似内容");
-    expect(safetyMemory?.consolidatedBecause).toContain("小心边界");
-    expect(safetyMemory?.consolidatedBecause).not.toContain("forget feedback");
+    expect(profile.longTermMemories.some((memory) => memory.kind === "safety_rule")).toBe(false);
     expect(profile.longTermMemories.some((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("更小心边界"))).toBe(false);
     const secondForget = applyFeedback(profile, { kind: "forget", targetId });
     expect(profile.longTermMemories.find((memory) => memory.id === targetId)).toBeUndefined();
@@ -485,8 +478,6 @@ describe("creature core", () => {
     expect(feedback.followUpText).toBeUndefined();
     expect(memory.text).toContain("医保卡");
     expect(memory.text).toContain("检查报告");
-    expect(memory.tags.some((tag) => tag.includes("医保"))).toBe(true);
-    expect(memory.tags.some((tag) => tag.includes("检查"))).toBe(true);
     expect(memory.lastReferencedAt).toBe("2026-07-06T09:00:00.000Z");
   });
 
@@ -853,6 +844,7 @@ function scenarioProvider(prompts: string[] = [], options: { actionReply?: strin
       prompts.push(prompt);
       const eventId = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "";
       const candidateId = prompt.match(/"candidateId":"(candidate_[^"]+)"/)?.[1] ?? "";
+      const relatedMemoryId = prompt.match(/"id":"(ltm_[^"]+)"/)?.[1];
       if (prompt.includes("行动选择脑")) {
         return {
           decisions: [{
@@ -886,7 +878,8 @@ function scenarioProvider(prompts: string[] = [], options: { actionReply?: strin
           suggestedAction: "respond",
           reply: "游泳这件事你是喜欢的，只是人太多会让它没那么舒服。",
           memoryCandidateText: "你最近每天游泳，喜欢运动后的轻一点，但不喜欢游泳馆人太多。",
-          memoryTags: ["游泳", "运动习惯"]
+          memoryTags: ["游泳", "运动习惯"],
+          relatedMemoryIds: relatedMemoryId ? [relatedMemoryId] : []
         }
       } as T;
     }
