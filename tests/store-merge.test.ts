@@ -56,4 +56,74 @@ assert.equal(merged?.hermes.tasks.find((task) => task.id === "hermes_task_merge"
 assert.equal(merged?.conversation.some((message) => message.id === "msg_hermes_result"), true);
 assert.equal(merged?.conversation.some((message) => message.id === "msg_user_later"), true);
 
+const purgeBase = await store.createProfile({ userId: "purge-merge-user", creatureName: "Papo" });
+purgeBase.longTermMemories.unshift({
+  id: "ltm_should_stay_gone",
+  createdAt: "2026-07-07T09:00:00.000Z",
+  kind: "habit",
+  text: "用户以前说过游泳馆太吵。",
+  sourceEpisodeId: "episode_noise",
+  consolidatedBecause: "旧记忆",
+  weight: 0,
+  tags: ["游泳"]
+});
+await store.saveProfile(purgeBase);
+
+const staleWithDeletedMemory = await store.getProfile("purge-merge-user");
+const purgedSnapshot = await store.getProfile("purge-merge-user");
+assert.ok(staleWithDeletedMemory && purgedSnapshot);
+
+purgedSnapshot.longTermMemories = purgedSnapshot.longTermMemories.filter((memory) => memory.id !== "ltm_should_stay_gone");
+purgedSnapshot.conversation.unshift({
+  id: "msg_purge_trace",
+  at: "2026-07-07T09:01:00.000Z",
+  role: "user",
+  channel: "feedback",
+  text: "忘掉",
+  sourceId: "feedback-purge",
+  relatedMemoryIds: [],
+  modality: "button",
+  cognitionTrace: {
+    at: "2026-07-07T09:01:00.000Z",
+    source: "feedback",
+    providerKind: "mimo",
+    providerName: "test provider",
+    modelRuns: [],
+    feedbackDecision: {
+      feedbackId: "feedback-purge",
+      kind: "forget",
+      targetId: "ltm_should_stay_gone",
+      effect: "彻底删除这条记忆。",
+      learningNote: "用户明确要求放下。",
+      memoryCandidateIds: [],
+      memoryChanges: [{
+        targetId: "ltm_should_stay_gone",
+        targetType: "memory",
+        operation: "purged",
+        beforeText: "用户以前说过游泳馆太吵。"
+      }],
+      stateDeltas: [],
+      policyDeltas: []
+    }
+  }
+});
+await store.saveProfile(purgedSnapshot);
+
+staleWithDeletedMemory.conversation.unshift({
+  id: "msg_after_purge",
+  at: "2026-07-07T09:02:00.000Z",
+  role: "user",
+  channel: "button",
+  text: "这是一条后来的普通消息。",
+  sourceId: "button-after-purge",
+  relatedMemoryIds: [],
+  modality: "button"
+});
+await store.saveProfile(staleWithDeletedMemory);
+
+const afterPurgeMerge = await store.getProfile("purge-merge-user");
+assert.equal(afterPurgeMerge?.longTermMemories.some((memory) => memory.id === "ltm_should_stay_gone"), false);
+assert.equal(afterPurgeMerge?.conversation.some((message) => message.id === "msg_after_purge"), true);
+assert.equal(afterPurgeMerge?.conversation.some((message) => message.id === "msg_purge_trace"), true);
+
 console.log(JSON.stringify({ ok: true }, null, 2));

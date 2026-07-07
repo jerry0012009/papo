@@ -87,7 +87,7 @@ export class JsonProfileStore implements ProfileStore {
 }
 
 function mergeCreatureProfiles(current: CreatureProfile, incoming: CreatureProfile): CreatureProfile {
-  const purged = purgedTargets(incoming);
+  const purged = new Set([...purgedTargets(current), ...purgedTargets(incoming)]);
   const merged = normalizeCreatureProfile({
     ...current,
     ...incoming,
