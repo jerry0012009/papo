@@ -110,6 +110,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Active emergence has no rule-generated path. `/emergence` must call the model to decide quiet vs resurfacing and to choose a valid memory.
 - The old "rules create emergence, model polishes narration" path is removed; polishing a fake decision is still fake cognition.
 - Emergence guardrails validate that the chosen memory exists and is active; they must not use local keyword or token matching to decide whether the model's message semantically references the memory.
+- Emergence has a structural cooldown after active resurfacing. The model is still called with the cooldown context and should choose quiet; if it selects active emergence during cooldown, the guardrail blocks the visible message.
 - When there are no candidate memories, emergence still uses a compact model call that must choose quiet; this is not a local fake quiet response.
 - Feedback capture records the user's teaching. Explicit forget still performs the storage-layer weight/drop operation, but remembering, importance, reminder intent, memory correction, memory promotion, soft dismissal, state changes, policy changes, learning language, and creature self-memory must come from `semanticReflectFeedback`.
 - Memory correction uses `FeedbackKind=correct`; for a long-term memory target, the feedback model must return `memoryOperation.update_memory` with corrected text before the stored memory changes.
