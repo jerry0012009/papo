@@ -379,6 +379,7 @@ export function App() {
     audioObservationQueueRef.current = audioObservationQueueRef.current
       .then(() => processAudioObservationBlob(blob, meta))
       .catch((caught) => {
+        markLiveBatchAudioSettled(meta.batchId);
         setError(`Papo 刚才听到一点声音，但整理时断开了。${errorMessage(caught)}`);
       });
   }
