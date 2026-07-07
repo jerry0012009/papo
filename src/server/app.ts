@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
+import { semanticDreamMemories } from "../core/dreaming";
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
@@ -368,6 +369,18 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     }
   });
 
+  app.post("/api/profiles/:userId/dreaming", async (req, res, next) => {
+    try {
+      const profile = await requireProfile(store, req.params.userId);
+      markProactiveUserResponse(profile, new Date().toISOString());
+      const dream = await semanticDreamMemories(profile, provider, { force: true });
+      await store.saveProfile(profile);
+      res.json({ profile, dream });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post("/api/profiles/:userId/emergence", async (req, res, next) => {
     try {
       const profile = await requireProfile(store, req.params.userId);
@@ -642,10 +655,11 @@ function feedbackCognitionTrace(
 
 interface FeedbackTargetSnapshot {
   id: string;
-  type: "memory" | "episode";
+  type: "memory" | "episode" | "candidate";
   text?: string;
   kind?: CreatureProfile["longTermMemories"][number]["kind"];
   weight?: number;
+  status?: CreatureProfile["memoryCandidates"][number]["status"];
   relatedMemories: FeedbackMemorySnapshot[];
 }
 
@@ -672,6 +686,18 @@ function feedbackTargetSnapshot(profile: CreatureProfile, targetId?: string): Fe
       relatedMemories: profile.longTermMemories.filter((item) => item.sourceEpisodeId === episode.id).map(snapshotMemory)
     };
   }
+  const candidate = profile.memoryCandidates.find((item) => item.id === targetId);
+  if (candidate) {
+    return {
+      id: candidate.id,
+      type: "candidate",
+      text: candidate.candidateText,
+      kind: candidate.memoryKind,
+      weight: candidate.confidence,
+      status: candidate.status,
+      relatedMemories: profile.longTermMemories.filter((item) => item.sourceEpisodeId === candidate.sourceEpisodeId).map(snapshotMemory)
+    };
+  }
   return undefined;
 }
 
@@ -680,11 +706,14 @@ function feedbackMemoryChanges(profile: CreatureProfile, before?: FeedbackTarget
   const changes: NonNullable<MessageCognitionTrace["feedbackDecision"]>["memoryChanges"] = [];
   const afterMemory = before.type === "memory" ? profile.longTermMemories.find((item) => item.id === before.id) : undefined;
   const afterEpisode = before.type === "episode" ? profile.episodes.find((item) => item.id === before.id) : undefined;
+  const afterCandidate = before.type === "candidate" ? profile.memoryCandidates.find((item) => item.id === before.id) : undefined;
   const after = afterMemory
     ? { id: afterMemory.id, type: "memory" as const, text: afterMemory.text, kind: afterMemory.kind, weight: afterMemory.weight }
     : afterEpisode
       ? { id: afterEpisode.id, type: "episode" as const, text: afterEpisode.inputSummary, weight: afterEpisode.weight }
-      : undefined;
+      : afterCandidate
+        ? { id: afterCandidate.id, type: "candidate" as const, text: afterCandidate.candidateText, kind: afterCandidate.memoryKind, weight: afterCandidate.confidence, status: afterCandidate.status }
+        : undefined;
 
   if (!after) {
     changes.push({
@@ -696,7 +725,7 @@ function feedbackMemoryChanges(profile: CreatureProfile, before?: FeedbackTarget
       beforeWeight: before.weight
     });
   } else {
-    const changed = before.text !== after.text || before.kind !== after.kind || before.weight !== after.weight;
+    const changed = before.text !== after.text || before.kind !== after.kind || before.weight !== after.weight || before.status !== after.status;
     changes.push({
       targetId: before.id,
       targetType: before.type,
@@ -756,6 +785,10 @@ function relatedFeedbackMemories(profile: CreatureProfile, before: FeedbackTarge
   if (before.type === "memory") {
     return profile.longTermMemories.filter((item) => item.id === before.id).map(snapshotMemory);
   }
+  if (before.type === "candidate") {
+    const candidate = profile.memoryCandidates.find((item) => item.id === before.id);
+    return profile.longTermMemories.filter((item) => item.sourceEpisodeId === candidate?.sourceEpisodeId).map(snapshotMemory);
+  }
   return profile.longTermMemories.filter((item) => item.sourceEpisodeId === before.id).map(snapshotMemory);
 }
 
@@ -796,8 +829,10 @@ function feedbackRelatedMemoryIds(profile: CreatureProfile, targetId?: string, t
     ids.add(targetMemoryIdBefore);
   }
   if (targetId) {
+    const candidate = profile.memoryCandidates.find((item) => item.id === targetId);
     for (const memory of profile.longTermMemories) {
       if (memory.sourceEpisodeId === targetId) ids.add(memory.id);
+      if (candidate && memory.sourceEpisodeId === candidate.sourceEpisodeId) ids.add(memory.id);
     }
   }
   return [...ids];

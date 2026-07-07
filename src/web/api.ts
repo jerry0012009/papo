@@ -1,4 +1,4 @@
-import type { CaptureResult, CreatureProfile, FeedbackKind, FeedbackRecord, MediaAttachment, MessageCognitionTrace, SegmentKind, SensingTrace, StreamSegment, WakeEvent } from "../core/types";
+import type { CaptureResult, CreatureProfile, DreamRecord, FeedbackKind, FeedbackRecord, MediaAttachment, MessageCognitionTrace, SegmentKind, SensingTrace, StreamSegment, WakeEvent } from "../core/types";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 const apiBase = import.meta.env.VITE_API_BASE as string | undefined;
@@ -104,6 +104,10 @@ export async function updateLongTermMemory(userId: string, memoryId: string, tex
     body: JSON.stringify({ text })
   });
   return data.profile;
+}
+
+export async function dreamMemories(userId: string): Promise<{ profile: CreatureProfile; dream?: DreamRecord }> {
+  return request<{ profile: CreatureProfile; dream?: DreamRecord }>(`/api/profiles/${userId}/dreaming`, { method: "POST" });
 }
 
 export async function activeEmergence(userId: string) {

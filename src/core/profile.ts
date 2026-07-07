@@ -23,6 +23,7 @@ export function createCreatureProfile(input: {
     memoryCandidates: [],
     emergenceHistory: [],
     wakeHistory: [],
+    dreamHistory: [],
     semanticBrainHistory: [],
     conversation: [],
     proactive: initialProactiveState(now)
@@ -48,6 +49,7 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.memoryCandidates ??= [];
   profile.emergenceHistory ??= [];
   profile.wakeHistory ??= [];
+  profile.dreamHistory ??= [];
   profile.semanticBrainHistory ??= [];
   profile.conversation ??= [];
   profile.proactive ??= initialProactiveState(new Date().toISOString());

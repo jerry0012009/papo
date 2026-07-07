@@ -31,6 +31,7 @@ import {
   buttonCapture,
   createProfile,
   curiousCapture,
+  dreamMemories,
   getProfile,
   listProfiles,
   makeSegment,
@@ -297,6 +298,14 @@ export function App() {
     await run(async () => {
       const next = await updateLongTermMemory(profile.userId, memoryId, text);
       setProfile(next);
+    });
+  }
+
+  async function runDreaming() {
+    if (!profile) return;
+    await run(async () => {
+      const result = await dreamMemories(profile.userId);
+      setProfile(result.profile);
     });
   }
 
@@ -668,7 +677,7 @@ export function App() {
           onStopListening={stopListening}
         />
       ) : null}
-      {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} /> : null}
+      {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} onDream={runDreaming} busy={busy} /> : null}
       {tab === "profile" ? (
         <ProfileView
           profiles={profiles}
@@ -1368,10 +1377,10 @@ function feedbackDeltaItems(items: Array<{ key: string; before: number; after: n
 }
 
 function feedbackMemoryChangeTitle(change: {
-  targetType: "memory" | "episode";
+  targetType: "memory" | "episode" | "candidate";
   operation: "created" | "updated" | "purged" | "unchanged";
 }) {
-  const target = change.targetType === "memory" ? "记忆" : "经历";
+  const target = change.targetType === "memory" ? "记忆" : change.targetType === "candidate" ? "候选" : "经历";
   const operation = {
     created: "已创建",
     updated: "已更新",
@@ -1452,22 +1461,57 @@ function MemoryView(props: {
   onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
   onObserveFeedbackAudio: (file: File) => Promise<string>;
   onEditMemory: (memoryId: string, text: string) => void;
+  onDream: () => void;
+  busy: boolean;
 }) {
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<"all" | "candidate" | "long">("all");
   const [editingId, setEditingId] = useState<string>();
   const [draft, setDraft] = useState("");
   const memories = [...(props.profile.longTermMemories ?? [])]
     .filter((memory) => `${memory.text} ${memory.kind} ${(memory.tags ?? []).join(" ")}`.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   const otherMemories = memories.filter((memory) => memory.kind !== "creature_self_memory");
+  const candidates = [...(props.profile.memoryCandidates ?? [])]
+    .filter((candidate) => candidate.status === "candidate")
+    .filter((candidate) => `${candidate.candidateText} ${candidate.memoryKind} ${(candidate.tags ?? []).join(" ")}`.toLowerCase().includes(query.toLowerCase()))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
+  const showCandidates = view === "all" || view === "candidate";
+  const showLongTerm = view === "all" || view === "long";
 
   return (
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={History} title="Papo 记得的生活" />
-        <p className="muted">按时间放着 Papo 真正留下的回忆。点开一条，可以看原始来龙去脉、反馈和背后的模型流程。</p>
+        <p className="muted">候选是 Papo 还在拿捏的记忆，长期记忆是已经留下来的回忆。你可以分别维护它们。</p>
+        <button className="dream-button" onClick={props.onDream} disabled={props.busy}>
+          <Sparkles size={16} />
+          整理记忆
+        </button>
+        <div className="segmented-control" role="group" aria-label="选择记忆类型">
+          <button className={view === "all" ? "active" : ""} onClick={() => setView("all")}>全部</button>
+          <button className={view === "candidate" ? "active" : ""} onClick={() => setView("candidate")}>候选 {candidates.length}</button>
+          <button className={view === "long" ? "active" : ""} onClick={() => setView("long")}>长期 {otherMemories.length}</button>
+        </div>
         <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一找哪件事" />
-        {otherMemories.map((memory) => (
+        {showCandidates && candidates.length ? (
+          <section className="memory-section">
+            <h3>候选记忆</h3>
+            {candidates.map((candidate) => (
+              <MemoryCandidateCard
+                candidate={candidate}
+                profile={props.profile}
+                key={candidate.id}
+                onFeedback={props.onFeedback}
+                onObserveFeedbackAudio={props.onObserveFeedbackAudio}
+              />
+            ))}
+          </section>
+        ) : null}
+        {showLongTerm && otherMemories.length ? (
+          <section className="memory-section">
+            <h3>长期记忆</h3>
+            {otherMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
             {editingId === memory.id ? (
               <>
@@ -1513,16 +1557,68 @@ function MemoryView(props: {
               </button>
             </div>
             <MemoryFeedbackBox
-              memory={memory}
+              targetId={memory.id}
               onFeedback={props.onFeedback}
               onObserveFeedbackAudio={props.onObserveFeedbackAudio}
             />
             <MemoryTraceList memory={memory} profile={props.profile} />
           </article>
-        ))}
-        {otherMemories.length ? null : <p className="muted">这里还没有留下和你有关的回忆。</p>}
+            ))}
+          </section>
+        ) : null}
+        {(showCandidates && candidates.length) || (showLongTerm && otherMemories.length) ? null : <p className="muted">这里还没有符合筛选的记忆。</p>}
       </div>
     </section>
+  );
+}
+
+function MemoryCandidateCard(props: {
+  candidate: CreatureProfile["memoryCandidates"][number];
+  profile: CreatureProfile;
+  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
+  onObserveFeedbackAudio: (file: File) => Promise<string>;
+}) {
+  const sourceEpisode = props.profile.episodes.find((episode) => episode.id === props.candidate.sourceEpisodeId);
+  return (
+    <article className="memory-surface candidate-memory">
+      <div className="memory-main">
+        <div>
+          <span>{new Date(props.candidate.createdAt).toLocaleString("zh-CN")} · 候选 · {memoryKindLabel(props.candidate.memoryKind)}</span>
+          <strong>{normalizeMemoryText(props.candidate.candidateText)}</strong>
+        </div>
+        <AttachmentStrip attachments={props.candidate.attachments} />
+        {sourceEpisode ? (
+          <details className="memory-details">
+            <summary>来源</summary>
+            <div className="memory-detail-body">
+              <div>
+                <span>来自这次经历</span>
+                <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(props.profile, sourceEpisode))}</p>
+              </div>
+            </div>
+          </details>
+        ) : null}
+      </div>
+      <div className="memory-actions">
+        <button onClick={() => props.onFeedback("remember", props.candidate.id, undefined, "button")}>
+          <Save size={16} />
+          长期记住
+        </button>
+        <button onClick={() => props.onFeedback("important", props.candidate.id, undefined, "button")}>
+          <Lightbulb size={16} />
+          很重要
+        </button>
+        <button onClick={() => props.onFeedback("forget", props.candidate.id, undefined, "button")}>
+          <RefreshCcw size={16} />
+          放下
+        </button>
+      </div>
+      <MemoryFeedbackBox
+        targetId={props.candidate.id}
+        onFeedback={props.onFeedback}
+        onObserveFeedbackAudio={props.onObserveFeedbackAudio}
+      />
+    </article>
   );
 }
 
@@ -1605,7 +1701,7 @@ function memoryTraceTitle(message: ConversationMessage) {
 }
 
 function MemoryFeedbackBox(props: {
-  memory: CreatureProfile["longTermMemories"][number];
+  targetId: string;
   onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
   onObserveFeedbackAudio: (file: File) => Promise<string>;
 }) {
@@ -1614,7 +1710,7 @@ function MemoryFeedbackBox(props: {
   function submit() {
     const content = feedbackText.trim();
     if (!content) return;
-    props.onFeedback("continue", props.memory.id, content, feedbackModality);
+    props.onFeedback("continue", props.targetId, content, feedbackModality);
     setFeedbackText("");
     setFeedbackModality("text");
   }
@@ -1754,6 +1850,20 @@ function memorySourceEpisode(memory: CreatureProfile["longTermMemories"][number]
 
 function memoryResultLine(memory: CreatureProfile["longTermMemories"][number]) {
   return extractRememberedMoment(memory.text);
+}
+
+function memoryKindLabel(kind: CreatureProfile["longTermMemories"][number]["kind"]) {
+  const labels: Record<CreatureProfile["longTermMemories"][number]["kind"], string> = {
+    user_preference: "偏好",
+    long_theme: "长期主题",
+    creature_self_memory: "成长",
+    safety_rule: "边界",
+    future_review: "以后回看",
+    relationship: "关系",
+    habit: "习惯",
+    open_question: "开放问题"
+  };
+  return labels[kind] ?? kind;
 }
 
 function normalizeMemoryText(text: string) {

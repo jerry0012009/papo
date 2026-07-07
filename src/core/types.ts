@@ -52,6 +52,21 @@ export interface StateChange {
   after: CreatureState;
 }
 
+export interface DreamRecord {
+  id: string;
+  at: string;
+  summary: string;
+  operations: Array<{
+    type: "update_memory" | "merge_memories" | "dismiss_candidate" | "promote_candidate" | "adjust_state";
+    targetId?: string;
+    sourceIds?: string[];
+    text?: string;
+    reason: string;
+  }>;
+  stateDeltas?: CreatureStateDeltaRecord[];
+  ruleTrace: string[];
+}
+
 export interface StreamSegment {
   id: string;
   kind: SegmentKind;
@@ -279,8 +294,8 @@ export interface WakeEvent {
 export interface SemanticBrainRecord {
   id: string;
   at: string;
-  source: AttentionSource | "memory" | "feedback" | "emergence";
-  stage?: "attention" | "action" | "memory" | "feedback" | "emergence" | "harness";
+  source: AttentionSource | "memory" | "feedback" | "emergence" | "dreaming";
+  stage?: "attention" | "action" | "memory" | "feedback" | "emergence" | "dreaming" | "harness";
   providerKind: ProviderKind;
   providerName: string;
   model?: string;
@@ -342,7 +357,7 @@ export interface MessageCognitionTrace {
     memoryCandidateIds: string[];
     memoryChanges: Array<{
       targetId: string;
-      targetType: "memory" | "episode";
+      targetType: "memory" | "episode" | "candidate";
       operation: "created" | "updated" | "purged" | "unchanged";
       beforeText?: string;
       afterText?: string;
@@ -399,6 +414,7 @@ export interface CreatureProfile {
   memoryCandidates: MemoryCandidate[];
   emergenceHistory: EmergenceRecord[];
   wakeHistory: WakeEvent[];
+  dreamHistory: DreamRecord[];
   semanticBrainHistory: SemanticBrainRecord[];
   conversation: CreatureMessage[];
   proactive: ProactiveEmergenceState;

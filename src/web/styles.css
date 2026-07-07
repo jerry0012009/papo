@@ -428,6 +428,29 @@ select {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.segmented-control {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.segmented-control button {
+  min-height: 34px;
+  padding: 7px 8px;
+}
+
+.segmented-control button.active {
+  background: #1f2421;
+  color: #fffaf0;
+}
+
+.dream-button {
+  width: fit-content;
+  justify-self: start;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
 .proactive-nudge {
   width: fit-content;
   justify-self: center;
@@ -514,6 +537,20 @@ select {
 .memory-main {
   display: grid;
   gap: 8px;
+}
+
+.memory-section {
+  display: grid;
+  gap: 10px;
+}
+
+.memory-section h3 {
+  margin: 2px 0 0;
+  font-size: 0.9rem;
+}
+
+.candidate-memory {
+  background: #fff7ef;
 }
 
 .memory-main div {

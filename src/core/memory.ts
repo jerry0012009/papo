@@ -102,6 +102,55 @@ function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new D
   return memory;
 }
 
+export function promoteMemoryCandidate(
+  profile: CreatureProfile,
+  candidateId: string,
+  input: {
+    text?: string;
+    kind?: LongTermMemory["kind"];
+    tags?: string[];
+    consolidatedBecause?: string;
+    weight?: number;
+    now?: string;
+  } = {}
+) {
+  const now = input.now ?? new Date().toISOString();
+  const candidate = profile.memoryCandidates.find((item) => item.id === candidateId && item.status === "candidate");
+  if (!candidate) return undefined;
+  const episode = profile.episodes.find((item) => item.id === candidate.sourceEpisodeId);
+  const text = normalizeSharedMemoryText(input.text ?? candidate.candidateText);
+  if (!text) return undefined;
+  const duplicate = findActiveDuplicateMemory(profile, { ...candidate, candidateText: text });
+  const tags = input.tags?.length ? input.tags : candidate.tags;
+  if (duplicate) {
+    candidate.status = "promoted";
+    if (episode) episode.promotedToLongTerm = true;
+    duplicate.kind = input.kind ?? candidate.memoryKind;
+    duplicate.text = text;
+    duplicate.weight = Math.max(0, Math.min(100, Math.round(input.weight ?? Math.max(duplicate.weight, (episode?.weight ?? 45) + 18))));
+    duplicate.tags = unique([...duplicate.tags, ...tags]);
+    duplicate.attachments = mergeAttachments(duplicate.attachments, candidate.attachments);
+    duplicate.consolidatedBecause = input.consolidatedBecause ?? candidate.whyConsolidate ?? duplicate.consolidatedBecause;
+    duplicate.lastReferencedAt = now;
+    return duplicate;
+  }
+  const memory: LongTermMemory = {
+    id: makeId("ltm"),
+    createdAt: now,
+    kind: input.kind ?? candidate.memoryKind,
+    text,
+    sourceEpisodeId: candidate.sourceEpisodeId,
+    consolidatedBecause: input.consolidatedBecause ?? candidate.whyConsolidate,
+    weight: Math.max(0, Math.min(100, Math.round(input.weight ?? (episode?.weight ?? 45) + 18))),
+    tags,
+    attachments: candidate.attachments ?? []
+  };
+  candidate.status = "promoted";
+  if (episode) episode.promotedToLongTerm = true;
+  profile.longTermMemories.unshift(memory);
+  return memory;
+}
+
 function findActiveDuplicateMemory(profile: CreatureProfile, candidate: MemoryCandidate) {
   const candidateText = normalizeSharedMemoryText(candidate.candidateText);
   if (!candidateText) return undefined;
@@ -136,6 +185,20 @@ export function forgetMemory(profile: CreatureProfile, targetId?: string): { cha
     return { changed: true, purged: false };
   }
 
+  const candidate = profile.memoryCandidates.find((item) => item.id === targetId);
+  if (candidate) {
+    if (candidate.status === "dismissed") {
+      profile.memoryCandidates = profile.memoryCandidates.filter((item) => item.id !== targetId);
+      const episode = profile.episodes.find((item) => item.id === candidate.sourceEpisodeId);
+      if (episode) episode.memoryCandidateIds = episode.memoryCandidateIds.filter((id) => id !== candidate.id);
+      return { changed: true, purged: true };
+    }
+    candidate.status = "dismissed";
+    candidate.writePolicy = "do_not_save";
+    candidate.decayPolicy = "forget_if_dismissed";
+    return { changed: true, purged: false };
+  }
+
   const episode = profile.episodes.find((item) => item.id === targetId);
   if (!episode) return { changed: false, purged: false };
   if (episode.weight <= 0) {
@@ -157,6 +220,8 @@ export function adjustMemoryWeight(profile: CreatureProfile, targetId: string | 
   if (episode) episode.weight = Math.max(0, Math.min(100, episode.weight + amount));
   const longTerm = profile.longTermMemories.find((item) => item.id === targetId);
   if (longTerm) longTerm.weight = Math.max(0, Math.min(100, longTerm.weight + amount));
+  const candidate = profile.memoryCandidates.find((item) => item.id === targetId);
+  if (candidate) candidate.confidence = Math.max(0, Math.min(100, candidate.confidence + amount));
 }
 
 function buildMemoryCandidateText(episode: EpisodeMemory): string {
