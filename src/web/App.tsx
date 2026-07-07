@@ -1825,8 +1825,14 @@ function MemoryCandidateCard(props: {
       <div className="memory-main">
         <div>
           <span>{new Date(props.candidate.createdAt).toLocaleString("zh-CN")} · 候选 · {memoryKindLabel(props.candidate.memoryKind)}</span>
-          <strong>{normalizeMemoryText(props.candidate.candidateText)}</strong>
+          <strong className="memory-text-preview">{normalizeMemoryText(props.candidate.candidateText)}</strong>
         </div>
+        {shouldShowFullMemoryText(props.candidate.candidateText) ? (
+          <details className="memory-details memory-full-text">
+            <summary>完整内容</summary>
+            <p>{normalizeMemoryText(props.candidate.candidateText)}</p>
+          </details>
+        ) : null}
         <AttachmentStrip attachments={props.candidate.attachments} />
         {sourceEpisode ? (
           <details className="memory-details">
@@ -1871,8 +1877,14 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
     <div className="memory-main">
       <div>
         <span>{new Date(memory.createdAt).toLocaleString("zh-CN")}</span>
-        <strong>{memoryResultLine(memory)}</strong>
+        <strong className="memory-text-preview">{memoryResultLine(memory)}</strong>
       </div>
+      {shouldShowFullMemoryText(memoryResultLine(memory)) ? (
+        <details className="memory-details memory-full-text">
+          <summary>完整记忆</summary>
+          <p>{memoryResultLine(memory)}</p>
+        </details>
+      ) : null}
       <AttachmentStrip attachments={memory.attachments} />
       {sourceEpisode ? (
         <details className="memory-details">
@@ -2086,6 +2098,10 @@ function memorySourceEpisode(memory: CreatureProfile["longTermMemories"][number]
 
 function memoryResultLine(memory: CreatureProfile["longTermMemories"][number]) {
   return extractRememberedMoment(memory.text);
+}
+
+function shouldShowFullMemoryText(text: string) {
+  return normalizeMemoryText(text).length > 90;
 }
 
 function memoryKindLabel(kind: CreatureProfile["longTermMemories"][number]["kind"]) {

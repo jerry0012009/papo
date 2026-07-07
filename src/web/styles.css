@@ -786,8 +786,8 @@ select {
 }
 
 .candidate-memory {
-  background: #fff8ef;
-  border-color: rgba(213, 154, 59, 0.18);
+  background: #fbfbf7;
+  border-color: rgba(63, 127, 102, 0.14);
 }
 
 .memory-main div {
@@ -809,6 +809,13 @@ select {
 .memory-main strong {
   color: var(--ink);
   font-size: 0.95rem;
+}
+
+.memory-text-preview {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
 }
 
 .attachment-strip {
@@ -865,6 +872,14 @@ select {
   border-radius: 8px;
   background: rgba(232, 243, 237, 0.7);
   border: 1px solid rgba(63, 127, 102, 0.14);
+}
+
+.memory-full-text p {
+  margin: 6px 0 0;
+  padding: 9px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.66);
+  border: 1px solid rgba(70, 82, 72, 0.1);
 }
 
 .memory-feedback .feedback-input {
