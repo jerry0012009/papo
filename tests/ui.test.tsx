@@ -257,15 +257,27 @@ describe("App", () => {
     expect(screen.queryByText(/Papo 放过了/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "陪我" }));
-    expect(screen.getByText("陪我看一小段世界")).toBeInTheDocument();
-    expect(screen.getByText("陪我听一会儿")).toBeInTheDocument();
-    expect(screen.getByText("加一张照片")).toBeInTheDocument();
-    expect(screen.getByText("加一段录音")).toBeInTheDocument();
+    expect(screen.getByText("陪我一会儿")).toBeInTheDocument();
+    expect(screen.getByText("可以让 Papo 持续听一会儿")).toBeInTheDocument();
+    expect(screen.getByText(/最多 3 分钟，每 30 秒整理一次声音/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "开始听 3 分钟" })).toBeInTheDocument();
+    expect(screen.getByLabelText("加照片")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "提交这件事" })).toBeInTheDocument();
+    expect(screen.getByText("刚才的对话")).toBeInTheDocument();
+    expect(screen.queryByText("加一张照片")).not.toBeInTheDocument();
+    expect(screen.queryByText("加一段录音")).not.toBeInTheDocument();
+    expect(screen.queryByText("加一小段")).not.toBeInTheDocument();
+    expect(screen.queryByText("让 Papo 看看")).not.toBeInTheDocument();
     expect(screen.queryByText("Curious Mode")).not.toBeInTheDocument();
     expect(screen.queryByText("Curious 录音感知")).not.toBeInTheDocument();
     expect(screen.queryByText(/image_summary|audio_transcript/)).not.toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "文字" }).length).toBeGreaterThan(0);
     expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    await userEvent.type(screen.getByPlaceholderText("告诉 Papo 正在发生或刚想到的事"), "我刚想到周六复查前要把病历放进包里。");
+    await userEvent.click(screen.getByRole("button", { name: "提交这件事" }));
+    await waitFor(() => expect(curiousRequest?.segments?.map((segment) => segment.kind)).toEqual(["text"]));
+    expect(curiousRequest?.segments?.[0]?.content).toContain("周六复查前要把病历放进包里");
+    expect(screen.getByText("陪我一会儿")).toBeInTheDocument();
+    expect(await screen.findByText("我把你刚说的话和照片放在同一件事里听了。")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "对话" }));
     expect(screen.getByText("和 Papo 的小日常")).toBeInTheDocument();

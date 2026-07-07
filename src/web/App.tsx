@@ -130,9 +130,7 @@ export function App() {
   const [provider, setProvider] = useState<ProviderInfo>();
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [profile, setProfile] = useState<CreatureProfile>();
-  const [segments, setSegments] = useState(
-    starterSegments.map((segment, index) => makeSegment(`segment-${index + 1}`, segment.kind, segment.label, segment.content))
-  );
+  const [segments, setSegments] = useState<StreamSegment[]>([]);
   const [chatSegments, setChatSegments] = useState<StreamSegment[]>([]);
   const [lastResult, setLastResult] = useState<CaptureResult>();
   const [emergence, setEmergence] = useState<EmergenceSurface>();
@@ -253,17 +251,25 @@ export function App() {
     });
   }
 
-  async function submitCurious() {
+  async function submitCompanionMoment(text: string) {
     if (!profile) return;
+    const cleanText = text.trim();
     await run(async () => {
+      const batchId = segments[0]?.batchId ?? currentBatchId();
+      const textSegment = cleanText
+        ? [makeSegment(`companion-text-${Date.now()}`, "text", "你刚说的话", cleanText, { observedAt: new Date().toISOString(), batchId })]
+        : [];
+      const eventSegments = [...textSegment, ...segments].filter((segment) => segment.content.trim());
+      if (!eventSegments.length) return;
       const result = await curiousCapture(
         profile.userId,
-        segments.filter((segment) => segment.content.trim()).map((segment, index) => ensureSegmentContext(segment, index))
+        eventSegments.map((segment, index) => ensureSegmentContext(segment, index))
       );
+      setSegments([]);
       setLastResult(result);
       setProfile(result.profile);
       setLearningNote(undefined);
-      setTab("home");
+      setTab("curious");
     });
   }
 
@@ -327,24 +333,6 @@ export function App() {
     });
   }
 
-  async function uploadAudioTranscript(file?: File) {
-    if (!file) return;
-    await run(async () => {
-      const dataUrl = await readFileAsDataUrl(file);
-      const result = await transcribeAudio(dataUrl, file.name || "上传录音");
-      const content = sensingSegmentContent(result.transcript, result.error);
-      setSegments((current) => [
-        ...current,
-        makeSegment(`audio-${Date.now()}`, "audio_transcript", file.name || `录音 ${current.length + 1}`, content, {
-          observedAt: new Date().toISOString(),
-          batchId: currentBatchId()
-        })
-      ]);
-      setDemoNote(result.error ? "录音已经留在这次陪伴里，先补一句再给我听。" : result.semanticSource === "llm" ? "我已经把录音整理成可修改的文字。" : "录音已经加入这次陪伴，你可以先改准再给我听。");
-      setTab("curious");
-    });
-  }
-
   async function giveFeedback(kind: FeedbackKind, targetId?: string, content?: string, modality: "text" | "audio_transcript" | "button" = content ? "text" : "button") {
     if (!profile) return;
     await run(async () => {
@@ -402,11 +390,11 @@ export function App() {
     try {
       stream = await navigator.mediaDevices?.getUserMedia?.({ audio: true });
     } catch {
-      setError("我还听不到麦克风。你可以先写一小段给 Papo，或者手动加一段录音。");
+      setError("我还听不到麦克风。你可以先用文字告诉 Papo，或者加照片补充。");
       return;
     }
     if (!stream) {
-      setError("我还没有听到可用的麦克风声音。你可以先写一小段给 Papo，或者手动加一段录音。");
+      setError("我还没有听到可用的麦克风声音。你可以先用文字告诉 Papo，或者加照片补充。");
       return;
     }
 
@@ -436,7 +424,7 @@ export function App() {
           stopMediaCapture();
           setListening(false);
           listeningStartedAtRef.current = undefined;
-          setError("这个浏览器暂时没法让 Papo 连续听。你可以先写给它，或者手动加一段录音。");
+          setError("这个浏览器暂时没法让 Papo 连续听。你可以先写给它，或者加照片补充。");
           return;
         }
       }
@@ -733,14 +721,14 @@ export function App() {
 
       {tab === "curious" ? (
         <CuriousView
+          profile={profile}
           segments={segments}
           setSegments={setSegments}
-          onSubmit={submitCurious}
+          onSubmit={submitCompanionMoment}
           busy={busy}
           listening={listening}
           listeningElapsed={listeningElapsed}
           onUploadImage={uploadImageSummary}
-          onUploadAudio={uploadAudioTranscript}
           onStartListening={startListening}
           onStopListening={stopListening}
         />
@@ -938,37 +926,46 @@ function ShibaAvatar({ state, idle = false }: { state?: CreatureState; idle?: bo
 }
 
 function CuriousView(props: {
+  profile: CreatureProfile;
   segments: StreamSegment[];
   setSegments: (segments: StreamSegment[] | ((current: StreamSegment[]) => StreamSegment[])) => void;
-  onSubmit: () => void;
+  onSubmit: (text: string) => Promise<void>;
   busy: boolean;
   listening: boolean;
   listeningElapsed: number;
   onUploadImage: (file?: File) => void;
-  onUploadAudio: (file?: File) => void;
   onStartListening: () => void;
   onStopListening: () => void;
 }) {
+  const [draft, setDraft] = useState("");
+  const messages = [...(props.profile.conversation ?? [])].slice(0, 16).reverse();
+  const sections = groupConversationSections(messages);
+  const canSubmit = Boolean(draft.trim() || props.segments.some((segment) => segment.content.trim()));
+
   function updateSegment(index: number, patch: Partial<StreamSegment>) {
     props.setSegments(props.segments.map((segment, current) => (current === index ? { ...segment, ...patch } : segment)));
   }
 
-  function addSegment() {
-    props.setSegments([
-      ...props.segments,
-      makeSegment(`segment-${Date.now()}`, "text", `片段 ${props.segments.length + 1}`, "")
-    ]);
+  function removeSegment(index: number) {
+    props.setSegments((current) => current.filter((_, currentIndex) => currentIndex !== index));
+  }
+
+  async function submitCurrentEvent() {
+    const text = draft.trim();
+    if (!text && !props.segments.length) return;
+    setDraft("");
+    await props.onSubmit(text);
   }
 
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={Sparkles} title="陪我看一小段世界" />
+        <PanelTitle icon={Sparkles} title="陪我一会儿" />
         <section className="listening-panel">
           <div>
-            <strong>{props.listening ? "我正在听这一小段世界" : "陪我听一会儿"}</strong>
+            <strong>{props.listening ? "Papo 正在听你周围发生的事" : "可以让 Papo 持续听一会儿"}</strong>
             <p>
-              最多听 3 分钟，每 30 秒整理一次。原始声音不保存，只把可修改的文字加入这次共同经历。
+              最多 3 分钟，每 30 秒整理一次声音。你可以同时补文字或照片；提交一次就是一件事，提交后还可以继续说下一件。
             </p>
           </div>
           <button onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
@@ -976,51 +973,77 @@ function CuriousView(props: {
             {props.listening ? `停止 ${formatListeningTime(props.listeningElapsed)}` : "开始听 3 分钟"}
           </button>
         </section>
-        <label className="upload-button">
-          <ImagePlus size={18} />
-          加一张照片
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            onChange={(event) => {
-              props.onUploadImage(event.currentTarget.files?.[0]);
-              event.currentTarget.value = "";
-            }}
-            disabled={props.busy}
+        <div className="chat-composer companion-composer">
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            rows={3}
+            placeholder="告诉 Papo 正在发生或刚想到的事"
           />
-        </label>
-        <label className="upload-button">
-          <Mic size={18} />
-          加一段录音
-          <input
-            type="file"
-            accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg"
-            onChange={(event) => {
-              props.onUploadAudio(event.currentTarget.files?.[0]);
-              event.currentTarget.value = "";
-            }}
-            disabled={props.busy}
-          />
-        </label>
-        {props.segments.map((segment, index) => (
-          <div className="segment-editor" key={segment.id}>
-            <div className="segment-row">
-              <input value={segment.label} onChange={(event) => updateSegment(index, { label: event.target.value })} />
-              <SegmentKindPicker value={segment.kind} onChange={(kind) => updateSegment(index, { kind })} />
-            </div>
-            <textarea value={segment.content} onChange={(event) => updateSegment(index, { content: event.target.value })} rows={4} />
+          <div className="composer-tools">
+            <label className="upload-button compact-upload">
+              <ImagePlus size={16} />
+              加照片
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => {
+                  props.onUploadImage(event.currentTarget.files?.[0]);
+                  event.currentTarget.value = "";
+                }}
+                disabled={props.busy}
+              />
+            </label>
+            <button className="primary" onClick={submitCurrentEvent} disabled={props.busy || !canSubmit}>
+              <MessageCircle size={18} />
+              提交这件事
+            </button>
           </div>
-        ))}
-        <div className="action-row">
-          <button onClick={addSegment}>
-            <Plus size={18} />
-            加一小段
-          </button>
-          <button className="primary" onClick={props.onSubmit} disabled={props.busy}>
-            <Eye size={18} />
-            让 Papo 看看
-          </button>
         </div>
+        {props.segments.length ? (
+          <section className="staged-moment">
+            <strong>这次会一起给 Papo 理解</strong>
+            {props.segments.map((segment, index) => (
+              <article className="staged-segment" key={segment.id}>
+                <div className="segment-row">
+                  <input value={segment.label} onChange={(event) => updateSegment(index, { label: event.target.value })} />
+                  <SegmentKindPicker value={segment.kind} onChange={(kind) => updateSegment(index, { kind })} />
+                </div>
+                <textarea value={segment.content} onChange={(event) => updateSegment(index, { content: event.target.value })} rows={3} />
+                <button onClick={() => removeSegment(index)} disabled={props.busy}>
+                  <RefreshCcw size={16} />
+                  这次不带
+                </button>
+              </article>
+            ))}
+          </section>
+        ) : (
+          <p className="muted">你可以直接说一件事，也可以先开始听，再随时加照片或文字补充。</p>
+        )}
+      </div>
+      <div className="panel">
+        <PanelTitle icon={MessagesSquare} title="刚才的对话" />
+        {messages.length ? (
+          <div className="chat-list compact-chat-list">
+            {sections.map((section) =>
+              section.kind === "batch" ? (
+                <section className="chat-batch" key={section.id}>
+                  <div className="chat-batch-head">
+                    <strong>同一次事件</strong>
+                    <span>{section.messages.length} 条内容</span>
+                  </div>
+                  {section.messages.map((message) => (
+                    <ChatBubble message={message} key={message.id} />
+                  ))}
+                </section>
+              ) : (
+                <ChatBubble message={section.message} key={section.id} />
+              )
+            )}
+          </div>
+        ) : (
+          <p className="muted">提交后，Papo 的回应会留在这里，也会出现在对话页。</p>
+        )}
       </div>
     </section>
   );

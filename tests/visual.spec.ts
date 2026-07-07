@@ -65,13 +65,18 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   expect(memoryScreenshot.byteLength).toBeGreaterThan(30_000);
 
   await page.getByRole("button", { name: "陪我" }).click();
-  await expect(page.getByText("陪我看一小段世界")).toBeVisible();
-  await expect(page.getByText("陪我听一会儿")).toBeVisible();
+  await expect(page.getByText("陪我一会儿")).toBeVisible();
+  await expect(page.getByText("可以让 Papo 持续听一会儿")).toBeVisible();
+  await expect(page.getByText(/最多 3 分钟，每 30 秒整理一次声音/)).toBeVisible();
   await expect(page.getByRole("button", { name: "开始听 3 分钟" })).toBeVisible();
-  await expect(page.getByText("加一张照片")).toBeVisible();
-  await expect(page.getByText("加一段录音")).toBeVisible();
+  await expect(page.getByText("加照片", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "提交这件事" })).toBeVisible();
+  await expect(page.getByText("刚才的对话")).toBeVisible();
+  await expect(page.getByText("加一张照片")).toHaveCount(0);
+  await expect(page.getByText("加一段录音")).toHaveCount(0);
+  await expect(page.getByText("加一小段")).toHaveCount(0);
+  await expect(page.getByText("让 Papo 看看")).toHaveCount(0);
   await expect(page.getByRole("combobox")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "照片" }).first()).toBeVisible();
   await expect(page.getByText("Curious Mode")).toHaveCount(0);
 
   await page.getByRole("button", { name: "演示" }).click();
