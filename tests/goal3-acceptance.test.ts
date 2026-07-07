@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { handleButtonCapture, handleCuriousStream } from "../src/core/attention";
 import { createContrastSummary } from "../src/core/demo";
 import { semanticDecideEmergence } from "../src/core/emergence";
-import { applyFeedback } from "../src/core/feedback";
+import { applyFeedback, semanticReflectFeedback } from "../src/core/feedback";
 import { createCreatureProfile } from "../src/core/profile";
 import type { ModelProvider } from "../src/core/provider";
 import { wakeCreature } from "../src/core/rhythm";
@@ -28,14 +28,16 @@ describe("goal 3 acceptance flow", () => {
     const targetEpisode = curious.episodes[0];
     applyFeedback(main, { kind: "remember", targetId: targetEpisode.id, now: "2026-07-06T06:02:00.000Z" });
     const learned = applyFeedback(main, { kind: "continue", targetId: targetEpisode.id, now: "2026-07-06T06:03:00.000Z" });
+    await semanticReflectFeedback(main, learned, feedbackProvider("continue"));
     expect(learned.learningNote).toContain("我学到");
     expect(learned.learningNote).toContain("不要浅浅带过");
     expect(main.longTermMemories.some((memory) => memory.sourceEpisodeId === targetEpisode.id)).toBe(true);
-    expect(main.memoryCandidates.some((candidate) => candidate.sourceEpisodeId === targetEpisode.id)).toBe(true);
 
     const input = "我有点担心自己又把妈妈复查这件事拖到睡前，明明它很重要。";
-    const deep = conditionCreature("goal3-deep", input, "continue");
-    const quiet = conditionCreature("goal3-quiet", input, "not_now");
+    const [deep, quiet] = await Promise.all([
+      conditionCreature("goal3-deep", input, "continue"),
+      conditionCreature("goal3-quiet", input, "not_now")
+    ]);
     const deepNext = handleButtonCapture(deep, input, "2026-07-06T06:04:00.000Z");
     const quietNext = handleButtonCapture(quiet, input, "2026-07-06T06:04:00.000Z");
     const contrast = createContrastSummary({ deepProfile: deep, quietProfile: quiet, deepResult: deepNext, quietResult: quietNext });
@@ -92,13 +94,40 @@ function emergenceProvider(memoryId: string): ModelProvider {
   };
 }
 
-function conditionCreature(userId: string, input: string, feedbackKind: "continue" | "not_now") {
+async function conditionCreature(userId: string, input: string, feedbackKind: "continue" | "not_now") {
   const profile = createCreatureProfile({ userId });
   const first = handleButtonCapture(profile, input, "2026-07-06T06:00:00.000Z");
   for (let index = 0; index < 3; index += 1) {
-    applyFeedback(profile, { kind: feedbackKind, targetId: first.episodes[0].id, now: `2026-07-06T06:0${index + 1}:00.000Z` });
+    const feedback = applyFeedback(profile, { kind: feedbackKind, targetId: first.episodes[0].id, now: `2026-07-06T06:0${index + 1}:00.000Z` });
+    await semanticReflectFeedback(profile, feedback, feedbackProvider(feedbackKind));
   }
   return profile;
+}
+
+function feedbackProvider(kind: "continue" | "not_now"): ModelProvider {
+  const deep = kind === "continue";
+  return {
+    kind: "generic",
+    name: "acceptance feedback model",
+    available: true,
+    usesRealModel: true,
+    generate: async () => "",
+    summarizeImage: async () => "",
+    transcribeAudio: async () => "",
+    generateJson: async <T,>(): Promise<T | undefined> =>
+      ({
+        responseAction: deep ? "acknowledge" : "quiet",
+        stateDeltas: deep ? { curiosity: 4, attachment: 2 } : { arousal: -4 },
+        policyDeltas: deep ? { preferDepth: 7, recallTendency: 6, quietTendency: -2 } : { quietTendency: 8, preferProactivity: -5, askThreshold: 3 },
+        memoryWeightDelta: deep ? 6 : -4,
+        learningNote: deep ? "我学到：这件担心不要浅浅带过，下次要多停一下。" : "我学到：这类时候先安静陪着，不急着追问。",
+        effect: deep ? "你是在教我更认真地接住相近担心。" : "你是在教我先收住声音，别急着打扰。",
+        creatureSelfMemory: {
+          text: deep ? "你教我遇到这类担心时，不要浅浅带过，要多停一下。" : "你教我遇到这类担心时，先轻声陪着，不急着追问。",
+          tags: deep ? ["更愿意多想"] : ["更安静"]
+        }
+      }) as T
+  };
 }
 
 function lifeSegments(): StreamSegment[] {

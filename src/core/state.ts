@@ -1,4 +1,4 @@
-import type { CreatureProfile, CreatureState, FeedbackKind, StateChange } from "./types";
+import type { CreatureProfile, CreatureState, StateChange } from "./types";
 
 export function initialState(seed = "papo"): CreatureState {
   const offset = seededOffset(seed);
@@ -65,21 +65,6 @@ export function applyStateDelta(
   profile.stateChanges.unshift(change);
   profile.stateChanges = profile.stateChanges.slice(0, 30);
   return change;
-}
-
-export function deltaForFeedback(kind: FeedbackKind) {
-  switch (kind) {
-    case "understood":
-      return { confidence: 8, attachment: 4, arousal: -2 };
-    case "continue":
-      return { curiosity: 8, confidence: 4, energy: -4, attachment: 2 };
-    case "not_now":
-      return { arousal: -7, confidence: -3, energy: 2 };
-    case "remember":
-      return { attachment: 6, confidence: 5, safety: 2 };
-    case "forget":
-      return { safety: 10, arousal: 4, confidence: -5, attachment: -2 };
-  }
 }
 
 function clamp(value: number): number {

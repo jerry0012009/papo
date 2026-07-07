@@ -1,21 +1,13 @@
 import { z } from "zod";
-import { clampPolicy, updatePolicyFromFeedback } from "./drive";
+import { clampPolicy } from "./drive";
 import { makeId } from "./ids";
-import { createLearningNote } from "./experience";
-import { adjustMemoryWeight, createMemoryCandidateFromEpisode, forgetMemory, normalizeSharedMemoryText, promoteEpisode } from "./memory";
+import { adjustMemoryWeight, forgetMemory, normalizeSharedMemoryText, promoteEpisode } from "./memory";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
-import { applyStateDelta, deltaForFeedback } from "./state";
+import { applyStateDelta } from "./state";
 import { extractTags, summarizeText } from "./text";
 import type { CreatureProfile, CreatureState, FeedbackKind, FeedbackPolicyProfile, FeedbackRecord, LongTermMemory, SegmentKind } from "./types";
-
-interface FeedbackReplyContext {
-  tags: string[];
-  targetEpisode?: CreatureProfile["episodes"][number];
-  targetLongTerm?: LongTermMemory;
-  forgetResult?: { changed: boolean; purged: boolean };
-}
 
 const stateDeltaSchema = z
   .object({
@@ -99,10 +91,6 @@ export function applyFeedback(
   const targetEpisode = profile.episodes.find((item) => item.id === input.targetId);
   const targetLongTerm = profile.longTermMemories.find((item) => item.id === input.targetId);
   const tags = targetEpisode?.tags ?? targetLongTerm?.tags ?? [];
-  const stateBefore = structuredClone(profile.state);
-  const policyBefore = structuredClone(profile.policyProfile);
-  const learningNote = createLearningNote(input.kind, tags, inputText);
-  const effect = `${effectText(input.kind)} ${updatePolicyFromFeedback(profile, input.kind, tags)}`;
   const record: FeedbackRecord = {
     id: makeId("feedback"),
     at: now,
@@ -110,8 +98,8 @@ export function applyFeedback(
     targetId: input.targetId,
     inputText,
     inputModality: input.modality ?? (inputText ? "text" : "button"),
-    effect,
-    learningNote,
+    effect: "等待模型理解这次反馈。",
+    learningNote: "我正在理解你刚才教我的这一下。",
     memoryCandidateIds: []
   };
 
@@ -119,10 +107,6 @@ export function applyFeedback(
   profile.feedbackHistory = profile.feedbackHistory.slice(0, 60);
 
   if (targetEpisode) targetEpisode.feedback.push(input.kind);
-
-  const stateChange = applyStateDelta(profile, deltaForFeedback(input.kind), effect, now);
-  record.stateDeltas = stateDeltas(stateBefore, stateChange.after);
-  record.policyDeltas = policyDeltas(policyBefore, profile.policyProfile);
 
   if (input.kind === "remember" && input.targetId) {
     const memory = promoteEpisode(profile, input.targetId, now);
@@ -137,33 +121,7 @@ export function applyFeedback(
     }
   }
   const forgetResult = input.kind === "forget" ? forgetMemory(profile, input.targetId) : undefined;
-  if (input.kind === "understood") adjustMemoryWeight(profile, input.targetId, 8);
-  if (input.kind === "continue") {
-    adjustMemoryWeight(profile, input.targetId, 12);
-    if (targetEpisode) {
-      const candidate = createMemoryCandidateFromEpisode(profile, targetEpisode, { feedback: "continue", now });
-      if (inputText && !hasPrivacyRisk(inputText)) {
-        candidate.candidateText = `你后来教我补上这一点：${summarizeText(inputText, 140)}。我会把它和原来的事放在一起理解。`;
-        candidate.tags = unique([...candidate.tags, ...extractTags(inputText)]);
-      }
-      record.memoryCandidateIds?.push(candidate.id);
-    }
-  }
-  if (input.kind === "not_now") adjustMemoryWeight(profile, input.targetId, -8);
   if (input.kind === "forget" && forgetResult?.changed && !forgetResult.purged) createSafetyMemoryFromForget(profile, targetEpisode, targetLongTerm, now);
-  upsertFeedbackSelfMemory(profile, {
-    kind: input.kind,
-    tags,
-    targetEpisode,
-    targetLongTerm,
-    inputText,
-    now
-  });
-
-  const replyContext: FeedbackReplyContext = { tags, targetEpisode, targetLongTerm, forgetResult };
-  record.responseAction = selectFeedbackResponseAction(input.kind, inputText, replyContext);
-  record.followUpText = createFeedbackFollowUp(record.responseAction, input.kind, inputText, replyContext);
-  record.replyText = composeFeedbackReplyText(record);
 
   return record;
 }
@@ -183,7 +141,6 @@ export async function semanticReflectFeedback(
   }
   assertSemanticFeedbackVisibleOutput(parsed.data);
   applySemanticFeedbackSuggestion(profile, feedback, parsed.data);
-  removeRuleCreatedFeedbackSelfMemories(profile, feedback);
   recordFeedbackSemanticRun(profile, provider, "applied", "llm feedback reflection applied");
   return feedback;
 }
@@ -254,18 +211,6 @@ function assertSemanticFeedbackVisibleOutput(suggestion: SemanticFeedbackSuggest
   if (!learningNote || !learningNote.startsWith("我学到")) throw new Error("feedback model did not provide a usable learning note");
   const effect = safeCreatureText(suggestion.effect);
   if (!effect) throw new Error("feedback model did not provide a usable effect");
-}
-
-function removeRuleCreatedFeedbackSelfMemories(profile: CreatureProfile, feedback: FeedbackRecord) {
-  profile.longTermMemories = profile.longTermMemories.filter(
-    (memory) =>
-      !(
-        memory.kind === "creature_self_memory" &&
-        memory.createdAt === feedback.at &&
-        memory.tags.includes("被你养成") &&
-        !memory.tags.includes("LLM理解反馈")
-      )
-  );
 }
 
 function cleanNumberDeltas<T extends Record<string, number | undefined> | undefined>(deltas: T) {
@@ -341,6 +286,9 @@ function safeCreatureText(text?: string) {
   if (/(LLM|语义|用户意图|用户在|用户希望|系统|后台|流程|candidate|episode|score|阈值|字段|JSON|prompt|数据库|写入|长期记忆|情景记忆)/i.test(normalized)) {
     return undefined;
   }
+  if (/(^|[，。；、\s])(他|她)(希望|说|告诉|觉得|想|需要|不想|喜欢|讨厌|在|会)/.test(normalized)) {
+    return undefined;
+  }
   return normalized;
 }
 
@@ -386,6 +334,7 @@ function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: Feedbac
 - 输出内部词：LLM、语义、后台、流程、candidate、episode、score、阈值、JSON、数据库、写入、长期记忆、情景记忆。
 - 把隐私、token、验证码、密码、地址等内容写进 creatureSelfMemory。
 - 编造用户没有说过的新事实。
+- 用户反馈里的“我”是用户自己，“你”通常是 Papo；Papo 的 learningNote/effect/creatureSelfMemory 里要用“你”称呼用户，不要写“用户”“他”“她”。
 
 返回严格 JSON：
 {
@@ -451,73 +400,6 @@ ${JSON.stringify(modelMemoryContext(profile.longTermMemories))}
 `;
 }
 
-function effectText(kind: FeedbackKind): string {
-  switch (kind) {
-    case "understood":
-      return "你说我这次懂对了，我会更敢把这种理解方式轻轻说出来。";
-    case "continue":
-      return "你让我再想一会儿，我以后会更愿意把相近的小事连起来多停一下。";
-    case "not_now":
-      return "你说这次先不用，我会把声音收小一点，学会不急着打扰你。";
-    case "remember":
-      return "你让我帮你记住，我会把这件事记得更准一点。";
-    case "forget":
-      return "你让我放下它，我会让这段变轻，也更小心守住边界。";
-  }
-}
-
-function selectFeedbackResponseAction(kind: FeedbackKind, inputText: string | undefined, context: FeedbackReplyContext) {
-  if (kind === "not_now" || kind === "forget") return "quiet";
-  if (kind === "remember") return "note_memory";
-  if (kind === "continue" && inputText && inputText.length >= 8 && hasFeedbackTarget(context)) return "ask_follow_up";
-  if (kind === "continue") return "note_memory";
-  return "acknowledge";
-}
-
-function createFeedbackFollowUp(
-  action: NonNullable<FeedbackRecord["responseAction"]>,
-  kind: FeedbackKind,
-  inputText: string | undefined,
-  context: FeedbackReplyContext
-) {
-  const topic = feedbackTopic(context);
-  if (action === "ask_follow_up") {
-    return `我还想轻轻问一句：下次再碰到${topic}时，我先帮你想起以前的小事，还是先问你一句确认？`;
-  }
-  if (action === "note_memory") {
-    if (kind === "remember") {
-      return inputText?.trim()
-        ? `我会把你刚补的这点和${topic}放在一起，之后更容易接上。`
-        : `我会把${topic}记稳一点，之后更容易接上。`;
-    }
-    return inputText?.trim()
-      ? `我会先把你补的这点和${topic}放在一起，当成还没完全记稳的想法守着。`
-      : `我会把${topic}再放近一点，之后更容易从这里继续想。`;
-  }
-  if (action === "quiet") {
-    if (kind === "forget" && context.forgetResult?.purged) {
-      return `我已经把${topic}彻底放下，只留下边界：下次类似内容先问你。`;
-    }
-    if (kind === "forget") {
-      return `我先把${topic}放轻到最低，之后不把它当成会自己冒出来的小事。`;
-    }
-    return `我会先安静，把${topic}放轻一点；下次类似内容不急着追问。`;
-  }
-  return `我会按你这次教的方式靠近${topic}。`;
-}
-
-function hasFeedbackTarget(context: FeedbackReplyContext) {
-  return Boolean(context.targetEpisode || context.targetLongTerm || context.tags.length);
-}
-
-function feedbackTopic(context: FeedbackReplyContext) {
-  const tag = context.tags.find((item) => usefulFeedbackTag(item));
-  if (tag) return `「${summarizeText(tag, 18)}」`;
-  const text = context.targetEpisode?.inputSummary ?? context.targetEpisode?.noticed ?? context.targetLongTerm?.text;
-  if (text) return `「${summarizeText(text, 18)}」`;
-  return "这类事";
-}
-
 function usefulFeedbackTag(tag: string) {
   const clean = tag.trim();
   if (clean.length < 2) return false;
@@ -535,7 +417,15 @@ function unique(values: string[]) {
 }
 
 function safeStoredTags(tags: string[]) {
-  return unique(tags.filter((tag) => !hasPrivacyRisk(tag)));
+  return unique(tags.filter((tag) => isSystemStoredTag(tag) || (!hasPrivacyRisk(tag) && !containsInternalStoredTag(tag))));
+}
+
+function isSystemStoredTag(tag: string) {
+  return tag === "被你养成" || tag === "LLM理解反馈";
+}
+
+function containsInternalStoredTag(tag: string) {
+  return /用户|小动物|LLM|语义|系统|后台|流程|candidate|episode|score|阈值|JSON|数据库|写入|长期记忆|情景记忆|偏好分类|记忆策略|^他|^她|他希望|她希望|他说|她说/i.test(tag);
 }
 
 function createSafetyMemoryFromForget(
@@ -558,92 +448,4 @@ function createSafetyMemoryFromForget(
     tags: privacyHigh ? [] : safeStoredTags(episode?.tags ?? memory?.tags ?? []),
     consolidatedBecause: "你用放下这一下教我先小心边界。"
   });
-}
-
-function upsertFeedbackSelfMemory(
-  profile: CreatureProfile,
-  input: {
-    kind: FeedbackKind;
-    tags: string[];
-    targetEpisode?: CreatureProfile["episodes"][number];
-    targetLongTerm?: LongTermMemory;
-    inputText?: string;
-    now: string;
-  }
-) {
-  const trait = selfMemoryTrait(input.kind);
-  const topic = selfMemoryTopic(input);
-  const extra = input.inputText && !hasPrivacyRisk(input.inputText) ? ` 你还用自己的话教我：${summarizeText(input.inputText, 80)}。` : "";
-  const text = normalizeSharedMemoryText(`${trait.text(topic)}${extra}`);
-  const topicPrivacyHigh = hasPrivacyRisk(`${input.inputText ?? ""} ${input.targetEpisode?.inputSummary ?? ""} ${input.targetLongTerm?.text ?? ""} ${input.tags.join(" ")}`);
-  const tags = safeStoredTags(["被你养成", trait.tag, ...(topicPrivacyHigh ? [] : input.tags), ...extractTags(topic)]);
-  const sourceEpisodeId = input.targetEpisode?.id ?? input.targetLongTerm?.sourceEpisodeId;
-  const existing = profile.longTermMemories.find((memory) => memory.kind === "creature_self_memory" && memory.tags.includes(trait.tag));
-
-  if (existing) {
-    existing.text = text;
-    existing.weight = Math.min(100, existing.weight + 10);
-    existing.tags = safeStoredTags([...existing.tags, ...tags]);
-    existing.lastReferencedAt = input.now;
-    existing.sourceEpisodeId ??= sourceEpisodeId;
-    existing.consolidatedBecause = "你反复用反馈教我，我更认识自己该怎么靠近你。";
-    return;
-  }
-
-  profile.longTermMemories.unshift({
-    id: makeId("ltm"),
-    createdAt: input.now,
-    kind: "creature_self_memory",
-    text,
-    sourceEpisodeId,
-    weight: 64,
-    tags,
-    consolidatedBecause: "你刚才的反馈让我更认识自己该怎么靠近你。"
-  });
-}
-
-function selfMemoryTrait(kind: FeedbackKind) {
-  switch (kind) {
-    case "understood":
-      return {
-        tag: "被确认",
-        text: (topic: string) => `你告诉我这次懂对了，我更敢相信这种听法。以后遇到${topic}，我会先照着这次的理解靠近。`
-      };
-    case "continue":
-      return {
-        tag: "更愿意多想",
-        text: (topic: string) => `你教我不要浅浅带过。以后遇到${topic}，我会多停一下，先想起以前的小事再回应。`
-      };
-    case "not_now":
-      return {
-        tag: "更安静",
-        text: (topic: string) => `你教我不是每次注意到都要插话。以后遇到${topic}，我会先轻声陪着，不急着追问。`
-      };
-    case "remember":
-      return {
-        tag: "更愿意记稳",
-        text: (topic: string) => `你教我被确认的内容值得记稳。以后遇到${topic}，我会更愿意把它和以前的事连起来。`
-      };
-    case "forget":
-      return {
-        tag: "更小心边界",
-        text: (topic: string) => `你教我这类内容要先小心边界。以后遇到${topic}，我会先问你，再决定要不要记。`
-      };
-  }
-}
-
-function selfMemoryTopic(input: {
-  tags: string[];
-  targetEpisode?: CreatureProfile["episodes"][number];
-  targetLongTerm?: LongTermMemory;
-  inputText?: string;
-}) {
-  const contextPrivacyHigh = hasPrivacyRisk(`${input.inputText ?? ""} ${input.targetEpisode?.inputSummary ?? ""} ${input.targetLongTerm?.text ?? ""} ${input.tags.join(" ")}`);
-  if (contextPrivacyHigh) return "这类需要保护的内容";
-  const tag = input.tags.find((item) => usefulFeedbackTag(item));
-  if (tag) return `「${summarizeText(tag, 18)}」`;
-  const text = input.targetEpisode?.inputSummary ?? input.targetEpisode?.noticed ?? input.targetLongTerm?.text ?? input.inputText;
-  if (hasPrivacyRisk(text ?? "")) return "这类需要保护的内容";
-  if (text) return `「${summarizeText(text, 22)}」`;
-  return "这类事";
 }

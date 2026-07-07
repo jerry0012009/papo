@@ -123,33 +123,28 @@ describe("creature core", () => {
     expect(result.curiousSession?.ignored.map((item) => item.segmentId)).toContain("s2");
   });
 
-  it("feedback changes state and keeps values clamped", () => {
+  it("feedback capture records teaching input without rule-shaped learning", () => {
     const profile = createCreatureProfile();
     handleButtonCapture(profile, "请继续想这个小动物为什么会注意。");
-    const before = profile.state.curiosity;
+    const beforeState = structuredClone(profile.state);
+    const beforePolicy = structuredClone(profile.policyProfile);
 
     const feedback = applyFeedback(profile, { kind: "continue", targetId: profile.episodes[0].id, content: "这块请多想一点，不要只轻轻带过。" });
 
-    expect(profile.state.curiosity).toBeGreaterThan(before);
+    expect(profile.state).toEqual(beforeState);
+    expect(profile.policyProfile).toEqual(beforePolicy);
     expect(inRange(profile.state)).toBe(true);
     expect(profile.feedbackHistory[0].kind).toBe("continue");
     expect(feedback.inputText).toContain("多想一点");
-    expect(feedback.effect).toContain("你让我再想一会儿");
-    expect(feedback.effect).not.toMatch(/用户让我|用户说|策略改变/);
-    expect(feedback.learningNote).toContain("你还补充说");
-    expect(feedback.responseAction).toBe("ask_follow_up");
-    expect(feedback.followUpText).toContain("下次再碰到");
-    expect(feedback.followUpText).toMatch(/小动物|注意/);
-    expect(feedback.replyText).toContain(feedback.followUpText);
-    expect(feedback.memoryCandidateIds?.length).toBeGreaterThan(0);
-    expect(profile.memoryCandidates[0].candidateText).toContain("你后来教我补上这一点");
-    expect(profile.memoryCandidates[0].candidateText).not.toContain("用户反馈这段");
-    expect(profile.longTermMemories[0].kind).toBe("creature_self_memory");
-    expect(profile.longTermMemories[0].text).toContain("你教我不要浅浅带过");
-    expect(profile.longTermMemories[0].text).toContain("你还用自己的话教我");
-    expect(profile.longTermMemories[0].tags).toContain("更愿意多想");
-    expect(feedback.stateDeltas?.some((item) => item.key === "curiosity" && item.delta > 0)).toBe(true);
-    expect(feedback.policyDeltas?.some((item) => item.key === "preferDepth" && item.delta > 0)).toBe(true);
+    expect(feedback.effect).toBe("等待模型理解这次反馈。");
+    expect(feedback.learningNote).toContain("正在理解");
+    expect(feedback.responseAction).toBeUndefined();
+    expect(feedback.followUpText).toBeUndefined();
+    expect(feedback.replyText).toBeUndefined();
+    expect(feedback.memoryCandidateIds).toEqual([]);
+    expect(profile.longTermMemories.some((memory) => memory.kind === "creature_self_memory")).toBe(false);
+    expect(feedback.stateDeltas).toBeUndefined();
+    expect(feedback.policyDeltas).toBeUndefined();
   });
 
   it("LLM feedback reflection can shape state, policy, memory weight, and self memory inside guardrails", async () => {
@@ -172,7 +167,7 @@ describe("creature core", () => {
           effect: "你这次是在鼓励我更认真地接住相近的事。",
           creatureSelfMemory: {
             text: "你教我遇到这类让你在意的事时，不要太快放过去，要先多听一会儿。",
-            tags: ["更愿意多想", "多听一会儿"]
+            tags: ["更愿意多想", "多听一会儿", "用户偏好"]
           },
           trace: ["feedback means more depth"]
         }) as T
@@ -184,22 +179,25 @@ describe("creature core", () => {
     const beforeCuriosity = profile.state.curiosity;
     const beforeArousal = profile.state.arousal;
     const beforePreferDepth = profile.policyProfile.preferDepth;
+    const beforeRecall = profile.policyProfile.recallTendency;
+    const beforeQuiet = profile.policyProfile.quietTendency;
 
     const feedback = applyFeedback(profile, { kind: "continue", targetId: episode.id, content: "这里别轻轻带过，请多想一点。" });
     await semanticReflectFeedback(profile, feedback, provider);
 
-    expect(profile.state.curiosity).toBe(beforeCuriosity + 13);
+    expect(profile.state.curiosity).toBe(beforeCuriosity + 5);
     expect(profile.state.arousal).toBe(beforeArousal - 4);
-    expect(profile.policyProfile.preferDepth).toBe(beforePreferDepth + 14);
-    expect(profile.policyProfile.recallTendency).toBe(63);
-    expect(profile.policyProfile.quietTendency).toBe(30);
-    expect(episode.weight).toBe(beforeWeight + 19);
+    expect(profile.policyProfile.preferDepth).toBe(beforePreferDepth + 6);
+    expect(profile.policyProfile.recallTendency).toBe(beforeRecall + 5);
+    expect(profile.policyProfile.quietTendency).toBe(beforeQuiet - 2);
+    expect(episode.weight).toBe(beforeWeight + 7);
     expect(feedback.responseAction).toBe("ask_follow_up");
     expect(feedback.learningNote).toContain("我学到");
     expect(feedback.followUpText).toContain("多听一会儿");
-    expect(feedback.stateDeltas?.find((item) => item.key === "curiosity")?.delta).toBe(13);
-    expect(feedback.policyDeltas?.find((item) => item.key === "preferDepth")?.delta).toBe(14);
+    expect(feedback.stateDeltas?.find((item) => item.key === "curiosity")?.delta).toBe(5);
+    expect(feedback.policyDeltas?.find((item) => item.key === "preferDepth")?.delta).toBe(6);
     expect(profile.longTermMemories.some((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("LLM理解反馈"))).toBe(true);
+    expect(profile.longTermMemories.some((memory) => memory.tags.includes("用户偏好"))).toBe(false);
     expect(profile.semanticBrainHistory[0]).toMatchObject({ source: "feedback", status: "applied" });
   });
 
@@ -270,7 +268,7 @@ describe("creature core", () => {
     await expect(semanticReflectFeedback(profile, feedback, provider)).rejects.toThrow(/usable learning note|usable effect/);
   });
 
-  it("ignores malformed optional feedback self memory without losing model learning", async () => {
+  it("ignores third-person feedback self memory without losing model learning", async () => {
     const provider: ModelProvider = {
       kind: "generic",
       name: "short self-memory feedback model",
@@ -284,7 +282,7 @@ describe("creature core", () => {
           responseAction: "acknowledge",
           learningNote: "我学到这件事你希望我多停一下。",
           effect: "你是在教我遇到相近内容时不要太快带过。",
-          creatureSelfMemory: { text: "" }
+          creatureSelfMemory: { text: "他希望我以后遇到这类事情多停一下。", tags: ["他说", "更愿意多想"] }
         }) as T
     };
     const profile = createCreatureProfile();
@@ -329,7 +327,7 @@ describe("creature core", () => {
     expect(promptSeen).not.toContain("secret token");
     expect(promptSeen).not.toContain("abc");
     expect(feedback.replyText).toBe(before);
-    expect(feedback.replyText).not.toMatch(/secret|token|abc/i);
+    expect(feedback.replyText ?? "").not.toMatch(/secret|token|abc/i);
   });
 
   it("wake rhythm applies time-based state recovery without faking memory emergence", () => {
@@ -385,7 +383,7 @@ describe("creature core", () => {
     expect(wake.emergenceId).toBeUndefined();
     expect(wake.relatedMemoryIds).toEqual([]);
     expect(profile.emergenceHistory).toHaveLength(0);
-    expect(profile.longTermMemories.some((memory) => memory.tags.includes("被你养成"))).toBe(true);
+    expect(profile.longTermMemories.some((memory) => memory.tags.includes("被你养成"))).toBe(false);
   });
 
   it("wake never resurfaces raw analysis text as creature speech", () => {
@@ -462,16 +460,15 @@ describe("creature core", () => {
     const firstForget = applyFeedback(profile, { kind: "forget", targetId });
 
     expect(profile.longTermMemories.find((memory) => memory.id === targetId)?.weight).toBe(0);
-    expect(firstForget.followUpText).toContain("放轻到最低");
+    expect(firstForget.followUpText).toBeUndefined();
     const safetyMemory = profile.longTermMemories.find((memory) => memory.kind === "safety_rule");
     expect(safetyMemory?.text).toContain("你让我放下类似内容");
     expect(safetyMemory?.consolidatedBecause).toContain("小心边界");
     expect(safetyMemory?.consolidatedBecause).not.toContain("forget feedback");
-    expect(profile.longTermMemories.some((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("更小心边界"))).toBe(true);
+    expect(profile.longTermMemories.some((memory) => memory.kind === "creature_self_memory" && memory.tags.includes("更小心边界"))).toBe(false);
     const secondForget = applyFeedback(profile, { kind: "forget", targetId });
     expect(profile.longTermMemories.find((memory) => memory.id === targetId)).toBeUndefined();
-    expect(secondForget.followUpText).toContain("彻底放下");
-    expect(profile.state.safety).toBeGreaterThan(58);
+    expect(secondForget.followUpText).toBeUndefined();
   });
 
   it("remember feedback with teaching text updates the targeted long-term memory", () => {
@@ -488,8 +485,8 @@ describe("creature core", () => {
       now: "2026-07-06T09:00:00.000Z"
     });
 
-    expect(feedback.responseAction).toBe("note_memory");
-    expect(feedback.followUpText).toContain("放在一起");
+    expect(feedback.responseAction).toBeUndefined();
+    expect(feedback.followUpText).toBeUndefined();
     expect(memory.text).toContain("医保卡");
     expect(memory.text).toContain("检查报告");
     expect(memory.tags.some((tag) => tag.includes("医保"))).toBe(true);

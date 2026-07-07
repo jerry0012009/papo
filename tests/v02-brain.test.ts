@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { handleButtonCapture, handleCuriousStream } from "../src/core/attention";
 import { createContrastSummary } from "../src/core/demo";
 import { semanticDecideEmergence } from "../src/core/emergence";
-import { applyFeedback } from "../src/core/feedback";
+import { applyFeedback, semanticReflectFeedback } from "../src/core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../src/core/harness";
 import { enrichFeedbackNarration } from "../src/core/narration";
 import { createCreatureProfile } from "../src/core/profile";
@@ -47,14 +47,16 @@ describe("creature brain v0.2", () => {
     expect(ask.events[0].actionDecision.blockedActions.length).toBeGreaterThan(0);
   });
 
-  it("feedback policy changes later attention and action style for different users", () => {
+  it("LLM feedback reflection changes later attention and action style for different users", async () => {
     const a = createCreatureProfile({ userId: "a" });
     const b = createCreatureProfile({ userId: "b" });
 
     const aFirst = handleButtonCapture(a, "我担心这个小动物会变成工具，而不是活物。");
     const bFirst = handleButtonCapture(b, "我担心这个小动物会变成工具，而不是活物。");
-    for (let i = 0; i < 3; i++) applyFeedback(a, { kind: "continue", targetId: aFirst.episodes[0].id });
-    for (let i = 0; i < 3; i++) applyFeedback(b, { kind: "not_now", targetId: bFirst.episodes[0].id });
+    for (let i = 0; i < 3; i++) {
+      await semanticReflectFeedback(a, applyFeedback(a, { kind: "continue", targetId: aFirst.episodes[0].id }), feedbackProvider("continue"));
+      await semanticReflectFeedback(b, applyFeedback(b, { kind: "not_now", targetId: bFirst.episodes[0].id }), feedbackProvider("not_now"));
+    }
 
     const aNext = handleButtonCapture(a, "我担心这个小动物会变成工具，而不是活物。");
     const bNext = handleButtonCapture(b, "我担心这个小动物会变成工具，而不是活物。");
@@ -167,7 +169,6 @@ describe("creature brain v0.2", () => {
       generateJson: async <T,>() =>
         ({
           learningNote: "我学到：妈妈复查这件事你希望我多停一下，之后遇到相似担心时，我会先陪你把它放稳。",
-          followUpText: "我还想轻轻问一句：下次我先帮你盯住准备资料，还是先陪你把担心说完？",
           trace: ["llm: feedback narration"]
         }) as T
     };
@@ -180,8 +181,8 @@ describe("creature brain v0.2", () => {
     await enrichFeedbackNarration(profile, feedback, provider);
 
     expect(feedback.learningNote).toContain("妈妈复查");
-    expect(feedback.followUpText).toContain("准备资料");
-    expect(feedback.replyText).toContain("准备资料");
+    expect(feedback.followUpText).toBeUndefined();
+    expect(feedback.replyText).toContain("妈妈复查");
     expect(feedback.responseAction).toBe(actionAfterRules);
     expect(profile.state).toEqual(stateAfterRules);
   });
@@ -238,7 +239,7 @@ describe("creature brain v0.2", () => {
 
     expect(feedback.learningNote).toContain("妈妈复查");
     expect(feedback.followUpText).toBe(ruleFollowUp);
-    expect(feedback.replyText).toContain(ruleFollowUp);
+    expect(feedback.replyText).toBe(feedback.learningNote);
   });
 
 });
@@ -260,6 +261,32 @@ function emergenceProvider(input: { memoryId: string; message: string }): ModelP
         whyNow: "我想把这条真实记住的事带回当前对话里。",
         message: input.message,
         proactiveLevel: "gentle"
+      }) as T
+  };
+}
+
+function feedbackProvider(kind: "continue" | "not_now"): ModelProvider {
+  const deep = kind === "continue";
+  return {
+    kind: "generic",
+    name: "v02 feedback model",
+    available: true,
+    usesRealModel: true,
+    generate: async () => "",
+    summarizeImage: async () => "",
+    transcribeAudio: async () => "",
+    generateJson: async <T,>(): Promise<T | undefined> =>
+      ({
+        responseAction: deep ? "acknowledge" : "quiet",
+        stateDeltas: deep ? { curiosity: 4, attachment: 2 } : { arousal: -4 },
+        policyDeltas: deep ? { preferDepth: 7, recallTendency: 6, quietTendency: -2 } : { quietTendency: 8, preferProactivity: -5, askThreshold: 3 },
+        memoryWeightDelta: deep ? 6 : -4,
+        learningNote: deep ? "我学到：这类担心不要浅浅带过，要多停一下。" : "我学到：这类担心先安静陪着，不急着追问。",
+        effect: deep ? "你是在教我更认真接住相近担心。" : "你是在教我先收住声音，别急着打扰。",
+        creatureSelfMemory: {
+          text: deep ? "你教我遇到这类担心时，不要浅浅带过，要多停一下。" : "你教我遇到这类担心时，先轻声陪着，不急着追问。",
+          tags: deep ? ["更愿意多想"] : ["更安静"]
+        }
       }) as T
   };
 }

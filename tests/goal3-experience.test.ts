@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { handleButtonCapture, handleCuriousStream } from "../src/core/attention";
 import { semanticDecideEmergence } from "../src/core/emergence";
-import { applyFeedback } from "../src/core/feedback";
+import { applyFeedback, semanticReflectFeedback } from "../src/core/feedback";
 import { createCreatureProfile } from "../src/core/profile";
 import type { ModelProvider } from "../src/core/provider";
 
@@ -30,11 +30,12 @@ describe("goal 3 creature experience", () => {
     expect(result.events[0].creatureExperience.earReason).not.toMatch(/竖起耳朵|情景记忆|后台分析|抱住|叼/);
   });
 
-  it("feedback returns a visible learning note", () => {
+  it("LLM feedback reflection returns a visible learning note", async () => {
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "我有点担心自己又把妈妈复查这件事拖到睡前。");
 
     const feedback = applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id });
+    await semanticReflectFeedback(profile, feedback, feedbackProvider("continue"));
 
     expect(feedback.learningNote).toContain("我学到");
     expect(feedback.learningNote).toContain("不要浅浅带过");
@@ -74,6 +75,32 @@ function emergenceProvider(memoryId: string): ModelProvider {
         whyNow: "我还惦记着你希望提前准备妈妈复查这件事。",
         message: "我刚才又想起妈妈复查这件事。你说它很重要、想提前准备，所以等你继续说时，我会接住和准备有关的线索。",
         proactiveLevel: "gentle"
+      }) as T
+  };
+}
+
+function feedbackProvider(kind: "continue" | "not_now"): ModelProvider {
+  const continueFeedback = kind === "continue";
+  return {
+    kind: "generic",
+    name: "goal feedback model",
+    available: true,
+    usesRealModel: true,
+    generate: async () => "",
+    summarizeImage: async () => "",
+    transcribeAudio: async () => "",
+    generateJson: async <T,>(): Promise<T | undefined> =>
+      ({
+        responseAction: continueFeedback ? "acknowledge" : "quiet",
+        stateDeltas: continueFeedback ? { curiosity: 5, attachment: 2 } : { arousal: -4 },
+        policyDeltas: continueFeedback ? { preferDepth: 7, recallTendency: 4 } : { quietTendency: 7, preferProactivity: -5 },
+        memoryWeightDelta: continueFeedback ? 6 : -4,
+        learningNote: continueFeedback ? "我学到：妈妈复查这件事不要浅浅带过，要多停一下。" : "我学到：这类时候先安静陪着，不急着追问。",
+        effect: continueFeedback ? "你是在教我遇到相近担心时更认真一点。" : "你是在教我收住声音，先陪着。",
+        creatureSelfMemory: {
+          text: continueFeedback ? "你教我遇到妈妈复查这类担心时，不要浅浅带过。" : "你教我不是每次注意到都要插话。",
+          tags: continueFeedback ? ["更愿意多想"] : ["更安静"]
+        }
       }) as T
   };
 }

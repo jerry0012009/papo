@@ -1,5 +1,4 @@
 import { summarizeText } from "./text";
-import { hasHighPrivacyText } from "./privacy";
 import type {
   ActionKind,
   AttentionEvent,
@@ -7,7 +6,6 @@ import type {
   CreatureProfile,
   CuriousSessionAudit,
   EpisodeMemory,
-  FeedbackKind,
   LongTermMemory,
   SegmentScore
 } from "./types";
@@ -90,23 +88,6 @@ export function createCuriousCreatureReport(session: CuriousSessionAudit): strin
     repeatedIgnored ? `${repeatedIgnored.label} 和前面太像，我先不重复回应。` : undefined
   ].filter(Boolean);
   return parts.join(" ");
-}
-
-export function createLearningNote(kind: FeedbackKind, tags: string[] = [], feedbackText?: string): string {
-  const topic = tags.length ? "这个主题" : "这类内容";
-  const userLine = feedbackText?.trim() && !hasHighPrivacyText(feedbackText) ? ` 你还补充说：${summarizeText(feedbackText, 72)}。` : "";
-  switch (kind) {
-    case "understood":
-      return `我学到：这次理解方向是对的。以后遇到${topic}，我会更相信这种注意方式。${userLine}`;
-    case "continue":
-      return `我学到：${topic}你希望我不要浅浅带过。以后我会更愿意想起以前的小事，并展开一点。${userLine}`;
-    case "not_now":
-      return `我学到：不是每次注意到东西都要打扰你。以后遇到${topic}，我会更安静。${userLine}`;
-    case "remember":
-      return `我学到：${topic}你希望我记得更稳。以后再遇到相近的事，我会更容易接上。${userLine}`;
-    case "forget":
-      return `我学到：${topic}要更谨慎。以后我会先等你的意思，不会自己留下。${userLine}`;
-  }
 }
 
 function actionFeeling(action: ActionKind, profile: CreatureProfile) {
