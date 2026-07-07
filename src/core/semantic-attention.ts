@@ -223,8 +223,10 @@ function recordAttentionSemanticRun(profile: CreatureProfile, provider: ModelPro
     id: makeId("semantic"),
     at: new Date().toISOString(),
     source: "curious_stream",
+    stage: "attention",
     providerKind: provider.kind,
     providerName: provider.name,
+    model: provider.diagnostics?.textModel,
     status,
     message,
     ruleTrace: [`provider=${provider.kind}`, "source=curious_stream", `status=${status}`, "stage=attention"]

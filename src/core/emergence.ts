@@ -125,8 +125,10 @@ function recordEmergenceSemanticRun(
     id: makeId("semantic"),
     at: new Date().toISOString(),
     source: "emergence",
+    stage: "emergence",
     providerKind: provider.kind,
     providerName: provider.name,
+    model: provider.diagnostics?.textModel,
     status,
     message,
     ruleTrace: [`provider=${provider.kind}`, "source=emergence", `status=${status}`]

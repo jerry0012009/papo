@@ -1,5 +1,5 @@
 import { makeId } from "./ids";
-import type { ConversationChannel, CreatureMessage, CreatureProfile, SegmentKind, StreamSegment } from "./types";
+import type { ConversationChannel, CreatureMessage, CreatureProfile, MessageCognitionTrace, SegmentKind, StreamSegment } from "./types";
 
 const MAX_CONVERSATION_MESSAGES = 80;
 
@@ -10,6 +10,7 @@ export function appendPapoMessage(
     text?: string;
     sourceId?: string;
     relatedMemoryIds?: string[];
+    cognitionTrace?: MessageCognitionTrace;
     at?: string;
   }
 ): CreatureMessage | undefined {
@@ -28,7 +29,8 @@ export function appendPapoMessage(
     channel: input.channel,
     text,
     sourceId: input.sourceId,
-    relatedMemoryIds: input.relatedMemoryIds ?? []
+    relatedMemoryIds: input.relatedMemoryIds ?? [],
+    cognitionTrace: input.cognitionTrace
   };
   profile.conversation.unshift(message);
   profile.conversation = profile.conversation.slice(0, MAX_CONVERSATION_MESSAGES);

@@ -707,11 +707,16 @@ select {
   width: 100%;
 }
 
-.chat-bubble div {
+.chat-bubble-head {
   display: flex;
   justify-content: space-between;
   gap: 12px;
   align-items: baseline;
+}
+
+.chat-bubble-head > div {
+  display: grid;
+  gap: 2px;
 }
 
 .chat-bubble p {
@@ -724,6 +729,97 @@ select {
   margin-top: 8px;
   color: #69756c;
   line-height: 1.45;
+}
+
+.developer-trace {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.developer-trace summary {
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  padding: 5px 8px;
+  border: 1px solid rgba(70, 82, 72, 0.18);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+  color: #465248;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.developer-trace summary::-webkit-details-marker {
+  display: none;
+}
+
+.developer-trace[open] summary {
+  background: #fffaf0;
+}
+
+.developer-trace-body {
+  position: absolute;
+  z-index: 10;
+  top: 34px;
+  left: 0;
+  width: min(82vw, 420px);
+  max-height: 70vh;
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(70, 82, 72, 0.18);
+  border-radius: 8px;
+  background: #fffdf7;
+  box-shadow: 0 18px 42px rgba(32, 45, 38, 0.16);
+  color: #27312a;
+}
+
+.developer-trace-body section {
+  display: grid;
+  gap: 8px;
+}
+
+.developer-trace-body ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.developer-trace-body li {
+  margin: 4px 0;
+  line-height: 1.45;
+}
+
+.developer-trace-body code {
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 6px;
+  overflow-wrap: anywhere;
+  font-size: 0.74rem;
+}
+
+.developer-trace-body small {
+  display: inline;
+  margin: 0;
+}
+
+.trace-block {
+  display: grid;
+  gap: 5px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(233, 243, 235, 0.72);
+}
+
+.trace-block p {
+  margin: 0;
+}
+
+.trace-list {
+  color: #5d6a61;
+  font-size: 0.78rem;
 }
 
 .episode-card h3 {

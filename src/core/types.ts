@@ -261,11 +261,62 @@ export interface SemanticBrainRecord {
   id: string;
   at: string;
   source: AttentionSource | "memory" | "feedback" | "emergence";
+  stage?: "attention" | "action" | "memory" | "feedback" | "emergence" | "harness";
   providerKind: ProviderKind;
   providerName: string;
+  model?: string;
   status: "skipped" | "applied" | "empty" | "invalid" | "failed";
   message: string;
   ruleTrace: string[];
+}
+
+export interface MessageCognitionTrace {
+  at: string;
+  source: SemanticBrainRecord["source"];
+  providerKind: ProviderKind;
+  providerName: string;
+  model?: string;
+  modelRuns: SemanticBrainRecord[];
+  harnessTrace?: string[];
+  eventDecisions?: Array<{
+    eventId: string;
+    action: ActionKind;
+    semanticSource: "rules" | "llm";
+    noticed: string;
+    reason: string;
+    relatedMemoryIds: string[];
+    decisionTrace: string[];
+  }>;
+  episodeDecisions?: Array<{
+    episodeId: string;
+    action?: ActionKind;
+    kept: boolean;
+    memoryCandidateIds: string[];
+    decisionTrace: string[];
+  }>;
+  memoryDecisions?: Array<{
+    candidateId: string;
+    sourceEpisodeId: string;
+    status: MemoryCandidate["status"];
+    writePolicy: MemoryCandidate["writePolicy"];
+    memoryKind: LongTermMemory["kind"];
+    text: string;
+    why: string;
+  }>;
+  feedbackDecision?: {
+    feedbackId: string;
+    kind: FeedbackKind;
+    effect: string;
+    learningNote: string;
+    responseAction?: FeedbackResponseAction;
+    memoryCandidateIds: string[];
+  };
+  emergenceDecision?: {
+    emergenceId: string;
+    kind: EmergenceRecord["kind"];
+    whyNow: string;
+    relatedMemoryIds: string[];
+  };
 }
 
 export interface CreatureMessage {
@@ -280,6 +331,7 @@ export interface CreatureMessage {
   batchId?: string;
   observedAt?: string;
   location?: StreamSegment["location"];
+  cognitionTrace?: MessageCognitionTrace;
 }
 
 export interface CreatureProfile {

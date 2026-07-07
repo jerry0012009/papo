@@ -14,7 +14,7 @@ import {
   Sparkles,
   UserRound
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toCreatureMemoryVoice } from "../core/memory";
 import type {
   CaptureResult,
@@ -674,11 +674,11 @@ function ChatView(props: {
                     <span>{batchMomentSummary(section.messages)}</span>
                   </div>
                   {section.messages.map((message) => (
-                    <ChatBubble message={message} key={message.id} />
+                    <ChatBubble message={message} profile={props.profile} key={message.id} />
                   ))}
                 </section>
               ) : (
-                <ChatBubble message={section.message} key={section.id} />
+                <ChatBubble message={section.message} profile={props.profile} key={section.id} />
               )
             )}
           </div>
@@ -787,15 +787,18 @@ function stagedSegmentPlaceholder(kind: SegmentKind) {
   return "可以补充这件事";
 }
 
-function ChatBubble({ message }: { message: ConversationMessage }) {
+function ChatBubble({ message, profile }: { message: ConversationMessage; profile: CreatureProfile }) {
   const context = messageContextText(message);
   return (
     <article className={`chat-bubble ${message.role}`}>
-      <div>
-        <strong>{messageTitle(message)}</strong>
-        <span>
-          {context ? `${context} · ` : ""}{new Date(message.at).toLocaleString("zh-CN")}
-        </span>
+      <div className="chat-bubble-head">
+        <div>
+          <strong>{messageTitle(message)}</strong>
+          <span>
+            {context ? `${context} · ` : ""}{new Date(message.at).toLocaleString("zh-CN")}
+          </span>
+        </div>
+        {message.role === "papo" && message.cognitionTrace ? <DeveloperTrace trace={message.cognitionTrace} profile={profile} /> : null}
       </div>
       <p>{visibleMessageText(message)}</p>
       {message.observedAt || message.location ? (
@@ -810,6 +813,153 @@ function ChatBubble({ message }: { message: ConversationMessage }) {
       ) : null}
     </article>
   );
+}
+
+function DeveloperTrace({ trace, profile }: { trace: NonNullable<ConversationMessage["cognitionTrace"]>; profile: CreatureProfile }) {
+  return (
+    <details className="developer-trace">
+      <summary aria-label="查看这句话背后的模型调用">
+        <Eye size={14} />
+        背后
+      </summary>
+      <div className="developer-trace-body">
+        <section>
+          <strong>模型调用</strong>
+          {trace.modelRuns.length ? (
+            <ul>
+              {trace.modelRuns.map((run) => (
+                <li key={run.id}>
+                  <span>{stageLabel(run.stage ?? run.source)}</span>
+                  <code>{run.model ?? trace.model ?? run.providerName}</code>
+                  <small>{run.status} · {run.message}</small>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p>这条消息没有记录到新增模型阶段。</p>
+          )}
+        </section>
+        {trace.eventDecisions?.length ? (
+          <section>
+            <strong>动作选择</strong>
+            {trace.eventDecisions.map((event) => (
+              <TraceBlock key={event.eventId} title={actionLabel(event.action)}>
+                <p>{event.noticed}</p>
+                <p>{event.reason}</p>
+                <TraceList items={event.decisionTrace} />
+                <RelatedMemories ids={event.relatedMemoryIds} profile={profile} />
+              </TraceBlock>
+            ))}
+          </section>
+        ) : null}
+        {trace.episodeDecisions?.length || trace.memoryDecisions?.length ? (
+          <section>
+            <strong>记忆结果</strong>
+            {trace.episodeDecisions?.map((episode) => (
+              <TraceBlock key={episode.episodeId} title={`episode ${episode.kept ? "保留" : "未保留"}`}>
+                <TraceList items={episode.decisionTrace} />
+              </TraceBlock>
+            ))}
+            {trace.memoryDecisions?.map((memory) => (
+              <TraceBlock key={memory.candidateId} title={`${memory.status} · ${memory.writePolicy}`}>
+                <p>{memory.text}</p>
+                <small>{memory.memoryKind} · {memory.why}</small>
+              </TraceBlock>
+            ))}
+          </section>
+        ) : null}
+        {trace.feedbackDecision ? (
+          <section>
+            <strong>反馈理解</strong>
+            <TraceBlock title={trace.feedbackDecision.responseAction ?? trace.feedbackDecision.kind}>
+              <p>{trace.feedbackDecision.effect}</p>
+              <small>{trace.feedbackDecision.learningNote}</small>
+            </TraceBlock>
+          </section>
+        ) : null}
+        {trace.emergenceDecision ? (
+          <section>
+            <strong>主动想起</strong>
+            <TraceBlock title={trace.emergenceDecision.kind}>
+              <p>{trace.emergenceDecision.whyNow}</p>
+              <RelatedMemories ids={trace.emergenceDecision.relatedMemoryIds} profile={profile} />
+            </TraceBlock>
+          </section>
+        ) : null}
+        {trace.harnessTrace?.length ? (
+          <section>
+            <strong>结构规则</strong>
+            <TraceList items={trace.harnessTrace} />
+          </section>
+        ) : null}
+      </div>
+    </details>
+  );
+}
+
+function TraceBlock(props: { title: string; children: ReactNode }) {
+  return (
+    <div className="trace-block">
+      <b>{props.title}</b>
+      {props.children}
+    </div>
+  );
+}
+
+function TraceList({ items }: { items: string[] }) {
+  const visible = items.filter(Boolean);
+  if (!visible.length) return null;
+  return (
+    <ul className="trace-list">
+      {visible.map((item, index) => (
+        <li key={`${item}-${index}`}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
+function RelatedMemories({ ids, profile }: { ids: string[]; profile: CreatureProfile }) {
+  const memories = ids
+    .map((id) => profile.longTermMemories.find((memory) => memory.id === id))
+    .filter((memory): memory is CreatureProfile["longTermMemories"][number] => Boolean(memory));
+  if (!memories.length) return null;
+  return (
+    <ul className="trace-list">
+      {memories.map((memory) => (
+        <li key={memory.id}>{memory.text}</li>
+      ))}
+    </ul>
+  );
+}
+
+function stageLabel(stage: string) {
+  const labels: Record<string, string> = {
+    attention: "注意",
+    action: "行动",
+    memory: "记忆",
+    feedback: "反馈",
+    emergence: "想起",
+    harness: "总流程",
+    button: "直接输入",
+    curious_stream: "陪伴输入"
+  };
+  return labels[stage] ?? stage;
+}
+
+function actionLabel(action: string) {
+  const labels: Record<string, string> = {
+    observe: "观察",
+    respond: "回应",
+    ask: "追问",
+    save_episode: "留下经历",
+    save_long_term: "长期记住",
+    recall: "带着记忆回应",
+    review: "整理",
+    quiet: "安静",
+    draft_reminder: "提醒草稿",
+    draft_question_list: "问题清单"
+  };
+  return labels[action] ?? action;
 }
 
 function groupConversationSections(messages: ConversationMessage[]): ConversationSection[] {

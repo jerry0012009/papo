@@ -94,8 +94,10 @@ function recordSemanticBrainRun(
     id: makeId("semantic"),
     at: new Date().toISOString(),
     source,
+    stage: "harness",
     providerKind: provider.kind,
     providerName: provider.name,
+    model: provider.diagnostics?.textModel,
     status,
     message,
     ruleTrace: [`provider=${provider.kind}`, `source=${source}`, `status=${status}`]

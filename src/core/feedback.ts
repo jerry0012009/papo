@@ -360,8 +360,10 @@ function recordFeedbackSemanticRun(
     id: makeId("semantic"),
     at: new Date().toISOString(),
     source: "feedback",
+    stage: "feedback",
     providerKind: provider.kind,
     providerName: provider.name,
+    model: provider.diagnostics?.textModel,
     status,
     message,
     ruleTrace: [`provider=${provider.kind}`, "source=feedback", `status=${status}`]

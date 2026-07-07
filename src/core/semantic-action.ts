@@ -231,8 +231,10 @@ function recordActionSemanticRun(profile: CreatureProfile, provider: ModelProvid
     id: makeId("semantic"),
     at: new Date().toISOString(),
     source,
+    stage: "action",
     providerKind: provider.kind,
     providerName: provider.name,
+    model: provider.diagnostics?.textModel,
     status: "applied",
     message: `llm action decision applied to ${applied} event(s)`,
     ruleTrace: [`provider=${provider.kind}`, `source=${source}`, "status=applied", "stage=action"]

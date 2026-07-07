@@ -7,7 +7,7 @@ import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { createModelProvider, type ModelProvider } from "../core/provider";
 import { wakeCreature } from "../core/rhythm";
-import type { CreatureProfile, StreamSegment } from "../core/types";
+import type { CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, MessageCognitionTrace, SemanticBrainRecord, StreamSegment } from "../core/types";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
 const createProfileSchema = z.object({
@@ -168,12 +168,15 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const profile = await requireProfile(store, req.params.userId);
       const body = buttonSchema.parse(req.body);
       appendInputMessage(profile, { channel: "button", role: "user", text: body.text, sourceId: `button-${Date.now()}`, modality: "button" });
+      const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runButtonHarness(profile, body.text, provider);
+      const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       appendPapoMessage(profile, {
         channel: "button",
         text: result.response,
-        sourceId: result.episodes[0]?.id,
-        relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds)
+        sourceId: result.episodes[0]?.id ?? result.events[0]?.id,
+        relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
+        cognitionTrace: captureCognitionTrace(result, provider, "button", modelRuns)
       });
       await store.saveProfile(profile);
       res.json({ ...result, provider: provider.kind });
@@ -198,12 +201,15 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
           location: segment.location
         });
       }
+      const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
+      const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       appendPapoMessage(profile, {
         channel: "curious",
         text: result.response,
-        sourceId: result.curiousSession?.id ?? result.episodes[0]?.id,
-        relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds)
+        sourceId: result.episodes[0]?.id ?? result.curiousSession?.id ?? result.events[0]?.id,
+        relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
+        cognitionTrace: captureCognitionTrace(result, provider, "curious_stream", modelRuns)
       });
       await store.saveProfile(profile);
       res.json({ ...result, provider: provider.kind });
@@ -218,7 +224,9 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const body = feedbackSchema.parse(req.body);
       const targetMemoryBefore = body.targetId ? profile.longTermMemories.find((memory) => memory.id === body.targetId) : undefined;
       const feedback = applyFeedback(profile, body);
+      const beforeSemanticIds = semanticRecordIds(profile);
       await semanticReflectFeedback(profile, feedback, provider);
+      const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const relatedMemoryIds = feedbackRelatedMemoryIds(profile, body.targetId, targetMemoryBefore?.id);
       appendInputMessage(profile, {
         channel: "feedback",
@@ -230,7 +238,13 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         at: feedback.at,
         relatedMemoryIds
       });
-      appendPapoMessage(profile, { channel: "feedback", text: feedback.replyText, sourceId: feedback.id, relatedMemoryIds });
+      appendPapoMessage(profile, {
+        channel: "feedback",
+        text: feedback.replyText,
+        sourceId: feedback.id,
+        relatedMemoryIds,
+        cognitionTrace: feedbackCognitionTrace(feedback, provider, modelRuns)
+      });
       await store.saveProfile(profile);
       res.json({ profile, feedback });
     } catch (error) {
@@ -252,7 +266,9 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         modality: "text",
         now: at
       });
+      const beforeSemanticIds = semanticRecordIds(profile);
       await semanticReflectFeedback(profile, feedback, provider);
+      const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const memory = profile.longTermMemories.find((item) => item.id === req.params.memoryId);
       if (!memory) throw new HttpError(404, "Memory not found after feedback reflection");
       appendInputMessage(profile, {
@@ -270,6 +286,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         text: feedback.replyText,
         sourceId: `${memory.id}:edit`,
         relatedMemoryIds: [memory.id],
+        cognitionTrace: feedbackCognitionTrace(feedback, provider, modelRuns),
         at
       });
       await store.saveProfile(profile);
@@ -282,12 +299,15 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
   app.post("/api/profiles/:userId/emergence", async (req, res, next) => {
     try {
       const profile = await requireProfile(store, req.params.userId);
+      const beforeSemanticIds = semanticRecordIds(profile);
       const emergence = await semanticDecideEmergence(profile, provider);
+      const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       appendPapoMessage(profile, {
         channel: "emergence",
         text: emergence.text,
         sourceId: emergence.id,
-        relatedMemoryIds: emergence.relatedMemoryIds
+        relatedMemoryIds: emergence.relatedMemoryIds,
+        cognitionTrace: emergenceCognitionTrace(emergence, provider, modelRuns)
       });
       await store.saveProfile(profile);
       res.json({ profile, emergence });
@@ -328,6 +348,100 @@ function feedbackInputText(kind: string, content?: string) {
   }[kind] ?? kind;
   const note = content?.trim();
   return note ? `${label}：${note}` : label;
+}
+
+function semanticRecordIds(profile: CreatureProfile) {
+  return new Set((profile.semanticBrainHistory ?? []).map((record) => record.id));
+}
+
+function newSemanticRuns(profile: CreatureProfile, beforeIds: Set<string>) {
+  return (profile.semanticBrainHistory ?? []).filter((record) => !beforeIds.has(record.id)).reverse();
+}
+
+function captureCognitionTrace(
+  result: CaptureResult,
+  provider: ModelProvider,
+  source: "button" | "curious_stream",
+  modelRuns: SemanticBrainRecord[]
+): MessageCognitionTrace {
+  return {
+    at: new Date().toISOString(),
+    source,
+    providerKind: provider.kind,
+    providerName: provider.name,
+    model: provider.diagnostics?.textModel,
+    modelRuns,
+    harnessTrace: result.harnessTrace ?? [],
+    eventDecisions: result.events.map((event) => ({
+      eventId: event.id,
+      action: event.actionDecision.action,
+      semanticSource: event.semanticSource,
+      noticed: event.noticed,
+      reason: event.reason,
+      relatedMemoryIds: event.relatedMemoryIds,
+      decisionTrace: event.decisionTrace ?? event.actionDecision.ruleTrace ?? []
+    })),
+    episodeDecisions: result.episodes.map((episode) => ({
+      episodeId: episode.id,
+      action: episode.actionDecision?.action,
+      kept: true,
+      memoryCandidateIds: episode.memoryCandidateIds,
+      decisionTrace: episode.decisionTrace ?? episode.actionDecision?.ruleTrace ?? []
+    })),
+    memoryDecisions: (result.memoryCandidates ?? []).map((candidate) => ({
+      candidateId: candidate.id,
+      sourceEpisodeId: candidate.sourceEpisodeId,
+      status: candidate.status,
+      writePolicy: candidate.writePolicy,
+      memoryKind: candidate.memoryKind,
+      text: candidate.candidateText,
+      why: candidate.whyConsolidate
+    }))
+  };
+}
+
+function feedbackCognitionTrace(
+  feedback: FeedbackRecord,
+  provider: ModelProvider,
+  modelRuns: SemanticBrainRecord[]
+): MessageCognitionTrace {
+  return {
+    at: new Date().toISOString(),
+    source: "feedback",
+    providerKind: provider.kind,
+    providerName: provider.name,
+    model: provider.diagnostics?.textModel,
+    modelRuns,
+    feedbackDecision: {
+      feedbackId: feedback.id,
+      kind: feedback.kind,
+      effect: feedback.effect,
+      learningNote: feedback.learningNote,
+      responseAction: feedback.responseAction,
+      memoryCandidateIds: feedback.memoryCandidateIds ?? []
+    }
+  };
+}
+
+function emergenceCognitionTrace(
+  emergence: EmergenceRecord & { text: string; memoryId?: string },
+  provider: ModelProvider,
+  modelRuns: SemanticBrainRecord[]
+): MessageCognitionTrace {
+  return {
+    at: new Date().toISOString(),
+    source: "emergence",
+    providerKind: provider.kind,
+    providerName: provider.name,
+    model: provider.diagnostics?.textModel,
+    modelRuns,
+    emergenceDecision: {
+      emergenceId: emergence.id,
+      kind: emergence.kind,
+      whyNow: emergence.whyNow,
+      relatedMemoryIds: emergence.relatedMemoryIds
+    }
+  };
 }
 
 function feedbackRelatedMemoryIds(profile: CreatureProfile, targetId?: string, targetMemoryIdBefore?: string) {

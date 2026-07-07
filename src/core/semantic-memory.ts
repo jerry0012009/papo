@@ -126,8 +126,10 @@ function recordMemorySemanticRun(profile: CreatureProfile, provider: ModelProvid
     id: makeId("semantic"),
     at: new Date().toISOString(),
     source: "memory",
+    stage: "memory",
     providerKind: provider.kind,
     providerName: provider.name,
+    model: provider.diagnostics?.textModel,
     status: "applied",
     message,
     ruleTrace: [`provider=${provider.kind}`, "source=memory", "status=applied"]
