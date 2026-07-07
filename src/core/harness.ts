@@ -6,6 +6,7 @@ import { createCuriousCreatureReport } from "./experience";
 import { makeId } from "./ids";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
+import { semanticDecideMemory } from "./semantic-memory";
 import type { ActionKind, CaptureResult, CreatureProfile, SemanticBrainRecord, StreamSegment } from "./types";
 
 const actionSchema = z.enum(["observe", "respond", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list"]);
@@ -148,6 +149,9 @@ async function enrichWithSemanticBrain(
 
     const suggestion = semantic.suggestion;
     applySuggestion(profile, result, suggestion, source);
+    if (result.memoryCandidates?.length) {
+      await semanticDecideMemory(profile, result.memoryCandidates, provider);
+    }
     result.harnessTrace = [...trace, "semantic: llm interpretation applied", ...(suggestion.trace ?? [])];
     recordSemanticBrainRun(profile, provider, source, "applied", semantic.message);
     return result;

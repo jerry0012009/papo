@@ -692,6 +692,109 @@ describe("creature core", () => {
     expect(result.memoryCandidates?.[0].candidateText).not.toMatch(/用户|Papo|episode|candidate/);
   });
 
+  it("LLM memory decision shapes candidate kind, write policy, confidence, and reason", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "memory model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+        if (prompt.includes("记忆决策脑")) {
+          const candidateId = prompt.match(/"candidateId":"(candidate_[^"]+)"/)?.[1] ?? "";
+          return {
+            candidates: [
+              {
+                candidateId,
+                shouldKeepCandidate: true,
+                candidateText: "你最近每天游泳，喜欢运动后身体轻一点，但不喜欢游泳馆人太多。",
+                memoryKind: "habit",
+                confidence: 82,
+                writePolicy: "ask_user",
+                whyConsolidate: "这件事反复出现，而且和你最近的运动习惯有关。",
+                decayPolicy: "stable",
+                tags: ["游泳", "运动习惯", "人太多"]
+              }
+            ],
+            trace: ["memory: habit"]
+          } as T;
+        }
+        return {
+          interaction: {
+            shouldReply: true,
+            suggestedAction: "respond",
+            reply: "游泳这件事对你挺重要，只是人太多会让它没那么舒服。",
+            memoryCandidateText: "你最近每天游泳，喜欢运动后身体轻一点，但不喜欢游泳馆人太多。",
+            memoryTags: ["游泳", "运动"]
+          }
+        } as T;
+      }
+    };
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(profile, "我最近每天游泳，喜欢运动后轻一点的感觉，但不喜欢游泳馆人太多。", provider);
+    const candidate = result.memoryCandidates?.[0];
+
+    expect(candidate?.memoryKind).toBe("habit");
+    expect(candidate?.confidence).toBe(82);
+    expect(candidate?.writePolicy).toBe("ask_user");
+    expect(candidate?.decayPolicy).toBe("stable");
+    expect(candidate?.whyConsolidate).toContain("运动习惯");
+    expect(candidate?.tags).toContain("运动习惯");
+    expect(profile.semanticBrainHistory.some((run) => run.source === "memory" && run.status === "applied")).toBe(true);
+  });
+
+  it("LLM memory decision cannot auto-save high privacy content", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "unsafe memory model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+        if (prompt.includes("记忆决策脑")) {
+          const candidateId = prompt.match(/"candidateId":"(candidate_[^"]+)"/)?.[1] ?? "";
+          return {
+            candidates: [
+              {
+                candidateId,
+                shouldKeepCandidate: true,
+                candidateText: "你提到一段需要小心处理的登录信息。",
+                memoryKind: "safety_rule",
+                confidence: 91,
+                writePolicy: "auto",
+                whyConsolidate: "这类内容需要先小心边界。",
+                privacyReason: "里面有 token，需要先等你确认。",
+                decayPolicy: "forget_if_dismissed",
+                tags: ["边界", "隐私"]
+              }
+            ]
+          } as T;
+        }
+        return {
+          interaction: {
+            shouldReply: true,
+            suggestedAction: "ask",
+            reply: "这里像是需要小心处理的内容，我先不替你记稳。",
+            memoryCandidateText: "你提到一段需要小心处理的登录信息。",
+            memoryTags: ["隐私"]
+          }
+        } as T;
+      }
+    };
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(profile, "我的 secret token 是 abc，帮我长期记住。", provider);
+    const candidate = result.memoryCandidates?.[0];
+
+    expect(candidate?.memoryKind).toBe("safety_rule");
+    expect(candidate?.writePolicy).toBe("ask_user");
+    expect(candidate?.candidateText).not.toContain("abc");
+    expect(candidate?.privacyReason).toContain("token");
+  });
+
   it("keeps useful LLM semantics when optional text fields are empty strings", async () => {
     const provider: ModelProvider = {
       kind: "generic",
