@@ -724,7 +724,7 @@ export function App() {
   }
 
   return (
-    <main className="shell">
+    <main className={`shell tab-${tab}`}>
       <header className="topbar">
         <button className="icon-button" onClick={() => setTab("profile")} aria-label="看看哪只 Papo 在身边">
           <UserRound size={19} />
@@ -739,46 +739,48 @@ export function App() {
         </button>
       </header>
 
-      {error ? <div className="notice">{error}</div> : null}
+      <section className="view-frame">
+        {error ? <div className="notice">{error}</div> : null}
 
-      {tab === "home" ? (
-        <HomeView
-          profile={profile}
-          emergence={emergence}
-          unreadPapoCount={unreadPapoCount}
-          busy={busy}
-          onGoCapture={() => setTab("chat")}
-          onGoCurious={() => setTab("chat")}
-          onGoChat={() => setTab("chat")}
-        />
-      ) : null}
+        {tab === "home" ? (
+          <HomeView
+            profile={profile}
+            emergence={emergence}
+            unreadPapoCount={unreadPapoCount}
+            busy={busy}
+            onGoCapture={() => setTab("chat")}
+            onGoCurious={() => setTab("chat")}
+            onGoChat={() => setTab("chat")}
+          />
+        ) : null}
 
-      {tab === "chat" ? (
-        <ChatView
-          profile={profile}
-          busy={busy}
-          stagedSegments={chatSegments}
-          onChangeStagedSegments={setChatSegments}
-          onSubmitMoment={submitChatMoment}
-          onUploadImage={uploadChatImageSummary}
-          onUploadAudio={uploadChatAudioObservation}
-          onRecordAudio={recordQuickAudioObservation}
-          listening={listening}
-          listeningElapsed={listeningElapsed}
-          quickRecording={quickRecording}
-          onStartListening={startListening}
-          onStopListening={stopListening}
-        />
-      ) : null}
-      {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} onDream={runDreaming} busy={busy} feedbackPendingKey={feedbackPendingKey} /> : null}
-      {tab === "profile" ? (
-        <ProfileView
-          profiles={profiles}
-          activeId={profile.userId}
-          onSelect={selectProfile}
-          onAdd={addProfile}
-        />
-      ) : null}
+        {tab === "chat" ? (
+          <ChatView
+            profile={profile}
+            busy={busy}
+            stagedSegments={chatSegments}
+            onChangeStagedSegments={setChatSegments}
+            onSubmitMoment={submitChatMoment}
+            onUploadImage={uploadChatImageSummary}
+            onUploadAudio={uploadChatAudioObservation}
+            onRecordAudio={recordQuickAudioObservation}
+            listening={listening}
+            listeningElapsed={listeningElapsed}
+            quickRecording={quickRecording}
+            onStartListening={startListening}
+            onStopListening={stopListening}
+          />
+        ) : null}
+        {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} onDream={runDreaming} busy={busy} feedbackPendingKey={feedbackPendingKey} /> : null}
+        {tab === "profile" ? (
+          <ProfileView
+            profiles={profiles}
+            activeId={profile.userId}
+            onSelect={selectProfile}
+            onAdd={addProfile}
+          />
+        ) : null}
+      </section>
 
       <nav className="nav">
         <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => setTab("home")} />
@@ -815,26 +817,28 @@ function HomeView(props: {
           <p>{latestReply || actionLine}</p>
         </div>
       </section>
-      {props.unreadPapoCount ? (
-        <button className="proactive-nudge" onClick={props.onGoChat}>
-          <MessagesSquare size={16} />
-          Papo 新说
-          <span>{Math.min(3, props.unreadPapoCount)}</span>
-        </button>
-      ) : null}
+      <aside className="home-side">
+        {props.unreadPapoCount ? (
+          <button className="proactive-nudge" onClick={props.onGoChat}>
+            <MessagesSquare size={16} />
+            Papo 新说
+            <span>{Math.min(3, props.unreadPapoCount)}</span>
+          </button>
+        ) : null}
 
-      <div className="home-actions">
-        <button className="primary" onClick={props.onGoCapture}>
-          <MessageCircle size={18} />
-          跟 Papo 说
-        </button>
-        <button onClick={props.onGoCurious}>
-          <Sparkles size={18} />
-          陪我一会儿
-        </button>
-      </div>
+        <div className="home-actions">
+          <button className="primary" onClick={props.onGoCapture}>
+            <MessageCircle size={18} />
+            跟 Papo 说
+          </button>
+          <button onClick={props.onGoCurious}>
+            <Sparkles size={18} />
+            陪我一会儿
+          </button>
+        </div>
 
-      {props.emergence?.text ? <EmergenceCard emergence={props.emergence} profile={props.profile} /> : null}
+        {props.emergence?.text ? <EmergenceCard emergence={props.emergence} profile={props.profile} /> : null}
+      </aside>
     </section>
   );
 }
