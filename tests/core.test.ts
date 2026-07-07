@@ -269,6 +269,33 @@ describe("creature core", () => {
     await expect(semanticReflectFeedback(profile, feedback, provider)).rejects.toThrow(/usable learning note|usable effect/);
   });
 
+  it("ignores malformed optional feedback self memory without losing model learning", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "short self-memory feedback model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          responseAction: "acknowledge",
+          learningNote: "我学到这件事你希望我多停一下。",
+          effect: "你是在教我遇到相近内容时不要太快带过。",
+          creatureSelfMemory: { text: "" }
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "我最近总是把妈妈复查这件事拖到很晚。");
+    const feedback = applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id, content: "这里请多想一点。" });
+
+    await semanticReflectFeedback(profile, feedback, provider);
+
+    expect(feedback.learningNote).toContain("我学到这件事");
+    expect(profile.longTermMemories.some((memory) => memory.tags.includes("LLM理解反馈"))).toBe(false);
+  });
+
   it("rejects private terms from feedback narration output", async () => {
     let promptSeen = "";
     const provider: ModelProvider = {
@@ -771,6 +798,20 @@ describe("creature core", () => {
     expect(prompts.join("\n")).toContain("我刚才在听你说游泳");
     expect(prompts.join("\n")).toContain("contentHiddenForPrivacy");
     expect(prompts.join("\n")).not.toMatch(/secret token|abc/i);
+  });
+
+  it("related memory during dialogue does not create rule-written emergence history", async () => {
+    const provider = scenarioProvider();
+    const profile = createCreatureProfile();
+    const first = handleButtonCapture(profile, "我最近每天游泳，但不喜欢游泳馆人太多。");
+    const memory = promoteEpisode(profile, first.episodes[0].id);
+    if (!memory) throw new Error("expected promoted memory");
+    profile.emergenceHistory = [];
+
+    const result = await runButtonHarness(profile, "我最近每天游泳，但还是不喜欢游泳馆人太多。", provider);
+
+    expect(result.events[0].relatedMemoryIds).toContain(memory.id);
+    expect(profile.emergenceHistory).toHaveLength(0);
   });
 
   it("bad visible LLM wording fails loudly instead of falling back to rule copy", async () => {

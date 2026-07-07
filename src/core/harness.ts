@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { guardActionDecision } from "./action";
-import { createMemoryResonanceEmergence } from "./emergence";
 import { buildAttentionEvent, handleButtonCapture, handleCuriousStream, isHighPrivacySegmentContent } from "./attention";
 import { makeId } from "./ids";
 import { modelConversationContext, modelMemoryContext } from "./model-context";
@@ -266,8 +265,6 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
     primaryEpisode.creatureExperience = primaryEvent.creatureExperience;
   }
 
-  recordMemoryResonance(profile, result);
-
   if (suggestion.response && !shouldSuppressTopLevelResponse(suggestion.interaction) && !hasConflictingAppliedAction(primaryEvent, suggestion, profile)) {
     result.response = safeExternalReplyText(suggestion.response, primaryEvent?.triggerContent) ?? result.response;
   }
@@ -469,12 +466,6 @@ function updateMemoryCandidate(result: CaptureResult, sourceEpisodeId: string, t
   if (!candidate) return;
   if (text?.trim()) candidate.candidateText = normalizeSharedMemoryText(text);
   if (tags?.length) candidate.tags = tags;
-}
-
-function recordMemoryResonance(profile: CreatureProfile, result: CaptureResult) {
-  for (const event of result.events) {
-    if (event.relatedMemoryIds.length) createMemoryResonanceEmergence(profile, event);
-  }
 }
 
 function recordSemanticBrainRun(

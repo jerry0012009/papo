@@ -42,6 +42,12 @@ const policyDeltaSchema = z
 
 const optionalText = (max: number) =>
   z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
+const optionalTextArray = (maxItems: number, maxText: number) =>
+  z
+    .array(z.preprocess((value) => cleanOptionalText(value, maxText), z.string().optional()))
+    .transform((values) => values.filter((value): value is string => Boolean(value)))
+    .pipe(z.array(z.string().min(1).max(maxText)).max(maxItems))
+    .optional();
 
 function cleanOptionalText(value: unknown, max: number) {
   if (value === null) return undefined;
@@ -61,8 +67,8 @@ const semanticFeedbackSchema = z
     effect: optionalText(260),
     creatureSelfMemory: z
       .object({
-        text: z.string().min(8).max(420),
-        tags: z.array(z.string().min(1).max(40)).max(8).optional()
+        text: optionalText(420),
+        tags: optionalTextArray(8, 40)
       })
       .optional(),
     trace: z.array(z.string().min(1).max(160)).max(8).optional()
