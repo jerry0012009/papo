@@ -113,7 +113,7 @@ Home presence, active emergence, body signals, and dialogue context should defau
 Home idle presence should be evidence-backed, not a static mood label. With a real shared memory, it can say what old small moment Papo is holding; with only feedback-shaped self-memory, it can say what listening habit the user taught; with no real shared life yet, it should plainly wait for the first text/photo/audio fragment instead of showing copy such as "好奇地贴近".
 Curious results should read like Papo choosing what to hold or let pass. Selected and ignored lines should use "我竖起耳朵" and "我先放过..." rather than report-style phrases such as "Papo 放过了".
 Memory candidates and consolidation reasons may later become user-visible long-term memories, so they must be written as shared-moment language from the start. Avoid "episode", "用户反馈这段", "我和用户", or "forget feedback" in candidate text, long-term memory text, and `consolidatedBecause`.
-Long-term memory candidates should remember a shared moment, not only an extracted fact. When Papo responded or chose a stance, the candidate should include a short "当时我回应你..." thread so future emergence can recall what Papo did with the moment.
+Long-term memory candidates should remember a shared moment, not only an extracted fact. When Papo responded or chose a stance, the candidate should include a short "当时我回应你..." thread so future emergence can recall what Papo did with the moment. If an episode came from photo/audio/text metadata with observed time or user-readable location label, the candidate should keep that natural moment context while stripping raw batch ids, segment ids, and coordinates.
 Long-term memory kind classification must not treat generic wording such as "我注意到..." as Papo self-memory. `creature_self_memory` is reserved for Papo's identity, learned habits, boundaries, or how the user is raising it; ordinary life moments should stay as shared memories, future reviews, habits, or themes.
 
 Harness stages:
@@ -296,6 +296,7 @@ Done:
   - Memory candidate text, promoted long-term memory text, and consolidation reasons now use shared-moment language instead of internal phrases such as "这条 episode", "用户反馈这段", "我和用户", or "forget feedback".
   - Memory page rendering now treats persisted memory text as raw material, not final copy: legacy/model phrases such as "用户确认", "小动物", "episode", "candidate", or "长期保存" are translated away before the user sees Papo's subjective memory surface.
   - Long-term memory candidates now keep Papo's own response as part of the shared moment, and LLM-written candidate text is normalized before it can become a long-term memory.
+  - Long-term memory candidates now keep natural observed-time and user-readable location context from multimodal shared moments, while stripping implementation metadata such as raw batch ids and coordinates before long-term promotion.
   - Ordinary life memories are no longer classified as Papo self-memory merely because their generated text says "我注意到"; self-memory is reserved for identity and raised habits.
   - Memory-page feedback now accepts text or audio-transcribed teaching before the user asks Papo to keep thinking, quiet down, remember steadily, or let a memory go, so memory feedback flows through the same interaction loop as episode feedback.
   - Feedback conversation messages now keep related long-term memory ids when the user teaches Papo about a specific memory, preserving the connection between dialogue history and memory.
@@ -351,6 +352,7 @@ Verified:
 - The dialogue page presents one shared-moment timeline with counts for user fragments and Papo responses.
 - The dialogue page groups same-batch multimodal inputs into a "30-second shared moment" before Papo's response.
 - Episode cards can trace a memory back to the source shared moment, including batch, observed time, location, and matching conversation input when present.
+- Long-term memory candidates generated from sourced episodes include natural time/location context from the shared moment without leaking raw batch ids.
 - Feedback text and audio transcript content are persisted as conversation input, and Papo's learning response follows it in the same timeline.
 - Feedback with substantive text can produce a rule-owned follow-up or memory note, and the persisted Papo reply includes that continuation.
 - Memory-page feedback can carry the user's written teaching into the same feedback endpoint with the target memory id, rather than acting as a bare management button.

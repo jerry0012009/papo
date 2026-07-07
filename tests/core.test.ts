@@ -106,6 +106,13 @@ describe("creature core", () => {
     expect(result.events[0].triggerBatchId).toBe("batch-core");
     expect(result.episodes[0].sourceBatchId).toBe("batch-core");
     expect(result.episodes[0].sourceLocation?.label).toBe("家里");
+    expect(result.memoryCandidates?.[0].candidateText).toContain("那一小段的时间是 2026-07-06 10:00:30 UTC");
+    expect(result.memoryCandidates?.[0].candidateText).toContain("地点是家里");
+    expect(result.memoryCandidates?.[0].candidateText).not.toContain("batch-core");
+    const memory = promoteEpisode(profile, result.episodes[0].id);
+    expect(memory?.text).toContain("那一小段的时间是 2026-07-06 10:00:30 UTC");
+    expect(memory?.text).toContain("地点是家里");
+    expect(memory?.text).not.toContain("batch-core");
   });
 
   it("feedback changes state and keeps values clamped", () => {

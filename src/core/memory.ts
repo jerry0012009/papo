@@ -182,10 +182,28 @@ function classifyLongTermKind(episode: EpisodeMemory): LongTermMemory["kind"] {
 }
 
 function buildLongTermText(episode: EpisodeMemory): string {
-  const scene = episode.noticed.length > 8 ? episode.noticed : `我和你一起经历过这件事：${episode.inputSummary}`;
+  const noticed = stripSourceMetadata(episode.noticed);
+  const scene = noticed.length > 8 ? noticed : `我和你一起经历过这件事：${stripSourceMetadata(episode.inputSummary)}`;
+  const moment = episodeMomentText(episode);
   const response = sharedResponseText(episode.creatureResponse, scene);
-  if (!response) return normalizeSharedMemoryText(scene);
-  return normalizeSharedMemoryText(`${scene} 当时我回应你：${response}`);
+  const parts = [scene, moment, response ? `当时我回应你：${response}` : ""].filter(Boolean);
+  return normalizeSharedMemoryText(parts.join(" "));
+}
+
+function episodeMomentText(episode: EpisodeMemory) {
+  const parts: string[] = [];
+  if (episode.sourceObservedAt) {
+    parts.push(`那一小段的时间是 ${memoryMomentTime(episode.sourceObservedAt)}`);
+  }
+  if (episode.sourceLocation?.label) {
+    parts.push(`地点是${episode.sourceLocation.label}`);
+  }
+  if (!parts.length) return "";
+  return `我也记住它发生时的线索：${parts.join("，")}。`;
+}
+
+function memoryMomentTime(value: string) {
+  return value.replace("T", " ").replace(/\.\d{3}Z$/, " UTC").replace(/Z$/, " UTC");
 }
 
 export function normalizeSharedMemoryText(text: string) {
@@ -224,10 +242,21 @@ export function normalizeSharedMemoryText(text: string) {
 }
 
 function sharedResponseText(response: string, scene: string) {
-  const text = normalizeSharedMemoryText(response);
+  const text = normalizeSharedMemoryText(stripSourceMetadata(response));
   if (text.length < 6) return "";
   if (scene.includes(text) || text.includes(scene)) return "";
   return summarizeText(text, 120);
+}
+
+function stripSourceMetadata(text: string) {
+  return text
+    .replace(/30秒批次[：:]\s*\S+/g, "")
+    .replace(/观察地点[：:][^\n。！？.!?]*/g, "")
+    .replace(/照片时间[：:]\s*\S+/g, "")
+    .replace(/音频片段时间[：:]\s*\S+/g, "")
+    .replace(/观察时间[：:]\s*\S+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function countSimilarEpisodes(profile: CreatureProfile, tags: string[]) {
