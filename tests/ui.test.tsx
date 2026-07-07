@@ -582,6 +582,7 @@ function profileFixture() {
       {
         id: "m2",
         createdAt: new Date().toISOString(),
+        sourceEpisodeId: "episode1",
         kind: "future_review",
         text: "我先试着理解：我注意到这个片段可能是你想让我认真理解的当前事件：如果你能说话 你就说句话给我听。我还没有强烈联想到旧记忆，所以先把它作为新的情景片段。这段需要用户确认，尤其是隐私、情绪或保存意图还不够明确。",
         weight: 80,

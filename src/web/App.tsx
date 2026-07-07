@@ -1179,11 +1179,23 @@ function MemoryView(props: {
 }
 
 function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTermMemories"][number]; profile: CreatureProfile }) {
+  const sourceEpisode = memorySourceEpisode(memory, profile);
+  if (!sourceEpisode) {
+    return (
+      <div className="memory-main">
+        <div>
+          <span>Papo 记住</span>
+          <strong>{memoryResultLine(memory)}</strong>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="memory-main">
       <div>
         <span>你当时说</span>
-        <p>{memorySourceLine(memory, profile)}</p>
+        <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode))}</p>
       </div>
       <div>
         <span>Papo 记住</span>
@@ -1194,14 +1206,15 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
 }
 
 function MemoryProcessDetails({ memory, profile }: { memory: CreatureProfile["longTermMemories"][number]; profile: CreatureProfile }) {
-  const sourceEpisode = memory.sourceEpisodeId ? profile.episodes.find((episode) => episode.id === memory.sourceEpisodeId) : undefined;
+  const sourceEpisode = memorySourceEpisode(memory, profile);
+  const sourceSteps = sourceEpisode ? [{ label: "你当时说", text: episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode)) }] : [];
   return (
     <details className="episode-flow compact-flow">
       <summary>看看怎么留下的</summary>
       <FlowSteps
         steps={[
-          { label: "听见什么", text: memorySourceLine(memory, profile) },
-          { label: "留下什么", text: memoryResultLine(memory) },
+          ...sourceSteps,
+          { label: "Papo 记住", text: memoryResultLine(memory) },
           { label: "为什么留下", text: memory.consolidatedBecause ? memoryKeptBecauseText(memory.consolidatedBecause) : sourceEpisode?.importanceReason },
           { label: "之后怎么用", text: memoryUseLine(memory) }
         ]}
@@ -1861,9 +1874,13 @@ function emergenceDriveText(drive: string) {
 }
 
 function memorySourceLine(memory: CreatureProfile["longTermMemories"][number], profile: CreatureProfile) {
-  const sourceEpisode = memory.sourceEpisodeId ? profile.episodes.find((episode) => episode.id === memory.sourceEpisodeId) : undefined;
+  const sourceEpisode = memorySourceEpisode(memory, profile);
   if (sourceEpisode) return episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode));
   return extractRememberedMoment(memory.text);
+}
+
+function memorySourceEpisode(memory: CreatureProfile["longTermMemories"][number], profile: CreatureProfile) {
+  return memory.sourceEpisodeId ? profile.episodes.find((episode) => episode.id === memory.sourceEpisodeId) : undefined;
 }
 
 function memoryResultLine(memory: CreatureProfile["longTermMemories"][number]) {

@@ -423,6 +423,7 @@ Verified:
 - Core tests protect rule/fallback creature responses from analysis-template wording.
 - Core and UI tests protect visible dialogue from cognitive-process wording: Papo may internally notice, decide, and remember, but chat replies should be short external responses.
 - Memory cards default to the user's shared moment and the resulting remembered content; attention reasons, action choice, and consolidation rationale stay in expandable process details.
+- Memory cards should only label a line as the user's original shared moment when a source episode is available. Legacy memories without provenance should show the remembered result directly instead of duplicating it as if it were the user's exact words.
 - Expandable process details are still product experience, not raw backend output. Rule and LLM process fields should use "你/我" wording and avoid "用户可能", "语义理解", "后台流程", or "系统选择" phrasing unless the user is on a technical Brain diagnostic surface.
 - The semantic brain owns semantic interpretation, action suggestions, visible replies, and memory candidate wording; rule code owns flow classes, safety guards, budgets, and fallback behavior.
 - Model-written replies are rejected if they mix cognitive notes with a full echo of the user's input. In that case Papo falls back to the nearest external reply, because the chat surface is for behavior and speech, not for showing the thinking trace.
