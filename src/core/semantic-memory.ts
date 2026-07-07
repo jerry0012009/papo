@@ -141,12 +141,18 @@ function buildSemanticMemoryPrompt(profile: CreatureProfile, candidates: MemoryC
 - 应该写成什么记忆文本。
 - 它属于哪种 memoryKind：user_preference, long_theme, creature_self_memory, safety_rule, future_review, relationship, habit, open_question。
 - confidence、writePolicy、whyConsolidate、privacyReason、decayPolicy、tags。
+- writePolicy 的含义：
+  - auto：规则会立刻写入长期记忆，只在用户明确要求记住、稳定偏好/习惯、或非常适合长期留下时使用。
+  - ask_user：需要用户确认后再长期保存。
+  - wait_feedback：先作为轻量候选等后续互动。
+  - do_not_save：不保留为候选。
 
 护栏会校验：
 - candidateId 必须来自候选列表。
 - shouldKeepCandidate=true 时必须给出 candidateText；这是 Papo 真正会留下的记忆候选文本，不能依赖系统预填文本。
 - shouldKeepCandidate=false 时必须给出 whyConsolidate 说明为什么不留下。
 - 不能编造用户没说过的新事实。
+- writePolicy=auto 的候选会真的写入 long_term_memory。
 - 普通用户看到的是 Papo 记得的生活，不看这些分类。
 
 返回严格 JSON：

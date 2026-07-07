@@ -1,5 +1,6 @@
 import { handleButtonCapture, handleCuriousStream } from "./attention";
 import { makeId } from "./ids";
+import { applyMemoryWritePolicies } from "./memory";
 import type { ModelProvider } from "./provider";
 import { semanticSelectAction } from "./semantic-action";
 import { semanticDecideAttention } from "./semantic-attention";
@@ -59,6 +60,10 @@ async function enrichWithSemanticBrain(
   ensureVisibleOutputContract(result);
   if (result.memoryCandidates?.length) {
     await semanticDecideMemory(profile, result.memoryCandidates, provider);
+    const promoted = applyMemoryWritePolicies(profile, result.memoryCandidates);
+    if (promoted.length) {
+      result.harnessTrace = [...(result.harnessTrace ?? []), `memory: auto_promoted=${promoted.length}`];
+    }
   }
   result.harnessTrace = [...trace, "semantic: llm cognition applied"];
   recordSemanticBrainRun(profile, provider, source, "applied", "llm cognition applied");

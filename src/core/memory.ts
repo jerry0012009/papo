@@ -109,6 +109,23 @@ export function promoteEpisode(profile: CreatureProfile, episodeId: string, now 
   return memory;
 }
 
+export function applyMemoryWritePolicies(
+  profile: CreatureProfile,
+  candidates: MemoryCandidate[],
+  now = new Date().toISOString()
+) {
+  const promoted: LongTermMemory[] = [];
+  for (const candidate of candidates) {
+    if (candidate.status !== "candidate") continue;
+    const episode = profile.episodes.find((item) => item.id === candidate.sourceEpisodeId);
+    const actionSavesLongTerm = episode?.actionDecision?.action === "save_long_term";
+    if (candidate.writePolicy !== "auto" && !actionSavesLongTerm) continue;
+    const memory = promoteEpisode(profile, candidate.sourceEpisodeId, now);
+    if (memory) promoted.push(memory);
+  }
+  return promoted;
+}
+
 export function forgetMemory(profile: CreatureProfile, targetId?: string): { changed: boolean; purged: boolean } {
   if (!targetId) return { changed: false, purged: false };
 
