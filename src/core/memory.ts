@@ -1,5 +1,4 @@
 import { makeId } from "./ids";
-import { hasHighPrivacyText } from "./privacy";
 import { extractTags, summarizeText } from "./text";
 import type { AttentionEvent, CreatureProfile, EpisodeMemory, LongTermMemory, MemoryCandidate } from "./types";
 
@@ -38,50 +37,29 @@ export function createEpisodeFromEvent(
 export function createMemoryCandidateFromEpisode(
   profile: CreatureProfile,
   episode: EpisodeMemory,
-  input: { feedback?: "continue" | "remember"; now?: string } = {}
+  input: { now?: string } = {}
 ): MemoryCandidate {
   const now = input.now ?? new Date().toISOString();
-  const privacyHigh = hasHighPrivacyMemoryText(`${episode.inputSummary} ${episode.noticed}`);
-  const repeatedThemeCount = 0;
-  const kind: LongTermMemory["kind"] = "long_theme";
-  const confidence = Math.min(96, Math.max(35, episode.weight + repeatedThemeCount * 8 + (input.feedback === "remember" ? 18 : 0) - (privacyHigh ? 25 : 0)));
-  const writePolicy = decideWritePolicy({
-    privacyHigh,
-    confidence,
-    feedback: input.feedback,
-    repeatedThemeCount,
-    saveThreshold: profile.policyProfile.saveThreshold
-  });
+  const sourceMaterial = buildMemoryCandidateText(episode);
 
   const candidate: MemoryCandidate = {
     id: makeId("candidate"),
     createdAt: now,
-    candidateText: privacyHigh ? buildPrivateMemoryCandidateText(episode) : buildMemoryCandidateText(episode),
-    memoryKind: input.feedback === "continue" && kind === "long_theme" ? "open_question" : kind,
-    confidence,
+    candidateText: sourceMaterial,
+    memoryKind: "open_question",
+    confidence: 0,
     sourceEpisodeId: episode.id,
     whyConsolidate: "",
-    writePolicy,
-    privacyReason: privacyHigh ? "包含隐私或密钥线索，默认不自动长期保存。" : undefined,
-    decayPolicy: input.feedback === "continue" ? "stable" : "decay_without_feedback",
+    writePolicy: "wait_feedback",
+    decayPolicy: "decay_without_feedback",
     status: "candidate",
-    tags: episode.tags
+    tags: []
   };
 
   profile.memoryCandidates.unshift(candidate);
   profile.memoryCandidates = profile.memoryCandidates.slice(0, 80);
   episode.memoryCandidateIds.push(candidate.id);
   return candidate;
-}
-
-function hasHighPrivacyMemoryText(text: string) {
-  return hasHighPrivacyText(text);
-}
-
-function buildPrivateMemoryCandidateText(episode: EpisodeMemory) {
-  const timePart = episode.sourceObservedAt ? ` 当时的时间线索是 ${memoryMomentTime(episode.sourceObservedAt)}。` : "";
-  const locationPart = episode.sourceLocation?.label ? ` 地点线索是${episode.sourceLocation.label}。` : "";
-  return `这次包含需要保护的内容，具体细节不写入候选。${timePart}${locationPart}`;
 }
 
 export function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new Date().toISOString()) {
@@ -182,10 +160,6 @@ function buildMemoryCandidateText(episode: EpisodeMemory): string {
   return noticed.length > 0 ? noticed : "";
 }
 
-function memoryMomentTime(value: string) {
-  return value.replace("T", " ").replace(/\.\d{3}Z$/, " UTC").replace(/Z$/, " UTC");
-}
-
 export function normalizeSharedMemoryText(text: string) {
   return text
     .trim()
@@ -212,19 +186,4 @@ function stripSourceMetadata(text: string) {
     .replace(/观察时间[：:]\s*\S+/g, "")
     .replace(/\s+/g, " ")
     .trim();
-}
-
-function decideWritePolicy(input: {
-  privacyHigh: boolean;
-  confidence: number;
-  feedback?: "continue" | "remember";
-  repeatedThemeCount: number;
-  saveThreshold: number;
-}): MemoryCandidate["writePolicy"] {
-  if (input.privacyHigh) return "ask_user";
-  if (input.feedback === "remember") return "auto";
-  if (input.feedback === "continue") return "wait_feedback";
-  if (input.repeatedThemeCount >= 3 && input.confidence >= input.saveThreshold) return "ask_user";
-  if (input.confidence >= 88) return "ask_user";
-  return "wait_feedback";
 }

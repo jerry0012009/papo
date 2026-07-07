@@ -136,6 +136,10 @@ function buildSemanticMemoryPrompt(profile: CreatureProfile, candidates: MemoryC
   const episodesById = new Map(profile.episodes.map((episode) => [episode.id, episode]));
   return `请作为 Papo 的记忆决策脑，在这次真实互动形成的候选记忆上做具体判断。
 
+候选里的 sourceMaterial 只是用户原始材料或行动脑给出的草稿，不是系统结论。
+initialMemoryKind、initialConfidence、initialWritePolicy 是存储结构占位，不代表规则已经判断过这件事。
+你必须自己决定是否保留、怎么写、分到哪一类、是否长期保存。
+
 你可以决定：
 - 这条候选是否应该保留为候选。
 - 应该写成什么记忆文本。
@@ -196,12 +200,12 @@ ${JSON.stringify(candidates.map((candidate) => {
   const privacyHigh = false;
   return {
     candidateId: candidate.id,
-    systemCandidateText: modelSafeMemoryText(candidate.candidateText, privacyHigh),
+    sourceMaterial: modelSafeMemoryText(candidate.candidateText, privacyHigh),
     contentHiddenForPrivacy: privacyHigh,
-    systemMemoryKind: candidate.memoryKind,
-    systemConfidence: candidate.confidence,
-    systemWritePolicy: candidate.writePolicy,
-    systemWhyConsolidate: candidate.whyConsolidate,
+    initialMemoryKind: candidate.memoryKind,
+    initialConfidence: candidate.confidence,
+    initialWritePolicy: candidate.writePolicy,
+    initialWhyConsolidate: candidate.whyConsolidate,
     sourceEpisode: episode
       ? {
           id: episode.id,
