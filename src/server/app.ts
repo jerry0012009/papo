@@ -167,10 +167,11 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const body = buttonSchema.parse(req.body);
-      appendInputMessage(profile, { channel: "button", role: "user", text: body.text, sourceId: `button-${Date.now()}`, modality: "button" });
+      const inputSourceId = `button-${Date.now()}`;
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runButtonHarness(profile, body.text, provider);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
+      appendInputMessage(profile, { channel: "button", role: "user", text: body.text, sourceId: inputSourceId, modality: "button" });
       appendPapoMessage(profile, {
         channel: "button",
         text: result.response,
@@ -189,6 +190,9 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const body = curiousSchema.parse(req.body);
+      const beforeSemanticIds = semanticRecordIds(profile);
+      const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
+      const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       for (const segment of body.segments) {
         appendInputMessage(profile, {
           channel: "curious",
@@ -201,9 +205,6 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
           location: segment.location
         });
       }
-      const beforeSemanticIds = semanticRecordIds(profile);
-      const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
-      const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       appendPapoMessage(profile, {
         channel: "curious",
         text: result.response,

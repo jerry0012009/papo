@@ -120,6 +120,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - If the model chooses a visible action such as `respond`, `ask`, `recall`, or `review`, a visible reply is required.
 - If the model chooses `observe` or `quiet`, it must not provide a visible reply; the API may persist the user's input without adding a Papo reply.
 - Recent conversation, memories, and feedback are passed into model prompts through `model-context.ts`.
+- For button and curious captures, the current input is passed to the semantic brain as the current event/candidate, then appended to the conversation timeline after cognition. `recent_conversation` must represent prior context, not duplicate the current input.
 - Development planning text must not be used as creature interaction material.
 - New Papo messages persist `cognitionTrace` with the real model stages, attention/action/memory decisions, feedback effects, emergence choices, visible reply, persistence outcomes, and structural rule checks that produced that visible reply. This supports developer audit without proving the mechanism in the main UI.
 
