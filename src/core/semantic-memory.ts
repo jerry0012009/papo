@@ -2,7 +2,7 @@ import { z } from "zod";
 import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { normalizeSharedMemoryText, toCreatureMemoryVoice } from "./memory";
-import { tagsForModel, textForModel } from "./privacy";
+import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
 import type { CreatureProfile, MemoryCandidate } from "./types";
 
@@ -87,7 +87,7 @@ function applySemanticMemorySuggestion(profile: CreatureProfile, candidates: Mem
       continue;
     }
 
-    const privacyHigh = false;
+    const privacyHigh = hasHighPrivacyText(`${candidate.candidateText} ${episode.inputSummary} ${episode.noticed}`);
     const candidateText = safeMemoryText(item.candidateText);
     if (!candidateText) throw new Error("memory model kept candidate without a usable memory text");
     candidate.candidateText = candidateText;
@@ -105,7 +105,7 @@ function applySemanticMemorySuggestion(profile: CreatureProfile, candidates: Mem
 }
 
 function guardWritePolicy(policy: MemoryCandidate["writePolicy"], privacyHigh: boolean) {
-  void privacyHigh;
+  if (privacyHigh && policy === "auto") return "ask_user";
   return policy;
 }
 
@@ -164,6 +164,7 @@ initialMemoryKind、initialConfidence、initialWritePolicy 是存储结构占位
 - decayPolicy 必须只使用：stable, decay_without_feedback, forget_if_dismissed；不要创造 decay_immediately、delete、none 等新值。
 - 不能编造用户没说过的新事实。
 - writePolicy=auto 的候选会真的写入 long_term_memory。
+- contentHiddenForPrivacy=true 时不能使用 writePolicy=auto；如果确实值得记住，应使用 ask_user 并说明需要用户确认。
 - 普通用户看到的是 Papo 记得的生活，不看这些分类。
 - 如果候选只是普通寒暄、临时问候、一次性闲聊、噪音或没有可复用意义的片段，应 shouldKeepCandidate=false。
 
@@ -204,7 +205,7 @@ ${JSON.stringify(modelFeedbackContext(profile.feedbackHistory))}
 candidates:
 ${JSON.stringify(candidates.map((candidate) => {
   const episode = episodesById.get(candidate.sourceEpisodeId);
-  const privacyHigh = false;
+  const privacyHigh = hasHighPrivacyText(`${candidate.candidateText} ${episode?.inputSummary ?? ""} ${episode?.noticed ?? ""}`);
   return {
     candidateId: candidate.id,
     sourceMaterial: modelSafeMemoryText(candidate.candidateText, privacyHigh),

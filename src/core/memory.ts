@@ -95,6 +95,7 @@ export function applyMemoryWritePolicies(
   const promoted: LongTermMemory[] = [];
   for (const candidate of candidates) {
     if (candidate.status !== "candidate") continue;
+    if (candidate.writePolicy === "ask_user" || candidate.writePolicy === "do_not_save") continue;
     const episode = profile.episodes.find((item) => item.id === candidate.sourceEpisodeId);
     const actionSavesLongTerm = episode?.actionDecision?.action === "save_long_term";
     if (candidate.writePolicy !== "auto" && !actionSavesLongTerm) continue;

@@ -3,6 +3,7 @@ import { describeStateInfluence } from "./drive";
 import { createAttentionExperience } from "./experience";
 import { makeId } from "./ids";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode } from "./memory";
+import { hasHighPrivacyText } from "./privacy";
 import { applyStateDelta } from "./state";
 import { summarizeText } from "./text";
 import type {
@@ -103,7 +104,7 @@ export function scoreSegment(
   void context;
   const tags: string[] = [];
   const related: string[] = [];
-  const privacy = 0;
+  const privacy = hasHighPrivacyText(segment.content) ? 92 : 0;
   const stateBias = profile.state.curiosity * 0.08 + profile.state.attachment * 0.02;
   const fatiguePenalty = Math.max(0, (35 - profile.state.energy) * 0.35);
   const total = Math.max(1, 40 + stateBias - fatiguePenalty);
@@ -147,7 +148,7 @@ export function buildAttentionEvent(
 ): AttentionEvent {
   const tags = input.score.tags;
   const related = input.score.relatedIds;
-  const privacyRisk = 0;
+  const privacyRisk = hasHighPrivacyText(input.triggerContent) ? 92 : 0;
   const strength = input.source === "button" ? Math.max(62, input.score.total) : input.score.total;
   const actionDecision = selectAction({
     profile,
@@ -248,8 +249,7 @@ function contentWithObservationContext(segment: StreamSegment) {
 }
 
 export function isHighPrivacySegmentContent(text: string) {
-  void text;
-  return false;
+  return hasHighPrivacyText(text);
 }
 
 function deriveAttentionBudget(profile: CreatureProfile) {

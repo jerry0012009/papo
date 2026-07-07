@@ -16,6 +16,7 @@ The current goal is "LLM as Papo's brain".
 - If a required model call fails, returns empty output, returns invalid JSON, or selects a visible action without a visible reply, the system must fail loudly.
 - Quiet listening is valid only when the model explicitly chooses it. It is not a degraded local substitute for understanding.
 - No local semantic keyword rule should pretend to understand what the user meant. Rules may create candidates and enforce boundaries; the model owns meaning and wording.
+- Privacy guardrails are structural only: obvious secrets, tokens, passwords, private keys, and government/payment identifiers are marked high privacy and cannot be auto-promoted into long-term memory.
 
 ## Harness Contract
 
@@ -95,7 +96,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Action selection code is an enum executor, not a semantic classifier. It must not locally replace a model-selected visible action because of mood, energy, keywords, or confidence heuristics.
 - `semanticSelectAction` owns the persistence decision for attended input. It must explicitly return whether to keep an episode and whether to keep a memory candidate; rules may prune temporary structures but must not default every input into memory.
 - Memory candidates keep user text and provenance only. Initial kind, confidence, and write policy are storage placeholders, not cognition. Memory kind, tags, consolidation wording, write policy, and long-term meaning must come from `semanticDecideMemory` before they are treated as product cognition.
-- Long-term memory writes happen only when the model-selected action is `save_long_term` or the model-selected memory `writePolicy` is `auto`; rules execute that decision and persist it.
+- Long-term memory writes happen only when the model-selected action is `save_long_term` or the model-selected memory `writePolicy` is `auto`; `ask_user` and `do_not_save` never auto-promote, and high-privacy candidates are forced away from `auto`.
 - The web UI must not fill empty Papo replies with "我听见了" or other local placeholder speech. If the model chose quiet or failed to provide a visible reply, the product should show no forged reply.
 - The product UI should not ship seeded demo loops or fake life-material buttons. The user-facing flow starts from real user text, photos, audio, or continuous listening.
 - Wake rhythm only updates presence/state. It must not pick memories, write emergence records, or feed wake text back into model conversation context.
