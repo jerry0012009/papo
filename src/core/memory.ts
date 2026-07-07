@@ -133,14 +133,6 @@ export function forgetMemory(profile: CreatureProfile, targetId?: string): { cha
   return { changed: true, purged: false };
 }
 
-export function updateLongTermMemory(profile: CreatureProfile, memoryId: string, text: string) {
-  const memory = profile.longTermMemories.find((item) => item.id === memoryId);
-  if (!memory) return undefined;
-  memory.text = text.trim();
-  memory.tags = extractTags(memory.text);
-  return memory;
-}
-
 export function adjustMemoryWeight(profile: CreatureProfile, targetId: string | undefined, amount: number) {
   if (!targetId) return;
   const episode = profile.episodes.find((item) => item.id === targetId);

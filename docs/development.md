@@ -79,7 +79,6 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - `src/core/semantic-memory.ts`: model memory decisions.
 - `src/core/feedback.ts`: feedback application plus model reflection.
 - `src/core/emergence.ts`: active resurfacing through model decisions.
-- `src/core/narration.ts`: model narration.
 - `src/core/model-context.ts`: shared model context.
 - `src/core/conversation.ts`: user/world/Papo timeline.
 - `src/server/app.ts`: API orchestration.

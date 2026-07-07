@@ -5,11 +5,9 @@ import { appendInputMessage, appendPapoMessage } from "../core/conversation";
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
-import { narrateMemoryCorrection } from "../core/narration";
 import { createModelProvider, type ModelProvider } from "../core/provider";
-import { promoteEpisode, toCreatureMemoryVoice, updateLongTermMemory } from "../core/memory";
+import { promoteEpisode } from "../core/memory";
 import { wakeCreature } from "../core/rhythm";
-import { summarizeText } from "../core/text";
 import type { CreatureProfile, StreamSegment } from "../core/types";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
@@ -257,16 +255,22 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const profile = await requireProfile(store, req.params.userId);
       const body = updateMemorySchema.parse(req.body);
       const previousMemory = profile.longTermMemories.find((item) => item.id === req.params.memoryId);
-      const previousText = previousMemory?.text ?? "";
-      const memory = updateLongTermMemory(profile, req.params.memoryId, body.text);
-      if (!memory) throw new HttpError(404, "Memory not found");
+      if (!previousMemory) throw new HttpError(404, "Memory not found");
       const at = new Date().toISOString();
-      const taughtText = memoryCorrectionDialogueText(body.text, 140);
-      const replyText = await narrateMemoryCorrection(profile, { memory, previousText, correctedText: body.text }, provider);
+      const feedback = applyFeedback(profile, {
+        kind: "continue",
+        targetId: req.params.memoryId,
+        content: `帮我记准：${body.text}`,
+        modality: "text",
+        now: at
+      });
+      await semanticReflectFeedback(profile, feedback, provider);
+      const memory = profile.longTermMemories.find((item) => item.id === req.params.memoryId);
+      if (!memory) throw new HttpError(404, "Memory not found after feedback reflection");
       appendInputMessage(profile, {
         channel: "feedback",
         role: "user",
-        text: `帮我记准：${taughtText}`,
+        text: feedback.inputText ?? `帮我记准：${body.text}`,
         sourceId: `${memory.id}:edit:input`,
         modality: "text",
         observedAt: at,
@@ -275,7 +279,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       });
       appendPapoMessage(profile, {
         channel: "feedback",
-        text: replyText,
+        text: feedback.replyText,
         sourceId: `${memory.id}:edit`,
         relatedMemoryIds: [memory.id],
         at
@@ -349,14 +353,6 @@ function feedbackRelatedMemoryIds(profile: CreatureProfile, targetId?: string, t
     }
   }
   return [...ids];
-}
-
-function memoryCorrectionDialogueText(text: string, maxLength: number) {
-  return summarizeText(
-    toCreatureMemoryVoice(text)
-      .replace(/^(你主动|你确认|你后来教我)[：:]\s*/, ""),
-    maxLength
-  );
 }
 
 function normalizeAudioObservation(text: string) {
