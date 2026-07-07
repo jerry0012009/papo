@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { handleButtonCapture, handleCuriousStream } from "../src/core/attention";
 import { createContrastSummary } from "../src/core/demo";
-import { createActiveEmergence } from "../src/core/emergence";
+import { semanticDecideEmergence } from "../src/core/emergence";
 import { applyFeedback } from "../src/core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../src/core/harness";
-import { enrichEmergenceNarration, enrichFeedbackNarration } from "../src/core/narration";
+import { enrichFeedbackNarration } from "../src/core/narration";
 import { createCreatureProfile } from "../src/core/profile";
 import type { ModelProvider } from "../src/core/provider";
 
@@ -118,19 +118,25 @@ describe("creature brain v0.2", () => {
     expect(profile.memoryCandidates.some((candidate) => ["open_question", "future_review", "creature_self_memory"].includes(candidate.memoryKind))).toBe(true);
   });
 
-  it("emergence follows different drives and stays user-isolated", () => {
+  it("LLM emergence follows selected memory and stays user-isolated", async () => {
     const a = createCreatureProfile({ userId: "a" });
     const b = createCreatureProfile({ userId: "b" });
     handleButtonCapture(a, "用户 A 的长期主题是小动物不能像工具。");
     applyFeedback(a, { kind: "remember", targetId: a.episodes[0].id });
     b.state.safety = 88;
+    const memoryId = a.longTermMemories.find((memory) => memory.sourceEpisodeId === a.episodes[0].id)?.id;
+    if (!memoryId) throw new Error("expected memory");
 
-    const aEmergence = createActiveEmergence(a);
-    const bEmergence = createActiveEmergence(b);
+    const aEmergence = await semanticDecideEmergence(a, emergenceProvider({
+      memoryId,
+      message: "我想起你说过 Papo 不能只是工具，要更像有小脑袋的活物。你继续说时，我会按这个方向听。"
+    }));
 
     expect(aEmergence.relatedMemoryIds.every((id) => a.longTermMemories.some((memory) => memory.id === id))).toBe(true);
-    expect(bEmergence.relatedMemoryIds.every((id) => b.longTermMemories.some((memory) => memory.id === id))).toBe(true);
-    expect(bEmergence.driveSource).toBe("safety");
+    await expect(semanticDecideEmergence(b, emergenceProvider({
+      memoryId,
+      message: "我想起你说过 Papo 不能只是工具，要更像有小脑袋的活物。"
+    }))).rejects.toThrow(/unavailable memory|unsafe message/);
   });
 
   it("invalid LLM JSON fails loudly instead of falling back", async () => {
@@ -235,135 +241,28 @@ describe("creature brain v0.2", () => {
     expect(feedback.replyText).toContain(ruleFollowUp);
   });
 
-  it("LLM emergence narration must stay anchored to an existing memory", async () => {
-    const profile = createCreatureProfile();
-    const result = handleButtonCapture(profile, "妈妈复查这件事对我很重要，我希望提前准备。");
-    applyFeedback(profile, { kind: "remember", targetId: result.episodes[0].id });
-    profile.state.curiosity = 86;
-    const emergence = createActiveEmergence(profile);
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "anchored narration model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>() =>
-        ({
-          message: "我刚才自己又想起妈妈复查这件事。它现在冒出来，是因为我的好奇心还在轻轻推我：下次你给我新的片段时，我会先找哪些东西能帮你提前准备。",
-          trace: ["llm: emergence narration"]
-        }) as T
-    };
-
-    const enriched = await enrichEmergenceNarration(profile, emergence, provider);
-
-    expect(enriched.text).toContain("妈妈复查");
-    expect(profile.emergenceHistory[0].message).toContain("妈妈复查");
-
-    const unsafe = createActiveEmergence(profile);
-    const unsafeOriginal = unsafe.message;
-    const unsafeProvider: ModelProvider = {
-      ...provider,
-      generateJson: async <T,>() =>
-        ({
-          message: "我刚才想起一件不存在的旅行计划，所以准备提醒你订票。",
-          trace: ["llm: unanchored hallucination"]
-        }) as T
-    };
-
-    await expect(enrichEmergenceNarration(profile, unsafe, unsafeProvider)).rejects.toThrow(/reference selected memory|invalid emergence narration/);
-    expect(unsafe.message).toBe(unsafeOriginal);
-  });
-
-  it("keeps useful emergence narration when optional trace is empty", async () => {
-    const profile = createCreatureProfile();
-    const result = handleButtonCapture(profile, "妈妈复查这件事对我很重要，我希望提前准备。");
-    applyFeedback(profile, { kind: "remember", targetId: result.episodes[0].id });
-    profile.state.curiosity = 86;
-    const emergence = createActiveEmergence(profile);
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "sparse emergence narration model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>() =>
-        ({
-          message: "我刚才又想起妈妈复查这件事，因为我还惦记着你想提前准备。等你继续说时，我会先接住和准备有关的线索。",
-          trace: [""]
-        }) as T
-    };
-
-    const enriched = await enrichEmergenceNarration(profile, emergence, provider);
-
-    expect(enriched.text).toContain("妈妈复查");
-    expect(enriched.text).toContain("提前准备");
-    expect(profile.emergenceHistory[0].ruleTrace).toContain("llm: emergence narration enriched");
-  });
-
-  it("LLM emergence narration treats feedback self-memory as a raised habit", async () => {
-    const profile = createCreatureProfile();
-    const result = handleButtonCapture(profile, "我担心自己又把妈妈复查拖到睡前。");
-    applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id });
-    profile.state.curiosity = 86;
-    const emergence = createActiveEmergence(profile);
-    let promptSeen = "";
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "self-memory narration model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>(prompt?: string) => {
-        promptSeen = prompt ?? "";
-        return {
-          message:
-            "我想起你教过我的回应方式：妈妈复查这类担心不要浅浅带过。它现在出现，是因为我还想照着你教的方式多听一会儿。",
-          trace: ["llm: self-memory emergence narration"]
-        } as T;
-      }
-    };
-
-    const enriched = await enrichEmergenceNarration(profile, emergence, provider);
-
-    expect(promptSeen).toContain("被你教出来的习惯");
-    expect(promptSeen).toContain("不能写成普通旧事");
-    expect(enriched.text).toContain("你教过");
-    expect(enriched.text).toContain("多听一会儿");
-    expect(enriched.text).not.toMatch(/我想起了|旧事|我浮现的是|下一次你给我信息流/);
-  });
-
-  it("rejects internal LLM wording in emergence narration", async () => {
-    const profile = createCreatureProfile();
-    const result = handleButtonCapture(profile, "妈妈复查这件事对我很重要，我希望提前准备。");
-    applyFeedback(profile, { kind: "remember", targetId: result.episodes[0].id });
-    profile.state.curiosity = 86;
-    const emergence = createActiveEmergence(profile);
-    const original = emergence.text;
-    const provider: ModelProvider = {
-      kind: "generic",
-      name: "leaky emergence narration model",
-      available: true,
-      usesRealModel: true,
-      generate: async () => "",
-      summarizeImage: async () => "",
-      transcribeAudio: async () => "",
-      generateJson: async <T,>() =>
-        ({
-          message: "用户的妈妈复查 episode 触发了语义流程，所以系统准备写入长期记忆。",
-          trace: ["llm: leaky emergence narration"]
-        }) as T
-    };
-
-    await expect(enrichEmergenceNarration(profile, emergence, provider)).rejects.toThrow(/invalid emergence narration/);
-    expect(emergence.text).toBe(original);
-  });
 });
+
+function emergenceProvider(input: { memoryId: string; message: string }): ModelProvider {
+  return {
+    kind: "generic",
+    name: "v02 emergence model",
+    available: true,
+    usesRealModel: true,
+    generate: async () => "",
+    summarizeImage: async () => "",
+    transcribeAudio: async () => "",
+    generateJson: async <T,>(): Promise<T | undefined> =>
+      ({
+        shouldEmerge: true,
+        memoryId: input.memoryId,
+        driveSource: "attachment",
+        whyNow: "我想把这条真实记住的事带回当前对话里。",
+        message: input.message,
+        proactiveLevel: "gentle"
+      }) as T
+  };
+}
 
 function segment(id: string, label: string, content: string, kind: "text" | "image_summary" | "audio_transcript" = "text") {
   return { id, label, content, kind };

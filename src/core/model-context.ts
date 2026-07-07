@@ -3,7 +3,7 @@ import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { CreatureProfile, FeedbackRecord, LongTermMemory } from "./types";
 
 export function modelConversationContext(profile: CreatureProfile, limit = 10) {
-  return (profile.conversation ?? []).slice(0, limit).map((message) => {
+  return (profile.conversation ?? []).filter((message) => message.channel !== "wake").slice(0, limit).map((message) => {
     const privacyHigh = hasHighPrivacyText(message.text);
     return {
       role: message.role,

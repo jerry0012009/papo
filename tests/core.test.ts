@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleButtonCapture, handleCuriousStream } from "../src/core/attention";
-import { createActiveEmergence, semanticDecideEmergence } from "../src/core/emergence";
+import { semanticDecideEmergence } from "../src/core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../src/core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../src/core/harness";
 import { memoryKeepReasonToCreatureVoice, promoteEpisode, toCreatureMemoryVoice } from "../src/core/memory";
+import { modelConversationContext } from "../src/core/model-context";
 import { enrichFeedbackNarration } from "../src/core/narration";
 import { createCreatureProfile } from "../src/core/profile";
 import { createModelProvider, type ModelProvider } from "../src/core/provider";
@@ -331,7 +332,7 @@ describe("creature core", () => {
     expect(feedback.replyText).not.toMatch(/secret|token|abc/i);
   });
 
-  it("wake rhythm applies time-based state recovery and records a presence event", () => {
+  it("wake rhythm applies time-based state recovery without faking memory emergence", () => {
     const profile = createCreatureProfile({ now: "2026-07-06T08:00:00.000Z" });
     profile.state.energy = 40;
     profile.state.arousal = 60;
@@ -353,13 +354,12 @@ describe("creature core", () => {
     expect(profile.lastSeenAt).toBe("2026-07-06T08:00:00.000Z");
     expect(profile.wakeHistory[0].id).toBe(wake.id);
     expect(wake.message).toContain("醒来");
-    expect(wake.innerThought).toContain("妈妈");
     expect(wake.message).not.toMatch(/刚才过去 \d+ 分钟|重新计算|当前状态/);
-    expect(wake.innerThought).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|新的信息流|旧记忆|节律/);
-    expect(profile.emergenceHistory[0].whyNow).not.toMatch(/旧记忆|节律/);
-    expect(wake.relatedMemoryIds).toEqual(["ltm_family_review"]);
-    expect(profile.emergenceHistory[0].id).toBe(wake.emergenceId);
-    expect(profile.emergenceHistory[0].relatedMemoryIds).toEqual(["ltm_family_review"]);
+    expect(wake.innerThought).toBeUndefined();
+    expect(wake.emergenceId).toBeUndefined();
+    expect(wake.relatedMemoryIds).toEqual([]);
+    expect(profile.emergenceHistory).toHaveLength(0);
+    expect(profile.longTermMemories[0].lastReferencedAt).toBeUndefined();
   });
 
   it("short wake gaps sound like presence instead of a no-op system log", () => {
@@ -373,7 +373,7 @@ describe("creature core", () => {
     expect(wake.message).not.toContain("当前状态");
   });
 
-  it("wake can carry feedback-shaped self memory without faking a shared old event", () => {
+  it("wake does not carry feedback-shaped self memory as visible cognition", () => {
     const profile = createCreatureProfile({ now: "2026-07-06T06:00:00.000Z" });
     const result = handleButtonCapture(profile, "我担心自己又把妈妈复查这件事拖到睡前。", "2026-07-06T06:01:00.000Z");
     applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id, now: "2026-07-06T06:02:00.000Z" });
@@ -381,16 +381,14 @@ describe("creature core", () => {
 
     const wake = wakeCreature(profile, "2026-07-06T08:02:00.000Z");
 
-    expect(wake.innerThought).toContain("你教过我");
-    expect(wake.innerThought).toContain("继续听你说");
-    expect(wake.innerThought).not.toContain("我想起了");
-    expect(wake.innerThought).not.toMatch(/不装作|装成|旧记忆|节律/);
-    expect(wake.relatedMemoryIds).toEqual([expect.stringMatching(/^ltm_/)]);
-    expect(profile.emergenceHistory[0].driveSource).toBe("wake_self_memory");
-    expect(profile.longTermMemories.find((memory) => memory.id === wake.relatedMemoryIds[0])?.tags).toContain("被你养成");
+    expect(wake.innerThought).toBeUndefined();
+    expect(wake.emergenceId).toBeUndefined();
+    expect(wake.relatedMemoryIds).toEqual([]);
+    expect(profile.emergenceHistory).toHaveLength(0);
+    expect(profile.longTermMemories.some((memory) => memory.tags.includes("被你养成"))).toBe(true);
   });
 
-  it("wake resurfacing speaks normalized creature memory instead of raw analysis text", () => {
+  it("wake never resurfaces raw analysis text as creature speech", () => {
     const profile = createCreatureProfile({ now: "2026-07-06T06:00:00.000Z" });
     profile.lastSeenAt = "2026-07-06T06:00:00.000Z";
     profile.longTermMemories.unshift({
@@ -404,9 +402,21 @@ describe("creature core", () => {
 
     const wake = wakeCreature(profile, "2026-07-06T08:00:00.000Z");
 
-    expect(wake.innerThought).toContain("如果你能说话");
-    expect(wake.innerThought).toContain("我当时决定先放轻一点");
-    expect(wake.innerThought).not.toMatch(/我先试着理解|当前事件|用户|小动物|旧记忆|保存意图|情景片段|你刚递给我的这件小事/);
+    expect(wake.innerThought).toBeUndefined();
+    expect(wake.relatedMemoryIds).toEqual([]);
+    expect(profile.emergenceHistory).toHaveLength(0);
+  });
+
+  it("model conversation context excludes wake rhythm messages", () => {
+    const profile = createCreatureProfile({ now: "2026-07-06T07:55:00.000Z" });
+    profile.conversation.unshift(
+      { id: "msg_wake", at: "2026-07-06T08:00:00.000Z", role: "papo", channel: "wake", text: "我像浅浅趴了一会儿。", relatedMemoryIds: [] },
+      { id: "msg_user", at: "2026-07-06T08:01:00.000Z", role: "user", channel: "button", text: "我准备去游泳。", relatedMemoryIds: [] }
+    );
+
+    expect(modelConversationContext(profile)).toEqual([
+      expect.objectContaining({ role: "user", channel: "button", text: "我准备去游泳。" })
+    ]);
   });
 
   it("renders old memory material in Papo's subjective voice", () => {
@@ -507,31 +517,33 @@ describe("creature core", () => {
     expect(memory.text).not.toContain("secret-abc");
   });
 
-  it("active emergence waits instead of faking recall without shared memory", () => {
+  it("LLM emergence can choose quiet without faking recall", async () => {
     const profile = createCreatureProfile();
-    const emergence = createActiveEmergence(profile);
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "quiet emergence model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          shouldEmerge: false,
+          driveSource: "rhythm",
+          whyNow: "现在没有需要主动带回来的旧事。",
+          message: "我先安静陪着。等你继续说，我再认真接住新的事。",
+          proactiveLevel: "quiet"
+        }) as T
+    };
+
+    const emergence = await semanticDecideEmergence(profile, provider);
 
     expect(emergence.relatedMemoryIds).toEqual([]);
     expect(emergence.memoryId).toBeUndefined();
-    expect(emergence.text).toContain("我安静了一下");
-    expect(emergence.text).toContain("先只是陪在这里");
-    expect(emergence.text).toContain("等你继续说");
-    expect(emergence.text).not.toMatch(/足够稳定|真实内容|真的和你一起经历过/);
-    expect(emergence.text).not.toMatch(/耳朵留给|抱住|叼|情景记忆/);
-    expect(emergence.text).not.toContain("所以我想起了");
-    expect(emergence.text).not.toMatch(/不装作|装成|假装|旧记忆|内在倾向|我浮现的是|旧事/);
-  });
-
-  it("active emergence references existing shared memory", () => {
-    const profile = createCreatureProfile();
-    const result = handleButtonCapture(profile, "妈妈周五复查这件事需要我提前准备病历。");
-    applyFeedback(profile, { kind: "remember", targetId: result.episodes[0].id });
-
-    const emergence = createActiveEmergence(profile);
-
-    expect(profile.longTermMemories.some((memory) => memory.id === emergence.memoryId && memory.kind !== "creature_self_memory" && memory.weight > 0)).toBe(true);
-    expect(emergence.text).toContain("想起");
-    expect(emergence.text).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|我浮现的是|旧记忆|节律/);
+    expect(emergence.text).toContain("安静陪着");
+    expect(emergence.ruleTrace).toContain("llm: chose quiet emergence");
+    expect(profile.emergenceHistory[0].id).toBe(emergence.id);
   });
 
   it("LLM emergence decision chooses whether and which real memory resurfaces", async () => {
@@ -652,43 +664,7 @@ describe("creature core", () => {
     await expect(semanticDecideEmergence(profile, provider, "2026-07-07T07:05:00.000Z")).rejects.toThrow(/unavailable memory|unsafe message/);
   });
 
-  it("active emergence speaks normalized creature memory instead of raw analysis text", () => {
-    const profile = createCreatureProfile();
-    profile.state.curiosity = 86;
-    profile.longTermMemories.unshift({
-      id: "ltm_raw_active_memory",
-      createdAt: "2026-07-06T06:01:00.000Z",
-      kind: "future_review",
-      text: "我先试着理解：我注意到这个片段可能是你想让我认真理解的当前事件：如果你能说话 你就说句话给我听。我还没有强烈联想到旧记忆，所以先把它作为新的情景片段。这段需要用户确认，尤其是隐私、情绪或保存意图还不够明确。",
-      weight: 86,
-      tags: ["说话", "确认"]
-    });
-
-    const emergence = createActiveEmergence(profile);
-
-    expect(emergence.text).toContain("如果你能说话");
-    expect(emergence.text).toContain("我当时决定先放轻一点");
-    expect(emergence.text).not.toMatch(/我先试着理解|当前事件|用户|小动物|旧记忆|保存意图|情景片段|你刚递给我的这件小事/);
-  });
-
-  it("active emergence treats feedback-shaped self-memory as a raised habit, not an old event", () => {
-    const profile = createCreatureProfile();
-    const result = handleButtonCapture(profile, "我担心自己又把妈妈复查拖到睡前。");
-    applyFeedback(profile, { kind: "continue", targetId: result.episodes[0].id });
-    profile.state.curiosity = 86;
-
-    const emergence = createActiveEmergence(profile);
-    const memory = profile.longTermMemories.find((item) => item.id === emergence.relatedMemoryIds[0]);
-
-    expect(memory?.kind).toBe("creature_self_memory");
-    expect(memory?.tags).toContain("被你养成");
-    expect(emergence.message).toContain("你教过我");
-    expect(emergence.message).toContain("多听一会儿");
-    expect(emergence.ruleTrace).toContain("memory_type=feedback_self_memory");
-    expect(emergence.message).not.toMatch(/我想起了|旧事|旧记忆|我浮现的是|下一次你给我信息流|不装作|装成/);
-  });
-
-  it("active emergence does not resurface a memory after forget downranks it to zero", () => {
+  it("LLM emergence cannot resurface a memory after forget downranks it to zero", async () => {
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "妈妈周五复查这件事需要我提前准备病历。");
     const memory = promoteEpisode(profile, result.episodes[0].id);
@@ -696,10 +672,26 @@ describe("creature core", () => {
     const forgottenId = memory.id;
 
     applyFeedback(profile, { kind: "forget", targetId: forgottenId });
-    const emergence = createActiveEmergence(profile);
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "forgotten emergence model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(): Promise<T | undefined> =>
+        ({
+          shouldEmerge: true,
+          memoryId: forgottenId,
+          driveSource: "curiosity",
+          whyNow: "我想起了这件已经被放下的事。",
+          message: "我想起妈妈周五复查这件事。",
+          proactiveLevel: "gentle"
+        }) as T
+    };
 
-    expect(emergence.relatedMemoryIds).not.toContain(forgottenId);
-    expect(emergence.memoryId).not.toBe(forgottenId);
+    await expect(semanticDecideEmergence(profile, provider)).rejects.toThrow(/unavailable memory|unsafe message/);
   });
 
   it("generic provider sends audio sensing through the transcription endpoint", async () => {

@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { handleButtonCapture, handleCuriousStream } from "../src/core/attention";
 import { createContrastSummary } from "../src/core/demo";
-import { createActiveEmergence } from "../src/core/emergence";
+import { semanticDecideEmergence } from "../src/core/emergence";
 import { applyFeedback } from "../src/core/feedback";
 import { createCreatureProfile } from "../src/core/profile";
+import type { ModelProvider } from "../src/core/provider";
 import { wakeCreature } from "../src/core/rhythm";
 import type { StreamSegment } from "../src/core/types";
 
 describe("goal 3 acceptance flow", () => {
-  it("runs the minimum life loop: wake, notice, remember, learn, diverge, and resurface", () => {
+  it("runs the minimum life loop: wake, notice, remember, learn, diverge, and resurface", async () => {
     const main = createCreatureProfile({ userId: "goal3-main", now: "2026-07-06T06:00:00.000Z" });
     main.lastSeenAt = "2026-07-06T04:00:00.000Z";
     const wake = wakeCreature(main, "2026-07-06T06:00:00.000Z");
@@ -60,15 +61,36 @@ describe("goal 3 acceptance flow", () => {
     main.state.curiosity = 50;
     main.state.attachment = 42;
     main.state.safety = 58;
-    const emergence = createActiveEmergence(main, "2026-07-06T06:05:00.000Z");
+    const emergence = await semanticDecideEmergence(main, emergenceProvider(promoted?.id ?? ""), "2026-07-06T06:05:00.000Z");
 
     expect(emergence.relatedMemoryIds[0]).toBe(promoted?.id);
     expect(emergence.whyNow).toBeTruthy();
     expect(emergence.driveSource).toBeTruthy();
-    expect(emergence.message).toContain("想起了");
+    expect(emergence.message).toContain("妈妈复查");
     expect(emergence.message).not.toContain("我浮现的是");
   });
 });
+
+function emergenceProvider(memoryId: string): ModelProvider {
+  return {
+    kind: "generic",
+    name: "acceptance emergence model",
+    available: true,
+    usesRealModel: true,
+    generate: async () => "",
+    summarizeImage: async () => "",
+    transcribeAudio: async () => "",
+    generateJson: async <T,>(): Promise<T | undefined> =>
+      ({
+        shouldEmerge: true,
+        memoryId,
+        driveSource: "attachment",
+        whyNow: "刚才这件事还贴在我旁边，我想带着它继续听你。",
+        message: "我又想起妈妈复查和提前准备资料这件事。等你继续说时，我会把它放近一点听。",
+        proactiveLevel: "gentle"
+      }) as T
+  };
+}
 
 function conditionCreature(userId: string, input: string, feedbackKind: "continue" | "not_now") {
   const profile = createCreatureProfile({ userId });

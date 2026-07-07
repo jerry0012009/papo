@@ -5,7 +5,7 @@ import { appendInputMessage, appendPapoMessage } from "../core/conversation";
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
-import { enrichEmergenceNarration, enrichFeedbackNarration, narrateMemoryCorrection } from "../core/narration";
+import { enrichFeedbackNarration, narrateMemoryCorrection } from "../core/narration";
 import { createModelProvider, type ModelProvider } from "../core/provider";
 import { promoteEpisode, toCreatureMemoryVoice, updateLongTermMemory } from "../core/memory";
 import { wakeCreature } from "../core/rhythm";
@@ -159,13 +159,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const wake = wakeCreature(profile);
-      const wakeEmergence = wake.emergenceId ? profile.emergenceHistory.find((item) => item.id === wake.emergenceId) : undefined;
-      if (wakeEmergence) {
-        const enriched = await enrichEmergenceNarration(profile, { ...wakeEmergence, text: wakeEmergence.message }, provider);
-        wake.innerThought = enriched.text;
-      }
       appendPapoMessage(profile, { channel: "wake", text: wake.message, sourceId: wake.id, relatedMemoryIds: wake.relatedMemoryIds, at: wake.at });
-      appendPapoMessage(profile, { channel: "wake", text: wake.innerThought, sourceId: wake.emergenceId, relatedMemoryIds: wake.relatedMemoryIds, at: wake.at });
       await store.saveProfile(profile);
       res.json({ profile, wake });
     } catch (error) {

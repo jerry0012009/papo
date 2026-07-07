@@ -265,7 +265,7 @@ export function App() {
       const location = await currentLocationSnapshot();
       const dataUrl = await readFileAsDataUrl(file);
       const result = await summarizeImage(dataUrl, file.name || "对话照片");
-      const content = sensingSegmentContent(result.summary, result.error);
+      const content = sensingSegmentContent(result.summary);
       setChatSegments((current) => [
         ...current,
         makeSegment(`chat-image-${Date.now()}`, "image_summary", file.name || `照片 ${current.length + 1}`, content, {
@@ -274,7 +274,7 @@ export function App() {
           location
         })
       ]);
-      setDemoNote(result.error ? "照片先留在这次对话里，等你补一句我再一起看。" : result.semanticSource === "llm" ? "照片已经整理成可修改的描述，会和这次对话里的话一起给我看。" : "照片先留在这次对话里，提交时会一起给我看。");
+      setDemoNote(result.semanticSource === "llm" ? "照片已经整理成可修改的描述，会和这次对话里的话一起给我看。" : "照片先留在这次对话里，提交时会一起给我看。");
       setTab("chat");
     });
   }
@@ -284,7 +284,7 @@ export function App() {
     await run(async () => {
       const dataUrl = await readFileAsDataUrl(file);
       const result = await transcribeAudio(dataUrl, file.name || "对话录音");
-      const content = sensingSegmentContent(result.transcript, result.error);
+      const content = sensingSegmentContent(result.transcript);
       setChatSegments((current) => [
         ...current,
         makeSegment(`chat-audio-${Date.now()}`, "audio_transcript", file.name || `录音 ${current.length + 1}`, content, {
@@ -1908,9 +1908,7 @@ function emergenceDriveText(drive: string) {
     safety: "谨慎感更高，所以先轻轻碰一下这段。",
     curiosity: "好奇心更高，所以还想继续想一会儿。",
     attachment: "这段和以前的共同经历连上了。",
-    rhythm: "安静了一阵之后，旧片段自己冒了出来。",
-    wake_rhythm: "醒来以后，节律把旧片段带了回来。",
-    wake_self_memory: "醒来以后，碰到了你养出来的听法。",
+    rhythm: "Papo 觉得此刻适合安静带回这件事。",
     memory_resonance: "这次内容和以前记住的事连上了。"
   };
   return map[drive] ?? "当前状态把这段带了回来。";
@@ -2240,8 +2238,7 @@ function chooseAudioTranscript(modelTranscript: string) {
   return modelText;
 }
 
-function sensingSegmentContent(text: string, error?: string) {
-  if (error) return "";
+function sensingSegmentContent(text: string) {
   return isUnclearAudioTranscript(text) ? "" : text;
 }
 

@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { handleButtonCapture, handleCuriousStream } from "../src/core/attention";
-import { createActiveEmergence } from "../src/core/emergence";
+import { semanticDecideEmergence } from "../src/core/emergence";
 import { applyFeedback } from "../src/core/feedback";
 import { createCreatureProfile } from "../src/core/profile";
+import type { ModelProvider } from "../src/core/provider";
 
 describe("goal 3 creature experience", () => {
   it("curious mode creates a creature-facing observation report from everyday material", () => {
@@ -40,19 +41,42 @@ describe("goal 3 creature experience", () => {
     expect(profile.policyProfile.preferDepth).toBeGreaterThan(45);
   });
 
-  it("active emergence reads like an inner resurfacing, not a template reminder", () => {
+  it("LLM emergence reads like an inner resurfacing, not a template reminder", async () => {
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "妈妈复查这件事对我很重要，我希望提前准备。");
     applyFeedback(profile, { kind: "remember", targetId: result.episodes[0].id });
     profile.state.curiosity = 85;
+    const memoryId = profile.longTermMemories.find((memory) => memory.sourceEpisodeId === result.episodes[0].id)?.id;
+    if (!memoryId) throw new Error("expected memory");
 
-    const emergence = createActiveEmergence(profile);
+    const emergence = await semanticDecideEmergence(profile, emergenceProvider(memoryId));
 
-    expect(emergence.message).toContain("我想起了");
+    expect(emergence.message).toContain("妈妈复查");
     expect(emergence.message).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|我浮现的是/);
     expect(emergence.message).not.toContain("我浮现的是");
   });
 });
+
+function emergenceProvider(memoryId: string): ModelProvider {
+  return {
+    kind: "generic",
+    name: "goal emergence model",
+    available: true,
+    usesRealModel: true,
+    generate: async () => "",
+    summarizeImage: async () => "",
+    transcribeAudio: async () => "",
+    generateJson: async <T,>(): Promise<T | undefined> =>
+      ({
+        shouldEmerge: true,
+        memoryId,
+        driveSource: "curiosity",
+        whyNow: "我还惦记着你希望提前准备妈妈复查这件事。",
+        message: "我刚才又想起妈妈复查这件事。你说它很重要、想提前准备，所以等你继续说时，我会接住和准备有关的线索。",
+        proactiveLevel: "gentle"
+      }) as T
+  };
+}
 
 function segment(id: string, label: string, content: string, kind: "text" | "image_summary" | "audio_transcript" = "text") {
   return { id, label, content, kind };
