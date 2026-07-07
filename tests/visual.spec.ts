@@ -26,6 +26,7 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByText("我会先保护隐私和边界")).toHaveCount(0);
   await expect(page.getByText("耳朵竖起来，尾巴轻快地摆")).toHaveCount(0);
   await expect(page.getByText("我会先找最让我在意的一小段")).toHaveCount(0);
+  await expect(page.getByText(/先谨慎一点|如果内容涉及隐私|耳朵正朝着你|身体往你这边靠|眼睛亮了一点|趴着听你|安静等你靠近/)).toHaveCount(0);
   await expect(page.getByText("我被你养成的样子")).toHaveCount(0);
   await expect(page.getByText("你教我不要浅浅带过。以后遇到「妈妈复查」，我会多停一下，先想起以前的小事再回应")).toHaveCount(0);
   await expect(page.getByText(/preferDepth|quietTendency|深入倾向|安静倾向/)).toHaveCount(0);
@@ -37,7 +38,7 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByText("查看后台流程")).toBeVisible();
   await expect(page.getByText("我刚才注意到：")).toHaveCount(0);
   await expect(page.getByText("我为什么注意：")).toHaveCount(0);
-  await expect(page.getByText("来自半分钟里的一小段").first()).toBeVisible();
+  await expect(page.getByText("来自同一次事件").first()).toBeVisible();
   expect(await navSitsOutsideScrollPort(page)).toBe(true);
 
   const homeScreenshot = await page.screenshot({ fullPage: true, path: testInfo.outputPath(`${testInfo.project.name}-home.png`) });
@@ -45,10 +46,16 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
 
   await page.getByRole("button", { name: "对话" }).click();
   await expect(page.getByText("和 Papo 的小日常")).toBeVisible();
-  await expect(page.getByText("半分钟里的一小段")).toBeVisible();
+  await expect(page.getByText("同一次事件")).toBeVisible();
   await expect(page.getByText("你给 Papo 看了照片")).toBeVisible();
   await expect(page.getByText("Papo", { exact: true }).first()).toBeVisible();
   await expect(page.getByLabel("有未读 Papo 回复")).toHaveCount(0);
+  await expect(page.getByText("可以让 Papo 持续听一会儿")).toBeVisible();
+  await expect(page.getByText(/最多 3 分钟，每 30 秒整理一次声音/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "开始听 3 分钟" })).toBeVisible();
+  await expect(page.getByText("加照片", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "说给 Papo" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "陪我" })).toHaveCount(0);
   const chatScreenshot = await page.screenshot({ fullPage: true, path: testInfo.outputPath(`${testInfo.project.name}-chat.png`) });
   expect(chatScreenshot.byteLength).toBeGreaterThan(30_000);
 
@@ -59,24 +66,17 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByText(/用户|小动物|episode|candidate|长期保存|当前事件|保存意图|未来价值/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "教我记准" })).toBeVisible();
   await expect(page.getByRole("button", { name: "帮我先放下" })).toBeVisible();
-  await expect(page.getByText("来自半分钟里的一小段")).toBeVisible();
+  await expect(page.getByText("来自同一次事件")).toBeVisible();
   await expect(page.getByText("来源细节")).toHaveCount(0);
   await expect(page.getByText(/batch life-batch-1|segment photo-review/)).toHaveCount(0);
   const memoryScreenshot = await page.screenshot({ fullPage: true, path: testInfo.outputPath(`${testInfo.project.name}-memory.png`) });
   expect(memoryScreenshot.byteLength).toBeGreaterThan(30_000);
 
-  await page.getByRole("button", { name: "陪我" }).click();
-  await expect(page.getByText("陪我一会儿")).toBeVisible();
-  await expect(page.getByText("可以让 Papo 持续听一会儿")).toBeVisible();
-  await expect(page.getByText(/最多 3 分钟，每 30 秒整理一次声音/)).toBeVisible();
-  await expect(page.getByRole("button", { name: "开始听 3 分钟" })).toBeVisible();
-  await expect(page.getByText("加照片", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "提交这件事" })).toBeVisible();
-  await expect(page.getByText("刚才的对话")).toBeVisible();
   await expect(page.getByText("加一张照片")).toHaveCount(0);
   await expect(page.getByText("加一段录音")).toHaveCount(0);
   await expect(page.getByText("加一小段")).toHaveCount(0);
   await expect(page.getByText("让 Papo 看看")).toHaveCount(0);
+  await expect(page.getByText("刚才的对话")).toHaveCount(0);
   await expect(page.getByRole("combobox")).toHaveCount(0);
   await expect(page.getByText("Curious Mode")).toHaveCount(0);
 

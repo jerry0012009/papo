@@ -48,7 +48,7 @@ import {
   type ProviderInfo
 } from "./api";
 
-type Tab = "home" | "curious" | "chat" | "memory" | "brain" | "profile" | "demo";
+type Tab = "home" | "chat" | "memory" | "brain" | "profile" | "demo";
 
 interface SpeechRecognitionLike {
   continuous: boolean;
@@ -130,7 +130,6 @@ export function App() {
   const [provider, setProvider] = useState<ProviderInfo>();
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [profile, setProfile] = useState<CreatureProfile>();
-  const [segments, setSegments] = useState<StreamSegment[]>([]);
   const [chatSegments, setChatSegments] = useState<StreamSegment[]>([]);
   const [lastResult, setLastResult] = useState<CaptureResult>();
   const [emergence, setEmergence] = useState<EmergenceSurface>();
@@ -243,28 +242,6 @@ export function App() {
     });
   }
 
-  async function submitCompanionMoment(text: string) {
-    if (!profile) return;
-    const cleanText = text.trim();
-    await run(async () => {
-      const batchId = segments[0]?.batchId ?? currentBatchId();
-      const textSegment = cleanText
-        ? [makeSegment(`companion-text-${Date.now()}`, "text", "你刚说的话", cleanText, { observedAt: new Date().toISOString(), batchId })]
-        : [];
-      const eventSegments = [...textSegment, ...segments].filter((segment) => segment.content.trim());
-      if (!eventSegments.length) return;
-      const result = await curiousCapture(
-        profile.userId,
-        eventSegments.map((segment, index) => ensureSegmentContext(segment, index))
-      );
-      setSegments([]);
-      setLastResult(result);
-      setProfile(result.profile);
-      setLearningNote(undefined);
-      setTab("curious");
-    });
-  }
-
   async function uploadChatImageSummary(file?: File) {
     if (!file) return;
     await run(async () => {
@@ -301,27 +278,6 @@ export function App() {
       ]);
       setDemoNote(result.error ? "录音先留在这次对话里，等你补一句我再一起听。" : result.semanticSource === "llm" ? "录音已经整理成可修改的文字，会和这半分钟里的话一起给我听。" : "录音先留在这次对话里，提交时会一起给我听。");
       setTab("chat");
-    });
-  }
-
-  async function uploadImageSummary(file?: File) {
-    if (!file) return;
-    await run(async () => {
-      const observedAt = file.lastModified ? new Date(file.lastModified).toISOString() : new Date().toISOString();
-      const location = await currentLocationSnapshot();
-      const dataUrl = await readFileAsDataUrl(file);
-      const result = await summarizeImage(dataUrl, file.name || "上传照片");
-      const content = sensingSegmentContent(result.summary, result.error);
-      setSegments((current) => [
-        ...current,
-        makeSegment(`image-${Date.now()}`, "image_summary", file.name || `照片 ${current.length + 1}`, content, {
-          observedAt,
-          batchId: currentBatchId(),
-          location
-        })
-      ]);
-      setDemoNote(result.error ? "照片已经留在这次陪伴里，先补一句再给我看。" : result.semanticSource === "llm" ? "我已经把照片整理成可修改的描述，并记下可用的时间和地点。" : "照片已经加入这次陪伴，你可以先改准再给我看。");
-      setTab("curious");
     });
   }
 
@@ -510,7 +466,7 @@ export function App() {
     }
 
     if (!content.trim()) return;
-    setSegments((current) => [
+    setChatSegments((current) => [
       ...current,
       makeSegment(`live-audio-${Date.now()}-${index}`, "audio_transcript", `语音片段 ${index}`, content.trim(), {
         observedAt: new Date().toISOString(),
@@ -569,10 +525,10 @@ export function App() {
   }
 
   function loadDemoCurious() {
-    setSegments(demoCuriousSegments.map((segment, index) => makeSegment(`demo-${index + 1}`, segment.kind, segment.label, segment.content)));
-    setDemoNote("我把 8 段日常内容放到 Papo 面前了：有背景、有日历、有隐私内容、有声音，也有重复。现在可以让它自己挑出真正需要回应的地方。");
+    setChatSegments(demoCuriousSegments.map((segment, index) => makeSegment(`demo-${index + 1}`, segment.kind, segment.label, segment.content)));
+    setDemoNote("我把 8 段日常内容放进这次对话里了：有背景、有日历、有隐私内容、有声音，也有重复。现在可以让 Papo 自己挑出真正需要回应的地方。");
     setDemoSummary(undefined);
-    setTab("curious");
+    setTab("chat");
   }
 
   async function runGuidedDemo() {
@@ -705,22 +661,7 @@ export function App() {
           onFeedback={giveFeedback}
           onTranscribeFeedbackAudio={transcribeFeedbackAudio}
           onGoCapture={() => setTab("chat")}
-          onGoCurious={() => setTab("curious")}
-        />
-      ) : null}
-
-      {tab === "curious" ? (
-        <CuriousView
-          profile={profile}
-          segments={segments}
-          setSegments={setSegments}
-          onSubmit={submitCompanionMoment}
-          busy={busy}
-          listening={listening}
-          listeningElapsed={listeningElapsed}
-          onUploadImage={uploadImageSummary}
-          onStartListening={startListening}
-          onStopListening={stopListening}
+          onGoCurious={() => setTab("chat")}
         />
       ) : null}
 
@@ -733,6 +674,10 @@ export function App() {
           onSubmitMoment={submitChatMoment}
           onUploadImage={uploadChatImageSummary}
           onUploadAudio={uploadChatAudioTranscript}
+          listening={listening}
+          listeningElapsed={listeningElapsed}
+          onStartListening={startListening}
+          onStopListening={stopListening}
         />
       ) : null}
       {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onTranscribeFeedbackAudio={transcribeFeedbackAudio} onEditMemory={editLongTermMemory} /> : null}
@@ -753,7 +698,6 @@ export function App() {
       <nav className="nav">
         <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => setTab("home")} />
         <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" unread={hasUnreadPapoMessage} onClick={() => setTab("chat")} />
-        <NavButton active={tab === "curious"} icon={Sparkles} label="陪我" onClick={() => setTab("curious")} />
         <NavButton active={tab === "memory"} icon={History} label="记忆" onClick={() => setTab("memory")} />
         <NavButton active={tab === "brain"} icon={Brain} label="脑态" onClick={() => setTab("brain")} />
         <NavButton active={tab === "demo"} icon={Wand2} label="演示" onClick={() => setTab("demo")} />
@@ -904,130 +848,6 @@ function ShibaAvatar({ state, idle = false }: { state?: CreatureState; idle?: bo
   );
 }
 
-function CuriousView(props: {
-  profile: CreatureProfile;
-  segments: StreamSegment[];
-  setSegments: (segments: StreamSegment[] | ((current: StreamSegment[]) => StreamSegment[])) => void;
-  onSubmit: (text: string) => Promise<void>;
-  busy: boolean;
-  listening: boolean;
-  listeningElapsed: number;
-  onUploadImage: (file?: File) => void;
-  onStartListening: () => void;
-  onStopListening: () => void;
-}) {
-  const [draft, setDraft] = useState("");
-  const messages = [...(props.profile.conversation ?? [])].slice(0, 16).reverse();
-  const sections = groupConversationSections(messages);
-  const canSubmit = Boolean(draft.trim() || props.segments.some((segment) => segment.content.trim()));
-
-  function updateSegment(index: number, patch: Partial<StreamSegment>) {
-    props.setSegments(props.segments.map((segment, current) => (current === index ? { ...segment, ...patch } : segment)));
-  }
-
-  function removeSegment(index: number) {
-    props.setSegments((current) => current.filter((_, currentIndex) => currentIndex !== index));
-  }
-
-  async function submitCurrentEvent() {
-    const text = draft.trim();
-    if (!text && !props.segments.length) return;
-    setDraft("");
-    await props.onSubmit(text);
-  }
-
-  return (
-    <section className="stack">
-      <div className="panel">
-        <PanelTitle icon={Sparkles} title="陪我一会儿" />
-        <section className="listening-panel">
-          <div>
-            <strong>{props.listening ? "Papo 正在听你周围发生的事" : "可以让 Papo 持续听一会儿"}</strong>
-            <p>
-              最多 3 分钟，每 30 秒整理一次声音。你可以同时补文字或照片；提交一次就是一件事，提交后还可以继续说下一件。
-            </p>
-          </div>
-          <button onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
-            <Sparkles size={18} />
-            {props.listening ? `停止 ${formatListeningTime(props.listeningElapsed)}` : "开始听 3 分钟"}
-          </button>
-        </section>
-        <div className="chat-composer companion-composer">
-          <textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            rows={3}
-            placeholder="告诉 Papo 正在发生或刚想到的事"
-          />
-          <div className="composer-tools">
-            <label className="upload-button compact-upload">
-              <ImagePlus size={16} />
-              加照片
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={(event) => {
-                  props.onUploadImage(event.currentTarget.files?.[0]);
-                  event.currentTarget.value = "";
-                }}
-                disabled={props.busy}
-              />
-            </label>
-            <button className="primary" onClick={submitCurrentEvent} disabled={props.busy || !canSubmit}>
-              <MessageCircle size={18} />
-              提交这件事
-            </button>
-          </div>
-        </div>
-        {props.segments.length ? (
-          <section className="staged-moment">
-            <strong>这次会一起给 Papo 理解</strong>
-            {props.segments.map((segment, index) => (
-              <article className="staged-segment" key={segment.id}>
-                <div className="segment-row">
-                  <input value={segment.label} onChange={(event) => updateSegment(index, { label: event.target.value })} />
-                  <SegmentKindPicker value={segment.kind} onChange={(kind) => updateSegment(index, { kind })} />
-                </div>
-                <textarea value={segment.content} onChange={(event) => updateSegment(index, { content: event.target.value })} rows={3} />
-                <button onClick={() => removeSegment(index)} disabled={props.busy}>
-                  <RefreshCcw size={16} />
-                  这次不带
-                </button>
-              </article>
-            ))}
-          </section>
-        ) : (
-          <p className="muted">你可以直接说一件事，也可以先开始听，再随时加照片或文字补充。</p>
-        )}
-      </div>
-      <div className="panel">
-        <PanelTitle icon={MessagesSquare} title="刚才的对话" />
-        {messages.length ? (
-          <div className="chat-list compact-chat-list">
-            {sections.map((section) =>
-              section.kind === "batch" ? (
-                <section className="chat-batch" key={section.id}>
-                  <div className="chat-batch-head">
-                    <strong>同一次事件</strong>
-                    <span>{section.messages.length} 条内容</span>
-                  </div>
-                  {section.messages.map((message) => (
-                    <ChatBubble message={message} key={message.id} />
-                  ))}
-                </section>
-              ) : (
-                <ChatBubble message={section.message} key={section.id} />
-              )
-            )}
-          </div>
-        ) : (
-          <p className="muted">提交后，Papo 的回应会留在这里，也会出现在对话页。</p>
-        )}
-      </div>
-    </section>
-  );
-}
-
 function ChatView(props: {
   profile: CreatureProfile;
   busy: boolean;
@@ -1036,6 +856,10 @@ function ChatView(props: {
   onSubmitMoment: (text: string) => Promise<void>;
   onUploadImage: (file?: File) => void;
   onUploadAudio: (file?: File) => void;
+  listening: boolean;
+  listeningElapsed: number;
+  onStartListening: () => void;
+  onStopListening: () => void;
 }) {
   const [draft, setDraft] = useState("");
   const messages = [...(props.profile.conversation ?? [])].slice(0, 50).reverse();
@@ -1062,6 +886,41 @@ function ChatView(props: {
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={MessagesSquare} title="和 Papo 的小日常" />
+        <div className="conversation-summary">
+          <span>{inputCount} 条你给的内容</span>
+          <span>{papoCount} 次 Papo 回应</span>
+        </div>
+        {messages.length ? (
+          <div className="chat-list">
+            {sections.map((section) =>
+              section.kind === "batch" ? (
+                <section className="chat-batch" key={section.id}>
+                  <div className="chat-batch-head">
+                    <strong>同一次事件</strong>
+                    <span>{section.messages.length} 条内容</span>
+                  </div>
+                  {section.messages.map((message) => (
+                    <ChatBubble message={message} key={message.id} />
+                  ))}
+                </section>
+              ) : (
+                <ChatBubble message={section.message} key={section.id} />
+              )
+            )}
+          </div>
+        ) : (
+          <p className="muted">还没有对话。等你给 Papo 文字、照片或声音，它的注意和回应会在这里连成一条时间线。</p>
+        )}
+        <section className="listening-panel">
+          <div>
+            <strong>{props.listening ? "Papo 正在听你周围发生的事" : "可以让 Papo 持续听一会儿"}</strong>
+            <p>最多 3 分钟，每 30 秒整理一次声音。你可以同时补文字、照片或录音；提交一次就是一件事。</p>
+          </div>
+          <button onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
+            <Sparkles size={18} />
+            {props.listening ? `停止 ${formatListeningTime(props.listeningElapsed)}` : "开始听 3 分钟"}
+          </button>
+        </section>
         <div className="chat-composer">
           <textarea
             value={draft}
@@ -1120,33 +979,6 @@ function ChatView(props: {
             </section>
           ) : null}
         </div>
-        <div className="conversation-summary">
-          <span>{inputCount} 条你给的内容</span>
-          <span>{papoCount} 次 Papo 回应</span>
-        </div>
-        {messages.length ? (
-          <div className="chat-list">
-            {sections.map((section) =>
-              section.kind === "batch" ? (
-                <section className="chat-batch" key={section.id}>
-                  <div className="chat-batch-head">
-                    <strong>半分钟里的一小段</strong>
-                    <span>
-                      {section.messages.length} 条内容
-                    </span>
-                  </div>
-                  {section.messages.map((message) => (
-                    <ChatBubble message={message} key={message.id} />
-                  ))}
-                </section>
-              ) : (
-                <ChatBubble message={section.message} key={section.id} />
-              )
-            )}
-          </div>
-        ) : (
-          <p className="muted">还没有对话。等你给 Papo 文字、照片或声音，它的注意和回应会在这里连成一条时间线。</p>
-        )}
       </div>
     </section>
   );
@@ -1695,7 +1527,7 @@ function FlowSteps({ steps }: { steps: Array<{ label: string; text?: string }> }
 
 function EpisodeSourceMoment({ episode, messages, compact }: { episode: EpisodeMemory; messages: ConversationMessage[]; compact: boolean }) {
   if (!messages.length && !episode.sourceBatchId && !episode.sourceObservedAt && !episode.sourceLocation) return null;
-  const title = episode.sourceBatchId ? "来自半分钟里的一小段" : "来自当时你给我的片段";
+  const title = episode.sourceBatchId ? "来自同一次事件" : "来自当时你给我的片段";
   const momentParts = [
     episode.sourceObservedAt ? `那时 ${new Date(episode.sourceObservedAt).toLocaleString("zh-CN")}` : "",
     episode.sourceLocation ? locationText(episode.sourceLocation) : ""
@@ -1980,7 +1812,6 @@ function stateHeadline(profile: CreatureProfile) {
 }
 
 function stateSentence(profile: CreatureProfile) {
-  const state = profile.state;
   const latest = profile.conversation?.[0];
   const latestChange = profile.stateChanges?.[0];
   if (latest?.role === "papo" && latest.channel === "feedback") return "你刚刚教过我一次，我会把这种偏好带到后面相似的回应里。";
@@ -1993,24 +1824,13 @@ function stateSentence(profile: CreatureProfile) {
   const memory = strongestSharedMemory(profile);
   if (memory) return `我还记得这件旧事：${normalizeMemoryText(memory.text)}。如果之后聊到相近内容，我会想起它。`;
   if (!profile.episodes.length) return "我还没有和你经历过多少事。你可以直接跟我说话，也可以给我照片或声音。";
-  if (state.energy < 35) return "我会短一点回应，先把重要的部分说清楚。";
-  if (state.safety > 74) return "如果内容涉及隐私或长期保存，我会更谨慎。";
-  if (state.curiosity > 72) return "我现在更容易注意到新内容，但还是会先回应最重要的部分。";
-  if (state.attachment > 68) return "我会把你现在说的事，和以前相关的事一起考虑。";
-  return "我正安静陪着你，先观察，再决定要不要靠近。";
+  return "你可以继续说，也可以传照片、录音，或让 Papo 听一会儿。";
 }
 
 function restingHeadline(profile: CreatureProfile) {
   if (strongestSharedMemory(profile)) return "想起以前的事";
   if (!profile.episodes.length) return "等第一段生活靠近";
-  const state = profile.state;
-  if (state.energy < 35) return "趴着听你";
-  if (state.safety > 74) return "先谨慎一点";
-  if (state.attachment > 68) return "身体往你这边靠";
-  if (state.confidence > 70 && state.energy > 55) return "眼睛亮了一点";
-  if (state.arousal < 36) return "安静贴着这一刻";
-  if (state.curiosity > 62) return "耳朵正朝着你";
-  return "安静等你靠近";
+  return "等你继续说";
 }
 
 function strongestSharedMemory(profile: CreatureProfile) {
