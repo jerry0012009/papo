@@ -201,6 +201,7 @@ describe("creature brain v0.2", () => {
     expect(result.events.length).toBeGreaterThanOrEqual(1);
     expect(result.events.length).toBeLessThanOrEqual(3);
     expect(result.events[0].semanticSource).toBe("llm");
+    expect(result.events.map((event) => event.noticed).join(" ")).not.toMatch(/LLM|语义脑|关键转折点/);
     expect(result.curiousSession?.selected.some((item) => item.whySelected.includes("拖到睡前"))).toBe(true);
     expect(result.curiousSession?.ignored.some((item) => item.whyIgnored.includes("背景声"))).toBe(true);
     expect(result.curiousSession?.creatureReport).toContain("先回应");
@@ -208,6 +209,47 @@ describe("creature brain v0.2", () => {
     expect(result.curiousSession?.selected.map((item) => item.segmentId)).toContain("s2");
     expect(result.harnessTrace?.join(" ")).toContain("llm interpretation applied");
     expect(profile.semanticBrainHistory[0].status).toBe("applied");
+  });
+
+  it("rejects internal LLM wording in curious reports before user-facing display", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "leaky curious model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>() =>
+        ({
+          response: "semantic harness 认为应该展示 attention score。",
+          curiousSession: {
+            creatureReport: "后台流程根据 score 总分和阈值选中了 s2。",
+            selected: [{ segmentId: "s2", whySelected: "attention score 超过阈值，所以 candidate 被写入。" }],
+            ignored: [{ segmentId: "s1", whyIgnored: "fallback 规则判定低于阈值。" }]
+          },
+          trace: ["llm: leaky curious report"]
+        }) as T
+    };
+    const profile = createCreatureProfile();
+    const result = await runCuriousHarness(
+      profile,
+      [
+        segment("s1", "背景", "今天只是普通记录。"),
+        segment("s2", "复查", "我担心妈妈复查又被拖到睡前。")
+      ],
+      provider
+    );
+    const visible = [
+      result.response,
+      result.curiousSession?.creatureReport,
+      ...(result.curiousSession?.selected.map((item) => item.whySelected) ?? []),
+      ...(result.curiousSession?.ignored.map((item) => item.whyIgnored) ?? [])
+    ].join(" ");
+
+    expect(result.harnessTrace?.join(" ")).toContain("llm interpretation applied");
+    expect(visible).not.toMatch(/semantic|harness|后台|流程|score|总分|阈值|candidate|写入|fallback/);
+    expect(result.curiousSession?.creatureReport).toContain("先回应");
   });
 
   it("LLM can promote a near-threshold curious segment while rules keep the attention budget", async () => {
@@ -226,7 +268,7 @@ describe("creature brain v0.2", () => {
             creatureReport: "我没有总结全部，先回应担心复查和明天带资料检查这两点。",
             selected: [
               { segmentId: "s2", whySelected: "这段说的是复查担心，情绪比较重。" },
-              { segmentId: "s3", whySelected: "虽然规则分数接近阈值，但它补上了明天要带资料检查这个具体准备动作。" }
+              { segmentId: "s3", whySelected: "它补上了明天要带资料检查这个具体准备动作。" }
             ],
             ignored: [{ segmentId: "s1", whyIgnored: "这只是背景声，暂时略过。" }]
           },

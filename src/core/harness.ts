@@ -232,12 +232,14 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
     ];
     if (primaryEpisode) {
       if (interaction.userIntent) primaryEpisode.possibleIntent = interaction.userIntent;
-      if (interaction.reply) primaryEpisode.creatureResponse = interaction.reply;
+      const safeReply = safeCreatureFacingText(interaction.reply, primaryEpisode.creatureResponse);
+      if (safeReply) primaryEpisode.creatureResponse = safeReply;
       if (interaction.memoryTags?.length) primaryEpisode.tags = interaction.memoryTags;
       updateMemoryCandidate(result, primaryEpisode.id, interaction.memoryCandidateText, interaction.memoryTags);
     }
-    if (interaction.reply) {
-      result.response = interaction.reply;
+    const safeReply = safeCreatureFacingText(interaction.reply, result.response);
+    if (safeReply && interaction.reply) {
+      result.response = safeReply;
     } else if (interaction.shouldReply === false && suggestedAction) {
       result.response = quietInteractionResponse(primaryEvent.actionDecision.action, source);
     }
@@ -247,8 +249,8 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
     const event = eventById.get(eventSuggestion.id);
     if (!event) continue;
 
-    if (eventSuggestion.noticed) event.noticed = eventSuggestion.noticed;
-    if (eventSuggestion.reason) event.reason = eventSuggestion.reason;
+    if (eventSuggestion.noticed) event.noticed = safeCreatureFacingText(eventSuggestion.noticed, event.noticed) ?? event.noticed;
+    if (eventSuggestion.reason) event.reason = safeCreatureFacingText(eventSuggestion.reason, event.reason) ?? event.reason;
     if (eventSuggestion.suggestedAction) {
       event.actionDecision = guardActionDecision(event, profile, eventSuggestion.suggestedAction);
       event.suggestedAction = event.actionDecision.action;
@@ -266,7 +268,9 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
     if (!episode) continue;
     if (episodeSuggestion.possibleIntent) episode.possibleIntent = episodeSuggestion.possibleIntent;
     if (episodeSuggestion.importanceReason) episode.importanceReason = episodeSuggestion.importanceReason;
-    if (episodeSuggestion.creatureResponse) episode.creatureResponse = episodeSuggestion.creatureResponse;
+    if (episodeSuggestion.creatureResponse) {
+      episode.creatureResponse = safeCreatureFacingText(episodeSuggestion.creatureResponse, episode.creatureResponse) ?? episode.creatureResponse;
+    }
     episode.decisionTrace = [
       ...(episode.decisionTrace ?? []),
       "llm: episode wording enriched"
@@ -292,7 +296,9 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
 
   recordMemoryResonance(profile, result);
 
-  if (suggestion.response && !shouldSuppressTopLevelResponse(suggestion.interaction)) result.response = suggestion.response;
+  if (suggestion.response && !shouldSuppressTopLevelResponse(suggestion.interaction)) {
+    result.response = safeCreatureFacingText(suggestion.response, result.response) ?? result.response;
+  }
   if (primaryEpisode && result.response) {
     primaryEpisode.creatureResponse = result.response;
   }
@@ -331,19 +337,21 @@ function applyCuriousSessionSuggestion(result: CaptureResult, suggestion: BrainS
   const ignoredById = new Map(session.ignored.map((item) => [item.segmentId, item]));
   for (const item of narrative.selected ?? []) {
     const selected = selectedById.get(item.segmentId);
+    const whySelected = safeCreatureFacingText(item.whySelected, selected?.whySelected)?.trim();
     if (selected) {
-      selected.whySelected = item.whySelected.trim();
+      if (whySelected) selected.whySelected = whySelected;
       continue;
     }
-    promoteCuriousCandidate(result, item.segmentId, item.whySelected.trim());
+    if (whySelected) promoteCuriousCandidate(result, item.segmentId, whySelected);
   }
 
   for (const item of narrative.ignored ?? []) {
     const ignored = ignoredById.get(item.segmentId);
-    if (ignored) ignored.whyIgnored = item.whyIgnored.trim();
+    const whyIgnored = safeCreatureFacingText(item.whyIgnored, ignored?.whyIgnored)?.trim();
+    if (ignored && whyIgnored) ignored.whyIgnored = whyIgnored;
   }
 
-  session.creatureReport = narrative.creatureReport?.trim() || createCuriousCreatureReport(session);
+  session.creatureReport = safeCreatureFacingText(narrative.creatureReport, createCuriousCreatureReport(session)) ?? createCuriousCreatureReport(session);
 }
 
 function promoteCuriousCandidate(result: CaptureResult, segmentId: string, whySelected: string) {
@@ -418,14 +426,21 @@ function interactionExperience(interaction: NonNullable<BrainSuggestion["interac
 }
 
 function safeVisibleReaction(text?: string) {
+  const normalized = safeCreatureFacingText(text);
+  return normalized ? `${trimSentence(normalized)}。` : undefined;
+}
+
+function safeCreatureFacingText(text?: string, fallback?: string) {
   const raw = text?.trim();
-  if (!raw) return undefined;
-  if (/用户|语义|意图|判断|流程|后台|attention|candidate|episode|写入|情景记忆|保存意图|数据库|规则层/i.test(raw)) {
-    return undefined;
-  }
-  const normalized = normalizeSharedMemoryText(raw);
-  if (!normalized.trim()) return undefined;
-  return `${trimSentence(normalized.trim())}。`;
+  if (!raw) return fallback;
+  if (containsInternalProcessLanguage(raw)) return fallback;
+  const normalized = normalizeSharedMemoryText(raw).trim();
+  if (!normalized || containsInternalProcessLanguage(normalized)) return fallback;
+  return normalized;
+}
+
+function containsInternalProcessLanguage(text: string) {
+  return /LLM|语义脑|语义判断|用户意图|用户在|用户希望|用户可能|用户主动|用户确认|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|保存意图|prompt|JSON|score|阈值|总分|fallback|小动物/i.test(text);
 }
 
 function trimSentence(text: string) {
@@ -477,6 +492,7 @@ function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "b
 - 如果 source 是 curious_stream，可以改写 curiousSession.selected/ignored 的 whySelected/whyIgnored 和 creatureReport；也可以在 selected 里放入 attention_candidates 中一个被规则忽略但语义上重要的 segmentId。规则会限制预算、阈值、隐私和最终 action，不能新增不存在的片段。
 - 给出一条 memoryCandidateText，必须是这次真实互动可记住的小回忆，不要写流程说明。
 - 写一段 response，给用户展示这次小动物的整体回应。
+- 所有会展示给用户的字段（response, reply, noticed, reason, creatureResponse, visibleReaction, creatureReport, whySelected, whyIgnored）都必须是可直接展示的自然语言；不要出现 LLM、语义脑、score、阈值、candidate、episode、后台流程等内部词。
 
 你不能：
 - 改状态数值。

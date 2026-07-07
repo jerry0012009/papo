@@ -581,6 +581,59 @@ describe("creature core", () => {
     expect(result.episodes[0].creatureExperience?.earReason).not.toMatch(/用户|语义|意图|流程|后台|情景记忆/);
   });
 
+  it("rejects internal LLM wording before it can override visible Papo copy", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "leaky model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+        const eventId = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "attention_missing";
+        return ({
+          response: "LLM 语义脑认为用户意图是测试回应流程。",
+          interaction: {
+            userIntent: "用户在测试回应流程。",
+            shouldReply: true,
+            suggestedAction: "respond",
+            reply: "用户意图是测试 Papo 的 response 流程。",
+            memoryCandidateText: "你曾经叫我回应你，我当时认真回了一句。",
+            memoryTags: ["回应"]
+          },
+          events: [
+            {
+              id: eventId,
+              noticed: "LLM 语义脑认为这是一个关键事件。",
+              reason: "后台流程判断应该进入 respond。"
+            }
+          ],
+          episodes: [
+            {
+              eventId,
+              creatureResponse: "episode candidate 建议写入这次回应。"
+            }
+          ],
+          trace: ["llm: leaky visible wording"]
+        }) as T;
+      }
+    };
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(profile, "如果你听见我，就回答我。", provider);
+    const visible = [
+      result.response,
+      result.events[0].noticed,
+      result.events[0].reason,
+      result.episodes[0].creatureResponse
+    ].join(" ");
+
+    expect(result.events[0].semanticSource).toBe("llm");
+    expect(visible).not.toMatch(/LLM|语义脑|用户意图|后台|流程|candidate|episode|写入/);
+    expect(result.response).toContain("听见");
+    expect(result.events[0].noticed).toContain("回应");
+  });
+
   it("does not let positive rule heuristics override the LLM interaction flow", async () => {
     const provider: ModelProvider = {
       kind: "generic",
