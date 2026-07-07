@@ -796,16 +796,20 @@ function HomeView(props: {
   const latestReply = props.unreadPapoCount ? latestVisiblePapoReply(props.profile) : "";
   const actionLine = papoVisibleActionLine(props.profile.state);
   return (
-    <section className="stack">
-      <div className="hero">
-        <ShibaAvatar state={props.profile.state} />
-        <div className="hero-copy">
-          <p className="eyebrow">Papo 在这里</p>
-          <h2>{props.profile.creatureName}</h2>
-          <p>{latestReply || actionLine}</p>
+    <section className="home-screen">
+      <section className="home-stage">
+        <div className="home-stage-top">
+          <span className="mood-pill">{papoMoodLabel(props.profile.state)}</span>
           <HomeBrainPeek profile={props.profile} />
         </div>
-      </div>
+        <div className="home-avatar-wrap">
+          <ShibaAvatar state={props.profile.state} />
+        </div>
+        <div className="home-speech">
+          <h2>{props.profile.creatureName}</h2>
+          <p>{latestReply || actionLine}</p>
+        </div>
+      </section>
       {props.unreadPapoCount ? (
         <button className="proactive-nudge" onClick={props.onGoChat}>
           <MessagesSquare size={16} />
@@ -814,8 +818,8 @@ function HomeView(props: {
         </button>
       ) : null}
 
-      <div className="action-row">
-        <button onClick={props.onGoCapture}>
+      <div className="home-actions">
+        <button className="primary" onClick={props.onGoCapture}>
           <MessageCircle size={18} />
           跟 Papo 说
         </button>
@@ -962,6 +966,15 @@ function papoVisibleActionLine(state: CreatureState) {
   return "Papo 趴在旁边，等你说下一件事。";
 }
 
+function papoMoodLabel(state: CreatureState) {
+  if (state.energy < 35) return "有点困";
+  if (state.attachment > 72) return "很亲近";
+  if (state.curiosity > 72) return "在好奇";
+  if (state.safety > 76) return "慢慢听";
+  if (state.mood === "bright") return "很精神";
+  return "在身边";
+}
+
 function ChatView(props: {
   profile: CreatureProfile;
   busy: boolean;
@@ -1027,16 +1040,20 @@ function ChatView(props: {
     await props.onSubmitMoment(text);
   }
   return (
-    <section className="stack">
-      <div className="panel">
-        <PanelTitle icon={MessagesSquare} title="和 Papo 的小日常" />
-        <section className="chat-presence">
-          <ShibaAvatar state={props.profile.state} />
-          <div>
-            <strong>{props.listening ? "Papo 正在旁边听" : "Papo 趴在旁边等你"}</strong>
-            <p>{props.listening ? `已经陪了 ${formatListeningTime(props.listeningElapsed)}。` : "你可以直接说一件事，也可以让它陪在旁边。"}</p>
-          </div>
-        </section>
+    <section className="chat-screen">
+      <header className="chat-top">
+        <ShibaAvatar state={props.profile.state} />
+        <div>
+          <strong>{props.listening ? "Papo 正在听" : "Papo 在这里"}</strong>
+          <span>{props.listening ? formatListeningTime(props.listeningElapsed) : papoMoodLabel(props.profile.state)}</span>
+        </div>
+        <button className="listen-toggle" onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
+          <Sparkles size={17} />
+          {props.listening ? "停下" : "陪我"}
+        </button>
+      </header>
+      <HermesTaskNotice profile={props.profile} />
+      <section className="chat-thread" aria-label="和 Papo 的对话">
         {messages.length ? (
           <div className="chat-list">
             {hasOlderMessages ? (
@@ -1063,26 +1080,39 @@ function ChatView(props: {
         ) : (
           <p className="muted">还没有对话。第一件小事会从这里开始。</p>
         )}
-        <section className="listening-panel">
-          <div>
-            <strong>{props.listening ? "正在陪你听" : "陪你听一会儿"}</strong>
-            <p>
-              {props.listening
-                ? "听清的事会自己进对话，嘈杂时就轻轻放过去。"
-                : "开始后你仍然可以继续打字或加照片。"}
-            </p>
-          </div>
-          <button onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
-            <Sparkles size={18} />
-            {props.listening ? `停下 ${formatListeningTime(props.listeningElapsed)}` : "开始陪我听"}
-          </button>
-        </section>
-        <HermesTaskNotice profile={props.profile} />
-        <div className="chat-composer" ref={composerRef}>
+      </section>
+      <div className="chat-composer" ref={composerRef}>
+          {props.stagedSegments.length ? (
+            <section className="staged-moment">
+              <strong>这次分享里还带着</strong>
+              {props.stagedSegments.map((segment, index) => (
+                <article className="staged-segment" key={segment.id}>
+                  <div className="staged-attachment-head">
+                    <span className="staged-kind">
+                      <StagedSegmentIcon kind={segment.kind} />
+                      {stagedSegmentKindText(segment.kind)}
+                    </span>
+                    <strong>{segment.label}</strong>
+                  </div>
+                  <textarea
+                    value={segment.content}
+                    onChange={(event) => updateStagedSegmentContent(index, event.target.value)}
+                    rows={3}
+                    placeholder={stagedSegmentPlaceholder(segment.kind)}
+                  />
+                  <AttachmentStrip attachments={segment.attachments} />
+                  <button onClick={() => removeStagedSegment(index)} disabled={props.busy}>
+                    <RefreshCcw size={16} />
+                    这次先不带
+                  </button>
+                </article>
+              ))}
+            </section>
+          ) : null}
           <textarea
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            rows={3}
+            rows={2}
             placeholder="直接告诉 Papo 一件刚发生的事"
           />
           <div className="composer-tools">
@@ -1135,34 +1165,6 @@ function ChatView(props: {
               {props.stagedSegments.length ? "让 Papo 听听" : "说给 Papo"}
             </button>
           </div>
-          {props.stagedSegments.length ? (
-            <section className="staged-moment">
-              <strong>这次分享里还带着</strong>
-              {props.stagedSegments.map((segment, index) => (
-                <article className="staged-segment" key={segment.id}>
-                  <div className="staged-attachment-head">
-                    <span className="staged-kind">
-                      <StagedSegmentIcon kind={segment.kind} />
-                      {stagedSegmentKindText(segment.kind)}
-                    </span>
-                    <strong>{segment.label}</strong>
-                  </div>
-                  <textarea
-                    value={segment.content}
-                    onChange={(event) => updateStagedSegmentContent(index, event.target.value)}
-                    rows={3}
-                    placeholder={stagedSegmentPlaceholder(segment.kind)}
-                  />
-                  <AttachmentStrip attachments={segment.attachments} />
-                  <button onClick={() => removeStagedSegment(index)} disabled={props.busy}>
-                    <RefreshCcw size={16} />
-                    这次先不带
-                  </button>
-                </article>
-              ))}
-            </section>
-          ) : null}
-        </div>
       </div>
     </section>
   );
