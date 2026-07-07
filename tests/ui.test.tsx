@@ -49,6 +49,46 @@ describe("App", () => {
     expect(screen.queryByText("当前心情")).not.toBeInTheDocument();
   });
 
+  it("surfaces a raised habit on Home without pretending it is a shared memory", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/api/provider")) {
+        return json({
+          kind: "fallback",
+          name: "Fallback demo brain",
+          available: true,
+          usesRealModel: false,
+          diagnostics: { textProvider: "fallback", visionProvider: "fallback", audioProvider: "fallback", audioRoute: "fallback" }
+        });
+      }
+      if (url.endsWith("/api/profiles")) return json({ profiles: [{ userId: "u-raised", creatureName: "Papo" }] });
+      if (url.endsWith("/api/profiles/u-raised")) return json({ profile: raisedOnlyProfileFixture() });
+      if (url.endsWith("/api/profiles/u-raised/wake")) {
+        return json({
+          profile: raisedOnlyProfileFixture(),
+          wake: {
+            id: "wake-raised",
+            at: new Date().toISOString(),
+            elapsedMinutes: 0,
+            message: "我刚刚醒着，你一打开我就还在这里。",
+            innerThought: "",
+            relatedMemoryIds: [],
+            stateDelta: {},
+            ruleTrace: ["elapsed_minutes=0", "state_delta=none"]
+          }
+        });
+      }
+      return json({ profile: raisedOnlyProfileFixture() });
+    });
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText("记着你教过的听法")).toBeInTheDocument());
+    expect(screen.getByText("你把我教得遇到相近的事要多停一下，不要太快放过去。")).toBeInTheDocument();
+    expect(screen.queryByText("想起以前的事")).not.toBeInTheDocument();
+    expect(screen.queryByText("我被你养成的样子")).not.toBeInTheDocument();
+  });
+
   it("renders the core mobile-first workbench", async () => {
     let curiousRequest: { segments?: Array<{ kind: string; batchId?: string; content: string }> } | undefined;
     const feedbackRequests: Array<{ kind: string; targetId?: string; content?: string; modality?: string }> = [];
@@ -436,6 +476,27 @@ function blankProfileFixture() {
     emergenceHistory: [],
     wakeHistory: [],
     semanticBrainHistory: [],
+    conversation: []
+  };
+}
+
+function raisedOnlyProfileFixture() {
+  const profile = blankProfileFixture();
+  return {
+    ...profile,
+    userId: "u-raised",
+    episodes: [],
+    longTermMemories: [
+      ...profile.longTermMemories,
+      {
+        id: "raised-depth",
+        createdAt: new Date().toISOString(),
+        kind: "creature_self_memory",
+        text: "你教我不要浅浅带过。以后遇到相近内容，我会多停一下，先想起以前的小事再回应。",
+        weight: 82,
+        tags: ["被你养成", "更愿意多想"]
+      }
+    ],
     conversation: []
   };
 }

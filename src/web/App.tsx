@@ -1944,12 +1944,15 @@ function presenceSentence(profile: CreatureProfile) {
   if (latest?.role === "user" || latest?.role === "world") return "文字、照片或声音会留在同一次对话里，让 Papo 接着回应。";
   const memory = strongestSharedMemory(profile);
   if (memory) return `我还记得这件旧事：${normalizeMemoryText(memory.text)}。如果之后聊到相近内容，我会想起它。`;
+  const raisedHabit = strongestRaisedHabit(profile);
+  if (raisedHabit) return raisedHabitSentence(raisedHabit);
   if (!profile.episodes.length) return "我还没有和你经历过多少事。你可以直接跟我说话，也可以给我照片或声音。";
   return "你可以继续说，也可以传照片、录音，或让 Papo 听一会儿。";
 }
 
 function restingPresenceHeadline(profile: CreatureProfile) {
   if (strongestSharedMemory(profile)) return "想起以前的事";
+  if (strongestRaisedHabit(profile)) return "记着你教过的听法";
   if (!profile.episodes.length) return "等第一段生活靠近";
   return "等你继续说";
 }
@@ -1958,6 +1961,20 @@ function strongestSharedMemory(profile: CreatureProfile) {
   return profile.longTermMemories
     .filter((memory) => memory.weight > 0 && memory.kind !== "creature_self_memory" && Boolean(memory.sourceEpisodeId))
     .sort((a, b) => b.weight - a.weight)[0];
+}
+
+function strongestRaisedHabit(profile: CreatureProfile) {
+  return profile.longTermMemories
+    .filter((memory) => memory.weight > 0 && memory.kind === "creature_self_memory" && memory.tags.includes("被你养成"))
+    .sort((a, b) => b.weight - a.weight)[0];
+}
+
+function raisedHabitSentence(memory: CreatureProfile["longTermMemories"][number]) {
+  if (memory.tags.includes("更愿意多想")) return "你把我教得遇到相近的事要多停一下，不要太快放过去。";
+  if (memory.tags.includes("更安静")) return "你把我教得更会收住声音，先陪着，不急着打扰你。";
+  if (memory.tags.includes("更小心边界")) return "你把我教得更小心边界，保存或展开前先等你的意思。";
+  if (memory.tags.includes("更愿意记住")) return "你把我教得更愿意把重要的小事记稳一点。";
+  return `你教过我：${normalizeMemoryText(memory.text)}。`;
 }
 
 function actionText(action: AttentionEvent["suggestedAction"]) {

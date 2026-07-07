@@ -372,7 +372,7 @@ Verified:
 - `陪我` now behaves as a continuous listening function inside the dialogue surface: text/photo/audio/listening chunks from the current shared moment are submitted through the same attention harness, the buffer clears after each event, and the dialogue page remains the single conversation timeline.
 - Home renders Papo as an animated Shiba Inu SVG whose visible posture changes with mood, energy, curiosity, attachment, and safety.
 - Home presence copy is context-first and does not expose "current mood" or state-calculation wording.
-- Home does not show low-information wake notices or persistent raised-habit summaries; those are internal rhythm/personality state unless tied to a fresh feedback action, real shared memory, or explicit details surface.
+- Home does not show low-information wake notices or a separate raised-habit card. If there is no fresher dialogue or shared memory, it may use one concise presence sentence for a feedback-shaped habit the user taught Papo.
 - Home hero does not show internal state explanations such as being cautious, curious, attached, tired, or privacy-sensitive; those signals belong in animation, Brain, or a fresh action result.
 - Default attention cards translate action decisions into visible behavior instead of action enum labels; Brain retains raw decisions and rule traces.
 - Home idle copy does not fall back to a static mood label; a new Papo with no real shared memory says it is waiting for the first real text/photo/audio fragment.
