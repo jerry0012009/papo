@@ -445,12 +445,21 @@ function parseJson<T>(text: string): T | undefined {
   const candidates = [text.trim(), ...extractJsonBlocks(text), extractFirstJsonObject(text)].filter((item): item is string => Boolean(item?.trim()));
   for (const candidate of candidates) {
     try {
-      return JSON.parse(candidate) as T;
+      return parseJsonCandidate<T>(candidate);
     } catch {
       // Try the next exact JSON candidate from the model output.
     }
   }
   throw new Error(`Model provider returned invalid JSON content (${jsonDiagnostic(text)})`);
+}
+
+function parseJsonCandidate<T>(candidate: string): T {
+  const parsed = JSON.parse(candidate) as unknown;
+  if (typeof parsed === "string") {
+    const nested = parsed.trim();
+    if (nested.startsWith("{") || nested.startsWith("[")) return JSON.parse(nested) as T;
+  }
+  return parsed as T;
 }
 
 function jsonDiagnostic(text: string) {

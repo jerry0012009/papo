@@ -71,6 +71,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Audio sensing should prefer native audio-capable multimodal models. The current OpenRouter default is `xiaomi/mimo-v2.5`, verified through chat completions audio input.
 - Mixed routing is allowed: for example, OpenRouter can be the semantic provider while generic audio uses a transcription endpoint as its provider route.
 - Provider errors are product errors. They should be visible through API errors and diagnostics instead of being hidden behind local wording.
+- If a real model repeatedly returns empty or invalid structured output for core cognition, switch to another configured real provider/model and verify it with scenario smoke tests. Do not add local semantic fallback to mask the model failure.
 
 ## Code Map
 
@@ -92,6 +93,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 
 - The provider layer throws when credentials are missing.
 - `generateJson` must distinguish empty model content from invalid JSON content. Invalid JSON is a provider/model contract failure, not an empty result.
+- `generateJson` may unwrap a JSON-encoded object string produced by a provider, but it must not synthesize missing semantic fields or repair invalid model decisions.
 - Sensing endpoints call real model providers directly. Image/audio failures return errors.
 - The semantic harness strips rule-created visible drafts before model action/wording. Papo's final visible reply must come from a model.
 - `attention.ts` creates neutral candidates only. It must not write creature-facing replies, semantic "noticed" explanations, keyword tags, related-memory guesses, curious reports, or mixed-preference dialogue.
@@ -121,6 +123,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - If the model chooses `observe` or `quiet`, it must not provide a visible reply; the API may persist the user's input without adding a Papo reply.
 - Recent conversation, memories, and feedback are passed into model prompts through `model-context.ts`.
 - For button and curious captures, the current input is passed to the semantic brain as the current event/candidate, then appended to the conversation timeline after cognition. `recent_conversation` must represent prior context, not duplicate the current input.
+- During feedback reflection, the current feedback is passed through the dedicated `feedback` field. `recent_feedback` must contain prior feedback only, not the same current feedback record repeated as history.
 - Development planning text must not be used as creature interaction material.
 - New Papo messages persist `cognitionTrace` with the real model stages, attention/action/memory decisions, feedback effects, emergence choices, visible reply, persistence outcomes, and structural rule checks that produced that visible reply. This supports developer audit without proving the mechanism in the main UI.
 

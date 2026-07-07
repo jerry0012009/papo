@@ -395,6 +395,7 @@ function recordFeedbackSemanticRun(
 function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: FeedbackRecord) {
   const targetEpisode = profile.episodes.find((item) => item.id === feedback.targetId);
   const targetLongTerm = profile.longTermMemories.find((item) => item.id === feedback.targetId);
+  const previousFeedback = profile.feedbackHistory.filter((item) => item.id !== feedback.id);
   const feedbackPrivacyHigh = false;
   const targetPrivacyHigh = false;
   return `请作为 Papo 的反馈反思脑，根据这次用户反馈，决定 Papo 应该怎样被养成。
@@ -499,7 +500,7 @@ current_policy:
 ${JSON.stringify(profile.policyProfile)}
 
 recent_feedback:
-${JSON.stringify(modelFeedbackContext(profile.feedbackHistory))}
+${JSON.stringify(modelFeedbackContext(previousFeedback))}
 
 recent_conversation_newest_first:
 ${JSON.stringify(modelConversationContext(profile))}
