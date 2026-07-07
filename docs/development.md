@@ -53,6 +53,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Text, photo, uploaded audio, and continuous listening chunks enter the same conversation timeline.
 - Continuous listening is internally batched around 30 seconds for up to 3 minutes, but the user should experience it as Papo listening with them.
 - Continuous listening records audio chunks and sends them to the configured audio model. Browser/local speech recognition output must not bypass the model into the life stream.
+- Text typed while continuous listening is active is treated as part of the current 30-second curious batch, not as a separate button-only dialogue path.
 - Empty audio, silence, noise, and unclear speech are ordinary inputs for the model to ignore or use.
 - Photo input records upload time and available browser location so memory can later keep natural provenance.
 - Papo replies are model-written external behavior, not frontend templates.

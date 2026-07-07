@@ -150,14 +150,15 @@ export function App() {
   async function submitChatMoment(text: string) {
     const cleanText = text.trim();
     if (!profile) return;
-    if (!chatSegments.length) {
+    if (!chatSegments.length && !listening) {
       await submitTextCapture(cleanText, "chat");
       return;
     }
+    if (!cleanText && !chatSegments.length) return;
     await run(async () => {
       const batchId = chatSegments[0]?.batchId ?? currentBatchId();
       const textSegment = cleanText
-        ? [makeSegment(`chat-text-${Date.now()}`, "text", "你刚说的话", cleanText, { observedAt: new Date().toISOString(), batchId })]
+        ? [makeSegment(`chat-text-${Date.now()}`, "text", listening ? "这 30 秒里你补充的话" : "你刚说的话", cleanText, { observedAt: new Date().toISOString(), batchId })]
         : [];
       const result = await curiousCapture(
         profile.userId,
