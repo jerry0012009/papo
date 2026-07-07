@@ -157,7 +157,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const body = audioObservationSchema.parse(req.body);
       const prompt = `请直接理解这段音频，写成一段给 Papo 后续注意机制使用的中文生活观察。只描述能直接听见的事实、明确听清的说话内容、环境声类型或正在发生的事；不能猜测人声、文字、看不见的物体、身份或原因，不能把非语音声音当成说话；不确定就写“不确定的声音”。最多 400 字；如果没有可用生活信息，返回空文本。如果你无法读取或处理这段音频，只返回 ERROR_AUDIO_UNREADABLE。标签：${body.label ?? "录音"}`;
-      const audioObservation = normalizeAudioObservation((await provider.observeAudio(body.dataUrl, prompt)).slice(0, 1200));
+      const audioObservation = normalizeAudioObservation((await observeAudioForSensing(provider, body.dataUrl, prompt)).slice(0, 1200));
       const trace = audioSensingTrace(provider, body.label ?? "录音", audioObservation);
       res.json({
         observation: audioObservation.text,
@@ -407,6 +407,20 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
   }
 
   return app;
+}
+
+async function observeAudioForSensing(provider: ModelProvider, dataUrl: string, prompt: string) {
+  try {
+    return await provider.observeAudio(dataUrl, prompt);
+  } catch (error) {
+    if (isUnreadableAudioInputError(error)) return "ERROR_AUDIO_UNREADABLE";
+    throw error;
+  }
+}
+
+function isUnreadableAudioInputError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /Audio input conversion failed|invalid_request_audio|Failed to load audio file|Invalid data found when processing input|EBML header parsing failed/i.test(message);
 }
 
 export function startProactiveEmergenceLoop(store: ProfileStore, provider: ModelProvider, intervalMs = 60_000) {
