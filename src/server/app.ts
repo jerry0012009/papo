@@ -323,15 +323,16 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const beforeSemanticIds = semanticRecordIds(profile);
       const emergence = await semanticDecideEmergence(profile, provider);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
+      const cognitionTrace = emergenceCognitionTrace(emergence, provider, modelRuns);
       appendPapoMessage(profile, {
         channel: "emergence",
         text: emergence.text,
         sourceId: emergence.id,
         relatedMemoryIds: emergence.relatedMemoryIds,
-        cognitionTrace: emergenceCognitionTrace(emergence, provider, modelRuns)
+        cognitionTrace
       });
       await store.saveProfile(profile);
-      res.json({ profile, emergence });
+      res.json({ profile, emergence: { ...emergence, cognitionTrace } });
     } catch (error) {
       next(error);
     }

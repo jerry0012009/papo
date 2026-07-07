@@ -1009,6 +1009,19 @@ select {
   line-height: 1.62;
 }
 
+.emergence-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.emergence-audit {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 28px;
+}
+
 .segment-editor {
   display: grid;
   gap: 8px;

@@ -21,6 +21,7 @@ import type {
   CreatureState,
   EpisodeMemory,
   FeedbackKind,
+  MessageCognitionTrace,
   SegmentKind,
   StreamSegment
 } from "../core/types";
@@ -45,6 +46,7 @@ type Tab = "home" | "chat" | "memory" | "profile";
 interface EmergenceSurface {
   text: string;
   memoryId?: string;
+  cognitionTrace?: MessageCognitionTrace;
 }
 
 type ConversationMessage = CreatureProfile["conversation"][number];
@@ -537,7 +539,7 @@ function HomeView(props: {
         </button>
       </div>
 
-      {props.emergence?.text ? <EmergenceCard emergence={props.emergence} /> : null}
+      {props.emergence?.text || props.emergence?.cognitionTrace ? <EmergenceCard emergence={props.emergence} profile={props.profile} /> : null}
     </section>
   );
 }
@@ -1430,10 +1432,20 @@ function noticedText(text: string) {
     .replace(/^我听到[:：]?\s*/, "");
 }
 
-function EmergenceCard({ emergence }: { emergence: EmergenceSurface }) {
+function EmergenceCard({ emergence, profile }: { emergence: EmergenceSurface; profile: CreatureProfile }) {
+  if (!emergence.text) {
+    return (
+      <section className="emergence-audit">
+        {emergence.cognitionTrace ? <DeveloperTrace trace={emergence.cognitionTrace} profile={profile} /> : null}
+      </section>
+    );
+  }
   return (
     <section className="memory-surface active">
-      <strong>Papo 想起一件事</strong>
+      <div className="emergence-card-head">
+        <strong>Papo 想起一件事</strong>
+        {emergence.cognitionTrace ? <DeveloperTrace trace={emergence.cognitionTrace} profile={profile} /> : null}
+      </div>
       <p>{visibleCreatureText(emergence.text)}</p>
     </section>
   );
