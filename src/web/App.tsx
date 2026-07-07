@@ -47,6 +47,7 @@ import {
 import {
   audioSliceBatchId,
   currentLiveBatchId,
+  imageSegmentContent,
   liveBatchBoundaryMs as liveBatchBoundaryFor,
   LIVE_BATCH_AUDIO_GRACE_MS,
   LIVE_BATCH_MAX_WAIT_MS,
@@ -113,6 +114,10 @@ export function App() {
   );
   const unreadPapoCount = useMemo(() => countUnreadPapoMessages(profile), [profile?.conversation, profile?.readState?.lastReadPapoMessageId]);
   const hasUnreadPapoMessage = unreadPapoCount > 0;
+  const hasActiveHermesTask = useMemo(
+    () => Boolean(profile?.hermes?.tasks?.some((task) => task.status === "pending" || task.status === "sent")),
+    [profile?.hermes?.tasks]
+  );
 
   useEffect(() => {
     void bootstrap();
@@ -135,6 +140,7 @@ export function App() {
 
   useEffect(() => {
     if (!profile?.userId) return;
+    const intervalMs = hasActiveHermesTask ? 3_000 : 60_000;
     const timer = window.setInterval(async () => {
       try {
         const next = await getProfile(profile.userId);
@@ -142,9 +148,9 @@ export function App() {
       } catch {
         // Polling is only for passive proactive-message sync; user actions still surface errors.
       }
-    }, 60_000);
+    }, intervalMs);
     return () => window.clearInterval(timer);
-  }, [profile?.userId]);
+  }, [hasActiveHermesTask, profile?.userId]);
 
   async function bootstrap() {
     try {
@@ -223,8 +229,7 @@ export function App() {
       const location = await currentLocationSnapshot();
       const dataUrl = await readFileAsDataUrl(file);
       const result = await summarizeImage(dataUrl, file.name || "对话照片");
-      const content = sensingSegmentContent(result.summary);
-      if (!content) return;
+      const content = imageSegmentContent(result.summary, file.name || "照片");
       const asset = result.asset
         ? {
             ...result.asset,

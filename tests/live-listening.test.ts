@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   audioSliceBatchId,
   currentLiveBatchId,
+  imageSegmentContent,
   LIVE_BATCH_MS,
   LIVE_LISTENING_MAX_MS,
   liveBatchBoundaryMs,
@@ -32,6 +33,8 @@ assert.equal(currentLiveBatchId(startedAt, startedAt + 5 * LIVE_BATCH_MS), plann
 
 assert.equal(shouldSuppressForcedAudioSlice(startedAt + LIVE_LISTENING_MAX_MS, startedAt + LIVE_LISTENING_MAX_MS - 500), true);
 assert.equal(shouldSuppressForcedAudioSlice(startedAt + LIVE_LISTENING_MAX_MS, startedAt + LIVE_LISTENING_MAX_MS - 1500), false);
+assert.equal(imageSegmentContent("一只柴犬趴在地板上", "papo.jpg"), "一只柴犬趴在地板上");
+assert.match(imageSegmentContent("   ", "papo.jpg"), /你给 Papo 看了一张照片：papo\.jpg/);
 
 const appSource = readFileSync(new URL("../src/web/App.tsx", import.meta.url), "utf8");
 assert.equal(appSource.includes(".requestData()"), false, "continuous webm chunks must be complete recorder files, not requestData stream fragments");

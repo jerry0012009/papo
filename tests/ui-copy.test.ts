@@ -16,4 +16,6 @@ for (const phrase of forbiddenVisibleTemplates) {
   assert.equal(appSource.includes(phrase), false, `rule-written visible copy returned: ${phrase}`);
 }
 
-console.log(JSON.stringify({ ok: true, checked: forbiddenVisibleTemplates.length }, null, 2));
+assert.equal(appSource.includes("hasActiveHermesTask ? 3_000 : 60_000"), true, "active Hermes tasks should poll quickly so async results surface without a stale waiting notice");
+
+console.log(JSON.stringify({ ok: true, checked: forbiddenVisibleTemplates.length + 1 }, null, 2));

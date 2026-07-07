@@ -36,3 +36,10 @@ export function plannedLiveAudioSliceBatchIds(startedAt: number, totalMs = LIVE_
   const count = Math.ceil(totalMs / LIVE_BATCH_MS);
   return Array.from({ length: count }, (_item, index) => liveBatchId(startedAt, index + 1));
 }
+
+export function imageSegmentContent(summary: string, label: string) {
+  const cleanSummary = summary.trim();
+  if (cleanSummary) return cleanSummary;
+  const cleanLabel = label.trim() || "照片";
+  return `你给 Papo 看了一张照片：${cleanLabel}。这张照片这次没有被看清。`;
+}
