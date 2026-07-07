@@ -546,6 +546,32 @@ meter {
   line-height: 1.55;
 }
 
+.memory-main {
+  display: grid;
+  gap: 10px;
+}
+
+.memory-main div {
+  display: grid;
+  gap: 4px;
+}
+
+.memory-main span {
+  color: #69756c;
+  font-size: 0.78rem;
+}
+
+.memory-main p,
+.memory-main strong {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.memory-main strong {
+  color: #1f2421;
+  font-size: 0.95rem;
+}
+
 .attention-card footer {
   margin-top: 10px;
   color: #4f8b76;

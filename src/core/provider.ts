@@ -429,7 +429,7 @@ async function callAudioTranscriptionEndpoint(
 }
 
 function parseAudioDataUrl(dataUrl: string) {
-  const match = dataUrl.match(/^data:(audio\/[^;]+);base64,([A-Za-z0-9+/=]+)$/);
+  const match = dataUrl.match(/^data:(audio\/[^;]+)(?:;[^,]+)?;base64,([A-Za-z0-9+/=]+)$/);
   if (!match) throw new Error("Invalid audio data URL");
   const mime = match[1].toLowerCase();
   const format = audioFormatFromMime(mime);

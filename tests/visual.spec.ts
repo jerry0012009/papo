@@ -54,7 +54,8 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
   await expect(page.getByText("Papo", { exact: true }).first()).toBeVisible();
   await expect(page.getByLabel("有未读 Papo 回复")).toHaveCount(0);
   await expect(page.getByText("可以让 Papo 持续听一会儿")).toBeVisible();
-  await expect(page.getByText(/最多 3 分钟，每 30 秒整理一次声音/)).toBeVisible();
+  await expect(page.getByText(/最多 3 分钟，每 30 秒听一小段/)).toBeVisible();
+  await expect(page.getByText(/没有人声或太嘈杂时会自然略过/)).toBeVisible();
   await expect(page.getByRole("button", { name: "开始听 3 分钟" })).toBeVisible();
   await expect(page.getByText("加照片", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "说给 Papo" })).toBeVisible();
@@ -64,8 +65,11 @@ test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) =
 
   await page.getByRole("button", { name: "记忆" }).click();
   await expect(page.getByRole("heading", { name: "我记住的事" })).toBeVisible();
-  await expect(page.getByText(/它以后可能还会回来找你，我先记着：如果你能说话/)).toBeVisible();
-  await expect(page.getByText("我留下它，是因为这件事以后可能还会回来找你。")).toBeVisible();
+  await expect(page.getByText("你当时说").first()).toBeVisible();
+  await expect(page.getByText("Papo 记住").first()).toBeVisible();
+  await expect(page.getByText(/如果你能说话.*你就说句话给我听/).first()).toBeVisible();
+  await expect(page.getByText(/它以后可能还会回来找你，我先记着：如果你能说话/)).toHaveCount(0);
+  await expect(page.getByText("我留下它，是因为这件事以后可能还会回来找你。")).toHaveCount(0);
   await expect(page.getByText(/用户|小动物|episode|candidate|长期保存|当前事件|保存意图|未来价值/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "教我记准" })).toBeVisible();
   await expect(page.getByRole("button", { name: "帮我先放下" })).toBeVisible();

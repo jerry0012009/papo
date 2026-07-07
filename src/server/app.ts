@@ -56,7 +56,7 @@ const audioTranscriptSchema = z.object({
     .string()
     .min(64)
     .max(10_000_000)
-    .regex(/^data:audio\/(webm|wav|mpeg|mp3|mp4|m4a|x-m4a|ogg);base64,/),
+    .regex(/^data:audio\/(webm|wav|mpeg|mp3|mp4|m4a|x-m4a|ogg)(?:;[^,]+)?;base64,/),
   label: z.string().min(1).max(80).optional()
 });
 

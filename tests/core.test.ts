@@ -53,11 +53,23 @@ describe("creature core", () => {
     if (!event.scoreBreakdown) throw new Error("expected score breakdown");
     expect(event.noticed).toContain("复查");
     expect(event.scoreBreakdown.futureValue).toBeGreaterThan(0);
-    expect(result.response).toMatch(/共同经历|以后可能还会回来|复查/);
+    expect(result.response).toMatch(/我听见了|之后可能还要再看/);
     expect(result.episodes[0].possibleIntent).toContain("刚发生的对话");
     expect(result.response).not.toContain("我先试着理解");
     expect(result.response).not.toContain("我注意到这个片段可能");
+    expect(result.response).not.toContain("我注意到这段");
+    expect(result.response).not.toContain("确认我有没有听对");
     expect(result.episodes[0].possibleIntent).not.toContain("认真理解并判断");
+  });
+
+  it("rule fallback keeps cognition out of visible dialogue", () => {
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "我准备去游泳最近每天我都游泳游泳是一个消耗卡路里效率很高的运动我很喜欢但是我不喜欢游泳馆人太多");
+
+    expect(result.response).toContain("我听见了");
+    expect(result.response).toContain("喜欢的部分");
+    expect(result.response).not.toMatch(/我先听你说完|我注意到这段|刚发生的对话|确认我有没有听对|情景记忆|长期记忆/);
+    expect(result.episodes[0].creatureResponse).toBe(result.response);
   });
 
   it("fallback repair can respond to a direct call when the semantic model is unavailable", async () => {
@@ -418,7 +430,7 @@ describe("creature core", () => {
         OPENAI_AUDIO_MODEL: "gpt-5.5"
       });
 
-      const result = await provider.transcribeAudio(`data:audio/wav;base64,${Buffer.from("fake wav").toString("base64")}`, "判断有没有人声。");
+      const result = await provider.transcribeAudio(`data:audio/webm;codecs=opus;base64,${Buffer.from("fake webm").toString("base64")}`, "判断有没有人声。");
 
       expect(result).toBe("没有听到人声。");
       expect(provider.diagnostics?.audioRoute).toBe("audio_transcriptions");

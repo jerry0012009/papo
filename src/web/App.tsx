@@ -150,6 +150,7 @@ export function App() {
   const transcriptBufferRef = useRef("");
   const segmentIndexRef = useRef(1);
   const listeningStartedAtRef = useRef<number | undefined>(undefined);
+  const profileRef = useRef<CreatureProfile | undefined>(undefined);
   const tickTimerRef = useRef<number | undefined>(undefined);
   const segmentTimerRef = useRef<number | undefined>(undefined);
   const stopTimerRef = useRef<number | undefined>(undefined);
@@ -169,6 +170,10 @@ export function App() {
   useEffect(() => {
     if (tab === "chat" && latestPapoMessage) setReadPapoMessageId(latestPapoMessage.id);
   }, [latestPapoMessage?.id, tab]);
+
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
 
   async function bootstrap() {
     try {
@@ -276,7 +281,7 @@ export function App() {
           batchId: current[0]?.batchId ?? currentBatchId()
         })
       ]);
-      setDemoNote(result.error ? "录音先留在这次对话里，等你补一句我再一起听。" : result.semanticSource === "llm" ? "录音已经整理成可修改的文字，会和这次对话里的话一起给我听。" : "录音先留在这次对话里，提交时会一起给我听。");
+      setDemoNote(!content ? "这段录音暂时没有清楚的话。你可以补一句，再给 Papo 听。" : result.semanticSource === "llm" ? "录音已经整理成可修改的文字，会和这次对话里的话一起给我听。" : "录音先留在这次对话里，提交时会一起给我听。");
       setTab("chat");
     });
   }
@@ -458,21 +463,34 @@ export function App() {
           const dataUrl = await blobToDataUrl(blob);
           const result = await transcribeAudio(dataUrl, `语音片段 ${index}`);
           content = chooseAudioTranscript(result.transcript, localTranscript, Boolean(result.error));
-        } catch (caught) {
+        } catch {
           content = localTranscript;
-          if (!content) setError(`第 ${index} 段声音没听清。你可以手动补一小段给我。${errorMessage(caught)}`);
         }
       }
     }
 
     if (!content.trim()) return;
-    setChatSegments((current) => [
-      ...current,
-      makeSegment(`live-audio-${Date.now()}-${index}`, "audio_transcript", `语音片段 ${index}`, content.trim(), {
+    await submitLiveAudioSegment(
+      makeSegment(`live-audio-${Date.now()}-${index}`, "audio_transcript", `听到的声音 ${index}`, content.trim(), {
         observedAt: new Date().toISOString(),
         batchId: batchIdForSegment(index)
       })
-    ]);
+    );
+  }
+
+  async function submitLiveAudioSegment(segment: StreamSegment) {
+    const activeProfile = profileRef.current;
+    if (!activeProfile) return;
+    try {
+      const result = await curiousCapture(activeProfile.userId, [ensureSegmentContext(segment, 0)]);
+      profileRef.current = result.profile;
+      setProfile(result.profile);
+      setLastResult(result);
+      setLearningNote(undefined);
+      setLastFeedback(undefined);
+    } catch (caught) {
+      setError(`Papo 刚才听到一点声音，但整理时断开了。${errorMessage(caught)}`);
+    }
   }
 
   function ensureSegmentContext(segment: StreamSegment, index: number): StreamSegment {
@@ -908,7 +926,7 @@ function ChatView(props: {
         <section className="listening-panel">
           <div>
             <strong>{props.listening ? "Papo 正在听你周围发生的事" : "可以让 Papo 持续听一会儿"}</strong>
-            <p>最多 3 分钟，每 30 秒整理一次声音。你可以同时补文字、照片或录音；提交一次就是一件事。</p>
+            <p>最多 3 分钟，每 30 秒听一小段。听清的内容会自己进入 Papo 的注意；没有人声或太嘈杂时会自然略过。</p>
           </div>
           <button onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
             <Sparkles size={18} />
@@ -1012,7 +1030,7 @@ function ChatBubble({ message }: { message: ConversationMessage }) {
           {context ? `${context} · ` : ""}{new Date(message.at).toLocaleString("zh-CN")}
         </span>
       </div>
-      <p>{visibleCreatureText(message.text)}</p>
+      <p>{visibleMessageText(message)}</p>
       {message.observedAt || message.location ? (
         <small>
           {[
@@ -1090,10 +1108,9 @@ function MemoryView(props: {
                 </div>
               </>
             ) : (
-              <p>{memoryCreatureLine(memory)}</p>
+              <MemoryMainLines memory={memory} profile={props.profile} />
             )}
-            <span>{memoryFeelingText(memory)}</span>
-            {memory.consolidatedBecause ? <small>{memoryKeptBecauseText(memory.consolidatedBecause)}</small> : null}
+            <MemoryProcessDetails memory={memory} profile={props.profile} />
             <div className="memory-actions">
               <button
                 onClick={() => {
@@ -1118,8 +1135,10 @@ function MemoryView(props: {
         <PanelTitle icon={Brain} title="你教我的习惯" />
         {selfMemories.map((memory) => (
           <article className="memory-surface" key={memory.id}>
-            <p>{memoryCreatureLine(memory)}</p>
-            <span>{memoryFamiliarityText(memory.weight)}，我会照着它调整后面的回应。</span>
+            <div className="memory-main">
+              <span>你教会 Papo</span>
+              <p>{memoryResultLine(memory)}</p>
+            </div>
           </article>
         ))}
         {selfMemories.length ? null : <p className="muted">你还没有教出稳定的偏好，之后可以慢慢纠正我。</p>}
@@ -1138,6 +1157,38 @@ function MemoryView(props: {
         ))}
       </div>
     </section>
+  );
+}
+
+function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTermMemories"][number]; profile: CreatureProfile }) {
+  return (
+    <div className="memory-main">
+      <div>
+        <span>你当时说</span>
+        <p>{memorySourceLine(memory, profile)}</p>
+      </div>
+      <div>
+        <span>Papo 记住</span>
+        <strong>{memoryResultLine(memory)}</strong>
+      </div>
+    </div>
+  );
+}
+
+function MemoryProcessDetails({ memory, profile }: { memory: CreatureProfile["longTermMemories"][number]; profile: CreatureProfile }) {
+  const sourceEpisode = memory.sourceEpisodeId ? profile.episodes.find((episode) => episode.id === memory.sourceEpisodeId) : undefined;
+  return (
+    <details className="episode-flow compact-flow">
+      <summary>看看怎么留下的</summary>
+      <FlowSteps
+        steps={[
+          { label: "听见什么", text: memorySourceLine(memory, profile) },
+          { label: "留下什么", text: memoryResultLine(memory) },
+          { label: "为什么留下", text: memory.consolidatedBecause ? memoryKeptBecauseText(memory.consolidatedBecause) : sourceEpisode?.importanceReason },
+          { label: "之后怎么用", text: memoryUseLine(memory) }
+        ]}
+      />
+    </details>
   );
 }
 
@@ -1396,7 +1447,7 @@ function AttentionCard({ event }: { event: AttentionEvent }) {
         <span>{event.triggerLabel}</span>
         <strong>{attentionStrengthText(event.attentionStrength)}</strong>
       </div>
-      <p>{visibleCreatureText(event.noticed)}</p>
+      <p>{summarizeForEpisode(visibleCreatureText(event.triggerContent))}</p>
       <details className="episode-flow compact-flow">
         <summary>看看 Papo 怎么处理的</summary>
         <FlowSteps
@@ -1502,7 +1553,7 @@ function episodeUserLine(episode: EpisodeMemory, messages: ConversationMessage[]
 }
 
 function episodePapoLine(episode: EpisodeMemory) {
-  const cleaned = visibleCreatureText(episode.creatureResponse || "")
+  const cleaned = visiblePapoReplyText(episode.creatureResponse || "")
     .replace(/^我先听你说完[：:，,]?\s*/g, "")
     .replace(/^我接住你刚告诉来的这件事[：:，,]?\s*/g, "")
     .replace(/^我接住你刚告诉来的这一件事[：:，,]?\s*/g, "")
@@ -1738,53 +1789,33 @@ function emergenceDriveText(drive: string) {
   return map[drive] ?? "因为我现在的状态把这段带了回来";
 }
 
-function memoryFamiliarityText(weight: number) {
-  if (weight >= 85) return "我已经记得很稳了";
-  if (weight >= 65) return "我记得比较清楚";
-  if (weight >= 35) return "这段对我还很新";
-  if (weight <= 0) return "我已经把这段放下了";
-  return "这段在我这里变淡了";
+function memorySourceLine(memory: CreatureProfile["longTermMemories"][number], profile: CreatureProfile) {
+  const sourceEpisode = memory.sourceEpisodeId ? profile.episodes.find((episode) => episode.id === memory.sourceEpisodeId) : undefined;
+  if (sourceEpisode) return episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode));
+  return extractRememberedMoment(memory.text);
 }
 
-function memoryKindText(kind: CreatureProfile["longTermMemories"][number]["kind"]) {
+function memoryResultLine(memory: CreatureProfile["longTermMemories"][number]) {
+  return extractRememberedMoment(memory.text);
+}
+
+function memoryUseLine(memory: CreatureProfile["longTermMemories"][number]) {
+  if (memory.weight <= 0) return "这件事已经放轻，除非你再提起。";
   const map = {
-    user_preference: "下次遇到相近时刻，我会照这个方式靠近你",
-    long_theme: "它像一条会反复回到我耳边的小线索",
-    creature_self_memory: "这是你在我身上养出的一点听法",
-    safety_rule: "这是我会先守住的边界",
-    future_review: "以后聊到相近内容时，我会想起这一段",
-    relationship: "它让我更认识你一点",
-    habit: "我听见这里有个反复出现的小习惯",
-    open_question: "这件事我还没有想完"
-  };
-  return map[kind];
-}
-
-function memoryFeelingText(memory: CreatureProfile["longTermMemories"][number]) {
-  const familiarity = memoryFamiliarityText(memory.weight);
-  const kindText = memoryKindText(memory.kind);
-  if (memory.weight <= 0) return `${familiarity}，现在我先不主动提它。`;
-  return `${familiarity}。${kindText}。`;
-}
-
-function memoryCreatureLine(memory: CreatureProfile["longTermMemories"][number]) {
-  const rawText = memory.text.trim();
-  const text = normalizeMemoryText(rawText);
-  const map = {
-    user_preference: `我记住你喜欢我这样靠近：${text}`,
-    long_theme: `这件事可能会反复出现，我先记着：${text}`,
-    creature_self_memory: `你这样养过我：${text}`,
-    safety_rule: `这条边界我会先守住：${text}`,
-    future_review: `它以后可能还会回来找你，我先记着：${text}`,
-    relationship: `这段让我更认识你一点：${text}`,
-    habit: `我听见一个反复出现的小习惯：${text}`,
-    open_question: `这件事我还会继续想：${text}`
+    user_preference: "以后遇到相近时刻，Papo 会按这个偏好靠近你。",
+    long_theme: "以后聊到相近主题，Papo 会更容易想起它。",
+    creature_self_memory: "这是你教 Papo 的一种回应习惯。",
+    safety_rule: "以后碰到相近边界，Papo 会先放慢一点。",
+    future_review: "以后这件事回来时，Papo 会更容易接上。",
+    relationship: "它会帮助 Papo 更认识你一点。",
+    habit: "以后类似习惯再次出现时，Papo 会更容易听出来。",
+    open_question: "以后你继续说这件事时，Papo 会从这里接着想。"
   };
   return map[memory.kind];
 }
 
 function memoryKeptBecauseText(reason: string) {
-  return `我留下它，是因为${memoryKeepReasonToCreatureVoice(reason)}。`;
+  return memoryKeepReasonToCreatureVoice(reason);
 }
 
 function normalizeMemoryText(text: string) {
@@ -1792,6 +1823,47 @@ function normalizeMemoryText(text: string) {
     .replace(/^(你主动|你确认|你后来教我)[：:]\s*/, "")
     .replace(/([\u4e00-\u9fa5])\s+([\u4e00-\u9fa5])/g, "$1$2")
     .replace(/[。！？.!?]+$/, "");
+}
+
+function extractRememberedMoment(text: string) {
+  const normalized = normalizeMemoryText(text)
+    .replace(/^我和你一起经历过这件事[：:]\s*/, "")
+    .replace(/^你刚告诉我的这件事[：:]\s*/, "")
+    .replace(/^我接住你刚告诉来的这件事[：:]\s*/, "")
+    .replace(/我也记住它发生时的线索[：:].*$/g, "")
+    .replace(/那件事发生时的线索[：:].*$/g, "")
+    .trim();
+  const [beforeResponse] = normalized.split(/当时我回应你[：:]/);
+  const [beforeReason] = beforeResponse.split(/我当时(?:还没|决定|认真|先)/);
+  const cleaned = visibleCreatureText(beforeReason)
+    .replace(/^[：:，,。.\s]+/, "")
+    .replace(/[。！？.!?]+$/, "")
+    .trim();
+  return cleaned || "这件事";
+}
+
+function visibleMessageText(message: ConversationMessage) {
+  return message.role === "papo" ? visiblePapoReplyText(message.text) : visibleCreatureText(message.text);
+}
+
+function visiblePapoReplyText(text: string | undefined) {
+  const normalized = visibleCreatureText(text)
+    .replace(/^我先听你说完[：:，,]?\s*/g, "")
+    .replace(/^我听见了[：:]\s*/g, "我听见了。")
+    .replace(/这件事我会先当作刚发生的对话来回应。?/g, "")
+    .replace(/我想轻轻问一句，确认我有没有听对。?/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (normalized && !looksLikeInternalPapoText(normalized)) return normalized;
+  const firstVisibleSentence = visibleCreatureText(text)
+    .split(/[。！？.!?]/)
+    .map((part) => part.trim())
+    .find((part) => part && !looksLikeInternalPapoText(part));
+  return firstVisibleSentence ? `${firstVisibleSentence}。` : "我听见了。";
+}
+
+function looksLikeInternalPapoText(text: string) {
+  return /我注意到这段|我注意到这个片段|片段可能|我先试着理解|我先听你说完|这件事我会先当作|确认我有没有听对|情景|长期记|保存|要不要留下|用户|流程|语义|意图|后台|显著性|记忆策略|我为什么注意|我想起了什么|我猜你在做|我当时的状态|我选择/.test(text);
 }
 
 function visibleCreatureText(text: string | undefined) {
@@ -2024,14 +2096,20 @@ function preferredAudioMimeType(Recorder: typeof MediaRecorder) {
 function chooseAudioTranscript(modelTranscript: string, localTranscript: string, hasModelError = false) {
   const modelText = modelTranscript.trim();
   const localText = localTranscript.trim();
-  const modelIsFallback = /不能真实转写|暂时没有返回转写|请手动补充|没有转写成功|暂时没有听清|你可以补一句/.test(modelText);
+  const modelIsFallback = isUnclearAudioTranscript(modelText);
   if (hasModelError) return localText;
   if ((!modelText || modelIsFallback) && localText) return localText;
+  if (modelIsFallback) return "";
   return modelText || localText;
 }
 
 function sensingSegmentContent(text: string, error?: string) {
-  return error ? "" : text;
+  if (error) return "";
+  return isUnclearAudioTranscript(text) ? "" : text;
+}
+
+function isUnclearAudioTranscript(text: string) {
+  return /不能真实转写|暂时没有返回转写|请手动补充|没有转写成功|暂时没有听清|没有听到清楚的人声|没有清楚的人声|没有人声|录音已接住|你可以补一句|Invalid request/i.test(text);
 }
 
 async function currentLocationSnapshot(): Promise<StreamSegment["location"] | undefined> {

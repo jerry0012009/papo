@@ -318,10 +318,10 @@ function semanticActionFromInteraction(
 }
 
 function quietInteractionResponse(action: ActionKind, source: "button" | "curious_stream") {
-  if (action === "ask") return "我听见了，但这段要不要留下还需要你点头，所以我先轻轻问一句。";
-  if (action === "quiet") return "我听见了，这次先安静陪着，不急着追问或提醒你。";
-  if (source === "curious_stream") return "我先回应最重要的部分，不把每个背景声都拿出来说。";
-  return "我听见了，这次先不急着追问或替你生成什么。";
+  if (action === "ask") return "我听见了。你可以再多说一点。";
+  if (action === "quiet") return "我听见了，这次先不急着追问。";
+  if (source === "curious_stream") return "我听见了最重要的那一点。";
+  return "我听见了，这次先不急着追问。";
 }
 
 function shouldSuppressTopLevelResponse(interaction?: BrainSuggestion["interaction"]) {
@@ -440,7 +440,7 @@ function safeCreatureFacingText(text?: string, fallback?: string) {
 }
 
 function containsInternalProcessLanguage(text: string) {
-  return /LLM|语义脑|语义判断|用户意图|用户在|用户希望|用户可能|用户主动|用户确认|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|保存意图|prompt|JSON|score|阈值|总分|fallback|小动物/i.test(text);
+  return /LLM|语义脑|语义判断|用户意图|用户在|用户希望|用户可能|用户主动|用户确认|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|长期留下|要不要长期记|prompt|JSON|score|阈值|总分|fallback|小动物|我注意到这段|我注意到这个片段|片段可能|我先听你说完|这件事我会先当作|确认我有没有听对|我为什么注意|我想起了什么|我猜你在做|我当时的状态|我选择|显著性|记忆策略/i.test(text);
 }
 
 function trimSentence(text: string) {
@@ -485,14 +485,16 @@ function buildPrompt(profile: CreatureProfile, result: CaptureResult, source: "b
 
 你可以：
 - 先判断这是不是一次互动：用户是在呼唤、要求回应、倾诉、要求记住、要求提醒，还是只是给环境素材。
-- 改写 noticed/reason，让它更像小动物真的注意到了什么。
+- 改写 noticed/reason，作为内隐理解记录；它们可以解释注意原因，但不要把这些句子当成 Papo 的台词。
 - 给出 suggestedAction，但只能从 observe, respond, ask, save_episode, save_long_term, recall, review, quiet, draft_reminder, draft_question_list 选择。
-- 改写 episode 的 possibleIntent/importanceReason/creatureResponse。
+- 改写 episode 的 possibleIntent/importanceReason/creatureResponse。creatureResponse 是外显回应，只能写 Papo 最终对用户说的话。
 - 在 interaction.visibleReaction 里写一句外显行为语言，像 Papo 真的做了什么或准备怎么回应；不要写“用户意图是/语义判断/后台流程/记忆写入”。
 - 如果 source 是 curious_stream，可以改写 curiousSession.selected/ignored 的 whySelected/whyIgnored 和 creatureReport；也可以在 selected 里放入 attention_candidates 中一个被规则忽略但语义上重要的 segmentId。规则会限制预算、阈值、隐私和最终 action，不能新增不存在的片段。
 - 给出一条 memoryCandidateText，必须是这次真实互动可记住的小回忆，不要写流程说明。
 - 写一段 response，给用户展示这次小动物的整体回应。
-- 所有会展示给用户的字段（response, reply, noticed, reason, creatureResponse, visibleReaction, creatureReport, whySelected, whyIgnored）都必须是可直接展示的自然语言；不要出现 LLM、语义脑、score、阈值、candidate、episode、后台流程等内部词。
+- response/reply/creatureResponse 必须像自然对话，不要说“我注意到这段...”“这件事我会先当作...”“确认我有没有听对”“要不要长期记”。这些属于内隐认知，不是外显台词。
+- noticed/reason/possibleIntent/importanceReason 可以记录内隐理解，但也不要使用“用户意图/后台流程/语义判断”等工程词。
+- 所有会展示给用户的字段（response, reply, creatureResponse, visibleReaction, creatureReport, whySelected, whyIgnored）都必须是可直接展示的自然语言；不要出现 LLM、语义脑、score、阈值、candidate、episode、后台流程等内部词。
 
 你不能：
 - 改状态数值。

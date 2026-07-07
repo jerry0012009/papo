@@ -277,51 +277,40 @@ export function buildAttentionEvent(
 
 export function composeCreatureResponse(profile: CreatureProfile, event: AttentionEvent): string {
   if (event.actionDecision.action === "respond") {
-    const memoryLine = event.relatedMemoryIds.length
-      ? "这句话让我想起以前你说过的事，我会一起考虑。"
-      : "你刚才是在叫我说话，我会先回应你。";
-    return `我在，听见了。${memoryLine}${raisedResponseLine(profile, event.actionDecision.action)}`;
+    return event.relatedMemoryIds.length ? "我在，听见了。刚才这句话让我想起以前你说过的事。" : "我在，听见了。";
   }
-  const posture = profile.state.confidence > 62 ? "我听见了" : "我先听你说完";
-  const memoryLine = event.relatedMemoryIds.length
-    ? "这件事让我想起以前相关的内容。"
-    : "这件事我会先当作刚发生的对话来回应。";
-  return `${posture}：${trimSentence(event.noticed)}。${memoryLine}${actionResponseLine(event.actionDecision.action)}${raisedResponseLine(profile, event.actionDecision.action)}`;
+  const line = outwardReactionLine(event.triggerContent, event.actionDecision.action, event.relatedMemoryIds.length > 0);
+  const raised = raisedExternalLine(profile, event.actionDecision.action);
+  const energy = profile.state.energy < 32 && event.actionDecision.action !== "ask" ? "我会少说一点，但我在听。" : "";
+  return [line, raised, energy].filter(Boolean).join("");
 }
 
-function actionResponseLine(action: AttentionEvent["actionDecision"]["action"]): string {
-  switch (action) {
-    case "ask":
-      return "我想轻轻问一句，确认我有没有听对。";
-    case "save_episode":
-      return "我会记住这次发生了什么，等你之后再纠正我。";
-    case "save_long_term":
-      return "我感觉它可能值得长久留下，但会等你的意思更清楚。";
-    case "recall":
-      return "我会把以前相关的事一起考虑。";
-    case "review":
-      return "我可以陪你把这件事整理清楚。";
-    case "quiet":
-      return "我会先安静一点，不急着追问。";
-    case "draft_reminder":
-      return "我会记得这件事之后可能还要再看，但不会替你直接执行。";
-    case "draft_question_list":
-      return "我会先把里面没想明白的地方轻轻分开，等你要继续时再一起想。";
-    case "observe":
-    default:
-      return "我先不急着打扰你。";
-  }
+function outwardReactionLine(text: string, action: AttentionEvent["actionDecision"]["action"], remembered: boolean): string {
+  const rememberedLine = remembered ? "这也让我想起之前相关的事。" : "";
+  if (hasMixedPreference(text)) return `我听见了。${rememberedLine}这里有你喜欢的部分，也有让你不舒服的部分。`;
+  if (includesAny(text, EMOTIONAL_WORDS)) return `我听见了。${rememberedLine}听起来这件事让你有点在意。`;
+  if (action === "quiet" || action === "observe") return `我听见了。${rememberedLine || "我先陪你听着。"}`;
+  if (action === "review") return `我听见了。${rememberedLine}我们可以慢慢把这件事理清楚。`;
+  if (action === "recall") return `我听见了。${rememberedLine}`;
+  if (action === "draft_reminder") return `我听见了。${rememberedLine}这件事之后可能还要再看。`;
+  if (action === "draft_question_list") return `我听见了。${rememberedLine}里面没想清的地方，我们可以一件件说。`;
+  if (action === "save_long_term" || action === "save_episode") return `我听见了。${rememberedLine || "这件事我会放在心上。"}`;
+  return rememberedLine ? `我听见了。${rememberedLine}` : "我听见了。你可以接着说。";
 }
 
-function raisedResponseLine(profile: CreatureProfile, action: AttentionEvent["actionDecision"]["action"]) {
+function raisedExternalLine(profile: CreatureProfile, action: AttentionEvent["actionDecision"]["action"]) {
   const policy = profile.policyProfile;
   if (policy.quietTendency >= 58 && ["ask", "quiet", "observe", "draft_reminder", "draft_question_list"].includes(action)) {
-    return "你这段时间把我教得更安静，所以我先轻轻记下，不急着打扰你。";
+    return "我先不急着打扰你。";
   }
-  if ((policy.preferDepth >= 65 || policy.recallTendency >= 65) && ["ask", "recall", "review", "save_episode", "observe", "respond", "draft_reminder", "draft_question_list"].includes(action)) {
-    return "你这段时间把我教得不要浅浅带过，所以我想继续多想一会儿。";
+  if ((policy.preferDepth >= 65 || policy.recallTendency >= 65) && ["ask", "recall", "review", "save_episode", "observe", "draft_reminder", "draft_question_list"].includes(action)) {
+    return "我会陪你继续多想一会儿。";
   }
   return "";
+}
+
+function hasMixedPreference(text: string) {
+  return /喜欢/.test(text) && /不喜欢|讨厌|烦|太多|难受/.test(text);
 }
 
 function composeStreamSummary(events: AttentionEvent[], session: CuriousSessionAudit): string {
@@ -348,10 +337,6 @@ function buildNoticed(text: string, relatedCount: number): string {
     return `我注意到这一小段和过去的记忆相连：${summarizeText(text, 88)}`;
   }
   return `我接住你刚递来的这一小段：${summarizeText(text, 88)}`;
-}
-
-function trimSentence(text: string) {
-  return text.trim().replace(/[。！？.!?]+$/, "");
 }
 
 function contentWithObservationContext(segment: StreamSegment) {

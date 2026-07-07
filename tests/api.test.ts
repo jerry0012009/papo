@@ -146,7 +146,7 @@ describe("api", () => {
 
     await request(app)
       .post("/api/audio-transcript")
-      .send({ dataUrl: `data:audio/webm;base64,${base64}`, label: "录音" })
+      .send({ dataUrl: `data:audio/webm;codecs=opus;base64,${base64}`, label: "录音" })
       .expect(200)
       .expect((response) => {
         expect(response.body.provider).toBe("fallback");
