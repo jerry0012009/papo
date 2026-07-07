@@ -1,6 +1,12 @@
+import { execFile } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
+import { promisify } from "node:util";
 import type { ProviderKind } from "./types";
+
+const execFileAsync = promisify(execFile);
 
 export interface ModelProvider {
   kind: ProviderKind;
@@ -369,7 +375,7 @@ async function callAudioObservation(
   dataUrl: string,
   prompt: string
 ) {
-  const audio = parseAudioDataUrl(dataUrl);
+  const audio = await audioForChatCompletions(dataUrl);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), input.audioTimeoutMs);
   try {
@@ -452,6 +458,44 @@ function parseAudioDataUrl(dataUrl: string) {
   const mime = match[1].toLowerCase();
   const format = audioFormatFromMime(mime);
   return { data: match[2], format, mime };
+}
+
+async function audioForChatCompletions(dataUrl: string) {
+  const audio = parseAudioDataUrl(dataUrl);
+  if (audio.format === "mp3" || audio.format === "wav") return audio;
+  return transcodeAudioToWav(audio);
+}
+
+async function transcodeAudioToWav(audio: ReturnType<typeof parseAudioDataUrl>) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "papo-audio-"));
+  const inputPath = path.join(directory, `input.${audio.format}`);
+  const outputPath = path.join(directory, "output.wav");
+  try {
+    await writeFile(inputPath, Buffer.from(audio.data, "base64"));
+    await execFileAsync("ffmpeg", [
+      "-hide_banner",
+      "-loglevel",
+      "error",
+      "-y",
+      "-i",
+      inputPath,
+      "-ac",
+      "1",
+      "-ar",
+      "16000",
+      outputPath
+    ], { timeout: 20_000 });
+    const converted = await readFile(outputPath);
+    return {
+      data: converted.toString("base64"),
+      format: "wav" as const,
+      mime: "audio/wav"
+    };
+  } catch (error) {
+    throw new Error(`Audio input conversion failed: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 }
 
 function audioFormatFromMime(mime: string) {

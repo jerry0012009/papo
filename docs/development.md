@@ -53,6 +53,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Text, photo, uploaded audio, and continuous listening chunks enter the same conversation timeline.
 - Continuous listening is internally batched around 30 seconds for up to 3 minutes, but the user should experience it as Papo listening with them.
 - Continuous listening records audio chunks and sends them to the configured audio model. Browser/local speech recognition output must not bypass the model into the life stream.
+- Browser `MediaRecorder` chunks may be `webm/opus` or another container. Provider code must convert chat-completions audio input to a model-readable format such as wav when the selected model rejects the browser container; this is an ingestion format fix, not a transcription fallback.
 - Text typed while continuous listening is active is buffered into the current 30-second curious batch, not as a separate button-only dialogue path.
 - Empty audio, silence, noise, and unclear speech are ordinary inputs for the model to ignore or use.
 - Photo input records upload time and available browser location so memory can later keep natural provenance.
@@ -71,6 +72,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Default semantic models should prefer the strongest available configured model, currently `openai/gpt-5.5` for OpenRouter or `gpt-5.5` for generic.
 - Vision sensing currently uses the verified OpenRouter default `nex-agi/nex-n2-mini`.
 - Audio sensing should prefer native audio-capable multimodal models. The current OpenRouter default is `mistralai/voxtral-small-24b-2507`, verified through chat completions audio input with a speech sample.
+- Audio chat models that only accept mp3/wav receive browser-recorded chunks after server-side wav transcoding.
 - Mixed routing is allowed: for example, Mimo can be the semantic provider while OpenRouter handles image/audio sensing, or OpenRouter can be the semantic provider while generic audio uses a native audio chat model. Transcription endpoints are used only when explicitly configured with a transcription/whisper model id, not as the default listening path.
 - Provider errors are product errors. They should be visible through API errors and diagnostics instead of being hidden behind local wording.
 - If a real model repeatedly returns empty or invalid structured output for core cognition, switch to another configured real provider/model and verify it with scenario smoke tests. Do not add local semantic fallback to mask the model failure.
@@ -132,6 +134,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - LLM prompts must carry source provenance for recent conversation and current candidates: `sourceId`, `batchId`, `observedAt`, `location`, modality, and related memory ids where available. This is harness context, not a local semantic rule.
 - During feedback reflection, the current feedback is passed through the dedicated `feedback` field. `recent_feedback` must contain prior feedback only, not the same current feedback record repeated as history.
 - Development planning text must not be used as creature interaction material.
+- Real model smoke tests must not pollute the public profile store with development profiles or scripted life material. Use in-memory profiles or an isolated temporary store for dialogue, attention, action, memory, feedback, and emergence smoke tests. Public API smoke is limited to provider/health/page checks and sensing endpoints unless the created profile is immediately pruned from production data.
 - New Papo messages persist `cognitionTrace` with the real model stages, attention/action/memory decisions, feedback effects, emergence choices, visible reply, persistence outcomes, and structural rule checks that produced that visible reply. This supports developer audit without proving the mechanism in the main UI.
 - When the model chooses quiet, ignores input, or feedback produces no visible reply, the product must not create a blank/fake Papo message. The same cognition trace should attach to the relevant user/world input message so Brain Mode can still inspect the complete decision path.
 

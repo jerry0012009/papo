@@ -60,8 +60,8 @@ export async function summarizeImage(dataUrl: string, label: string): Promise<{ 
   });
 }
 
-export async function observeAudio(dataUrl: string, label: string): Promise<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; semanticSource: "llm" }> {
-  return request<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; semanticSource: "llm" }>("/api/audio-observation", {
+export async function observeAudio(dataUrl: string, label: string): Promise<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; unreadable?: boolean; semanticSource: "llm" }> {
+  return request<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; unreadable?: boolean; semanticSource: "llm" }>("/api/audio-observation", {
     method: "POST",
     headers: jsonHeaders,
     body: JSON.stringify({ dataUrl, label })

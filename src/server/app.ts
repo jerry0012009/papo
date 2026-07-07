@@ -111,10 +111,11 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const body = audioObservationSchema.parse(req.body);
       const prompt = `请直接理解这段音频，写成一段给 Papo 后续注意机制使用的中文生活观察。只描述能直接听见的事实、明确听清的说话内容、环境声类型或正在发生的事；不能猜测人声、文字、看不见的物体、身份或原因，不能把非语音声音当成说话；不确定就写“不确定的声音”。最多 400 字；如果没有可用生活信息，返回空文本。如果你无法读取或处理这段音频，只返回 ERROR_AUDIO_UNREADABLE。标签：${body.label ?? "录音"}`;
-      const observation = normalizeAudioObservation((await provider.observeAudio(body.dataUrl, prompt)).slice(0, 1200));
+      const audioObservation = normalizeAudioObservation((await provider.observeAudio(body.dataUrl, prompt)).slice(0, 1200));
       res.json({
-        observation,
-        noSpeech: !observation,
+        observation: audioObservation.text,
+        noSpeech: !audioObservation.text,
+        unreadable: audioObservation.unreadable,
         provider: sensingProvider(provider, "audio"),
         model: provider.diagnostics?.audioModel,
         route: provider.diagnostics?.audioRoute,
@@ -564,13 +565,13 @@ function feedbackRelatedMemoryIds(profile: CreatureProfile, targetId?: string, t
 
 function normalizeAudioObservation(text: string) {
   const trimmed = text.trim();
-  if (!trimmed || /^["'“”‘’\s]+$/.test(trimmed)) return "";
+  if (!trimmed || /^["'“”‘’\s]+$/.test(trimmed)) return { text: "", unreadable: false };
   const quoted = trimmed.match(/^["“](.*)["”]$/s) ?? trimmed.match(/^['‘](.*)['’]$/s);
   const normalized = (quoted ? quoted[1] : trimmed).trim();
   if (normalized === "ERROR_AUDIO_UNREADABLE" || /无法(获取|读取|处理|访问).{0,12}音频/.test(normalized)) {
-    throw new Error("Audio model did not process the audio input.");
+    return { text: "", unreadable: true };
   }
-  return normalized;
+  return { text: normalized, unreadable: false };
 }
 
 function sensingProvider(provider: ModelProvider, modality: "vision" | "audio") {
