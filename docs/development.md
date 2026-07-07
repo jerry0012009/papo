@@ -92,10 +92,12 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Sensing endpoints call real model providers directly. Image/audio failures return errors.
 - The semantic harness strips rule-created visible drafts before model action/wording. Papo's final visible reply must come from a model.
 - `attention.ts` creates neutral candidates only. It must not write creature-facing replies, semantic "noticed" explanations, keyword tags, related-memory guesses, curious reports, or mixed-preference dialogue.
+- Attention candidate scores are structural pacing only. They must not contain fake semantic dimensions such as novelty, emotional charge, memory resonance, local tags, or local related-memory guesses.
 - Curious stream input starts with zero attention events. `semanticDecideAttention` must select segments with the model and provide noticed content, user meaning, memory relation, valid related memory ids, and tags before episodes or memory candidates are created.
 - Action selection code is an enum executor, not a semantic classifier. It must not locally replace a model-selected visible action because of mood, energy, keywords, or confidence heuristics.
 - `semanticSelectAction` owns the persistence decision for attended input. It must explicitly return whether to keep an episode and whether to keep a memory candidate; rules may prune temporary structures but must not default every input into memory.
 - Memory candidates keep user text and provenance only. Initial kind, confidence, and write policy are storage placeholders, not cognition. Memory kind, tags, consolidation wording, write policy, and long-term meaning must come from `semanticDecideMemory` before they are treated as product cognition.
+- Long-term memory tags are copied from the model-decided memory candidate only. Rules must not synthesize fallback tags from user text.
 - Long-term memory writes happen only when the model-selected action is `save_long_term` or the model-selected memory `writePolicy` is `auto`; `ask_user` and `do_not_save` never auto-promote, and high-privacy candidates are forced away from `auto`.
 - There must be no public endpoint that directly promotes an episode to long-term memory without a model memory or feedback decision.
 - The web UI must not fill empty Papo replies with "我听见了" or other local placeholder speech. If the model chose quiet or failed to provide a visible reply, the product should show no forged reply.

@@ -1,5 +1,5 @@
 import { makeId } from "./ids";
-import { extractTags, summarizeText } from "./text";
+import { summarizeText } from "./text";
 import type { AttentionEvent, CreatureProfile, EpisodeMemory, LongTermMemory, MemoryCandidate } from "./types";
 
 export function createEpisodeFromEvent(
@@ -79,7 +79,7 @@ function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new D
     sourceEpisodeId: episode.id,
     consolidatedBecause: candidate.whyConsolidate,
     weight: Math.min(100, episode.weight + 18),
-    tags: candidate.tags.length ? candidate.tags : extractTags(episode.inputSummary)
+    tags: candidate.tags
   };
   episode.promotedToLongTerm = true;
   candidate.status = "promoted";

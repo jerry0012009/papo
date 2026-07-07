@@ -60,37 +60,11 @@ export interface StreamSegment {
   };
 }
 
-export interface ScoreContribution {
-  key:
-    | "novelty"
-    | "memory_resonance"
-    | "emotional_charge"
-    | "future_value"
-    | "identity_relevance"
-    | "communication_intent"
-    | "privacy_risk"
-    | "state_bias"
-    | "redundancy_penalty"
-    | "fatigue_penalty";
-  label: string;
-  value: number;
-  reason: string;
-}
-
 export interface SegmentScore {
   total: number;
-  novelty: number;
-  memoryResonance: number;
-  emotionalCharge: number;
-  futureValue: number;
-  identityRelevance: number;
   privacyRisk: number;
   stateBias: number;
-  redundancyPenalty: number;
   fatiguePenalty: number;
-  relatedIds: string[];
-  tags: string[];
-  contributions: ScoreContribution[];
 }
 
 export interface ActionDecision {

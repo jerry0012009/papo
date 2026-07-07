@@ -1,4 +1,4 @@
-import type { ActionDecision, ActionKind, AttentionEvent, CreatureProfile, SegmentScore } from "./types";
+import type { ActionDecision, ActionKind, AttentionEvent, CreatureProfile } from "./types";
 
 export interface ActionSelectionInput {
   profile: CreatureProfile;
@@ -7,22 +7,17 @@ export interface ActionSelectionInput {
   attentionStrength: number;
   privacyRisk: number;
   relatedMemoryIds: string[];
-  score?: SegmentScore;
   llmSuggestedAction?: ActionKind;
 }
 
 export function selectAction(input: ActionSelectionInput): ActionDecision {
   const action = input.llmSuggestedAction ?? "observe";
-  let confidence = input.llmSuggestedAction ? 70 : 45;
-
-  confidence += input.relatedMemoryIds.length * 4;
-  confidence += input.attentionStrength > 75 ? 8 : 0;
-  confidence = Math.max(30, Math.min(96, Math.round(confidence)));
+  const confidence = input.llmSuggestedAction ? 100 : 0;
 
   return {
     action,
     confidence,
-    reason: explainAction(action, input),
+    reason: input.llmSuggestedAction ? "model selected this whitelisted action." : "structural placeholder before model action selection.",
     blockedActions: [],
     safetyNotes: [],
     llmSuggestedAction: input.llmSuggestedAction,
@@ -40,33 +35,6 @@ export function guardActionDecision(event: AttentionEvent, profile: CreatureProf
     attentionStrength: event.attentionStrength,
     privacyRisk: event.privacyRisk,
     relatedMemoryIds: event.relatedMemoryIds,
-    score: event.scoreBreakdown,
     llmSuggestedAction
   });
-}
-
-function explainAction(action: ActionKind, input: ActionSelectionInput) {
-  void input;
-  switch (action) {
-    case "respond":
-      return "llm selected a visible response.";
-    case "ask":
-      return "llm selected a question.";
-    case "save_episode":
-      return "llm selected an episodic save.";
-    case "save_long_term":
-      return "llm selected a long-term save.";
-    case "recall":
-      return "llm selected recall.";
-    case "review":
-      return "llm selected review.";
-    case "quiet":
-      return "llm selected quiet.";
-    case "draft_reminder":
-      return "llm selected reminder drafting.";
-    case "draft_question_list":
-      return "llm selected question-list drafting.";
-    default:
-      return "structural default keeps the candidate observable until the model decides.";
-  }
 }

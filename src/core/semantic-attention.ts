@@ -298,18 +298,11 @@ ${JSON.stringify((result.attentionCandidates ?? []).map((candidate) => ({
   contentHiddenForPrivacy: isHighPrivacySegmentContent(candidate.segment.content),
   alreadySelected: candidate.selectedByModel,
   pacingScore: candidate.score.total,
-  privacyRisk: candidate.score.privacyRisk,
-  relatedIds: candidate.score.relatedIds,
-  tags: modelSafeTags(candidate.segment.content, candidate.score.tags)
+  privacyRisk: candidate.score.privacyRisk
 })))}
 `;
 }
 
 function modelSafeSegmentContent(text: string) {
   return text;
-}
-
-function modelSafeTags(text: string, tags: string[]) {
-  void text;
-  return tags;
 }

@@ -10,7 +10,6 @@ import type {
   CaptureResult,
   CreatureProfile,
   CuriousSessionAudit,
-  ScoreContribution,
   SegmentScore,
   StreamSegment
 } from "./types";
@@ -23,12 +22,6 @@ export function handleButtonCapture(
   const cleanText = text.trim();
   const score = scoreSegment(profile, { id: "button", kind: "text", label: "你给我的话", content: cleanText });
   score.total = 72;
-  score.contributions.unshift({
-    key: "state_bias",
-    label: "button_intent",
-    value: 18,
-    reason: "manual input enters model cognition pipeline"
-  });
 
   const event = buildAttentionEvent(profile, {
     source: "button",
@@ -101,32 +94,16 @@ export function scoreSegment(
   context: { position?: number } = {}
 ): SegmentScore {
   void context;
-  const tags: string[] = [];
-  const related: string[] = [];
   const privacy = hasHighPrivacyText(segment.content) ? 92 : 0;
   const stateBias = profile.state.curiosity * 0.08 + profile.state.attachment * 0.02;
   const fatiguePenalty = Math.max(0, (35 - profile.state.energy) * 0.35);
   const total = Math.max(1, 40 + stateBias - fatiguePenalty);
 
-  const contributions: ScoreContribution[] = [
-    { key: "state_bias", label: "state_bias", value: round(stateBias), reason: "state contributes only to pacing, not semantic meaning" },
-    { key: "fatigue_penalty", label: "fatigue", value: -round(fatiguePenalty), reason: fatiguePenalty ? "energy guardrail lowers pacing" : "energy guardrail unchanged" }
-  ];
-
   return {
     total: round(total),
-    novelty: 0,
-    memoryResonance: 0,
-    emotionalCharge: 0,
-    futureValue: 0,
-    identityRelevance: 0,
     privacyRisk: round(privacy),
     stateBias: round(stateBias),
-    redundancyPenalty: 0,
-    fatiguePenalty: round(fatiguePenalty),
-    relatedIds: related,
-    tags,
-    contributions
+    fatiguePenalty: round(fatiguePenalty)
   };
 }
 
@@ -145,8 +122,7 @@ export function buildAttentionEvent(
     now: string;
   }
 ): AttentionEvent {
-  const tags = input.score.tags;
-  const related = input.score.relatedIds;
+  const related: string[] = [];
   const privacyRisk = hasHighPrivacyText(input.triggerContent) ? 92 : 0;
   const strength = input.source === "button" ? Math.max(62, input.score.total) : input.score.total;
   const actionDecision = selectAction({
@@ -155,8 +131,7 @@ export function buildAttentionEvent(
     text: input.triggerContent,
     attentionStrength: strength,
     privacyRisk,
-    relatedMemoryIds: related,
-    score: input.score
+    relatedMemoryIds: related
   });
   return {
     id: makeId("attention"),
@@ -181,10 +156,11 @@ export function buildAttentionEvent(
       actionFeeling: "",
       saveFeeling: ""
     },
-    tags,
+    tags: [],
     semanticSource: "rules",
     decisionTrace: [
-      ...input.score.contributions.map((item) => `${item.label} ${item.value >= 0 ? "+" : ""}${item.value}: ${item.reason}`),
+      `pacing_score=${input.score.total}`,
+      `privacy_risk=${privacyRisk}`,
       `final_action: ${actionDecision.action} (${actionDecision.reason})`
     ],
     createdAt: input.now
