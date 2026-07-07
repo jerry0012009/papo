@@ -309,6 +309,10 @@ candidates:
 ${JSON.stringify((result.attentionCandidates ?? []).map((candidate) => ({
   segmentId: candidate.segment.id,
   label: candidate.segment.label,
+  modality: candidate.segment.kind,
+  batchId: candidate.segment.batchId,
+  observedAt: candidate.segment.observedAt,
+  location: candidate.segment.location,
   content: modelSafeSegmentContent(candidate.segment.content),
   contentHiddenForPrivacy: isHighPrivacySegmentContent(candidate.segment.content),
   alreadySelected: candidate.selectedByModel,

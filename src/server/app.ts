@@ -52,8 +52,8 @@ const audioObservationSchema = z.object({
   dataUrl: z
     .string()
     .min(64)
-    .max(10_000_000)
-    .regex(/^data:audio\/(webm|wav|mpeg|mp3|mp4|m4a|x-m4a|ogg)(?:;[^,]+)?;base64,/),
+    .max(24_000_000)
+    .regex(/^data:audio\/(webm|wav|wave|x-wav|mpeg|mp3|mp4|m4a|x-m4a|ogg|aac)(?:;[^,]+)?;base64,/),
   label: z.string().min(1).max(80).optional()
 });
 
@@ -74,7 +74,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
   const app = express();
 
   app.use(cors());
-  app.use(express.json({ limit: "12mb" }));
+  app.use(express.json({ limit: "28mb" }));
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, provider: provider.kind });

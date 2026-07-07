@@ -220,6 +220,10 @@ ${JSON.stringify(candidates.map((candidate) => {
     sourceEpisode: episode
       ? {
           id: episode.id,
+          sourceSegmentId: episode.sourceSegmentId,
+          sourceBatchId: episode.sourceBatchId,
+          sourceObservedAt: episode.sourceObservedAt,
+          sourceLocation: episode.sourceLocation,
           inputSummary: textForModel(episode.inputSummary, privacyHigh),
           possibleIntent: textForModel(episode.possibleIntent, privacyHigh),
           importanceReason: textForModel(episode.importanceReason, privacyHigh),

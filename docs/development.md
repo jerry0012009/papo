@@ -53,7 +53,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Text, photo, uploaded audio, and continuous listening chunks enter the same conversation timeline.
 - Continuous listening is internally batched around 30 seconds for up to 3 minutes, but the user should experience it as Papo listening with them.
 - Continuous listening records audio chunks and sends them to the configured audio model. Browser/local speech recognition output must not bypass the model into the life stream.
-- Text typed while continuous listening is active is treated as part of the current 30-second curious batch, not as a separate button-only dialogue path.
+- Text typed while continuous listening is active is buffered into the current 30-second curious batch, not as a separate button-only dialogue path.
 - Empty audio, silence, noise, and unclear speech are ordinary inputs for the model to ignore or use.
 - Photo input records upload time and available browser location so memory can later keep natural provenance.
 - Papo replies are model-written external behavior, not frontend templates.
@@ -127,7 +127,9 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - If the model chooses `observe` or `quiet`, it must not provide a visible reply; the API may persist the user's input without adding a Papo reply.
 - Recent conversation, memories, and feedback are passed into model prompts through `model-context.ts`.
 - For button and curious captures, the current input is passed to the semantic brain as the current event/candidate, then appended to the conversation timeline after cognition. `recent_conversation` must represent prior context, not duplicate the current input.
-- During live listening, audio capture and cognition are separate queues. The browser must cut immutable audio slices on the 30-second rhythm even when earlier slices are still being sensed or processed. Text, photo, and uploaded-audio inputs submitted during live listening enter the same live capture queue, preserving order and triggering the normal attention/action/memory trace for each processed batch.
+- During live listening, audio capture, audio sensing, batch buffering, and cognition are separate steps. The browser must cut immutable audio slices on the 30-second rhythm even when earlier slices are still being sensed or processed.
+- Text, photo, and uploaded-audio inputs submitted during live listening enter the buffer for their current `batchId`. The batch is closed on the 30-second boundary, waits briefly for the audio model to settle, and then submits one ordered multimodal `/curious` request. If the audio model is slow, the batch may flush after a max wait and late audio can still arrive as a later input with the same batch id; raw captured blobs must not be dropped because cognition is busy.
+- LLM prompts must carry source provenance for recent conversation and current candidates: `sourceId`, `batchId`, `observedAt`, `location`, modality, and related memory ids where available. This is harness context, not a local semantic rule.
 - During feedback reflection, the current feedback is passed through the dedicated `feedback` field. `recent_feedback` must contain prior feedback only, not the same current feedback record repeated as history.
 - Development planning text must not be used as creature interaction material.
 - New Papo messages persist `cognitionTrace` with the real model stages, attention/action/memory decisions, feedback effects, emergence choices, visible reply, persistence outcomes, and structural rule checks that produced that visible reply. This supports developer audit without proving the mechanism in the main UI.

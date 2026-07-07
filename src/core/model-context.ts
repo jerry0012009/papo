@@ -6,12 +6,18 @@ export function modelConversationContext(profile: CreatureProfile, limit = 10) {
   return (profile.conversation ?? []).filter((message) => message.channel !== "wake").slice(0, limit).map((message) => {
     const privacyHigh = hasHighPrivacyText(message.text);
     return {
+      id: message.id,
       role: message.role,
       channel: message.channel,
       text: textForModel(message.text, privacyHigh),
       contentHiddenForPrivacy: privacyHigh,
       at: message.at,
-      modality: message.modality
+      modality: message.modality,
+      sourceId: message.sourceId,
+      batchId: message.batchId,
+      observedAt: message.observedAt,
+      location: message.location ? modelLocation(message.location) : undefined,
+      relatedMemoryIds: message.relatedMemoryIds
     };
   });
 }
@@ -50,5 +56,14 @@ export function modelFeedbackItem(item: FeedbackRecord) {
     replyText: textForModel(item.replyText, privacyHigh),
     targetId: item.targetId,
     contentHiddenForPrivacy: privacyHigh
+  };
+}
+
+function modelLocation(location: NonNullable<CreatureProfile["conversation"][number]["location"]>) {
+  return {
+    latitude: Number(location.latitude.toFixed(5)),
+    longitude: Number(location.longitude.toFixed(5)),
+    accuracy: location.accuracy === undefined ? undefined : Math.round(location.accuracy),
+    label: location.label
   };
 }

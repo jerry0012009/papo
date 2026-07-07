@@ -60,6 +60,18 @@ interface AudioSliceMeta {
   batchId: string;
 }
 
+interface LiveBatchBuffer {
+  segments: StreamSegment[];
+  closed: boolean;
+  audioSettled: boolean;
+  flushTimer?: number;
+  updatedAt: number;
+}
+
+const LIVE_BATCH_MS = 30_000;
+const LIVE_BATCH_AUDIO_GRACE_MS = 1_500;
+const LIVE_BATCH_MAX_WAIT_MS = 12_000;
+
 export function App() {
   const [tab, setTab] = useState<Tab>("home");
   const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
@@ -76,6 +88,7 @@ export function App() {
   const pendingAudioSlicesRef = useRef<AudioSliceMeta[]>([]);
   const audioObservationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const liveCaptureQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const liveBatchBuffersRef = useRef<Map<string, LiveBatchBuffer>>(new Map());
   const segmentIndexRef = useRef(1);
   const listeningStartedAtRef = useRef<number | undefined>(undefined);
   const profileRef = useRef<CreatureProfile | undefined>(undefined);
@@ -201,7 +214,7 @@ export function App() {
   async function uploadChatAudioObservation(file?: File) {
     if (!file) return;
     await run(async () => {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await readAudioFileAsDataUrl(file);
       const result = await observeAudio(dataUrl, file.name || "对话录音");
       const content = sensingSegmentContent(result.observation);
       if (!content) return;
@@ -233,7 +246,7 @@ export function App() {
     setBusy(true);
     setError(undefined);
     try {
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await readAudioFileAsDataUrl(file);
       const result = await observeAudio(dataUrl, file.name || "反馈录音");
       return result.observation;
     } catch (caught) {
@@ -286,6 +299,7 @@ export function App() {
     pendingAudioSlicesRef.current = [];
     audioObservationQueueRef.current = Promise.resolve();
     liveCaptureQueueRef.current = Promise.resolve();
+    clearLiveBatchBuffers();
     segmentIndexRef.current = 1;
     listeningStartedAtRef.current = Date.now();
     setListeningElapsed(0);
@@ -331,16 +345,19 @@ export function App() {
     tickTimerRef.current = undefined;
     segmentTimerRef.current = undefined;
     stopTimerRef.current = undefined;
-    listeningStartedAtRef.current = undefined;
     setListening(false);
     requestAudioSlice(true);
+    closeAllLiveBatches();
+    listeningStartedAtRef.current = undefined;
     window.setTimeout(() => stopMediaCapture(), 350);
   }
 
   function requestAudioSlice(force: boolean) {
     const recorder = mediaRecorderRef.current;
     if (!recorder || recorder.state !== "recording") return;
-    pendingAudioSlicesRef.current.push(nextAudioSliceMeta());
+    const meta = nextAudioSliceMeta();
+    pendingAudioSlicesRef.current.push(meta);
+    markLiveBatchClosed(meta.batchId);
     try {
       recorder.requestData();
     } catch (caught) {
@@ -370,27 +387,124 @@ export function App() {
     const dataUrl = await blobToDataUrl(blob);
     const result = await observeAudio(dataUrl, `语音片段 ${meta.index}`);
     const content = chooseAudioObservation(result.observation);
-    if (!content.trim()) return;
-    await submitLiveSegments([
+    if (!content.trim()) {
+      markLiveBatchAudioSettled(meta.batchId);
+      return;
+    }
+    submitLiveSegments([
       makeSegment(`live-audio-${Date.now()}-${meta.index}`, "audio_observation", `听到的声音 ${meta.index}`, content.trim(), {
         observedAt: meta.observedAt,
         batchId: meta.batchId
       })
-    ]);
+    ], { audioSettledBatchId: meta.batchId });
   }
 
-  async function submitLiveSegments(segments: StreamSegment[]) {
-    const activeProfile = profileRef.current;
+  function submitLiveSegments(segments: StreamSegment[], options: { audioSettledBatchId?: string } = {}) {
     const usefulSegments = segments.filter((segment) => segment.content.trim()).map((segment, index) => ensureSegmentContext(segment, index));
-    if (!activeProfile || !usefulSegments.length) return;
-    liveCaptureQueueRef.current = liveCaptureQueueRef.current.then(async () => {
+    if (!usefulSegments.length) {
+      if (options.audioSettledBatchId) markLiveBatchAudioSettled(options.audioSettledBatchId);
+      return;
+    }
+    for (const segment of usefulSegments) {
+      const batchId = segment.batchId ?? currentBatchId();
+      const buffer = ensureLiveBatchBuffer(batchId);
+      if (!buffer.segments.some((item) => item.id === segment.id)) {
+        buffer.segments.push({ ...segment, batchId });
+      }
+      buffer.updatedAt = Date.now();
+      scheduleLiveBatchFlush(batchId);
+    }
+    if (options.audioSettledBatchId) markLiveBatchAudioSettled(options.audioSettledBatchId);
+  }
+
+  function flushLiveBatch(batchId: string) {
+    const buffer = liveBatchBuffersRef.current.get(batchId);
+    if (!buffer) return;
+    if (buffer.flushTimer) window.clearTimeout(buffer.flushTimer);
+    liveBatchBuffersRef.current.delete(batchId);
+    const usefulSegments = buffer.segments
+      .filter((segment) => segment.content.trim())
+      .map((segment, index) => ({ ...segment, position: index + 1, batchId }));
+    if (!usefulSegments.length) return;
+    enqueueLiveCapture(usefulSegments);
+  }
+
+  function enqueueLiveCapture(usefulSegments: StreamSegment[]) {
+    liveCaptureQueueRef.current = liveCaptureQueueRef.current.catch(() => undefined).then(async () => {
       const latestProfile = profileRef.current;
       if (!latestProfile) return;
       const result = await curiousCapture(latestProfile.userId, usefulSegments);
       profileRef.current = result.profile;
       setProfile(result.profile);
+    }).catch((caught) => {
+      setError(`Papo 刚才整理这一小段时断开了。${errorMessage(caught)}`);
     });
-    await liveCaptureQueueRef.current;
+  }
+
+  function ensureLiveBatchBuffer(batchId: string): LiveBatchBuffer {
+    const existing = liveBatchBuffersRef.current.get(batchId);
+    if (existing) return existing;
+    const buffer: LiveBatchBuffer = {
+      segments: [],
+      closed: isPastLiveBatchBoundary(batchId),
+      audioSettled: false,
+      updatedAt: Date.now()
+    };
+    liveBatchBuffersRef.current.set(batchId, buffer);
+    scheduleLiveBatchFlush(batchId);
+    return buffer;
+  }
+
+  function markLiveBatchClosed(batchId: string) {
+    const buffer = ensureLiveBatchBuffer(batchId);
+    buffer.closed = true;
+    scheduleLiveBatchFlush(batchId);
+  }
+
+  function markLiveBatchAudioSettled(batchId: string) {
+    const buffer = ensureLiveBatchBuffer(batchId);
+    buffer.audioSettled = true;
+    scheduleLiveBatchFlush(batchId);
+  }
+
+  function closeAllLiveBatches() {
+    for (const batchId of liveBatchBuffersRef.current.keys()) {
+      const buffer = ensureLiveBatchBuffer(batchId);
+      buffer.closed = true;
+      scheduleLiveBatchFlush(batchId);
+    }
+  }
+
+  function scheduleLiveBatchFlush(batchId: string, explicitDelayMs?: number) {
+    const buffer = liveBatchBuffersRef.current.get(batchId);
+    if (!buffer) return;
+    if (buffer.flushTimer) window.clearTimeout(buffer.flushTimer);
+    const delay = explicitDelayMs ?? liveBatchFlushDelay(batchId, buffer);
+    buffer.flushTimer = window.setTimeout(() => flushLiveBatch(batchId), delay);
+  }
+
+  function liveBatchFlushDelay(batchId: string, buffer: LiveBatchBuffer) {
+    if (buffer.closed && buffer.audioSettled) return LIVE_BATCH_AUDIO_GRACE_MS;
+    if (buffer.closed) return LIVE_BATCH_MAX_WAIT_MS;
+    return Math.max(0, liveBatchBoundaryMs(batchId) - Date.now()) + LIVE_BATCH_MAX_WAIT_MS;
+  }
+
+  function liveBatchBoundaryMs(batchId: string) {
+    const startedAt = listeningStartedAtRef.current;
+    const match = batchId.match(/-(\d{2})$/);
+    if (!startedAt || !match) return Date.now();
+    return startedAt + Number(match[1]) * LIVE_BATCH_MS;
+  }
+
+  function isPastLiveBatchBoundary(batchId: string) {
+    return liveBatchBoundaryMs(batchId) <= Date.now();
+  }
+
+  function clearLiveBatchBuffers() {
+    for (const buffer of liveBatchBuffersRef.current.values()) {
+      if (buffer.flushTimer) window.clearTimeout(buffer.flushTimer);
+    }
+    liveBatchBuffersRef.current.clear();
   }
 
   function ensureSegmentContext(segment: StreamSegment, index: number): StreamSegment {
@@ -405,7 +519,7 @@ export function App() {
   function currentBatchId(nowMs = Date.now()) {
     const startedAt = listeningStartedAtRef.current;
     if (!startedAt) return manualBatchId(nowMs);
-    const index = Math.max(1, Math.floor((nowMs - startedAt) / 30_000) + 1);
+    const index = Math.max(1, Math.floor((nowMs - startedAt) / LIVE_BATCH_MS) + 1);
     return liveBatchId(startedAt, index);
   }
 
@@ -1576,6 +1690,34 @@ function readFileAsDataUrl(file: File) {
     reader.onerror = () => reject(new Error("文件读取失败"));
     reader.readAsDataURL(file);
   });
+}
+
+async function readAudioFileAsDataUrl(file: File) {
+  return normalizeAudioDataUrl(await readFileAsDataUrl(file), file.name);
+}
+
+function normalizeAudioDataUrl(dataUrl: string, fileName: string) {
+  if (/^data:audio\//.test(dataUrl)) return dataUrl;
+  const mime = audioMimeFromFileName(fileName);
+  if (!mime) return dataUrl;
+  return dataUrl.replace(/^data:[^,]*;base64,/, `data:${mime};base64,`);
+}
+
+function audioMimeFromFileName(fileName: string) {
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  const map: Record<string, string> = {
+    webm: "audio/webm",
+    wav: "audio/wav",
+    wave: "audio/wav",
+    mp3: "audio/mpeg",
+    mpeg: "audio/mpeg",
+    mp4: "audio/mp4",
+    m4a: "audio/mp4",
+    ogg: "audio/ogg",
+    oga: "audio/ogg",
+    aac: "audio/aac"
+  };
+  return extension ? map[extension] : undefined;
 }
 
 function blobToDataUrl(blob: Blob) {

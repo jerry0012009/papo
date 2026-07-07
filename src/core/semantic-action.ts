@@ -401,6 +401,10 @@ events:
 ${JSON.stringify(result.events.map((event) => ({
   id: event.id,
   source: event.source,
+  sourceSegmentId: event.triggerSegmentId,
+  sourceBatchId: event.triggerBatchId,
+  sourceObservedAt: event.triggerObservedAt,
+  sourceLocation: event.triggerLocation,
   label: event.triggerLabel,
   content: modelSafeEventContent(event.triggerContent),
   contentHiddenForPrivacy: isHighPrivacySegmentContent(event.triggerContent),
