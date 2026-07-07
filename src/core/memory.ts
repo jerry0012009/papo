@@ -172,7 +172,7 @@ function inferIntent(text: string): string {
 function classifyLongTermKind(episode: EpisodeMemory): LongTermMemory["kind"] {
   const text = `${episode.inputSummary} ${episode.noticed}`;
   if (/隐私|安全|谨慎|删除|忘掉/.test(text)) return "safety_rule";
-  if (/我应该|我曾经|小动物|脑功能|注意/.test(text)) return "creature_self_memory";
+  if (/我应该|我曾经|小动物|脑功能|活物|不像工具|被你养成|你教我/.test(text)) return "creature_self_memory";
   if (/提醒|未来|下次|之后/.test(text)) return "future_review";
   if (/问题|不确定|继续想/.test(text)) return "open_question";
   if (/习惯|经常|总是/.test(text)) return "habit";

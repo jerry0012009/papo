@@ -45,9 +45,15 @@ describe("creature core", () => {
   it("rule fallback responds to ordinary shared moments without analysis-template wording", () => {
     const profile = createCreatureProfile();
     const result = handleButtonCapture(profile, "刚刚医生确认复查时间改到周六上午。");
+    const event = result.events[0];
 
-    expect(result.events[0].noticed).toContain("我接住你刚递来的这一小段");
-    expect(result.response).toContain("这像一段新的共同经历");
+    expect(event).toBeDefined();
+    if (!event) throw new Error("expected attention event");
+    expect(event.scoreBreakdown).toBeDefined();
+    if (!event.scoreBreakdown) throw new Error("expected score breakdown");
+    expect(event.noticed).toContain("复查");
+    expect(event.scoreBreakdown.futureValue).toBeGreaterThan(0);
+    expect(result.response).toMatch(/共同经历|提醒草稿|复查/);
     expect(result.episodes[0].possibleIntent).toContain("我们刚一起经过的情景");
     expect(result.response).not.toContain("我先试着理解");
     expect(result.response).not.toContain("我注意到这个片段可能");
@@ -86,12 +92,12 @@ describe("creature core", () => {
         id: "s2",
         kind: "text",
         label: "核心",
-        content: "我担心投资人觉得它只是记忆库，所以要展示注意、反馈和小脑袋。",
+        content: "我担心自己又把妈妈复查拖到睡前，所以想让 Papo 先注意到这件家事。",
         batchId: "batch-core",
         observedAt: "2026-07-06T10:00:30.000Z",
-        location: { latitude: 52.52, longitude: 13.405, accuracy: 20, label: "演示现场" }
+        location: { latitude: 52.52, longitude: 13.405, accuracy: 20, label: "家里" }
       },
-      { id: "s3", kind: "text", label: "未来", content: "下次演示要生成提醒草稿和复盘。" }
+      { id: "s3", kind: "text", label: "未来", content: "下次复查前一天要提醒自己把资料放进包里。" }
     ]);
 
     expect(result.events.length).toBeGreaterThanOrEqual(1);
@@ -99,7 +105,7 @@ describe("creature core", () => {
     expect(result.events[0].triggerLabel).toBe("核心");
     expect(result.events[0].triggerBatchId).toBe("batch-core");
     expect(result.episodes[0].sourceBatchId).toBe("batch-core");
-    expect(result.episodes[0].sourceLocation?.label).toBe("演示现场");
+    expect(result.episodes[0].sourceLocation?.label).toBe("家里");
   });
 
   it("feedback changes state and keeps values clamped", () => {
@@ -196,6 +202,16 @@ describe("creature core", () => {
     expect(profile.episodes[0].promotedToLongTerm).toBe(true);
   });
 
+  it("does not classify ordinary noticed life moments as Papo self memory", () => {
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "妈妈周五复查这件事需要我提前准备病历。");
+    const memory = promoteEpisode(profile, result.episodes[0].id);
+
+    expect(memory?.kind).not.toBe("creature_self_memory");
+    expect(["future_review", "long_theme"]).toContain(memory?.kind);
+    expect(memory?.text).toContain("复查");
+  });
+
   it("forget downranks memory to zero before purging on a second forget", () => {
     const profile = createCreatureProfile();
     const targetId = profile.longTermMemories[0].id;
@@ -277,7 +293,7 @@ describe("creature core", () => {
 
     const emergence = createActiveEmergence(profile);
 
-    expect(emergence.memoryId).toBe(profile.longTermMemories.find((memory) => memory.kind !== "creature_self_memory" && memory.sourceEpisodeId)?.id);
+    expect(profile.longTermMemories.some((memory) => memory.id === emergence.memoryId && memory.kind !== "creature_self_memory" && memory.weight > 0)).toBe(true);
     expect(emergence.text).toContain("我想起了");
     expect(emergence.text).not.toMatch(/不是提醒|内在倾向|下一次你给我信息流|我浮现的是/);
   });

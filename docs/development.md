@@ -111,6 +111,7 @@ Home idle presence should be evidence-backed, not a static mood label. With a re
 Curious results should read like Papo choosing what to hold or let pass. Selected and ignored lines should use "我竖起耳朵" and "我先放过..." rather than report-style phrases such as "Papo 放过了".
 Memory candidates and consolidation reasons may later become user-visible long-term memories, so they must be written as shared-moment language from the start. Avoid "episode", "用户反馈这段", "我和用户", or "forget feedback" in candidate text, long-term memory text, and `consolidatedBecause`.
 Long-term memory candidates should remember a shared moment, not only an extracted fact. When Papo responded or chose a stance, the candidate should include a short "当时我回应你..." thread so future emergence can recall what Papo did with the moment.
+Long-term memory kind classification must not treat generic wording such as "我注意到..." as Papo self-memory. `creature_self_memory` is reserved for Papo's identity, learned habits, boundaries, or how the user is raising it; ordinary life moments should stay as shared memories, future reviews, habits, or themes.
 
 Harness stages:
 
@@ -292,6 +293,7 @@ Done:
   - Memory candidate text, promoted long-term memory text, and consolidation reasons now use shared-moment language instead of internal phrases such as "这条 episode", "用户反馈这段", "我和用户", or "forget feedback".
   - Memory page rendering now treats persisted memory text as raw material, not final copy: legacy/model phrases such as "用户确认", "小动物", "episode", "candidate", or "长期保存" are translated away before the user sees Papo's subjective memory surface.
   - Long-term memory candidates now keep Papo's own response as part of the shared moment, and LLM-written candidate text is normalized before it can become a long-term memory.
+  - Ordinary life memories are no longer classified as Papo self-memory merely because their generated text says "我注意到"; self-memory is reserved for identity and raised habits.
   - Memory-page feedback now accepts text or audio-transcribed teaching before the user asks Papo to keep thinking, quiet down, remember steadily, or let a memory go, so memory feedback flows through the same interaction loop as episode feedback.
   - Feedback conversation messages now keep related long-term memory ids when the user teaches Papo about a specific memory, preserving the connection between dialogue history and memory.
   - `remember` feedback with teaching text now truly appends non-private user teaching to the targeted long-term memory and retags it, while private feedback text remains out of memory writes.
@@ -342,6 +344,7 @@ Verified:
 - Feedback with substantive text can produce a rule-owned follow-up or memory note, and the persisted Papo reply includes that continuation.
 - Memory-page feedback can carry the user's written teaching into the same feedback endpoint with the target memory id, rather than acting as a bare management button.
 - Remember feedback aimed at an existing long-term memory actually changes that memory when the teaching text is non-private, and privacy-risk feedback is not appended.
+- Ordinary life memories containing "我注意到..." remain shared/future memories rather than being misclassified as Papo self-memory.
 - Feedback aimed at a long-term memory records that memory id on both the user teaching message and Papo's response in conversation history.
 - Correcting a long-term memory records the correction and Papo's confirmation in conversation history, both linked to the corrected memory id.
 - Feedback records include state/policy deltas in diagnostics, user-facing feedback explains behavioral change, and forget feedback requires a second click to purge a zero-weight memory.
@@ -388,6 +391,7 @@ Demo material rule:
 
 - Default inputs and Demo Mode scenarios should use ordinary user-life material.
 - Do not use our development notes, product planning text, or investor-pitch wording as the creature's interaction material.
+- Attention scoring and tests should model future value with ordinary life cues such as appointments, reminders, and preparation, not investor/demo vocabulary.
 
 ## Verification Checklist
 

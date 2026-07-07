@@ -61,6 +61,12 @@ export function selectAction(input: ActionSelectionInput): ActionDecision {
     trace.push("future_value_action");
   }
 
+  if (policy.quietTendency > 55 && ["ask", "review", "draft_reminder", "draft_question_list"].includes(action)) {
+    blockedActions.push({ action, reason: "用户反馈让它更克制，不能每次都主动展开" });
+    action = input.attentionStrength > 70 ? "observe" : "quiet";
+    trace.push("policy_quiet_restraint");
+  }
+
   if (input.profile.state.safety > 75 && input.privacyRisk > 35 && action !== "ask") {
     blockedActions.push({ action, reason: "安全感处于谨慎状态，保存或展开前先问" });
     action = "ask";

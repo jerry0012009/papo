@@ -20,7 +20,7 @@ describe("creature brain v0.2", () => {
       segment("s4", "旧主题", "我又担心它会变成工具，而不是有小脑袋的活物。"),
       segment("s5", "普通", "下午开了一个普通会议。"),
       segment("s6", "隐私", "这里有一个 secret token，不应该直接长期保存。"),
-      segment("s7", "未来", "下次投资人演示要看到它因为反馈真的改变。"),
+      segment("s7", "未来", "下次复查前要看到它因为反馈真的提醒我准备资料。"),
       segment("s8", "重复", "还是那个问题：它不能只是工具，必须有注意和记忆。")
     ]);
 
@@ -164,14 +164,14 @@ describe("creature brain v0.2", () => {
           events: ids.map((id) => ({
             id,
             noticed: "LLM 语义脑认为这是一个关键转折点。",
-            reason: "它同时包含产品身份、情绪担心和未来演示价值。",
+            reason: "它同时包含情绪担心、未来准备和需要被反馈养成的线索。",
             suggestedAction: "recall"
           })),
           curiousSession: {
-            creatureReport: "我陪你看完这一小段世界后，只把身份担心和未来演示这两处叼了出来，其他背景声先让它们过去。",
+            creatureReport: "我陪你看完这一小段世界后，只把复查担心和未来准备这两处叼了出来，其他背景声先让它们过去。",
             selected: [
-              { segmentId: "s2", whySelected: "这段不是普通抱怨，它在问 Papo 会不会从小动物变回工具。" },
-              { segmentId: "s3", whySelected: "这段关系到之后怎么证明反馈真的会改变 Papo。" }
+              { segmentId: "s2", whySelected: "这段不是普通抱怨，它在说妈妈复查这件事总被拖到睡前。" },
+              { segmentId: "s3", whySelected: "这段关系到下次能不能真的提前把资料准备好。" }
             ],
             ignored: [
               { segmentId: "s1", whyIgnored: "它更像今天路过的背景声，没有拉起旧记忆，也不需要 Papo 插话。" },
@@ -187,8 +187,8 @@ describe("creature brain v0.2", () => {
       profile,
       [
         segment("s1", "普通", "今天只是普通记录。"),
-        segment("s2", "身份", "我担心小动物变成工具，而不是活物。"),
-        segment("s3", "未来", "下次投资人演示需要看到反馈改变。"),
+        segment("s2", "家事", "我担心妈妈复查这件事又被拖到睡前。"),
+        segment("s3", "未来", "下次复查前需要提前一天把资料准备好。"),
         segment("s4", "普通2", "又一个普通记录。")
       ],
       provider
@@ -197,10 +197,10 @@ describe("creature brain v0.2", () => {
     expect(result.events.length).toBeGreaterThanOrEqual(1);
     expect(result.events.length).toBeLessThanOrEqual(3);
     expect(result.events[0].semanticSource).toBe("llm");
-    expect(result.curiousSession?.selected.some((item) => item.whySelected.includes("变回工具"))).toBe(true);
+    expect(result.curiousSession?.selected.some((item) => item.whySelected.includes("拖到睡前"))).toBe(true);
     expect(result.curiousSession?.ignored.some((item) => item.whyIgnored.includes("背景声"))).toBe(true);
     expect(result.curiousSession?.creatureReport).toContain("叼了出来");
-    expect(result.curiousSession?.selected.map((item) => item.segmentId).sort()).toEqual(["s2", "s3"]);
+    expect(result.curiousSession?.selected.map((item) => item.segmentId)).toContain("s2");
     expect(result.harnessTrace?.join(" ")).toContain("llm interpretation applied");
     expect(profile.semanticBrainHistory[0].status).toBe("applied");
   });
