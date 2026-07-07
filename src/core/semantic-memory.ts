@@ -154,6 +154,7 @@ function buildSemanticMemoryPrompt(profile: CreatureProfile, candidates: MemoryC
 - 不能编造用户没说过的新事实。
 - writePolicy=auto 的候选会真的写入 long_term_memory。
 - 普通用户看到的是 Papo 记得的生活，不看这些分类。
+- 如果候选只是普通寒暄、临时问候、一次性闲聊、噪音或没有可复用意义的片段，应 shouldKeepCandidate=false。
 
 返回严格 JSON：
 {

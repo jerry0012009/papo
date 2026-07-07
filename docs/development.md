@@ -34,6 +34,8 @@ LLM owns semantic work:
 
 - What happened in the user's text/photo/audio.
 - Whether Papo should respond, ask, stay quiet, remember, recall, or review.
+- Whether an attended input should become an episode or only remain in the conversation timeline.
+- Whether an episode should enter memory-candidate review.
 - Papo's visible reply.
 - Papo's visible behavior phrase when needed.
 - Candidate memory wording and tags.
@@ -91,6 +93,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - `attention.ts` creates neutral candidates only. It must not write creature-facing replies, semantic "noticed" explanations, keyword tags, related-memory guesses, curious reports, or mixed-preference dialogue.
 - Curious stream input starts with zero attention events. `semanticDecideAttention` must select segments with the model before episodes or memory candidates are created.
 - Action selection code is an enum executor, not a semantic classifier. It must not locally replace a model-selected visible action because of mood, energy, keywords, or confidence heuristics.
+- `semanticSelectAction` owns the persistence decision for attended input. It must explicitly return whether to keep an episode and whether to keep a memory candidate; rules may prune temporary structures but must not default every input into memory.
 - Memory candidates keep user text and provenance only. Memory kind, tags, consolidation wording, and long-term meaning must come from `semanticDecideMemory` before they are treated as product cognition.
 - Long-term memory writes happen only when the model-selected action is `save_long_term` or the model-selected memory `writePolicy` is `auto`; rules execute that decision and persist it.
 - The web UI must not fill empty Papo replies with "我听见了" or other local placeholder speech. If the model chose quiet or failed to provide a visible reply, the product should show no forged reply.

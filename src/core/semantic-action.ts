@@ -28,6 +28,8 @@ const semanticActionSchema = z.object({
         userIntent: optionalText(260),
         emotionalTone: optionalText(160),
         reason: optionalText(420),
+        shouldCreateEpisode: z.boolean(),
+        shouldConsiderMemory: z.boolean(),
         shouldReply: z.boolean().optional(),
         reply: optionalText(700),
         visibleReaction: optionalText(260),
@@ -90,6 +92,8 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
       "llm: action selected",
       decision.userIntent ? `intent=${safeProcessText(decision.userIntent) ?? "not_shown"}` : "intent=not_provided",
       decision.reason ? `action_reason=${safeProcessText(decision.reason) ?? "not_shown"}` : "action_reason=not_provided",
+      `episode=${decision.shouldCreateEpisode}`,
+      `memory_candidate=${decision.shouldConsiderMemory}`,
       decision.shouldReply === undefined ? "should_reply=not_provided" : `should_reply=${decision.shouldReply}`,
       `guardrail: action=${guarded.action}`
     ];
@@ -125,11 +129,54 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
         result.response = "";
         if (episode) episode.creatureResponse = "";
       }
-    }
-    applied += 1;
+      }
+      validatePersistenceDecision(decision);
+      applyPersistenceDecision(profile, result, episode, decision);
+      applied += 1;
   }
 
   return applied;
+}
+
+function validatePersistenceDecision(decision: ActionDecisionSuggestion) {
+  if (decision.shouldConsiderMemory && !decision.shouldCreateEpisode) {
+    throw new Error("action model requested memory consideration without an episode");
+  }
+  if ((decision.action === "save_episode" || decision.action === "save_long_term") && !decision.shouldCreateEpisode) {
+    throw new Error("action model selected a save action without an episode");
+  }
+  if (decision.action === "save_long_term" && !decision.shouldConsiderMemory) {
+    throw new Error("action model selected long-term save without a memory candidate");
+  }
+}
+
+function applyPersistenceDecision(
+  profile: CreatureProfile,
+  result: CaptureResult,
+  episode: CaptureResult["episodes"][number] | undefined,
+  decision: ActionDecisionSuggestion
+) {
+  if (!episode) return;
+  if (!decision.shouldCreateEpisode) {
+    removeEpisodeAndCandidates(profile, result, episode.id);
+    return;
+  }
+  if (!decision.shouldConsiderMemory) {
+    removeMemoryCandidatesForEpisode(profile, result, episode.id);
+  }
+}
+
+function removeEpisodeAndCandidates(profile: CreatureProfile, result: CaptureResult, episodeId: string) {
+  profile.episodes = profile.episodes.filter((episode) => episode.id !== episodeId);
+  result.episodes = result.episodes.filter((episode) => episode.id !== episodeId);
+  removeMemoryCandidatesForEpisode(profile, result, episodeId);
+}
+
+function removeMemoryCandidatesForEpisode(profile: CreatureProfile, result: CaptureResult, episodeId: string) {
+  profile.memoryCandidates = profile.memoryCandidates.filter((candidate) => candidate.sourceEpisodeId !== episodeId);
+  result.memoryCandidates = result.memoryCandidates?.filter((candidate) => candidate.sourceEpisodeId !== episodeId) ?? [];
+  const episode = profile.episodes.find((item) => item.id === episodeId) ?? result.episodes.find((item) => item.id === episodeId);
+  if (episode) episode.memoryCandidateIds = [];
 }
 
 function updateMemoryCandidate(result: CaptureResult, sourceEpisodeId: string, text?: string, tags?: string[]) {
@@ -212,6 +259,14 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - action 必须在白名单内。
 - 你不能改状态数值或直接写记忆。
 
+判断口径：
+- conversation timeline 会保存用户和 Papo 的对话；这不等于每句话都要形成 episode。
+- shouldCreateEpisode 只用于以后回看仍有意义的片段，例如用户分享了正在发生的事、偏好、习惯、情绪、计划、关系变化、明确训练或明确要求记住。
+- shouldConsiderMemory 比 shouldCreateEpisode 更窄，只用于可能值得进入后续记忆判断的片段。
+- 普通寒暄、单纯打招呼、误触、空白/嘈杂声音，通常 reply/observe 即可，shouldCreateEpisode=false，shouldConsiderMemory=false。
+- 用户明确说“记住”、表达稳定习惯/偏好/重要事实时，通常 shouldCreateEpisode=true，shouldConsiderMemory=true。
+- 如果你只是想当下陪用户聊一句，不要把它送进记忆候选。
+
 返回严格 JSON：
 {
   "decisions": [
@@ -222,6 +277,8 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
       "userIntent": "...",
       "emotionalTone": "...",
       "reason": "...",
+      "shouldCreateEpisode": true,
+      "shouldConsiderMemory": false,
       "shouldReply": true,
       "reply": "...",
       "visibleReaction": "...",
@@ -233,8 +290,18 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
   ]
 }
 
-noticed、userIntent、reason、memoryCandidateText 是内部理解和记忆材料；reply 和 visibleReaction 是可能给用户看的外显语言。不要把内部流程解释写进 reply。
+noticed、userIntent、reason、memoryCandidateText 是内部理解和记忆材料。
+reply 只能写 Papo 直接说出口的话，不要写括号动作、舞台指令、内部流程解释、字段名或阈值。
+visibleReaction 只写可以外显成动作的短行为，例如“抬头看你”“靠近一点”；不要把动作混进 reply。
+shouldCreateEpisode 决定这次是否应该留下为一条经历；普通寒暄、误触、无意义噪音通常为 false。
+shouldConsiderMemory 决定这次是否进入后续记忆判断；只有值得被之后记住、反馈、回忆或整理的事件才为 true。shouldConsiderMemory=true 时 shouldCreateEpisode 必须为 true。
+如果 action 是 save_episode 或 save_long_term，shouldCreateEpisode 必须为 true；如果 action 是 save_long_term，shouldConsiderMemory 必须为 true。
 如果 recent_memories 里有自然联想到的旧记忆，可以在 relatedMemoryIds 里返回对应 id；不能编造不存在的 id。
+
+例子：
+- 用户说“你好呀 Papo”：action=respond, shouldCreateEpisode=false, shouldConsiderMemory=false, reply 写一句自然问候。
+- 用户说“我准备去游泳，但游泳馆人太多让我有点烦”：action 可以 respond/ask/review, shouldCreateEpisode=true, shouldConsiderMemory=true 或 false 由你判断它是否值得以后记住。
+- 用户说“请记住：我每周二晚上都会游泳”：action=save_long_term, shouldCreateEpisode=true, shouldConsiderMemory=true。
 
 current_state:
 ${JSON.stringify(profile.state)}
