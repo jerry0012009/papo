@@ -53,6 +53,11 @@ export function applyFeedback(
       memory.text = `${memory.text} 你确认时还补充：${summarizeText(inputText, 120)}`;
       memory.tags = unique([...memory.tags, ...extractTags(inputText)]);
     }
+    if (!memory && targetLongTerm && inputText && !hasPrivacyRisk(inputText)) {
+      targetLongTerm.text = normalizeSharedMemoryText(`${targetLongTerm.text} 你确认时还补充：${summarizeText(inputText, 120)}`);
+      targetLongTerm.tags = unique([...targetLongTerm.tags, ...extractTags(inputText)]);
+      targetLongTerm.lastReferencedAt = now;
+    }
   }
   const forgetResult = input.kind === "forget" ? forgetMemory(profile, input.targetId) : undefined;
   if (input.kind === "understood") adjustMemoryWeight(profile, input.targetId, 8);

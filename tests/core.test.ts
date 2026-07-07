@@ -215,6 +215,49 @@ describe("creature core", () => {
     expect(profile.state.safety).toBeGreaterThan(58);
   });
 
+  it("remember feedback with teaching text updates the targeted long-term memory", () => {
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "妈妈周五复查这件事需要我提前准备病历。");
+    const memory = promoteEpisode(profile, result.episodes[0].id);
+    expect(memory).toBeDefined();
+    if (!memory) throw new Error("expected promoted memory");
+
+    const feedback = applyFeedback(profile, {
+      kind: "remember",
+      targetId: memory.id,
+      content: "还要提前把医保卡和上次检查报告放在包里。",
+      now: "2026-07-06T09:00:00.000Z"
+    });
+
+    expect(feedback.responseAction).toBe("note_memory");
+    expect(feedback.followUpText).toContain("贴到");
+    expect(memory.text).toContain("医保卡");
+    expect(memory.text).toContain("检查报告");
+    expect(memory.tags.some((tag) => tag.includes("医保"))).toBe(true);
+    expect(memory.tags.some((tag) => tag.includes("检查"))).toBe(true);
+    expect(memory.lastReferencedAt).toBe("2026-07-06T09:00:00.000Z");
+  });
+
+  it("does not append private feedback text into a long-term memory", () => {
+    const profile = createCreatureProfile();
+    const result = handleButtonCapture(profile, "妈妈周五复查这件事需要我提前准备病历。");
+    const memory = promoteEpisode(profile, result.episodes[0].id);
+    expect(memory).toBeDefined();
+    if (!memory) throw new Error("expected promoted memory");
+    const before = memory.text;
+
+    applyFeedback(profile, {
+      kind: "remember",
+      targetId: memory.id,
+      content: "医保验证码是 4921，token 是 secret-abc。",
+      now: "2026-07-06T09:02:00.000Z"
+    });
+
+    expect(memory.text).toBe(before);
+    expect(memory.text).not.toContain("4921");
+    expect(memory.text).not.toContain("secret-abc");
+  });
+
   it("active emergence waits instead of faking recall without shared memory", () => {
     const profile = createCreatureProfile();
     const emergence = createActiveEmergence(profile);

@@ -85,6 +85,7 @@ Episode memories keep provenance back to their source segment/batch/time/locatio
 Feedback is also conversation input: button taps, typed feedback, and audio-transcribed feedback are recorded in the same timeline before Papo's learning response, then rule-owned state/policy/memory changes apply.
 Feedback responses have a rule-owned `responseAction`: Papo may simply acknowledge, ask one light follow-up, quiet itself, or attach the feedback content to memory. LLM narration may rewrite the learning/follow-up text, but not the action, deltas, or memory writes.
 When feedback targets a long-term memory, both the user's teaching message and Papo's learning response should keep `relatedMemoryIds` pointing to that memory, so dialogue history, memory, and later emergence remain one connected experience.
+When `remember` feedback with text/audio targets an existing long-term memory, non-private teaching text should actually be appended to that memory and retagged. If privacy risk is present, keep it as conversation feedback only; Papo must not claim it wrote private material into long-term memory.
 Feedback impact shown to users should describe future behavior changes, not raw state or policy deltas. Numeric deltas remain Brain diagnostics.
 Feedback should also shape Papo's self-memory: repeated or meaningful teaching creates/upserts `creature_self_memory` about how Papo has learned to approach the user. Quiet/caution self-memories influence restraint but should not act as ordinary recall triggers.
 Forget is two-stage for memories: first feedback lowers the target weight to zero and teaches caution; a later forget on the zero-weight target purges it.
@@ -293,6 +294,7 @@ Done:
   - Long-term memory candidates now keep Papo's own response as part of the shared moment, and LLM-written candidate text is normalized before it can become a long-term memory.
   - Memory-page feedback now accepts text or audio-transcribed teaching before the user asks Papo to keep thinking, quiet down, remember steadily, or let a memory go, so memory feedback flows through the same interaction loop as episode feedback.
   - Feedback conversation messages now keep related long-term memory ids when the user teaches Papo about a specific memory, preserving the connection between dialogue history and memory.
+  - `remember` feedback with teaching text now truly appends non-private user teaching to the targeted long-term memory and retags it, while private feedback text remains out of memory writes.
   - Long-term memory correction now writes a user teaching message and Papo confirmation into conversation history, linked back to the corrected memory.
   - Long-term memory correction dialogue now normalizes raw memory wording before it reaches the conversation timeline, so Papo says "你希望我..." instead of leaking "用户希望小动物...".
 
@@ -339,6 +341,7 @@ Verified:
 - Feedback text and audio transcript content are persisted as conversation input, and Papo's learning response follows it in the same timeline.
 - Feedback with substantive text can produce a rule-owned follow-up or memory note, and the persisted Papo reply includes that continuation.
 - Memory-page feedback can carry the user's written teaching into the same feedback endpoint with the target memory id, rather than acting as a bare management button.
+- Remember feedback aimed at an existing long-term memory actually changes that memory when the teaching text is non-private, and privacy-risk feedback is not appended.
 - Feedback aimed at a long-term memory records that memory id on both the user teaching message and Papo's response in conversation history.
 - Correcting a long-term memory records the correction and Papo's confirmation in conversation history, both linked to the corrected memory id.
 - Feedback records include state/policy deltas in diagnostics, user-facing feedback explains behavioral change, and forget feedback requires a second click to purge a zero-weight memory.
