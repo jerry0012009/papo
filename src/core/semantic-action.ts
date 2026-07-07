@@ -322,11 +322,9 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 
 判断口径：
 - conversation timeline 会保存用户和 Papo 的对话；这不等于每句话都要形成 episode。
-- shouldCreateEpisode 只用于以后回看仍有意义的片段，例如用户分享了正在发生的事、偏好、习惯、情绪、计划、关系变化、明确训练或明确要求记住。
-- shouldConsiderMemory 比 shouldCreateEpisode 更窄，只用于可能值得进入后续记忆判断的片段。
-- 普通寒暄、单纯打招呼通常 respond 即可；误触、空白/嘈杂声音通常 observe 或 quiet。
-- 用户明确说“记住”、表达稳定习惯/偏好/重要事实时，通常 shouldCreateEpisode=true，shouldConsiderMemory=true。
-- 如果你只是想当下陪用户聊一句，不要把它送进记忆候选。
+- shouldCreateEpisode 由你判断：只有之后回看仍有意义的经历、上下文或互动才需要留下 episode。
+- shouldConsiderMemory 由你判断：它比 episode 更窄，只用于可能值得进入后续记忆模型判断的内容。
+- 如果你只是想当下陪用户聊一句，不要把它送进记忆候选；如果这段输入没有可用生活信息，也可以选择不说话。
 - observe 和 quiet 表示不说话，不能同时填写 reply 或 shouldReply=true；如果要说话，请选择 respond、ask、recall、review、draft_reminder 或 draft_question_list。
 - draft_reminder 和 draft_question_list 是有结构化产物的动作，不能只写 reply。必须在 actionResult 里返回草稿内容；reply 是 Papo 对用户说出口的自然短回应。
 
@@ -369,18 +367,11 @@ actionResult 是这一步行动真实产出的结构化结果：
 - action=draft_reminder 时，必须返回 {"kind":"reminder_draft","title":"...","text":"...","dueText":"..."}；title 和 text 必填，dueText 不确定时可以省略。
 - action=draft_question_list 时，必须返回 {"kind":"question_list_draft","title":"...","items":["..."]}；items 至少一条。
 - observe/quiet 应省略 actionResult，或返回 {"kind":"none"}。
-shouldCreateEpisode 决定这次是否应该留下为一条经历；普通寒暄、误触、无意义噪音通常为 false。
+shouldCreateEpisode 决定这次是否应该留下为一条经历。
 shouldConsiderMemory 决定这次是否进入后续记忆判断；只有值得被之后记住、反馈、回忆或整理的事件才为 true。shouldConsiderMemory=true 时 shouldCreateEpisode 必须为 true。
 如果 action 是 save_episode 或 save_long_term，shouldCreateEpisode 必须为 true；如果 action 是 save_long_term，shouldConsiderMemory 必须为 true。
 如果 action 是 observe 或 quiet，shouldReply 必须为 false 或省略，reply 必须省略。
 如果 recent_memories 里有自然联想到的旧记忆，可以在 relatedMemoryIds 里返回对应 id；不能编造不存在的 id。
-
-例子：
-- 用户说“你好呀 Papo”：action=respond, shouldCreateEpisode=false, shouldConsiderMemory=false, reply 写一句自然问候。
-- 用户说“我准备去游泳，但游泳馆人太多让我有点烦”：action 可以 respond/ask/review, shouldCreateEpisode=true, shouldConsiderMemory=true 或 false 由你判断它是否值得以后记住。
-- 用户说“请记住：我每周二晚上都会游泳”：action=save_long_term, shouldCreateEpisode=true, shouldConsiderMemory=true。
-- 用户说“帮我拟个提醒，明天早上 8 点带泳帽”：action=draft_reminder, shouldCreateEpisode=true, actionResult.kind=reminder_draft。
-- 用户说“帮我整理去咨询前要问的问题”：action=draft_question_list, shouldCreateEpisode=true, actionResult.kind=question_list_draft。
 
 current_state:
 ${JSON.stringify(profile.state)}

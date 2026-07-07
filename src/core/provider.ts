@@ -101,7 +101,7 @@ function genericAudioModel(merged: NodeJS.ProcessEnv) {
   if (merged.OPENAI_AUDIO_MODEL) return merged.OPENAI_AUDIO_MODEL;
   const explicit = merged.OPENAI_AUDIO_TRANSCRIPTION_MODEL ?? merged.OPENAI_TRANSCRIPTION_MODEL;
   if (explicit) return explicit;
-  return "gpt-4o-mini-transcribe";
+  return "gpt-4o-mini-audio-preview";
 }
 
 function genericAudioRoute(model: string): ProviderDiagnostics["audioRoute"] {
@@ -459,6 +459,7 @@ function audioFormatFromMime(mime: string) {
   if (mime.includes("wav")) return "wav";
   if (mime.includes("webm")) return "webm";
   if (mime.includes("ogg")) return "ogg";
+  if (mime.includes("aac")) return "aac";
   if (mime.includes("m4a") || mime.includes("mp4")) return "mp4";
   return "webm";
 }

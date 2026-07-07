@@ -71,7 +71,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Default semantic models should prefer the strongest available configured model, currently `openai/gpt-5.5` for OpenRouter or `gpt-5.5` for generic.
 - Vision sensing currently uses the verified OpenRouter default `nex-agi/nex-n2-mini`.
 - Audio sensing should prefer native audio-capable multimodal models. The current OpenRouter default is `mistralai/voxtral-small-24b-2507`, verified through chat completions audio input with a speech sample.
-- Mixed routing is allowed: for example, Mimo can be the semantic provider while OpenRouter handles image/audio sensing, or OpenRouter can be the semantic provider while generic audio uses a transcription endpoint as its provider route.
+- Mixed routing is allowed: for example, Mimo can be the semantic provider while OpenRouter handles image/audio sensing, or OpenRouter can be the semantic provider while generic audio uses a native audio chat model. Transcription endpoints are used only when explicitly configured with a transcription/whisper model id, not as the default listening path.
 - Provider errors are product errors. They should be visible through API errors and diagnostics instead of being hidden behind local wording.
 - If a real model repeatedly returns empty or invalid structured output for core cognition, switch to another configured real provider/model and verify it with scenario smoke tests. Do not add local semantic fallback to mask the model failure.
 

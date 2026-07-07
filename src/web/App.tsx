@@ -835,7 +835,7 @@ function ChatView(props: {
               加录音
               <input
                 type="file"
-                accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg"
+                accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg,audio/aac"
                 onChange={(event) => {
                   props.onUploadAudio(event.currentTarget.files?.[0]);
                   event.currentTarget.value = "";
@@ -1454,7 +1454,7 @@ function MemoryFeedbackBox(props: {
           说给我听
           <input
             type="file"
-            accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg"
+            accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg,audio/aac"
             onChange={async (event) => {
               const file = event.currentTarget.files?.[0];
               event.currentTarget.value = "";
