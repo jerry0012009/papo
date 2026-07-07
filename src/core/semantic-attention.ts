@@ -29,7 +29,12 @@ const semanticAttentionSchema = z.object({
     .array(
       z.object({
         segmentId: z.string().min(1),
-        whySelected: optionalText(360)
+        whySelected: optionalText(360),
+        noticed: optionalText(260),
+        userMeaning: optionalText(360),
+        memoryRelation: optionalText(360),
+        relatedMemoryIds: optionalTextArray(6, 80),
+        tags: optionalTextArray(10, 40)
       })
     )
     .max(6)
@@ -89,10 +94,13 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
   if (!selectedFromModel.length) return false;
 
   const selectedIds = new Set(selectedFromModel.map((candidate) => candidate.segment.id));
-  const selectedReason = new Map((suggestion.selected ?? []).map((item) => [item.segmentId, safeCreatureText(item.whySelected)]));
+  const selectedDecision = new Map((suggestion.selected ?? []).map((item) => [item.segmentId, item]));
   const ignoredReason = new Map((suggestion.ignored ?? []).map((item) => [item.segmentId, safeCreatureText(item.whyIgnored)]));
   for (const candidate of selectedFromModel) {
-    if (!selectedReason.get(candidate.segment.id)) throw new Error("attention model did not explain a selected segment");
+    const decision = selectedDecision.get(candidate.segment.id);
+    if (!safeCreatureText(decision?.whySelected)) throw new Error("attention model did not explain a selected segment");
+    if (!safeCreatureText(decision?.noticed)) throw new Error("attention model did not say what it noticed");
+    if (!safeCreatureText(decision?.userMeaning)) throw new Error("attention model did not infer user meaning");
   }
 
   const oldEpisodeIds = new Set(result.episodes.map((episode) => episode.id));
@@ -101,6 +109,7 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
 
   const now = session.createdAt;
   const events = selectedFromModel.map((candidate) => {
+    const decision = selectedDecision.get(candidate.segment.id);
     const event = buildAttentionEvent(profile, {
       source: "curious_stream",
       triggerSegmentId: candidate.segment.id,
@@ -109,14 +118,21 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
       triggerLocation: candidate.segment.location,
       triggerLabel: candidate.segment.label,
       triggerContent: candidate.segment.content,
-      reasonPrefix: selectedReason.get(candidate.segment.id) ?? "",
+      reasonPrefix: safeCreatureText(decision?.whySelected) ?? "",
       score: candidate.score,
       now
     });
+    event.noticed = safeCreatureText(decision?.noticed) ?? event.noticed;
+    event.reason = safeCreatureText(decision?.userMeaning) ?? event.reason;
+    event.relatedMemoryIds = validRelatedMemoryIds(profile, decision?.relatedMemoryIds);
+    event.tags = decision?.tags?.length ? decision.tags : event.tags;
     event.semanticSource = "llm";
     event.decisionTrace = [
       ...(event.decisionTrace ?? []),
       "llm: selected this segment for attention",
+      `noticed=${event.noticed}`,
+      `user_meaning=${event.reason}`,
+      decision?.memoryRelation ? `memory_relation=${safeCreatureText(decision.memoryRelation) ?? "not_shown"}` : "memory_relation=not_provided",
       `guardrail: attention_budget=${session.attentionBudget}`
     ];
     return event;
@@ -142,7 +158,7 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
     segmentId: candidate.segment.id,
     label: candidate.segment.label,
     score: candidate.score,
-    whySelected: selectedReason.get(candidate.segment.id) ?? ""
+    whySelected: safeCreatureText(selectedDecision.get(candidate.segment.id)?.whySelected) ?? ""
   }));
   session.ignored = candidates
     .filter((candidate) => !selectedIds.has(candidate.segment.id))
@@ -196,6 +212,12 @@ function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function validRelatedMemoryIds(profile: CreatureProfile, ids?: string[]) {
+  if (!ids?.length) return [];
+  const allowed = new Set(profile.longTermMemories.filter((memory) => memory.weight > 0).map((memory) => memory.id));
+  return [...new Set(ids)].filter((id) => allowed.has(id)).slice(0, 6);
+}
+
 function recordAttentionSemanticRun(profile: CreatureProfile, provider: ModelProvider, status: "skipped" | "applied" | "empty" | "invalid" | "failed", message: string) {
   profile.semanticBrainHistory.unshift({
     id: makeId("semantic"),
@@ -216,12 +238,17 @@ function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureR
 系统已经整理了候选片段和注意预算。你负责具体判断：
 - 哪些段值得注意。
 - 哪些段应该暂时略过。
-- 为什么。
+- 为什么注意。
+- 注意到的核心内容是什么。
+- 这段内容对用户可能意味着什么。
+- 它是否自然关联到 recent_memories 里的旧记忆。
 - 如果都只是背景声，可以 shouldAttend=false。
 
 护栏会校验：
 - selected.segmentId 必须来自 candidates。
 - selected 数量不能超过 attentionBudget。
+- selected 每一项必须给 whySelected、noticed、userMeaning。
+- relatedMemoryIds 只能使用 recent_memories 中已有 id，不能编造。
 - 不能新增不存在的片段。
 - 后续事件、episode、memory candidate 只会从最终 selected 生成。
 普通用户看到的是 Papo 听见了什么、回应了什么，不看规则解释。
@@ -229,7 +256,15 @@ function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureR
 返回严格 JSON：
 {
   "shouldAttend": true,
-  "selected": [{"segmentId":"s1","whySelected":"..."}],
+  "selected": [{
+    "segmentId":"s1",
+    "whySelected":"...",
+    "noticed":"...",
+    "userMeaning":"...",
+    "memoryRelation":"...",
+    "relatedMemoryIds":["ltm_xxx"],
+    "tags":["..."]
+  }],
   "ignored": [{"segmentId":"s2","whyIgnored":"..."}],
   "creatureReport": "...",
   "trace": ["..."]

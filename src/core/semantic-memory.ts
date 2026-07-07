@@ -9,6 +9,9 @@ import type { CreatureProfile, MemoryCandidate } from "./types";
 const memoryKindSchema = z.enum(["user_preference", "long_theme", "creature_self_memory", "safety_rule", "future_review", "relationship", "habit", "open_question"]);
 const writePolicySchema = z.enum(["auto", "ask_user", "wait_feedback", "do_not_save"]);
 const decayPolicySchema = z.enum(["stable", "decay_without_feedback", "forget_if_dismissed"]);
+const optionalMemoryKind = z.preprocess((value) => cleanOptionalText(value, 80), memoryKindSchema.optional());
+const optionalWritePolicy = z.preprocess((value) => cleanOptionalText(value, 40), writePolicySchema.optional());
+const optionalDecayPolicy = z.preprocess((value) => cleanOptionalText(value, 40), decayPolicySchema.optional());
 const optionalText = (max: number) =>
   z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
 const optionalTextArray = (maxItems: number, maxText: number) =>
@@ -32,12 +35,12 @@ const semanticMemorySchema = z.object({
         candidateId: z.string().min(1),
         shouldKeepCandidate: z.boolean().optional(),
         candidateText: optionalText(650),
-        memoryKind: memoryKindSchema.optional(),
+        memoryKind: optionalMemoryKind,
         confidence: z.number().min(0).max(100).optional(),
-        writePolicy: writePolicySchema.optional(),
+        writePolicy: optionalWritePolicy,
         whyConsolidate: optionalText(360),
         privacyReason: optionalText(220),
-        decayPolicy: decayPolicySchema.optional(),
+        decayPolicy: optionalDecayPolicy,
         tags: optionalTextArray(10, 40)
       })
     )
@@ -155,6 +158,10 @@ initialMemoryKind、initialConfidence、initialWritePolicy 是存储结构占位
 - candidateId 必须来自候选列表。
 - shouldKeepCandidate=true 时必须给出 candidateText；这是 Papo 真正会留下的记忆候选文本，不能依赖系统预填文本。
 - shouldKeepCandidate=false 时必须给出 whyConsolidate 说明为什么不留下。
+- shouldKeepCandidate=false 时不要填写 candidateText、memoryKind、writePolicy、decayPolicy；不要用空字符串占位。
+- memoryKind 必须只使用：user_preference, long_theme, creature_self_memory, safety_rule, future_review, relationship, habit, open_question。
+- writePolicy 必须只使用：auto, ask_user, wait_feedback, do_not_save。
+- decayPolicy 必须只使用：stable, decay_without_feedback, forget_if_dismissed；不要创造 decay_immediately、delete、none 等新值。
 - 不能编造用户没说过的新事实。
 - writePolicy=auto 的候选会真的写入 long_term_memory。
 - 普通用户看到的是 Papo 记得的生活，不看这些分类。
