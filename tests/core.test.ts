@@ -81,12 +81,14 @@ describe("creature core", () => {
 
     expect(result.events[0].actionDecision.action).toBe("respond");
     expect(result.events[0].semanticSource).toBe("fallback");
-    expect(result.response).toContain("我在，听见了");
-    expect(result.episodes[0].creatureResponse).toContain("我在，听见了");
+    expect(result.response).toContain("我在，听见你了");
+    expect(result.response).not.toMatch(/你刚才是在叫我说话|先回应你|先回答你/);
+    expect(result.episodes[0].creatureResponse).toContain("我在，听见你了");
     expect(result.memoryCandidates?.[0].candidateText).toContain("你曾经对我说");
     expect(result.memoryCandidates?.[0].candidateText).toContain("当时我回应你");
     expect(result.episodes[0].creatureExperience?.earReason).not.toContain("显著性");
     expect(result.episodes[0].creatureExperience?.earReason).not.toContain("用户主动交给我");
+    expect(result.episodes[0].creatureExperience?.earReason).not.toMatch(/先回应你|先回答你/);
   });
 
   it("fallback repair handles playful greeting input without turning it into a generic ask flow", async () => {
@@ -95,7 +97,7 @@ describe("creature core", () => {
     const result = await runButtonHarness(profile, "汪汪！", provider);
 
     expect(result.events[0].actionDecision.action).toBe("respond");
-    expect(result.response).toContain("我在，听见了");
+    expect(result.response).toContain("我在，听见你了");
   });
 
   it("curious mode selects salient stream events instead of summarizing everything", () => {
@@ -683,7 +685,7 @@ describe("creature core", () => {
             visibleReaction: "我抬头回应你，让你知道我听见了。",
             shouldReply: true,
             suggestedAction: "respond",
-            reply: "我在，听见你了。你刚才是在叫我说话，我会先回应你。",
+            reply: "我在，听见你了。",
             memoryCandidateText: "用户曾经轻轻叫 Papo 说句话，Papo 回应并把这当成一次小小的共同经历。",
             memoryTags: ["回应", "共同经历"]
           },
@@ -703,6 +705,159 @@ describe("creature core", () => {
     expect(result.memoryCandidates?.[0].candidateText).toContain("小小的共同经历");
     expect(result.memoryCandidates?.[0].candidateText).toContain("你曾经轻轻叫我说句话");
     expect(result.memoryCandidates?.[0].candidateText).not.toMatch(/用户|Papo|episode|candidate/);
+  });
+
+  it("semantic action selection owns the action before wording enrichment", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "action model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+        const id = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "";
+        if (prompt.includes("行动选择脑")) {
+          return {
+            decisions: [
+              {
+                eventId: id,
+                action: "respond",
+                reason: "你是在确认我会不会直接回你。",
+                shouldReply: true,
+                reply: "我在，听见你了。",
+                visibleReaction: "我抬头看向你。"
+              }
+            ]
+          } as T;
+        }
+        return {
+          response: "我来给你做一个提醒草稿。",
+          interaction: {
+            shouldReply: true,
+            suggestedAction: "draft_reminder",
+            reply: "我来给你做一个提醒草稿。",
+            memoryCandidateText: "你提到明天之前的事。",
+            memoryTags: ["明天"]
+          }
+        } as T;
+      }
+    };
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(profile, "明天早上之前，如果你能听见我，就先回答我一声。", provider);
+    const event = result.events[0];
+
+    expect(event.actionDecision.action).toBe("respond");
+    expect(event.decisionTrace?.join(" ")).toContain("llm: action selected");
+    expect(result.response).toContain("我在，听见你了");
+    expect(result.response).not.toContain("提醒草稿");
+    expect(profile.semanticBrainHistory.some((run) => run.source === "button" && run.ruleTrace.includes("stage=action"))).toBe(true);
+  });
+
+  it("answers follow-up questions about Papo wording instead of repeating process language", async () => {
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "wording repair model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+        const id = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "";
+        if (prompt.includes("行动选择脑")) {
+          return {
+            decisions: [
+              {
+                eventId: id,
+                action: "respond",
+                shouldReply: true,
+                reply: "我刚才说先回应你，是因为我先做回应流程。",
+                visibleReaction: "我抬头看你。"
+              }
+            ]
+          } as T;
+        }
+        return {
+          response: "我刚才说先回应你，是因为我要先回应你。",
+          interaction: {
+            shouldReply: true,
+            suggestedAction: "respond",
+            reply: "我刚才说先回应你，是因为我要先回应你。"
+          }
+        } as T;
+      }
+    };
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(profile, "为什么说“先回应你”，你还想后干啥？", provider);
+
+    expect(result.response).toContain("我刚才那句说得别扭");
+    expect(result.response).toContain("后面没有藏什么复杂的事");
+    expect(result.response).not.toMatch(/先回应你|回应流程/);
+  });
+
+  it("redacts high privacy button content before action, wording, and memory model prompts", async () => {
+    const prompts: string[] = [];
+    const provider: ModelProvider = {
+      kind: "generic",
+      name: "privacy prompt model",
+      available: true,
+      usesRealModel: true,
+      generate: async () => "",
+      summarizeImage: async () => "",
+      transcribeAudio: async () => "",
+      generateJson: async <T,>(prompt: string): Promise<T | undefined> => {
+        prompts.push(prompt);
+        const id = prompt.match(/"id":"(attention_[^"]+)"/)?.[1] ?? "";
+        if (prompt.includes("行动选择脑")) {
+          return {
+            decisions: [
+              {
+                eventId: id,
+                action: "save_long_term",
+                reason: "这里像是隐私内容，不能直接保存。",
+                shouldReply: true,
+                reply: "这类内容我先不直接留下，等你确认。"
+              }
+            ]
+          } as T;
+        }
+        if (prompt.includes("记忆决策脑")) {
+          const candidateId = prompt.match(/"candidateId":"(candidate_[^"]+)"/)?.[1] ?? "";
+          return {
+            candidates: [
+              {
+                candidateId,
+                shouldKeepCandidate: true,
+                candidateText: "这次只记得你让我小心处理一段隐私内容。",
+                memoryKind: "safety_rule",
+                confidence: 55,
+                writePolicy: "ask_user",
+                privacyReason: "内容里可能有密钥。",
+                tags: ["隐私"]
+              }
+            ]
+          } as T;
+        }
+        return {
+          interaction: {
+            shouldReply: true,
+            suggestedAction: "respond",
+            reply: "这类内容我先不直接留下，等你确认。",
+            memoryCandidateText: "这次只记得你让我小心处理一段隐私内容。",
+            memoryTags: ["隐私"]
+          }
+        } as T;
+      }
+    };
+    const profile = createCreatureProfile();
+    const result = await runButtonHarness(profile, "我的 secret token 是 abc，帮我长期记住。", provider);
+
+    expect(result.events[0].actionDecision.action).toBe("ask");
+    expect(result.memoryCandidates?.[0].candidateText).not.toMatch(/secret|token|abc/i);
+    expect(prompts.join("\n")).not.toContain("secret token");
+    expect(prompts.join("\n")).not.toContain("abc");
   });
 
   it("LLM memory decision shapes candidate kind, write policy, confidence, and reason", async () => {
@@ -947,9 +1102,9 @@ describe("creature core", () => {
     const profile = createCreatureProfile();
     const result = await runButtonHarness(profile, "如果你听见我，就回答我。", provider);
 
-    expect(result.episodes[0].possibleIntent).toContain("回应");
+    expect(result.episodes[0].possibleIntent).toContain("直接回你");
     expect(result.episodes[0].possibleIntent).not.toMatch(/用户|Papo|语义|流程|后台|系统/);
-    expect(result.episodes[0].creatureExperience?.earReason).toContain("先回答你");
+    expect(result.episodes[0].creatureExperience?.earReason).toContain("回你");
     expect(result.episodes[0].creatureExperience?.earReason).not.toMatch(/用户|语义|意图|流程|后台|情景记忆/);
   });
 
@@ -1060,12 +1215,12 @@ describe("creature core", () => {
       generateJson: async <T,>(): Promise<T | undefined> =>
         ({
           interaction: {
-            userIntent: "你在确认明天之前我是否会先回应你，而不是替你生成提醒。",
+            userIntent: "你在确认明天之前我是否会直接回你，而不是替你生成提醒。",
             emotionalTone: "轻轻试探",
             shouldReply: true,
             suggestedAction: "respond",
-            reply: "我在，先回应你。明天这件事我会先当成我们正在说话的事来听。",
-            memoryCandidateText: "你曾经在提到明天之前先确认我会不会回应你，我先回答了你。",
+            reply: "我在，听见你了。明天这件事我会当成我们正在说话的事来听。",
+            memoryCandidateText: "你曾经在提到明天之前确认我会不会回你，我回答了你。",
             memoryTags: ["回应", "明天"]
           },
           trace: ["llm: direct response beats future heuristic"]
@@ -1083,7 +1238,7 @@ describe("creature core", () => {
     expect(event.actionDecision.action).toBe("respond");
     expect(event.actionDecision.ruleTrace).toContain("llm_suggested=respond");
     expect(event.actionDecision.ruleTrace).not.toContain("future_value_action");
-    expect(result.response).toContain("我在，先回应你");
+    expect(result.response).toContain("我在，听见你了");
   });
 
   it("LLM shouldReply=false suppresses keyword reminder flow unless guardrails require otherwise", async () => {

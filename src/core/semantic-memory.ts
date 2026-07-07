@@ -183,9 +183,11 @@ ${JSON.stringify(profile.feedbackHistory.slice(0, 6).map((item) => ({ kind: item
 candidates:
 ${JSON.stringify(candidates.map((candidate) => {
   const episode = episodesById.get(candidate.sourceEpisodeId);
+  const privacyHigh = hasPrivacyRisk(`${candidate.candidateText} ${episode?.inputSummary ?? ""} ${episode?.noticed ?? ""}`);
   return {
     candidateId: candidate.id,
-    ruleCandidateText: candidate.candidateText,
+    ruleCandidateText: modelSafeMemoryText(candidate.candidateText, privacyHigh),
+    contentHiddenForPrivacy: privacyHigh,
     ruleMemoryKind: candidate.memoryKind,
     ruleConfidence: candidate.confidence,
     ruleWritePolicy: candidate.writePolicy,
@@ -193,15 +195,20 @@ ${JSON.stringify(candidates.map((candidate) => {
     sourceEpisode: episode
       ? {
           id: episode.id,
-          inputSummary: episode.inputSummary,
-          possibleIntent: episode.possibleIntent,
-          importanceReason: episode.importanceReason,
-          creatureResponse: episode.creatureResponse,
-          tags: episode.tags,
+          inputSummary: modelSafeMemoryText(episode.inputSummary, privacyHigh),
+          possibleIntent: modelSafeMemoryText(episode.possibleIntent, privacyHigh),
+          importanceReason: modelSafeMemoryText(episode.importanceReason, privacyHigh),
+          creatureResponse: modelSafeMemoryText(episode.creatureResponse, privacyHigh),
+          tags: privacyHigh ? [] : episode.tags,
           action: episode.actionDecision?.action
         }
       : undefined
   };
 }))}
 `;
+}
+
+function modelSafeMemoryText(text: string | undefined, privacyHigh: boolean) {
+  if (!privacyHigh) return text;
+  return "[这段包含可能的密钥、验证码、密码、地址或证件信息，原文已隐藏；只能判断保存策略，不能直接引用或写入。]";
 }

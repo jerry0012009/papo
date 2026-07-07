@@ -58,7 +58,7 @@ export function createMemoryCandidateFromEpisode(
   input: { feedback?: "continue" | "remember"; now?: string } = {}
 ): MemoryCandidate {
   const now = input.now ?? new Date().toISOString();
-  const privacyHigh = /隐私|密码|token|key|secret|地址/.test(`${episode.inputSummary} ${episode.noticed}`);
+  const privacyHigh = hasHighPrivacyMemoryText(`${episode.inputSummary} ${episode.noticed}`);
   const repeatedThemeCount = countSimilarEpisodes(profile, episode.tags);
   const kind = classifyLongTermKind(episode);
   const confidence = Math.min(96, Math.max(35, episode.weight + repeatedThemeCount * 8 + (input.feedback === "remember" ? 18 : 0) - (privacyHigh ? 25 : 0)));
@@ -73,7 +73,7 @@ export function createMemoryCandidateFromEpisode(
   const candidate: MemoryCandidate = {
     id: makeId("candidate"),
     createdAt: now,
-    candidateText: buildLongTermText(episode),
+    candidateText: privacyHigh ? buildPrivateMemoryCandidateText(episode) : buildLongTermText(episode),
     memoryKind: input.feedback === "continue" && kind === "long_theme" ? "open_question" : kind,
     confidence,
     sourceEpisodeId: episode.id,
@@ -91,6 +91,16 @@ export function createMemoryCandidateFromEpisode(
   profile.memoryCandidates = profile.memoryCandidates.slice(0, 80);
   episode.memoryCandidateIds.push(candidate.id);
   return candidate;
+}
+
+function hasHighPrivacyMemoryText(text: string) {
+  return /隐私|密码|token|key|secret|验证码|身份证|银行卡|api key|apikey|私钥|地址/i.test(text);
+}
+
+function buildPrivateMemoryCandidateText(episode: EpisodeMemory) {
+  const timePart = episode.sourceObservedAt ? ` 当时的时间线索是 ${memoryMomentTime(episode.sourceObservedAt)}。` : "";
+  const locationPart = episode.sourceLocation?.label ? ` 地点线索是${episode.sourceLocation.label}。` : "";
+  return `你交给我一段需要保护的内容，我没有把具体细节写进记忆。${timePart}${locationPart}这次只留下处理边界：遇到这类内容，我要先等你确认怎么处理。`;
 }
 
 export function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new Date().toISOString()) {
@@ -164,12 +174,12 @@ export function adjustMemoryWeight(profile: CreatureProfile, targetId: string | 
 
 function inferIntent(text: string): string {
   if (/说句话|说话|回复|回答|你在吗|你好|hello|汪|打招呼|听见|听到|回应|叫你/i.test(text)) {
-    return "你像是在确认我有没有听见，所以我应该先回应你。";
+    return "你像是在确认我有没有听见，我应该直接回你。";
   }
   if (/提醒|待办|deadline|todo/i.test(text)) return "这件事之后可能还会回来，你可能希望我到时候接得上。";
   if (/复盘|总结|review|why/i.test(text)) return "你像是在整理一次经历，希望我陪你看清楚。";
   if (/不像工具|活物|小脑袋|companion|生命/.test(text)) return "你在校准我应该怎么陪你，而不是只完成任务。";
-  return "你在分享一件刚发生或刚想起的事，我先回应当下。";
+  return "你在分享一件刚发生或刚想起的事，我会陪你接住当下。";
 }
 
 function classifyLongTermKind(episode: EpisodeMemory): LongTermMemory["kind"] {

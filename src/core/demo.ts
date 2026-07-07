@@ -43,7 +43,7 @@ function actionTone(action: string) {
     save_long_term: "把这件事记得更稳",
     observe: "先轻轻观察",
     quiet: "安静陪着",
-    respond: "先回应你",
+    respond: "回你一声",
     draft_reminder: "记得之后再回来看",
     draft_question_list: "把问题拆开陪你看"
   };

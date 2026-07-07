@@ -44,7 +44,7 @@ function earReason(
   strongest?: SegmentScore["contributions"][number]
 ) {
   if (/说句话|说话|回复|回答|你在吗|你好|hello|汪|打招呼|听见|听到|回应|叫你/i.test(input.triggerContent)) {
-    return "你在叫我回应，所以我先回答你。";
+    return "你在叫我，我抬头回你一声。";
   }
   if (input.relatedMemories.length) {
     return "这件事让我想起以前相关的内容。";
@@ -62,7 +62,7 @@ function earReason(
     return "这会影响我以后怎么回应你。";
   }
   if (input.action === "respond") {
-    return "最自然的下一步是先回应你。";
+    return "我会直接回你一声。";
   }
   return "你主动告诉我这件事，所以我会认真听。";
 }
@@ -71,7 +71,7 @@ export function createEpisodeExperience(episode: EpisodeMemory, profile: Creatur
   return episode.creatureExperience ?? {
     earReason: `我刚才注意到：${episode.noticed}`,
     rememberedScene: episode.relatedMemoryIds.length ? "这和我以前记住的一段经历有关。" : undefined,
-    actionFeeling: episode.actionDecision ? actionFeeling(episode.actionDecision.action, profile) : "我会先回应这件事。",
+    actionFeeling: episode.actionDecision ? actionFeeling(episode.actionDecision.action, profile) : "我会回你一声。",
     saveFeeling: episode.promotedToLongTerm
       ? "你已经让我记住它。"
       : "要不要一直记着它，我会看你的反馈。"

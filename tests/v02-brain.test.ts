@@ -267,7 +267,7 @@ describe("creature brain v0.2", () => {
       transcribeAudio: async () => "",
       generateJson: async <T,>() =>
         ({
-          response: "我先回应你担心复查这件事，也会留意明天要带资料检查这点，因为它会影响这件家事能不能真的准备好。",
+          response: "我听见你担心复查这件事，也会留意明天要带资料检查这点，因为它会影响这件家事能不能真的准备好。",
           curiousSession: {
             creatureReport: "我没有总结全部，先回应担心复查和明天带资料检查这两点。",
             selected: [
