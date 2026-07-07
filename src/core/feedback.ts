@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { clampPolicy } from "./drive";
 import { makeId } from "./ids";
-import { adjustMemoryWeight, forgetMemory, normalizeSharedMemoryText, promoteEpisode } from "./memory";
+import { adjustMemoryWeight, forgetMemory, normalizeSharedMemoryText } from "./memory";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
 import { applyStateDelta } from "./state";
-import { summarizeText } from "./text";
 import type { CreatureProfile, CreatureState, FeedbackKind, FeedbackPolicyProfile, FeedbackRecord, LongTermMemory, SegmentKind } from "./types";
+
+const memoryKindSchema = z.enum(["user_preference", "long_theme", "creature_self_memory", "safety_rule", "future_review", "relationship", "habit", "open_question"]);
 
 const stateDeltaSchema = z
   .object({
@@ -64,6 +65,16 @@ const semanticFeedbackSchema = z
         tags: optionalTextArray(8, 40)
       })
       .optional(),
+    memoryOperation: z
+      .object({
+        type: z.enum(["none", "promote_episode", "update_memory", "dismiss_target"]),
+        text: optionalText(650),
+        kind: memoryKindSchema.optional(),
+        tags: optionalTextArray(10, 40),
+        consolidatedBecause: optionalText(360),
+        weight: z.number().min(0).max(100).optional()
+      })
+      .optional(),
     trace: z.array(z.string().min(1).max(160)).max(8).optional()
   })
   .refine(
@@ -77,6 +88,7 @@ const semanticFeedbackSchema = z
           value.replyText ||
           value.effect ||
           value.creatureSelfMemory ||
+          (value.memoryOperation && value.memoryOperation.type !== "none") ||
           value.responseAction
       ),
     "semantic feedback result must contain at least one useful field"
@@ -91,7 +103,6 @@ export function applyFeedback(
   const now = input.now ?? new Date().toISOString();
   const inputText = input.content?.trim();
   const targetEpisode = profile.episodes.find((item) => item.id === input.targetId);
-  const targetLongTerm = profile.longTermMemories.find((item) => item.id === input.targetId);
   const record: FeedbackRecord = {
     id: makeId("feedback"),
     at: now,
@@ -108,17 +119,6 @@ export function applyFeedback(
   profile.feedbackHistory = profile.feedbackHistory.slice(0, 60);
 
   if (targetEpisode) targetEpisode.feedback.push(input.kind);
-
-  if (input.kind === "remember" && input.targetId) {
-    const memory = promoteEpisode(profile, input.targetId, now);
-    if (memory && inputText) {
-      memory.text = `${memory.text} 你确认时还补充：${summarizeText(inputText, 120)}`;
-    }
-    if (!memory && targetLongTerm && inputText) {
-      targetLongTerm.text = normalizeSharedMemoryText(`${targetLongTerm.text} 你确认时还补充：${summarizeText(inputText, 120)}`);
-      targetLongTerm.lastReferencedAt = now;
-    }
-  }
   const forgetResult = input.kind === "forget" ? forgetMemory(profile, input.targetId) : undefined;
   void forgetResult;
 
@@ -203,6 +203,9 @@ function applySemanticFeedbackSuggestion(profile: CreatureProfile, feedback: Fee
   if (suggestion.creatureSelfMemory) {
     upsertSemanticFeedbackSelfMemory(profile, feedback, suggestion.creatureSelfMemory, targetEpisode, targetLongTerm);
   }
+  if (suggestion.memoryOperation) {
+    applySemanticMemoryOperation(profile, feedback, suggestion.memoryOperation, targetEpisode, targetLongTerm);
+  }
 
   if (!feedback.replyText) feedback.replyText = "";
 }
@@ -284,6 +287,63 @@ function upsertSemanticFeedbackSelfMemory(
   });
 }
 
+function applySemanticMemoryOperation(
+  profile: CreatureProfile,
+  feedback: FeedbackRecord,
+  operation: NonNullable<SemanticFeedbackSuggestion["memoryOperation"]>,
+  targetEpisode?: CreatureProfile["episodes"][number],
+  targetLongTerm?: LongTermMemory
+) {
+  if (operation.type === "none") return;
+  if (operation.type === "dismiss_target") {
+    if (feedback.kind === "forget") return;
+    forgetMemory(profile, feedback.targetId);
+    return;
+  }
+  if (operation.type === "promote_episode") {
+    if (!targetEpisode) throw new Error("feedback model requested episode promotion without an episode target");
+    const text = safeCreatureText(operation.text);
+    if (!text) throw new Error("feedback model requested episode promotion without memory text");
+    if (!operation.kind) throw new Error("feedback model requested episode promotion without memory kind");
+    const existing = profile.longTermMemories.find((memory) => memory.sourceEpisodeId === targetEpisode.id);
+    const tags = operation.tags?.length ? safeStoredTags(operation.tags) : [];
+    if (existing) {
+      existing.kind = operation.kind;
+      existing.text = normalizeSharedMemoryText(text);
+      existing.consolidatedBecause = safeCreatureText(operation.consolidatedBecause) ?? existing.consolidatedBecause;
+      existing.weight = Math.max(0, Math.min(100, Math.round(operation.weight ?? Math.max(existing.weight, targetEpisode.weight + 18))));
+      if (tags.length) existing.tags = tags;
+      existing.lastReferencedAt = feedback.at;
+    } else {
+      profile.longTermMemories.unshift({
+        id: makeId("ltm"),
+        createdAt: feedback.at,
+        kind: operation.kind,
+        text: normalizeSharedMemoryText(text),
+        sourceEpisodeId: targetEpisode.id,
+        consolidatedBecause: safeCreatureText(operation.consolidatedBecause),
+        weight: Math.max(0, Math.min(100, Math.round(operation.weight ?? targetEpisode.weight + 18))),
+        tags
+      });
+    }
+    targetEpisode.promotedToLongTerm = true;
+    for (const candidate of profile.memoryCandidates.filter((item) => item.sourceEpisodeId === targetEpisode.id)) {
+      candidate.status = "promoted";
+    }
+    return;
+  }
+  if (operation.type === "update_memory") {
+    if (!targetLongTerm) throw new Error("feedback model requested memory update without a memory target");
+    const text = safeCreatureText(operation.text);
+    if (text) targetLongTerm.text = normalizeSharedMemoryText(text);
+    if (operation.kind) targetLongTerm.kind = operation.kind;
+    if (operation.tags?.length) targetLongTerm.tags = safeStoredTags(operation.tags);
+    if (operation.consolidatedBecause) targetLongTerm.consolidatedBecause = safeCreatureText(operation.consolidatedBecause) ?? targetLongTerm.consolidatedBecause;
+    if (Number.isFinite(operation.weight)) targetLongTerm.weight = Math.max(0, Math.min(100, Math.round(operation.weight ?? targetLongTerm.weight)));
+    targetLongTerm.lastReferencedAt = feedback.at;
+  }
+}
+
 function safeCreatureText(text?: string) {
   const normalized = normalizeSharedMemoryText(text?.trim() ?? "");
   if (!normalized) return undefined;
@@ -320,15 +380,24 @@ function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: Feedbac
 - stateDeltas：curiosity, attachment, energy, arousal, safety, confidence，每项 -15 到 15。
 - policyDeltas：preferDepth, preferProactivity, privacySensitivity, saveThreshold, askThreshold, recallTendency, quietTendency，每项 -15 到 15。
 - memoryWeightDelta：目标 episode 或 memory 的权重变化，-30 到 30。
+- memoryOperation：none, promote_episode, update_memory, dismiss_target。
 - responseAction：acknowledge, ask_follow_up, quiet, note_memory。
 - learningNote：内部学习记录，不给普通用户直接展示；不要写成前端说明或字段解释。
 - followUpText：内部追问意图记录，不给普通用户直接展示。
 - replyText：如果 responseAction 不是 quiet，写一句 Papo 可以直接对用户说的自然短回应；不要解释内部状态、字段、阈值或流程。
 - creatureSelfMemory：如果这次反馈体现了用户正在训练 Papo 的长期回应习惯，写成一条 Papo 自己的成长记忆。
 
+memoryOperation 使用口径：
+- promote_episode：用户明确要求记住某个 episode，或反馈文本把某个经历补准到值得长期记住。必须给 text 和 kind。
+- update_memory：用户纠正、补充或改写某条长期记忆。可以给 text、kind、tags、weight。
+- dismiss_target：用户通过文本/语音表达这件事不该留、不要再提、放下它。显式 forget 按钮已经会先执行一次存储层放下；你可以继续用 dismiss_target 表示语义上也应该放下。
+- none：反馈只是在教 Papo 以后怎么回应，或者只是轻微鼓励/安抚，不需要改记忆。
+
 你不能：
 - 使用未列出的字段。
 - 编造用户没有说过的新事实。
+- promote_episode 只能用于 target.type="episode"。
+- update_memory 只能用于 target.type="memory"。
 
 返回严格 JSON：
 {
@@ -341,6 +410,14 @@ function buildSemanticFeedbackPrompt(profile: CreatureProfile, feedback: Feedbac
   "replyText":"...",
   "effect":"...",
   "creatureSelfMemory":{"text":"...", "tags":["..."]},
+  "memoryOperation":{
+    "type":"promote_episode",
+    "text":"...",
+    "kind":"habit",
+    "tags":["..."],
+    "consolidatedBecause":"...",
+    "weight":82
+  },
   "trace":["..."]
 }
 
@@ -360,8 +437,12 @@ ${JSON.stringify(
   targetEpisode
     ? {
         type: "episode",
+        id: targetEpisode.id,
         inputSummary: textForModel(targetEpisode.inputSummary, targetPrivacyHigh),
+        possibleIntent: textForModel(targetEpisode.possibleIntent, targetPrivacyHigh),
+        importanceReason: textForModel(targetEpisode.importanceReason, targetPrivacyHigh),
         creatureResponse: textForModel(targetEpisode.creatureResponse, targetPrivacyHigh),
+        promotedToLongTerm: targetEpisode.promotedToLongTerm,
         tags: tagsForModel(targetEpisode.tags, targetPrivacyHigh),
         feedback: targetEpisode.feedback,
         contentHiddenForPrivacy: targetPrivacyHigh
@@ -369,6 +450,7 @@ ${JSON.stringify(
     : targetLongTerm
       ? {
           type: "memory",
+          id: targetLongTerm.id,
           kind: targetLongTerm.kind,
           text: textForModel(targetLongTerm.text, targetPrivacyHigh),
           weight: targetLongTerm.weight,
