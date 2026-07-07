@@ -792,7 +792,7 @@ function ChatBubble({ message, profile }: { message: ConversationMessage; profil
             {context ? `${context} · ` : ""}{new Date(message.at).toLocaleString("zh-CN")}
           </span>
         </div>
-        {message.role === "papo" && message.cognitionTrace ? <DeveloperTrace trace={message.cognitionTrace} profile={profile} /> : null}
+        {message.cognitionTrace ? <DeveloperTrace trace={message.cognitionTrace} profile={profile} /> : null}
       </div>
       <p>{visibleMessageText(message)}</p>
       {message.observedAt || message.location ? (

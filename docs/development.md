@@ -129,6 +129,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - During feedback reflection, the current feedback is passed through the dedicated `feedback` field. `recent_feedback` must contain prior feedback only, not the same current feedback record repeated as history.
 - Development planning text must not be used as creature interaction material.
 - New Papo messages persist `cognitionTrace` with the real model stages, attention/action/memory decisions, feedback effects, emergence choices, visible reply, persistence outcomes, and structural rule checks that produced that visible reply. This supports developer audit without proving the mechanism in the main UI.
+- When the model chooses quiet, ignores input, or feedback produces no visible reply, the product must not create a blank/fake Papo message. The same cognition trace should attach to the relevant user/world input message so Brain Mode can still inspect the complete decision path.
 
 ## Verification Checklist
 

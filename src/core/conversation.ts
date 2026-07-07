@@ -49,6 +49,7 @@ export function appendInputMessage(
     observedAt?: string;
     location?: StreamSegment["location"];
     relatedMemoryIds?: string[];
+    cognitionTrace?: MessageCognitionTrace;
     at?: string;
   }
 ): CreatureMessage | undefined {
@@ -71,7 +72,8 @@ export function appendInputMessage(
     modality: input.modality,
     batchId: input.batchId,
     observedAt: input.observedAt,
-    location: input.location
+    location: input.location,
+    cognitionTrace: input.cognitionTrace
   };
   profile.conversation.unshift(message);
   profile.conversation = profile.conversation.slice(0, MAX_CONVERSATION_MESSAGES);

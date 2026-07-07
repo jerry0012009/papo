@@ -171,13 +171,22 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runButtonHarness(profile, body.text, provider);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
-      appendInputMessage(profile, { channel: "button", role: "user", text: body.text, sourceId: inputSourceId, modality: "button" });
+      const cognitionTrace = captureCognitionTrace(result, provider, "button", modelRuns);
+      const hasVisibleReply = Boolean(result.response.trim());
+      appendInputMessage(profile, {
+        channel: "button",
+        role: "user",
+        text: body.text,
+        sourceId: inputSourceId,
+        modality: "button",
+        cognitionTrace: hasVisibleReply ? undefined : cognitionTrace
+      });
       appendPapoMessage(profile, {
         channel: "button",
         text: result.response,
         sourceId: result.episodes[0]?.id ?? result.events[0]?.id,
         relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
-        cognitionTrace: captureCognitionTrace(result, provider, "button", modelRuns)
+        cognitionTrace
       });
       await store.saveProfile(profile);
       res.json({ ...result, provider: provider.kind });
@@ -193,6 +202,9 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
+      const cognitionTrace = captureCognitionTrace(result, provider, "curious_stream", modelRuns);
+      const hasVisibleReply = Boolean(result.response.trim());
+      const traceSourceId = result.events[0]?.triggerSegmentId ?? body.segments[0]?.id;
       for (const segment of body.segments) {
         appendInputMessage(profile, {
           channel: "curious",
@@ -202,7 +214,8 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
           modality: segment.kind,
           batchId: segment.batchId,
           observedAt: segment.observedAt,
-          location: segment.location
+          location: segment.location,
+          cognitionTrace: !hasVisibleReply && segment.id === traceSourceId ? cognitionTrace : undefined
         });
       }
       appendPapoMessage(profile, {
@@ -210,7 +223,7 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         text: result.response,
         sourceId: result.episodes[0]?.id ?? result.curiousSession?.id ?? result.events[0]?.id,
         relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
-        cognitionTrace: captureCognitionTrace(result, provider, "curious_stream", modelRuns)
+        cognitionTrace
       });
       await store.saveProfile(profile);
       res.json({ ...result, provider: provider.kind });
@@ -229,6 +242,8 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       await semanticReflectFeedback(profile, feedback, provider);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const relatedMemoryIds = feedbackRelatedMemoryIds(profile, body.targetId, targetBefore?.type === "memory" ? targetBefore.id : undefined);
+      const cognitionTrace = feedbackCognitionTrace(feedback, provider, modelRuns, profile, targetBefore);
+      const hasVisibleReply = Boolean(feedback.replyText?.trim());
       appendInputMessage(profile, {
         channel: "feedback",
         role: "user",
@@ -237,14 +252,15 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         modality: body.modality ?? (body.content?.trim() ? "text" : "button"),
         observedAt: feedback.at,
         at: feedback.at,
-        relatedMemoryIds
+        relatedMemoryIds,
+        cognitionTrace: hasVisibleReply ? undefined : cognitionTrace
       });
       appendPapoMessage(profile, {
         channel: "feedback",
         text: feedback.replyText,
         sourceId: feedback.id,
         relatedMemoryIds,
-        cognitionTrace: feedbackCognitionTrace(feedback, provider, modelRuns, profile, targetBefore)
+        cognitionTrace
       });
       await store.saveProfile(profile);
       res.json({ profile, feedback });
@@ -273,6 +289,8 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const memory = profile.longTermMemories.find((item) => item.id === req.params.memoryId);
       if (!memory) throw new HttpError(404, "Memory not found after feedback reflection");
+      const cognitionTrace = feedbackCognitionTrace(feedback, provider, modelRuns, profile, targetBefore);
+      const hasVisibleReply = Boolean(feedback.replyText?.trim());
       appendInputMessage(profile, {
         channel: "feedback",
         role: "user",
@@ -281,14 +299,15 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         modality: "text",
         observedAt: at,
         at,
-        relatedMemoryIds: [memory.id]
+        relatedMemoryIds: [memory.id],
+        cognitionTrace: hasVisibleReply ? undefined : cognitionTrace
       });
       appendPapoMessage(profile, {
         channel: "feedback",
         text: feedback.replyText,
         sourceId: `${memory.id}:edit`,
         relatedMemoryIds: [memory.id],
-        cognitionTrace: feedbackCognitionTrace(feedback, provider, modelRuns, profile, targetBefore),
+        cognitionTrace,
         at
       });
       await store.saveProfile(profile);
