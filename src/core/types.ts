@@ -12,7 +12,7 @@ export type ActionKind =
   | "draft_question_list";
 
 export interface ActionResult {
-  kind: "none" | "visible_reply" | "reminder_draft" | "question_list_draft";
+  kind: "none" | "visible_reply" | "memory_intent" | "reminder_draft" | "question_list_draft";
   title?: string;
   text?: string;
   dueText?: string;

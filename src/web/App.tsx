@@ -973,6 +973,15 @@ function RelatedMemories({ ids, profile }: { ids: string[]; profile: CreaturePro
 
 function ActionResultView({ result }: { result?: ActionResult }) {
   if (!result || result.kind === "none" || result.kind === "visible_reply") return null;
+  if (result.kind === "memory_intent") {
+    return (
+      <div className="trace-action-result">
+        <b>记忆意图</b>
+        {result.title ? <p>{result.title}</p> : null}
+        {result.text ? <small>{result.text}</small> : null}
+      </div>
+    );
+  }
   if (result.kind === "reminder_draft") {
     return (
       <div className="trace-action-result">

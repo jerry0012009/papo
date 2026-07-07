@@ -72,6 +72,16 @@ function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new D
 
   const candidate = profile.memoryCandidates.find((item) => item.sourceEpisodeId === episode.id && item.status === "candidate");
   if (!candidate) return undefined;
+  const duplicate = findActiveDuplicateMemory(profile, candidate);
+  if (duplicate) {
+    episode.promotedToLongTerm = true;
+    candidate.status = "promoted";
+    duplicate.weight = Math.min(100, Math.max(duplicate.weight + 8, episode.weight + 18));
+    duplicate.tags = unique([...duplicate.tags, ...candidate.tags]);
+    duplicate.lastReferencedAt = now;
+    if (!duplicate.consolidatedBecause && candidate.whyConsolidate) duplicate.consolidatedBecause = candidate.whyConsolidate;
+    return duplicate;
+  }
   const memory: LongTermMemory = {
     id: makeId("ltm"),
     createdAt: now,
@@ -86,6 +96,12 @@ function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new D
   candidate.status = "promoted";
   profile.longTermMemories.unshift(memory);
   return memory;
+}
+
+function findActiveDuplicateMemory(profile: CreatureProfile, candidate: MemoryCandidate) {
+  const candidateText = normalizeSharedMemoryText(candidate.candidateText);
+  if (!candidateText) return undefined;
+  return profile.longTermMemories.find((memory) => memory.weight > 0 && normalizeSharedMemoryText(memory.text) === candidateText);
 }
 
 export function applyMemoryWritePolicies(
@@ -164,6 +180,10 @@ export function toCreatureMemoryVoice(text: string) {
 
 export function memoryKeepReasonToCreatureVoice(reason: string) {
   return toCreatureMemoryVoice(reason);
+}
+
+function unique(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
 }
 
 function stripSourceMetadata(text: string) {
