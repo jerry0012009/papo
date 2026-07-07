@@ -48,7 +48,8 @@ describe("goal 3 acceptance flow", () => {
     expect(quietNext.response).toMatch(/更安静|先轻轻记下|不急着打扰/);
     expect(quietNext.events[0].creatureExperience.actionFeeling).toMatch(/收住声音|不急着追问/);
     expect(contrast).toContain("养成差异");
-    expect(contrast).toContain("它们的内在选择也不一样");
+    expect(contrast).toContain("接话方式也被养得不一样");
+    expect(contrast).not.toContain("内在选择");
 
     const promoted = main.longTermMemories.find((memory) => memory.sourceEpisodeId === targetEpisode.id && !memory.tags.includes("被你养成"));
     expect(promoted).toBeTruthy();

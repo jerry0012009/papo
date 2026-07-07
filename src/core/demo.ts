@@ -8,12 +8,12 @@ export function createContrastSummary(input: {
 }) {
   const deepAction = input.deepResult.events[0]?.actionDecision.action ?? "quiet";
   const quietAction = input.quietResult.events[0]?.actionDecision.action ?? "quiet";
-  const deepLine = summarizeInnerChoice(input.deepResult);
-  const quietLine = summarizeInnerChoice(input.quietResult);
+  const deepLine = summarizeVisibleStyle(input.deepResult);
+  const quietLine = summarizeVisibleStyle(input.quietResult);
   return [
     `同一句话下，被你鼓励多想的 Papo ${actionTone(deepAction)}；被你教会轻声陪着的 Papo ${actionTone(quietAction)}。`,
     `养成差异：${deepProfileLine(input.deepProfile, input.quietProfile)}；${quietProfileLine(input.quietProfile, input.deepProfile)}。`,
-    `它们的内在选择也不一样：多想的那只「${deepLine}」；轻声的那只「${quietLine}」。`
+    `接话方式也被养得不一样：多想的那只「${deepLine}」；轻声的那只「${quietLine}」。`
   ].join(" ");
 }
 
@@ -34,20 +34,20 @@ function quietProfileLine(quiet: CreatureProfile, deep: CreatureProfile) {
 function actionTone(action: string) {
   const map: Record<string, string> = {
     recall: "把以前的小事带回来",
-    review: "继续复盘",
+    review: "多停一下继续想",
     ask: "追问确认",
-    save_episode: "写成共同经历",
-    save_long_term: "建议长期记住",
+    save_episode: "把这件事认真留下",
+    save_long_term: "更认真记住这件事",
     observe: "先轻轻观察",
     quiet: "安静陪着",
     respond: "先回应你",
-    draft_reminder: "准备之后再回来",
-    draft_question_list: "拆成小问题"
+    draft_reminder: "之后轻轻回来提醒",
+    draft_question_list: "把问题拆开陪你看"
   };
   return map[action] ?? action;
 }
 
-function summarizeInnerChoice(result: CaptureResult) {
+function summarizeVisibleStyle(result: CaptureResult) {
   return summarizeText(
     result.events[0]?.creatureExperience.actionFeeling ??
       result.events[0]?.actionDecision.reason ??

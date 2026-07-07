@@ -86,7 +86,8 @@ describe("creature brain v0.2", () => {
     expect(summary).toContain("更会收住声音");
     expect(summary).not.toContain(`深入倾向 ${a.policyProfile.preferDepth}`);
     expect(summary).not.toContain(`安静倾向 ${b.policyProfile.quietTendency}`);
-    expect(summary).toContain("它们的内在选择也不一样");
+    expect(summary).toContain("接话方式也被养得不一样");
+    expect(summary).not.toContain("内在选择");
   });
 
   it("memory consolidation creates candidates before long-term promotion", () => {
