@@ -51,8 +51,8 @@ export function describeStateInfluence(profile: CreatureProfile) {
   if (profile.state.attachment > 65) parts.push("依恋度高，更容易想起以前的小事");
   if (profile.state.energy < 35) parts.push("精力低，减少注意数量并偏向安静");
   if (profile.state.safety > 70 || profile.policyProfile.privacySensitivity > 70) parts.push("安全/隐私敏感度高，保存前更倾向询问");
-  if (profile.policyProfile.preferDepth > 65) parts.push("用户反馈让它更愿意深入展开");
-  if (profile.policyProfile.quietTendency > 60) parts.push("用户反馈让它更克制");
+  if (profile.policyProfile.preferDepth > 65) parts.push("你把我教得更愿意多想一会儿");
+  if (profile.policyProfile.quietTendency > 60) parts.push("你把我教得更克制");
   return parts.length ? parts.join("；") : "当前状态稳定，使用基础注意预算。";
 }
 

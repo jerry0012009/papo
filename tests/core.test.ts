@@ -37,7 +37,7 @@ describe("creature core", () => {
     expect(result.episodes).toHaveLength(1);
     expect(result.events[0].source).toBe("button");
     expect(result.events[0].attentionStrength).toBeGreaterThan(50);
-    expect(profile.episodes[0].noticed).toContain("小动物");
+    expect(profile.episodes[0].noticed).toContain("不该只是工具");
     expect(result.response).not.toContain("我先试着理解");
     expect(result.response).not.toContain("当前工作区");
   });
@@ -54,7 +54,7 @@ describe("creature core", () => {
     expect(event.noticed).toContain("复查");
     expect(event.scoreBreakdown.futureValue).toBeGreaterThan(0);
     expect(result.response).toMatch(/我听见了|之后可能还要再看/);
-    expect(result.episodes[0].possibleIntent).toContain("刚发生的对话");
+    expect(result.episodes[0].possibleIntent).toContain("刚发生或刚想起");
     expect(result.response).not.toContain("我先试着理解");
     expect(result.response).not.toContain("我注意到这个片段可能");
     expect(result.response).not.toContain("我注意到这段");
@@ -554,6 +554,7 @@ describe("creature core", () => {
     expect(result.events[0].actionDecision.action).toBe("respond");
     expect(result.response).toContain("听见你了");
     expect(result.episodes[0].possibleIntent).toContain("主动回应");
+    expect(result.episodes[0].possibleIntent).not.toMatch(/用户|Papo|语义|流程|后台/);
     expect(result.episodes[0].creatureExperience?.earReason).toContain("抬头回应");
     expect(result.episodes[0].creatureExperience?.earReason).not.toMatch(/用户|语义|意图|后台|情景记忆/);
     expect(result.memoryCandidates?.[0].candidateText).toContain("小小的共同经历");
@@ -588,7 +589,8 @@ describe("creature core", () => {
     const profile = createCreatureProfile();
     const result = await runButtonHarness(profile, "如果你听见我，就回答我。", provider);
 
-    expect(result.episodes[0].possibleIntent).toContain("语义理解");
+    expect(result.episodes[0].possibleIntent).toContain("回应");
+    expect(result.episodes[0].possibleIntent).not.toMatch(/用户|Papo|语义|流程|后台|系统/);
     expect(result.episodes[0].creatureExperience?.earReason).toContain("先回答你");
     expect(result.episodes[0].creatureExperience?.earReason).not.toMatch(/用户|语义|意图|流程|后台|情景记忆/);
   });
@@ -624,6 +626,8 @@ describe("creature core", () => {
           episodes: [
             {
               eventId,
+              possibleIntent: "用户意图是让系统测试语义理解流程。",
+              importanceReason: "后台流程认为这条 episode candidate 应该写入。",
               creatureResponse: "episode candidate 建议写入这次回应。"
             }
           ],
@@ -637,11 +641,13 @@ describe("creature core", () => {
       result.response,
       result.events[0].noticed,
       result.events[0].reason,
+      result.episodes[0].possibleIntent,
+      result.episodes[0].importanceReason,
       result.episodes[0].creatureResponse
     ].join(" ");
 
     expect(result.events[0].semanticSource).toBe("llm");
-    expect(visible).not.toMatch(/LLM|语义脑|用户意图|后台|流程|candidate|episode|写入/);
+    expect(visible).not.toMatch(/LLM|语义|用户意图|后台|流程|candidate|episode|写入|系统/);
     expect(result.response).toContain("听见");
     expect(result.events[0].noticed).toContain("回应");
   });

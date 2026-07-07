@@ -28,18 +28,18 @@ export function handleButtonCapture(
   now = new Date().toISOString()
 ): CaptureResult {
   const cleanText = text.trim();
-  const score = scoreSegment(profile, { id: "button", kind: "text", label: "用户主动给我的片段", content: cleanText });
+  const score = scoreSegment(profile, { id: "button", kind: "text", label: "你给我的话", content: cleanText });
   score.total = Math.max(score.total, 62);
   score.contributions.unshift({
     key: "state_bias",
     label: "button_intent",
     value: 18,
-    reason: "这是一段主动输入，会直接进入理解、行动选择和情景记忆流程。"
+    reason: "你主动告诉我这件事，我会直接理解并回应。"
   });
 
   const event = buildAttentionEvent(profile, {
     source: "button",
-    triggerLabel: "用户主动给我的片段",
+    triggerLabel: "你给我的话",
     triggerContent: cleanText,
     reasonPrefix: "你主动把这段交给我，所以我先理解你为什么让我看，而不是再判断它值不值得注意。",
     score,
@@ -184,7 +184,7 @@ export function scoreSegment(
     { key: "emotional_charge", label: "emotion", value: emotional, reason: emotional ? "出现担心/不确定等情绪词" : "情绪强度低" },
     { key: "future_value", label: "future_value", value: future, reason: future ? "包含未来/提醒/资料准备等未来价值线索" : "未来价值不明显" },
     { key: "identity_relevance", label: "identity", value: identity, reason: identity ? "触及小动物身份、活物感或脑功能" : "没有直接触及小动物身份" },
-    { key: "communication_intent", label: "communication", value: communication, reason: communication ? "用户在直接呼唤我回应，不应该只做后台分析" : "没有直接要求回应" },
+    { key: "communication_intent", label: "communication", value: communication, reason: communication ? "你在直接叫我回应，我应该先回你" : "没有直接要求回应" },
     { key: "privacy_risk", label: "privacy", value: round(privacy), reason: privacy ? "包含 key/token/地址等隐私风险词" : "未发现明显隐私风险" },
     { key: "state_bias", label: "state_bias", value: round(stateBias), reason: stateBias > 10 ? "当前状态提高注意倾向" : "状态偏向较弱" },
     { key: "fatigue_penalty", label: "fatigue", value: -round(fatiguePenalty), reason: fatiguePenalty ? "精力偏低，减少注意预算" : "精力足够" }
@@ -325,18 +325,18 @@ function buildNoticed(text: string, relatedCount: number): string {
     return `我听到你在叫我回应你：${summarizeText(text, 88)}`;
   }
   if (includesAny(text, IDENTITY_WORDS)) {
-    return `我注意到你又在校准“小动物不是工具，而是有小脑袋的系统”：${summarizeText(text, 88)}`;
+    return `我听见你在校准我不该只是工具，而要会注意、记住和被你养成：${summarizeText(text, 88)}`;
   }
   if (includesAny(text, FUTURE_WORDS)) {
-    return `我注意到这件事以后可能还会回来找你：${summarizeText(text, 88)}`;
+    return `我听见这件事之后可能还会回来：${summarizeText(text, 88)}`;
   }
   if (includesAny(text, EMOTIONAL_WORDS)) {
-    return `我注意到这段里有一点情绪，不适合被当成路过的背景声：${summarizeText(text, 88)}`;
+    return `我听见这里有一点情绪，不该把它当成背景声：${summarizeText(text, 88)}`;
   }
   if (relatedCount > 0) {
-    return `我注意到这一小段和过去的记忆相连：${summarizeText(text, 88)}`;
+    return `我听见这件事和以前记住的内容连上了：${summarizeText(text, 88)}`;
   }
-  return `我接住你刚递来的这一小段：${summarizeText(text, 88)}`;
+  return `我接住你刚告诉我的事：${summarizeText(text, 88)}`;
 }
 
 function contentWithObservationContext(segment: StreamSegment) {

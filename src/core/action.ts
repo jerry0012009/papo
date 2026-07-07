@@ -22,8 +22,8 @@ export function selectAction(input: ActionSelectionInput): ActionDecision {
   trace.push(`baseline=${action}`);
 
   if (input.privacyRisk + policy.privacySensitivity * 0.35 > 72 && /长期|记住|保存|提醒|deadline|下次|未来/.test(input.text)) {
-    blockedActions.push({ action: "save_long_term", reason: "文本带有保存/未来意图，但隐私风险高" });
-    safetyNotes.push("高隐私内容需要用户确认是否保留。");
+    blockedActions.push({ action: "save_long_term", reason: "这段带着保存或之后再看的意思，但隐私风险高" });
+    safetyNotes.push("高隐私内容需要先等你确认是否保留。");
   }
 
   if (input.llmSuggestedAction) {
@@ -41,11 +41,11 @@ export function selectAction(input: ActionSelectionInput): ActionDecision {
   if (input.privacyRisk + policy.privacySensitivity * 0.35 > 72 && (action === "save_long_term" || action === "save_episode" || action === "draft_reminder")) {
     blockedActions.push({ action, reason: "隐私风险高，不能自动保存或生成提醒" });
     action = "ask";
-    safetyNotes.push("高隐私内容需要用户确认是否保留。");
+    safetyNotes.push("高隐私内容需要先等你确认是否保留。");
   }
 
   if (policy.quietTendency > 65 && input.source === "curious_stream" && action === "ask") {
-    blockedActions.push({ action, reason: "用户反馈让它在信息流里更克制" });
+    blockedActions.push({ action, reason: "你把我教得在信息流里更克制" });
     action = "observe";
   }
 
@@ -62,7 +62,7 @@ export function selectAction(input: ActionSelectionInput): ActionDecision {
   }
 
   if (policy.quietTendency > 55 && ["ask", "review", "draft_reminder", "draft_question_list"].includes(action)) {
-    blockedActions.push({ action, reason: "用户反馈让它更克制，不能每次都主动展开" });
+    blockedActions.push({ action, reason: "你把我教得更克制，不能每次都主动展开" });
     action = input.attentionStrength > 70 ? "observe" : "quiet";
     trace.push("policy_quiet_restraint");
   }
@@ -115,24 +115,24 @@ function baselineAction(input: ActionSelectionInput): ActionKind {
 function explainAction(action: ActionKind, input: ActionSelectionInput) {
   switch (action) {
     case "respond":
-      return "用户在直接呼唤我或要求我说话，当前最自然的行动是回应，而不是只分析或保存。";
+      return "你在叫我或希望我回应，所以我先回你。";
     case "ask":
-      return "这段需要用户确认，尤其是隐私、情绪或保存意图还不够明确。";
+      return "这里有隐私、情绪或是否要记住的边界，我需要等你说得更清楚。";
     case "save_episode":
       return "注意强度足够高，适合先记录这次经历。";
     case "save_long_term":
-      return "这段以后可能还会回来找用户，而且风险不高，可以建议记得更稳。";
+      return "这件事之后可能还会回来，而且风险不高，可以记得更稳。";
     case "recall":
       return "当前内容关联到以前记住的事，适合一起考虑。";
     case "review":
-      return "用户像是在整理判断，适合生成复盘。";
+      return "你像是在整理判断，适合慢慢理清楚。";
     case "quiet":
       return "当前精力或反馈策略更适合短回应和安静陪伴。";
     case "draft_reminder":
-      return "这段以后可能还会回来找用户，适合先记住回来时机而不是直接执行。";
+      return "这件事之后可能还会回来，我先记住回来时机，不替你直接执行。";
     case "draft_question_list":
       return "这段像一个还没想完的问题，适合先把几处没弄清的地方分开。";
     default:
-      return "先观察，不急着保存或打扰用户。";
+      return "先观察，不急着保存或打扰你。";
   }
 }

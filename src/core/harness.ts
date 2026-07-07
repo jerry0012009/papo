@@ -231,7 +231,7 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
       `guardrail: action=${primaryEvent.actionDecision.action}`
     ];
     if (primaryEpisode) {
-      if (interaction.userIntent) primaryEpisode.possibleIntent = interaction.userIntent;
+      if (interaction.userIntent) primaryEpisode.possibleIntent = safeProcessText(interaction.userIntent, primaryEpisode.possibleIntent) ?? primaryEpisode.possibleIntent;
       const safeReply = safeCreatureFacingText(interaction.reply, primaryEpisode.creatureResponse);
       if (safeReply) primaryEpisode.creatureResponse = safeReply;
       if (interaction.memoryTags?.length) primaryEpisode.tags = interaction.memoryTags;
@@ -266,8 +266,8 @@ function applySuggestion(profile: CreatureProfile, result: CaptureResult, sugges
   for (const episodeSuggestion of suggestion.episodes ?? []) {
     const episode = episodeByEventId.get(episodeSuggestion.eventId);
     if (!episode) continue;
-    if (episodeSuggestion.possibleIntent) episode.possibleIntent = episodeSuggestion.possibleIntent;
-    if (episodeSuggestion.importanceReason) episode.importanceReason = episodeSuggestion.importanceReason;
+    if (episodeSuggestion.possibleIntent) episode.possibleIntent = safeProcessText(episodeSuggestion.possibleIntent, episode.possibleIntent) ?? episode.possibleIntent;
+    if (episodeSuggestion.importanceReason) episode.importanceReason = safeProcessText(episodeSuggestion.importanceReason, episode.importanceReason) ?? episode.importanceReason;
     if (episodeSuggestion.creatureResponse) {
       episode.creatureResponse = safeCreatureFacingText(episodeSuggestion.creatureResponse, episode.creatureResponse) ?? episode.creatureResponse;
     }
@@ -439,8 +439,16 @@ function safeCreatureFacingText(text?: string, fallback?: string) {
   return normalized;
 }
 
+function safeProcessText(text?: string, fallback?: string) {
+  const raw = text?.trim();
+  if (!raw) return fallback;
+  const normalized = normalizeSharedMemoryText(raw).trim();
+  if (!normalized || containsInternalProcessLanguage(normalized)) return fallback;
+  return normalized;
+}
+
 function containsInternalProcessLanguage(text: string) {
-  return /LLM|语义脑|语义判断|用户意图|用户在|用户希望|用户可能|用户主动|用户确认|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|长期留下|要不要长期记|prompt|JSON|score|阈值|总分|fallback|小动物|我注意到这段|我注意到这个片段|片段可能|我先听你说完|这件事我会先当作|确认我有没有听对|我为什么注意|我想起了什么|我猜你在做|我当时的状态|我选择|显著性|记忆策略/i.test(text);
+  return /LLM|语义|用户意图|用户在|用户希望|用户可能|用户主动|用户确认|系统|后台|流程|attention|semantic|harness|candidate|episode|数据库|规则层|写入|情景记忆|情景片段|保存意图|长期保存|长期记忆|长期留下|要不要长期记|prompt|JSON|score|阈值|总分|fallback|小动物|我注意到这段|我注意到这个片段|片段可能|我先听你说完|这件事我会先当作|确认我有没有听对|我为什么注意|我想起了什么|我猜你在做|我当时的状态|我选择|显著性|记忆策略/i.test(text);
 }
 
 function trimSentence(text: string) {
