@@ -280,13 +280,13 @@ export function composeCreatureResponse(profile: CreatureProfile, event: Attenti
     const memoryLine = event.relatedMemoryIds.length
       ? "这句话还碰到了我们以前的一点记忆，我会带着那段一起听。"
       : "我会把这次你叫我说话的小片段先记成一段情景记忆。";
-    return `我在，听见了。${memoryLine}`;
+    return `我在，听见了。${memoryLine}${raisedResponseLine(profile, event.actionDecision.action)}`;
   }
   const posture = profile.state.confidence > 62 ? "我比较稳地接住了这一小段" : "我先把这一小段轻轻抱住";
   const memoryLine = event.relatedMemoryIds.length
     ? "这一小段碰到我以前抱着的一点记忆，我会把旧片段和现在一起听。"
     : "这像一段新的共同经历，我会先把它放进情景里。";
-  return `${posture}：${trimSentence(event.noticed)}。${memoryLine}${actionResponseLine(event.actionDecision.action)}`;
+  return `${posture}：${trimSentence(event.noticed)}。${memoryLine}${actionResponseLine(event.actionDecision.action)}${raisedResponseLine(profile, event.actionDecision.action)}`;
 }
 
 function actionResponseLine(action: AttentionEvent["actionDecision"]["action"]): string {
@@ -311,6 +311,17 @@ function actionResponseLine(action: AttentionEvent["actionDecision"]["action"]):
     default:
       return "我先不急着打扰你，只继续看这一小段会不会变重要。";
   }
+}
+
+function raisedResponseLine(profile: CreatureProfile, action: AttentionEvent["actionDecision"]["action"]) {
+  const policy = profile.policyProfile;
+  if (policy.quietTendency >= 58 && ["ask", "quiet", "observe", "draft_reminder", "draft_question_list"].includes(action)) {
+    return "你这段时间把我教得更安静，所以我先轻轻记下，不急着打扰你。";
+  }
+  if ((policy.preferDepth >= 65 || policy.recallTendency >= 65) && ["ask", "recall", "review", "save_episode", "observe", "respond", "draft_reminder", "draft_question_list"].includes(action)) {
+    return "你这段时间把我教得不要浅浅带过，所以我想继续多想一会儿。";
+  }
+  return "";
 }
 
 function composeStreamSummary(events: AttentionEvent[], session: CuriousSessionAudit): string {

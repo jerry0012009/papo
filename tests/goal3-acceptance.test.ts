@@ -43,6 +43,10 @@ describe("goal 3 acceptance flow", () => {
     expect(deep.policyProfile.recallTendency).toBeGreaterThan(quiet.policyProfile.recallTendency);
     expect(quiet.policyProfile.quietTendency).toBeGreaterThan(deep.policyProfile.quietTendency);
     expect(deepNext.events[0].actionDecision.action).not.toBe(quietNext.events[0].actionDecision.action);
+    expect(deepNext.response).toMatch(/不要浅浅带过|继续多想/);
+    expect(deepNext.events[0].creatureExperience.actionFeeling).toMatch(/多停一下|不浅浅放过/);
+    expect(quietNext.response).toMatch(/更安静|先轻轻记下|不急着打扰/);
+    expect(quietNext.events[0].creatureExperience.actionFeeling).toMatch(/收住声音|不急着追问/);
     expect(contrast).toContain("养成差异");
     expect(contrast).toContain("它们的内在选择也不一样");
 

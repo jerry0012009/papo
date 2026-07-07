@@ -291,6 +291,7 @@ Done:
   - Demo-created comparison creatures now use natural small names and describe divergence as feedback-shaped behavior instead of classifier-style "deep/quiet type" labels.
   - Home and listening error/status copy no longer uses "材料", "模拟信息流", or "录音分段"; those are replaced with Papo receiving or hearing a small shared fragment.
   - Feedback controls and feedback impact now read as Papo being raised in first person: buttons use "再想一会儿/先安静点/帮我记住", typed or voice feedback is framed as something Papo hears, and visible impact lines say "我会..." instead of third-person product summaries.
+  - Feedback-shaped personality now reaches the next visible response and episode action feeling, not only internal policy numbers: a Papo repeatedly taught to continue says it wants to keep thinking and avoid shallow handling, while one taught "not now" says it will quietly hold the moment without interrupting.
   - Home presence, body signals, active emergence labels, and dialogue feedback context now use first-person creature voice instead of observer phrases such as "它已经接住" or "你在教它".
   - Curious result, Episode detail, memory feeling, and Demo entry copy now avoid report-style observer phrases such as "Papo 放过了", "它刚才怎么理解", and "它以后可能".
   - Rule/fallback creature responses now use action-oriented shared-moment language instead of analysis-template wording such as "我先试着理解" or "这个片段可能是".

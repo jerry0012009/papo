@@ -67,6 +67,10 @@ describe("creature brain v0.2", () => {
     expect(b.longTermMemories.find((memory) => memory.tags.includes("更安静"))?.text).toContain("不急着追问");
     expect(aNext.events[0].actionDecision.action).not.toBe("quiet");
     expect(["observe", "quiet", "ask"]).toContain(bNext.events[0].actionDecision.action);
+    expect(aNext.response).toMatch(/不要浅浅带过|继续多想/);
+    expect(aNext.events[0].creatureExperience.actionFeeling).toMatch(/多停一下|不浅浅放过/);
+    expect(bNext.response).toMatch(/更安静|先轻轻记下|不急着打扰/);
+    expect(bNext.events[0].creatureExperience.actionFeeling).toMatch(/收住声音|不急着追问/);
 
     const summary = createContrastSummary({
       deepProfile: a,

@@ -110,6 +110,12 @@ export function createLearningNote(kind: FeedbackKind, tags: string[] = [], feed
 }
 
 function actionFeeling(action: ActionKind, profile: CreatureProfile) {
+  const base = baseActionFeeling(action, profile);
+  const raised = raisedActionFeeling(action, profile);
+  return raised ? `${base}${raised}` : base;
+}
+
+function baseActionFeeling(action: ActionKind, profile: CreatureProfile) {
   switch (action) {
     case "respond":
       return "我想先回你一句，让你知道我听见了，而不是躲在后台只做分析。";
@@ -134,6 +140,17 @@ function actionFeeling(action: ActionKind, profile: CreatureProfile) {
     default:
       return "我先观察它，不急着行动。";
   }
+}
+
+function raisedActionFeeling(action: ActionKind, profile: CreatureProfile) {
+  const policy = profile.policyProfile;
+  if (policy.quietTendency >= 58 && ["ask", "quiet", "observe", "draft_reminder", "draft_question_list"].includes(action)) {
+    return "你把我养得更会收住声音，所以我会把话放轻，不急着追问你。";
+  }
+  if ((policy.preferDepth >= 65 || policy.recallTendency >= 65) && ["ask", "recall", "review", "save_episode", "observe", "respond", "draft_reminder", "draft_question_list"].includes(action)) {
+    return "你把我养得愿意多停一下，所以我会把这段和旧片段贴近一点，不浅浅放过。";
+  }
+  return "";
 }
 
 function saveFeeling(action: ActionKind, privacyRisk: number) {
