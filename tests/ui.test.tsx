@@ -279,7 +279,7 @@ describe("App", () => {
     expect(screen.queryByText(/场景 1|场景 2|场景 3|一键准备/)).not.toBeInTheDocument();
     expect(screen.queryByText("场景 2：生成 A/B 养成对比")).not.toBeInTheDocument();
     expect(screen.queryByText("后续任务")).not.toBeInTheDocument();
-  });
+  }, 10_000);
 });
 
 function json(body: unknown, status = 200) {

@@ -96,6 +96,19 @@ describe("api", () => {
       });
 
     await request(app)
+      .post(`/api/profiles/${userId}/feedback`)
+      .send({ kind: "continue", targetId: memoryId, content: "这条记忆先多想一下，但不要主动吵我。", modality: "text" })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.feedback.targetId).toBe(memoryId);
+        expect(response.body.profile.conversation[0].role).toBe("papo");
+        expect(response.body.profile.conversation[0].relatedMemoryIds).toContain(memoryId);
+        expect(response.body.profile.conversation[1].role).toBe("user");
+        expect(response.body.profile.conversation[1].text).toContain("这条记忆先多想一下");
+        expect(response.body.profile.conversation[1].relatedMemoryIds).toContain(memoryId);
+      });
+
+    await request(app)
       .post(`/api/profiles/${userId}/emergence`)
       .expect(200)
       .expect((response) => {

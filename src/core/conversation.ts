@@ -46,6 +46,7 @@ export function appendInputMessage(
     batchId?: string;
     observedAt?: string;
     location?: StreamSegment["location"];
+    relatedMemoryIds?: string[];
     at?: string;
   }
 ): CreatureMessage | undefined {
@@ -64,7 +65,7 @@ export function appendInputMessage(
     channel: input.channel,
     text,
     sourceId: input.sourceId,
-    relatedMemoryIds: [],
+    relatedMemoryIds: input.relatedMemoryIds ?? [],
     modality: input.modality,
     batchId: input.batchId,
     observedAt: input.observedAt,

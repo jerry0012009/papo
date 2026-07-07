@@ -9,7 +9,7 @@ import { enrichEmergenceNarration, enrichFeedbackNarration } from "../core/narra
 import { createModelProvider, type ModelProvider } from "../core/provider";
 import { promoteEpisode, updateLongTermMemory } from "../core/memory";
 import { wakeCreature } from "../core/rhythm";
-import type { StreamSegment } from "../core/types";
+import type { CreatureProfile, StreamSegment } from "../core/types";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
 const createProfileSchema = z.object({
@@ -230,8 +230,10 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
     try {
       const profile = await requireProfile(store, req.params.userId);
       const body = feedbackSchema.parse(req.body);
+      const targetMemoryBefore = body.targetId ? profile.longTermMemories.find((memory) => memory.id === body.targetId) : undefined;
       const feedback = applyFeedback(profile, body);
       await enrichFeedbackNarration(profile, feedback, provider);
+      const relatedMemoryIds = feedbackRelatedMemoryIds(profile, body.targetId, targetMemoryBefore?.id);
       appendInputMessage(profile, {
         channel: "feedback",
         role: "user",
@@ -239,9 +241,10 @@ export function createApp(input: { store?: ProfileStore; provider?: ModelProvide
         sourceId: `${feedback.id}:input`,
         modality: body.modality ?? (body.content?.trim() ? "text" : "button"),
         observedAt: feedback.at,
-        at: feedback.at
+        at: feedback.at,
+        relatedMemoryIds
       });
-      appendPapoMessage(profile, { channel: "feedback", text: feedback.replyText ?? feedback.learningNote, sourceId: feedback.id });
+      appendPapoMessage(profile, { channel: "feedback", text: feedback.replyText ?? feedback.learningNote, sourceId: feedback.id, relatedMemoryIds });
       await store.saveProfile(profile);
       res.json({ profile, feedback });
     } catch (error) {
@@ -323,6 +326,19 @@ function feedbackInputText(kind: string, content?: string) {
   }[kind] ?? kind;
   const note = content?.trim();
   return note ? `${label}：${note}` : label;
+}
+
+function feedbackRelatedMemoryIds(profile: CreatureProfile, targetId?: string, targetMemoryIdBefore?: string) {
+  const ids = new Set<string>();
+  if (targetMemoryIdBefore && profile.longTermMemories.some((memory) => memory.id === targetMemoryIdBefore)) {
+    ids.add(targetMemoryIdBefore);
+  }
+  if (targetId) {
+    for (const memory of profile.longTermMemories) {
+      if (memory.sourceEpisodeId === targetId) ids.add(memory.id);
+    }
+  }
+  return [...ids];
 }
 
 class HttpError extends Error {
