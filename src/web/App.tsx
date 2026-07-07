@@ -642,7 +642,7 @@ export function App() {
           <h1>{profile.creatureName}</h1>
           <p className="eyebrow">正在陪着你</p>
         </div>
-        <button className="icon-button" onClick={askEmergence} disabled={busy} aria-label="问问 Papo 现在想到什么">
+        <button className="icon-button" onClick={askEmergence} disabled={busy} aria-label="问问 Papo 想到了什么">
           <Sparkles size={19} />
         </button>
       </header>
@@ -724,9 +724,9 @@ function HomeView(props: {
       <div className="hero">
         <ShibaAvatar state={props.profile.state} />
         <div className="hero-copy">
-          <p className="eyebrow">Papo 现在</p>
-          <h2>{stateHeadline(props.profile)}</h2>
-          <p>{stateSentence(props.profile)}</p>
+          <p className="eyebrow">Papo 在这里</p>
+          <h2>{presenceHeadline(props.profile)}</h2>
+          <p>{presenceSentence(props.profile)}</p>
         </div>
       </div>
 
@@ -1798,35 +1798,32 @@ function NavButton(props: { active: boolean; icon: typeof Brain; label: string; 
   );
 }
 
-function stateHeadline(profile: CreatureProfile) {
+function presenceHeadline(profile: CreatureProfile) {
   const latest = profile.conversation?.[0];
   if (latest?.role === "papo") {
-    if (latest.channel === "button") return "刚听见你说话";
+    if (latest.channel === "button") return "有一句话给你";
     if (latest.channel === "curious") return "刚陪你听了一会儿";
-    if (latest.channel === "feedback") return "刚被你教了一下";
-    if (latest.channel === "emergence") return "刚想起一件旧事";
+    if (latest.channel === "feedback") return "刚学会一点你的意思";
+    if (latest.channel === "emergence") return "刚想起一件你们说过的事";
   }
-  if (latest?.role === "user" || latest?.role === "world") return "刚收到你说的事";
-  return restingHeadline(profile);
+  if (latest?.role === "user" || latest?.role === "world") return "收到了你刚给的事";
+  return restingPresenceHeadline(profile);
 }
 
-function stateSentence(profile: CreatureProfile) {
+function presenceSentence(profile: CreatureProfile) {
   const latest = profile.conversation?.[0];
-  const latestChange = profile.stateChanges?.[0];
-  if (latest?.role === "papo" && latest.channel === "feedback") return "你刚刚教过我一次，我会把这种偏好带到后面相似的回应里。";
-  if (latest?.role === "papo" && latest.channel === "emergence") return "我刚想起一件旧事，会带着它继续听你说。";
-  if (latest?.role === "papo" && latest.channel === "curious") return "我刚陪你听了一会儿，先回应最需要回应的部分。";
-  if (latest?.role === "papo" && latest.channel === "button") return "刚才那句话需要回应，我会先把回答放在对话里。";
-  if (latest?.role === "user" || latest?.role === "world") return "我已经收到你给的文字、照片或声音，会放在同一次对话里理解。";
-  if (latestChange?.reason.includes("button capture")) return "刚才那句话叫住了我，我会先回应你。";
-  if (latestChange?.reason.includes("feedback")) return "我刚被你养成了一点，之后遇到相似片段会更接近你的意思。";
+  if (latest?.role === "papo" && latest.channel === "feedback") return "你刚才教过我的那一点，已经放进后面的回应里。";
+  if (latest?.role === "papo" && latest.channel === "emergence") return "那件事已经在对话里，你可以点进去继续说。";
+  if (latest?.role === "papo" && latest.channel === "curious") return "刚才听到的内容已经整理进对话，你可以接着补文字、照片或声音。";
+  if (latest?.role === "papo" && latest.channel === "button") return "Papo 刚回了你一句，在对话里可以继续接上。";
+  if (latest?.role === "user" || latest?.role === "world") return "文字、照片或声音会留在同一次对话里，让 Papo 接着回应。";
   const memory = strongestSharedMemory(profile);
   if (memory) return `我还记得这件旧事：${normalizeMemoryText(memory.text)}。如果之后聊到相近内容，我会想起它。`;
   if (!profile.episodes.length) return "我还没有和你经历过多少事。你可以直接跟我说话，也可以给我照片或声音。";
   return "你可以继续说，也可以传照片、录音，或让 Papo 听一会儿。";
 }
 
-function restingHeadline(profile: CreatureProfile) {
+function restingPresenceHeadline(profile: CreatureProfile) {
   if (strongestSharedMemory(profile)) return "想起以前的事";
   if (!profile.episodes.length) return "等第一段生活靠近";
   return "等你继续说";

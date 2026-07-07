@@ -6,7 +6,8 @@ test.beforeEach(async ({ page }) => {
 
 test("renders lifeform surfaces in a real browser", async ({ page }, testInfo) => {
   await page.goto("/");
-  await expect(page.getByText("Papo 现在")).toBeVisible();
+  await expect(page.getByText("Papo 在这里")).toBeVisible();
+  await expect(page.getByText("Papo 现在")).toHaveCount(0);
 
   const avatar = page.getByLabel("Papo 是一只卡通柴犬");
   await expect(avatar).toBeVisible();

@@ -165,11 +165,12 @@ describe("App", () => {
     expect(screen.queryByText("Generic model API")).not.toBeInTheDocument();
     expect(screen.queryByText("LLM 语义脑已配置")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Papo 是一只卡通柴犬")).toBeInTheDocument();
-    expect(screen.getByText("Papo 现在")).toBeInTheDocument();
+    expect(screen.getByText("Papo 在这里")).toBeInTheDocument();
+    expect(screen.queryByText("Papo 现在")).not.toBeInTheDocument();
     expect(screen.queryByText("当前心情")).not.toBeInTheDocument();
     expect(screen.queryByText(/触发了醒来节律|重新计算/)).not.toBeInTheDocument();
-    expect(screen.getByText("刚收到你说的事")).toBeInTheDocument();
-    expect(screen.getByText("我已经收到你给的文字、照片或声音，会放在同一次对话里理解。")).toBeInTheDocument();
+    expect(screen.getByText("收到了你刚给的事")).toBeInTheDocument();
+    expect(screen.getByText("文字、照片或声音会留在同一次对话里，让 Papo 接着回应。")).toBeInTheDocument();
     expect(screen.queryByText(/小情景|递来的一小段|情景记忆/)).not.toBeInTheDocument();
     expect(screen.queryByText(/材料|模拟一段信息流|录音分段/)).not.toBeInTheDocument();
     expect(screen.queryByText("Papo 抬头看了你一眼")).not.toBeInTheDocument();
