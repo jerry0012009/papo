@@ -18,7 +18,7 @@ export function createEpisodeFromEvent(
     sourceLocation: event.triggerLocation,
     inputSummary: summarizeText(event.triggerContent, 140),
     noticed: event.noticed,
-    possibleIntent: inferIntent(event.triggerContent),
+    possibleIntent: "",
     importanceReason: event.reason,
     relatedMemoryIds: event.relatedMemoryIds,
     stateSnapshot: structuredClone(event.stateSnapshot),
@@ -147,11 +147,6 @@ export function adjustMemoryWeight(profile: CreatureProfile, targetId: string | 
   if (episode) episode.weight = Math.max(0, Math.min(100, episode.weight + amount));
   const longTerm = profile.longTermMemories.find((item) => item.id === targetId);
   if (longTerm) longTerm.weight = Math.max(0, Math.min(100, longTerm.weight + amount));
-}
-
-function inferIntent(text: string): string {
-  void text;
-  return "";
 }
 
 function buildMemoryCandidateText(episode: EpisodeMemory): string {

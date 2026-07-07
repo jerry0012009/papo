@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { buildAttentionEvent, composeCreatureResponse, composeStreamSummary, isHighPrivacySegmentContent } from "./attention";
+import { buildAttentionEvent, isHighPrivacySegmentContent } from "./attention";
 import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, normalizeSharedMemoryText } from "./memory";
@@ -138,7 +138,7 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
     return event;
   });
 
-  const episodes = events.map((event) => createEpisodeFromEvent(event, composeCreatureResponse(profile, event), now));
+  const episodes = events.map((event) => createEpisodeFromEvent(event, "", now));
   profile.episodes.unshift(...episodes);
   if (events.length) {
     applyStateDelta(
@@ -170,7 +170,7 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
     }));
 
   session.creatureReport = safeCreatureText(suggestion.creatureReport) ?? "";
-  result.response = composeStreamSummary(events, session);
+  result.response = "";
   result.harnessTrace = [...(result.harnessTrace ?? []), "semantic attention: llm selection applied"];
   return true;
 }

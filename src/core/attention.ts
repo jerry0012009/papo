@@ -1,6 +1,5 @@
 import { selectAction } from "./action";
 import { describeStateInfluence } from "./drive";
-import { createAttentionExperience } from "./experience";
 import { makeId } from "./ids";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode } from "./memory";
 import { hasHighPrivacyText } from "./privacy";
@@ -177,14 +176,11 @@ export function buildAttentionEvent(
     suggestedAction: actionDecision.action,
     actionDecision,
     scoreBreakdown: input.score,
-    creatureExperience: createAttentionExperience({
-      profile,
-      triggerContent: input.triggerContent,
-      relatedMemories: [],
-      score: input.score,
-      action: actionDecision.action,
-      privacyRisk
-    }),
+    creatureExperience: {
+      earReason: "",
+      actionFeeling: "",
+      saveFeeling: ""
+    },
     tags,
     semanticSource: "rules",
     decisionTrace: [
@@ -193,18 +189,6 @@ export function buildAttentionEvent(
     ],
     createdAt: input.now
   };
-}
-
-export function composeCreatureResponse(profile: CreatureProfile, event: AttentionEvent): string {
-  void profile;
-  void event;
-  return "";
-}
-
-export function composeStreamSummary(events: AttentionEvent[], session: CuriousSessionAudit): string {
-  void events;
-  void session;
-  return "";
 }
 
 function buildNoticed(text: string): string {
