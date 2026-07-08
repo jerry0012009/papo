@@ -38,6 +38,16 @@ const semanticEmergenceSchema = z
         sourceIds: z.array(z.string().min(1).max(120)).max(12).optional()
       })
       .optional(),
+    actionCardDraft: z
+      .object({
+        title: optionalText(120),
+        prompt: optionalText(1600),
+        caption: optionalText(220),
+        style: optionalText(160),
+        durationSeconds: z.number().min(4).max(20).optional(),
+        sourceIds: z.array(z.string().min(1).max(120)).max(12).optional()
+      })
+      .optional(),
     trace: z.array(z.string().min(1).max(160)).max(8).optional()
   })
   .refine((value) => !value.shouldEmerge || Boolean(value.memoryId && value.driveSource && value.whyNow && value.message), {
@@ -153,7 +163,7 @@ function createSemanticEmergenceRecord(
     driveSource: suggestion.driveSource ?? "curiosity",
     proactiveLevel: suggestion.proactiveLevel ?? "gentle",
     message,
-    actionResult: normalizeEmergenceIllustration(suggestion),
+    actionResult: normalizeEmergenceActionResult(suggestion),
     delivery,
     ruleTrace: [
       "llm: selected active emergence",
@@ -164,7 +174,19 @@ function createSemanticEmergenceRecord(
   };
 }
 
-function normalizeEmergenceIllustration(suggestion: SemanticEmergenceSuggestion): ActionResult | undefined {
+function normalizeEmergenceActionResult(suggestion: SemanticEmergenceSuggestion): ActionResult | undefined {
+  const actionCard = suggestion.actionCardDraft;
+  if (actionCard?.title && actionCard.prompt) {
+    return {
+      kind: "action_card_draft",
+      title: safeCreatureText(actionCard.title) ?? actionCard.title,
+      prompt: actionCard.prompt.trim(),
+      caption: safeCreatureText(actionCard.caption),
+      style: actionCard.style?.trim(),
+      durationSeconds: clampDuration(actionCard.durationSeconds),
+      sourceIds: actionCard.sourceIds?.slice(0, 12)
+    };
+  }
   const draft = suggestion.illustrationDraft;
   if (!draft?.title || !draft.prompt) return undefined;
   return {
@@ -175,6 +197,12 @@ function normalizeEmergenceIllustration(suggestion: SemanticEmergenceSuggestion)
     style: draft.style?.trim(),
     sourceIds: draft.sourceIds?.slice(0, 12)
   };
+}
+
+function clampDuration(value: unknown) {
+  const numeric = typeof value === "number" ? value : 8;
+  if (!Number.isFinite(numeric)) return 8;
+  return Math.max(4, Math.min(20, Math.round(numeric)));
 }
 
 function availableSemanticMemories(profile: CreatureProfile) {
@@ -294,6 +322,8 @@ ${JSON.stringify(eveningDiary)}
 - 如果 delivery=proactive，这不是用户手动碰一下 Papo，而是后台 30 分钟节律触发的一次主动判断。你可以选择安静，很多时候安静是更自然的；如果要主动说话，应短、轻、不催促。
 - proactive_context.pendingUnansweredMessages 表示此前主动消息还没收到用户回应。数值越高越应该克制；规则会负责未回应上限和下次触发时间，你负责判断此刻是否真的值得开口。
 - evening_diary_context.eligible=true 表示现在处于本地 19:00-24:00，且今天还没有发过“观察日记”插画。此时你可以选择安静、普通浮现，或返回 illustrationDraft 让 Papo 画一张今天的观察日记。是否画由你决定；如果画，应基于今天真实发生的 episode、对话、音频观察、照片附件和记忆，优先使用真实照片素材中的内容，不要编造今天没有发生的事情。
+- 如果某条记忆、当前状态或用户最近表达很适合让小动物“动一下”，可以返回 actionCardDraft 生成动作视频卡。例如出门、追蝴蝶、伸懒腰、打招呼、趴下陪着、带着玩具靠近。actionCardDraft 的 prompt 要写给视频模型，必须包含小动物名字、物种、具体动作、场景、镜头运动和角色一致性；不要把 prompt 写进 message。
+- illustrationDraft 和 actionCardDraft 同一次最多返回一个；如果只是该说一句话，不要生成媒体。
 - 观察日记优先画成 3-6 格的手绘多格漫画，而不是单张照片式画面；它应该像“Papo 今天看到的你的一天”，把当天几个真实片段串起来。只有当天素材非常单一时，才退成单幅明信片式画面。
 
 你必须返回一个 JSON object，不要输出解释性文字、Markdown 或空内容。
@@ -323,6 +353,14 @@ JSON 字段名保持示例格式；枚举字段值必须使用示例里的英文
     "prompt": "...",
     "caption": "...",
     "style": "手绘多格漫画观察日记 / 3-6 格分镜",
+    "sourceIds": ["episode_xxx", "img_xxx"]
+  },
+  "actionCardDraft": {
+    "title": "...",
+    "prompt": "...",
+    "caption": "...",
+    "style": "cute commercial pet animation, gentle camera, consistent character",
+    "durationSeconds": 8,
     "sourceIds": ["episode_xxx", "img_xxx"]
   },
   "trace": ["..."]

@@ -14,7 +14,7 @@ import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { createModelProvider, type ImageReference, type ModelProvider } from "../core/provider";
 import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
 import { wakeCreature } from "../core/rhythm";
-import type { ActionResult, CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationPlan, IllustrationRecord, MediaAttachment, MessageCognitionTrace, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
+import type { ActionCardRecord, ActionResult, CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationPlan, IllustrationRecord, MediaAttachment, MessageCognitionTrace, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
 import { createHermesBridge, type HermesBridge } from "./hermes";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
@@ -31,6 +31,15 @@ const loginProfileSchema = z.object({
 const passwordSchema = z.object({
   currentPassword: z.string().max(120).optional(),
   newPassword: z.string().max(120).optional()
+});
+
+const updateProfileSchema = z.object({
+  creatureName: z.string().trim().min(1).max(40).optional()
+}).refine((body) => body.creatureName !== undefined, { message: "No profile fields to update" });
+
+const updateActionCardSchema = z.object({
+  disabled: z.boolean().optional(),
+  deleted: z.boolean().optional()
 });
 
 const buttonSchema = z.object({
@@ -153,7 +162,7 @@ export function createApp(input: {
   app.get("/api/assets/:filename", async (req, res, next) => {
     try {
       const filename = req.params.filename;
-      if (!/^img_[a-f0-9]{24}\.(png|jpg|webp)$/.test(filename)) throw new HttpError(404, "Asset not found");
+      if (!/^(img|vid)_[a-f0-9]{24}\.(png|jpg|webp|mp4)$/.test(filename)) throw new HttpError(404, "Asset not found");
       res.sendFile(path.join(imageAssetDir(), filename));
     } catch (error) {
       next(error);
@@ -243,6 +252,18 @@ export function createApp(input: {
     }
   });
 
+  app.patch("/api/profiles/:userId", async (req, res, next) => {
+    try {
+      const profile = await requireProfile(store, req.params.userId, req);
+      const body = updateProfileSchema.parse(req.body);
+      if (body.creatureName !== undefined) profile.creatureName = body.creatureName;
+      await store.saveProfile(profile);
+      res.json({ profile: publicProfile(profile) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post("/api/profiles/:userId/wake", async (req, res, next) => {
     try {
       const profile = await requireProfile(store, req.params.userId, req);
@@ -279,6 +300,7 @@ export function createApp(input: {
       const result = await runButtonHarness(profile, body.text, provider);
       await hermesBridge?.enqueueTasks(profile, result);
       const illustrationAttachments = await executeIllustrationActions(profile, result, provider, "action");
+      const actionCardAttachments = await executeActionCardActions(profile, result, provider, "action");
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const cognitionTrace = captureCognitionTrace(result, provider, "button", modelRuns);
       appendInputMessage(profile, {
@@ -294,7 +316,7 @@ export function createApp(input: {
         text: result.response,
         sourceId: result.episodes[0]?.id ?? result.events[0]?.id,
         relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
-        attachments: illustrationAttachments,
+        attachments: [...illustrationAttachments, ...actionCardAttachments],
         cognitionTrace
       });
       await store.saveProfile(profile);
@@ -313,6 +335,7 @@ export function createApp(input: {
       const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
       await hermesBridge?.enqueueTasks(profile, result);
       const illustrationAttachments = await executeIllustrationActions(profile, result, provider, "action");
+      const actionCardAttachments = await executeActionCardActions(profile, result, provider, "action");
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const sensingTraces = body.segments.flatMap((segment) => segment.sensingTrace ? [segment.sensingTrace as SensingTrace] : []);
       const cognitionTrace = captureCognitionTrace(result, provider, "curious_stream", modelRuns, sensingTraces);
@@ -338,7 +361,7 @@ export function createApp(input: {
         text: result.response,
         sourceId: result.episodes[0]?.id ?? result.curiousSession?.id ?? result.events[0]?.id,
         relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
-        attachments: illustrationAttachments,
+        attachments: [...illustrationAttachments, ...actionCardAttachments],
         cognitionTrace
       });
       await store.saveProfile(profile);
@@ -470,6 +493,7 @@ export function createApp(input: {
       const profile = await requireProfile(store, req.params.userId, req);
       const beforeSemanticIds = semanticRecordIds(profile);
       const emergence = await semanticDecideEmergence(profile, provider, new Date().toISOString(), { delivery: "manual" });
+      const actionCardAttachments = await executeEmergenceActionCard(profile, emergence, provider, new Date().toISOString());
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const cognitionTrace = emergenceCognitionTrace(emergence, provider, modelRuns);
       appendPapoMessage(profile, {
@@ -477,10 +501,26 @@ export function createApp(input: {
         text: emergence.text,
         sourceId: emergence.id,
         relatedMemoryIds: emergence.relatedMemoryIds,
+        attachments: actionCardAttachments,
         cognitionTrace
       });
       await store.saveProfile(profile);
       res.json({ profile: publicProfile(profile), emergence: { ...emergence, cognitionTrace } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch("/api/profiles/:userId/action-cards/:cardId", async (req, res, next) => {
+    try {
+      const profile = await requireProfile(store, req.params.userId, req);
+      const body = updateActionCardSchema.parse(req.body);
+      const card = profile.actionCards?.find((item) => item.id === req.params.cardId);
+      if (!card) throw new HttpError(404, "Action card not found");
+      if (body.disabled !== undefined) card.disabled = body.disabled;
+      if (body.deleted !== undefined) card.deleted = body.deleted;
+      await store.saveProfile(profile);
+      res.json({ profile: publicProfile(profile), actionCard: card });
     } catch (error) {
       next(error);
     }
@@ -637,6 +677,7 @@ export async function runProactiveEmergenceSweep(store: ProfileStore, provider: 
     try {
       const emergence = await semanticDecideEmergence(profile, provider, now, { delivery: "proactive" });
       const emergenceAttachments = await executeEmergenceIllustration(profile, emergence, provider, now);
+      const actionCardAttachments = await executeEmergenceActionCard(profile, emergence, provider, now);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const cognitionTrace = emergenceCognitionTrace(emergence, provider, modelRuns);
       settleProactiveEmergence(profile, emergence, now);
@@ -646,7 +687,7 @@ export async function runProactiveEmergenceSweep(store: ProfileStore, provider: 
           text: emergence.text,
           sourceId: emergence.id,
           relatedMemoryIds: emergence.relatedMemoryIds,
-          attachments: emergenceAttachments,
+          attachments: [...emergenceAttachments, ...actionCardAttachments],
           cognitionTrace,
           at: now
         });
@@ -702,6 +743,148 @@ async function saveGeneratedIllustration(input: {
     prompt: input.prompt,
     sourceIds: input.sourceIds
   };
+}
+
+async function saveGeneratedActionVideo(input: {
+  dataUrl: string;
+  label: string;
+  prompt: string;
+  sourceIds: string[];
+}): Promise<MediaAttachment> {
+  const parsed = parseVideoDataUrl(input.dataUrl);
+  const hash = createHash("sha256").update(parsed.buffer).digest("hex");
+  const id = `vid_${hash.slice(0, 24)}`;
+  const filename = `${id}.mp4`;
+  const dir = imageAssetDir();
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, filename), parsed.buffer);
+  return {
+    id,
+    kind: "video",
+    label: input.label.trim() || "动作卡",
+    mime: "video/mp4",
+    url: `/api/assets/${filename}`,
+    createdAt: new Date().toISOString(),
+    sizeBytes: parsed.buffer.byteLength,
+    generatedBy: "papo_action_card",
+    prompt: input.prompt,
+    sourceIds: input.sourceIds
+  };
+}
+
+async function executeActionCardActions(
+  profile: CreatureProfile,
+  result: CaptureResult,
+  provider: ModelProvider,
+  kind: "action",
+  now = new Date().toISOString()
+) {
+  void kind;
+  const attachments: MediaAttachment[] = [];
+  for (const event of result.events) {
+    const actionResult = event.actionResult;
+    if (event.actionDecision.action !== "generate_action_card" || actionResult?.kind !== "action_card_draft" || !actionResult.prompt?.trim()) continue;
+    const references = await illustrationReferences(event.attachments);
+    const referenceImage = references[0];
+    if (!provider.generateVideo) throw new Error("Video generation provider is not configured");
+    const sourceIds = [...new Set([event.id, event.triggerSegmentId, event.triggerBatchId, ...(event.relatedMemoryIds ?? []), ...(event.attachments ?? []).map((item) => item.id), ...(actionResult.sourceIds ?? [])].filter(Boolean) as string[])];
+    const videoPrompt = actionCardVideoPrompt(profile, actionResult, event, Boolean(referenceImage));
+    const generated = await provider.generateVideo(videoPrompt, {
+      durationSeconds: actionResult.durationSeconds ?? 8,
+      style: actionResult.style,
+      referenceImage
+    });
+    const video = await saveGeneratedActionVideo({
+      dataUrl: generated.dataUrl,
+      label: actionResult.title ?? `${profile.creatureName} 的动作卡`,
+      prompt: videoPrompt,
+      sourceIds
+    });
+    const finalResult: ActionResult = {
+      ...actionResult,
+      kind: "action_card",
+      videoAttachment: video,
+      attachment: video,
+      durationSeconds: actionResult.durationSeconds ?? 8
+    };
+    event.actionResult = finalResult;
+    const episode = result.episodes.find((item) => item.actionDecision?.reason === event.actionDecision.reason || item.sourceSegmentId === event.triggerSegmentId || item.sourceBatchId === event.triggerBatchId);
+    if (episode?.actionResult?.kind === "action_card_draft") episode.actionResult = finalResult;
+    profile.actionCards ??= [];
+    profile.actionCards.unshift({
+      id: video.id,
+      createdAt: now,
+      title: actionResult.title ?? `${profile.creatureName} 的动作卡`,
+      caption: actionResult.caption ?? actionResult.text,
+      prompt: videoPrompt,
+      style: actionResult.style,
+      durationSeconds: actionResult.durationSeconds ?? 8,
+      video,
+      sourceIds,
+      actionEventId: event.id,
+      providerKind: provider.diagnostics?.videoProvider ?? provider.kind,
+      providerName: provider.diagnostics?.videoProvider ? `${provider.diagnostics.videoProvider} video` : provider.name,
+      model: generated.model ?? provider.diagnostics?.videoModel
+    });
+    profile.actionCards = profile.actionCards.slice(0, 30);
+    attachments.push(video);
+  }
+  return attachments;
+}
+
+async function executeEmergenceActionCard(
+  profile: CreatureProfile,
+  emergence: EmergenceRecord & { text: string; memoryId?: string },
+  provider: ModelProvider,
+  now: string
+) {
+  const actionResult = emergence.actionResult;
+  if (actionResult?.kind !== "action_card_draft" || !actionResult.prompt?.trim()) return [];
+  if (!provider.generateVideo) throw new Error("Video generation provider is not configured");
+  const references = await illustrationReferences(
+    profile.episodes
+      .filter((episode) => actionResult.sourceIds?.includes(episode.id) || emergence.relatedMemoryIds.includes(episode.id))
+      .flatMap((episode) => episode.attachments ?? [])
+  );
+  const sourceIds = [...new Set([emergence.id, emergence.memoryId, ...(emergence.relatedMemoryIds ?? []), ...(actionResult.sourceIds ?? [])].filter(Boolean) as string[])];
+  const videoPrompt = actionCardVideoPromptForEmergence(profile, actionResult, emergence, Boolean(references[0]));
+  const generated = await provider.generateVideo(videoPrompt, {
+    durationSeconds: actionResult.durationSeconds ?? 8,
+    style: actionResult.style,
+    referenceImage: references[0]
+  });
+  const video = await saveGeneratedActionVideo({
+    dataUrl: generated.dataUrl,
+    label: actionResult.title ?? `${profile.creatureName} 的动作卡`,
+    prompt: videoPrompt,
+    sourceIds
+  });
+  emergence.actionResult = {
+    ...actionResult,
+    kind: "action_card",
+    videoAttachment: video,
+    attachment: video,
+    durationSeconds: actionResult.durationSeconds ?? 8,
+    sourceIds
+  };
+  profile.actionCards ??= [];
+  profile.actionCards.unshift({
+    id: video.id,
+    createdAt: now,
+    title: actionResult.title ?? `${profile.creatureName} 的动作卡`,
+    caption: actionResult.caption ?? actionResult.text ?? emergence.text,
+    prompt: videoPrompt,
+    style: actionResult.style,
+    durationSeconds: actionResult.durationSeconds ?? 8,
+    video,
+    sourceIds,
+    emergenceId: emergence.id,
+    providerKind: provider.diagnostics?.videoProvider ?? provider.kind,
+    providerName: provider.diagnostics?.videoProvider ? `${provider.diagnostics.videoProvider} video` : provider.name,
+    model: generated.model ?? provider.diagnostics?.videoModel
+  });
+  profile.actionCards = profile.actionCards.slice(0, 30);
+  return [video];
 }
 
 async function executeIllustrationActions(
@@ -816,6 +999,39 @@ function illustrationPrompt(actionResult: ActionResult, event: CaptureResult["ev
     sourceImages ? `Available source image assets:\n${sourceImages}` : "",
     references.length ? `${references.length} original uploaded image reference(s) are attached to the image generation request. Use them as visual grounding.` : "",
     `Image prompt from action model:\n${actionResult.prompt}`
+  ].filter(Boolean).join("\n\n");
+}
+
+function actionCardVideoPrompt(profile: CreatureProfile, actionResult: ActionResult, event: CaptureResult["events"][number], hasReferenceImage: boolean) {
+  const species = profile.petKind === "british-shorthair" ? "round-faced gray and white British Shorthair kitten" : profile.petKind === "shiba" ? "cute cartoon Shiba Inu dog" : "cute small AI companion pet";
+  const sourceImages = (event.attachments ?? []).map((item) => `${item.label} ${item.url}`).join("\n");
+  return [
+    `Create a short looping 8 second animated video action card for ${profile.creatureName}, a ${species}.`,
+    "The character must stay consistent with the user's companion pet identity. Cute commercial app quality, clean animation, no UI, no text labels, no subtitles, no watermark.",
+    "Camera: gentle close-up, soft motion, readable single action, stable character proportions, cozy lighting.",
+    "Motion should be simple and adorable: small steps, blinking, tail or paw movement, playful curiosity.",
+    hasReferenceImage ? "Use the attached first frame/reference image as character and pose grounding." : "Keep the character design consistent with the pet kind and current state.",
+    `Current visible state: ${profile.dogState?.label ?? "陪着用户"} / ${namedCreatureText(profile.dogState?.actionText, profile.creatureName)}`,
+    `Moment: ${event.noticed || event.triggerContent}`,
+    sourceImages ? `Source image assets:\n${sourceImages}` : "",
+    `Action model prompt:\n${actionResult.prompt}`
+  ].filter(Boolean).join("\n\n");
+}
+
+function namedCreatureText(text: string | undefined, creatureName: string) {
+  return (text ?? "").replace(/\bPapo\b/g, creatureName);
+}
+
+function actionCardVideoPromptForEmergence(profile: CreatureProfile, actionResult: ActionResult, emergence: EmergenceRecord, hasReferenceImage: boolean) {
+  const species = profile.petKind === "british-shorthair" ? "round-faced gray and white British Shorthair kitten" : profile.petKind === "shiba" ? "cute cartoon Shiba Inu dog" : "cute small AI companion pet";
+  return [
+    `Create a short looping 8 second animated video action card for ${profile.creatureName}, a ${species}.`,
+    "Cute commercial app quality, no UI, no text labels, no subtitles, no watermark. Keep the pet identity consistent.",
+    "Camera: gentle close-up, cozy light, simple readable action.",
+    hasReferenceImage ? "Use the attached first frame/reference image as character and pose grounding." : "",
+    `Why now: ${emergence.whyNow}`,
+    `Visible message: ${emergence.message}`,
+    `Action model prompt:\n${actionResult.prompt}`
   ].filter(Boolean).join("\n\n");
 }
 
@@ -981,15 +1197,23 @@ async function imageAttachmentDataUrl(image: MediaAttachment) {
   }
 }
 
-function parseImageDataUrl(dataUrl: string): { mime: MediaAttachment["mime"]; extension: "png" | "jpg" | "webp"; buffer: Buffer } {
+function parseImageDataUrl(dataUrl: string): { mime: "image/png" | "image/jpeg" | "image/webp"; extension: "png" | "jpg" | "webp"; buffer: Buffer } {
   const match = dataUrl.match(/^data:(image\/(?:png|jpe?g|webp));base64,(.+)$/);
   if (!match) throw new HttpError(400, "Invalid image data URL");
   const rawMime = match[1] === "image/jpg" ? "image/jpeg" : match[1];
-  const mime = rawMime as MediaAttachment["mime"];
+  const mime = rawMime as "image/png" | "image/jpeg" | "image/webp";
   const extension = mime === "image/png" ? "png" : mime === "image/webp" ? "webp" : "jpg";
   const buffer = Buffer.from(match[2], "base64");
   if (!buffer.byteLength) throw new HttpError(400, "Empty image asset");
   return { mime, extension, buffer };
+}
+
+function parseVideoDataUrl(dataUrl: string): { buffer: Buffer } {
+  const match = dataUrl.match(/^data:video\/(?:mp4|quicktime|mpeg);base64,(.+)$/);
+  if (!match) throw new HttpError(400, "Invalid video data URL");
+  const buffer = Buffer.from(match[1], "base64");
+  if (!buffer.byteLength) throw new HttpError(400, "Empty video asset");
+  return { buffer };
 }
 
 async function requireExistingProfile(store: ProfileStore, userId: string) {

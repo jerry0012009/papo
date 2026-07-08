@@ -52,6 +52,8 @@ import {
   observeAudio,
   touchPet,
   updateLongTermMemory,
+  updateActionCard,
+  updateProfileName,
   updateProfilePassword,
   wakeProfile
 } from "./api";
@@ -292,6 +294,24 @@ export function App() {
     setProfile(next);
   }
 
+  async function renameCreature(creatureName: string) {
+    if (!profile) return;
+    const cleanName = creatureName.trim();
+    if (!cleanName || cleanName === profile.creatureName) return;
+    await run(async () => {
+      const next = await updateProfileName(profile.userId, cleanName);
+      setProfile(next);
+    });
+  }
+
+  async function changeActionCard(cardId: string, input: { disabled?: boolean; deleted?: boolean }) {
+    if (!profile) return;
+    await run(async () => {
+      const next = await updateActionCard(profile.userId, cardId, input);
+      setProfile(next);
+    });
+  }
+
   async function submitChatMoment(text: string) {
     const cleanText = text.trim();
     if (!profile) return;
@@ -427,11 +447,11 @@ export function App() {
     try {
       stream = await navigator.mediaDevices?.getUserMedia?.({ audio: true });
     } catch {
-      setError("我还听不到麦克风。你可以上传音频，或者先用文字告诉 Papo。");
+      setError(`我还听不到麦克风。你可以上传音频，或者先用文字告诉 ${profile.creatureName}。`);
       return;
     }
     if (!stream) {
-      setError("我还没有听到可用的麦克风声音。你可以上传音频，或者先用文字告诉 Papo。");
+      setError(`我还没有听到可用的麦克风声音。你可以上传音频，或者先用文字告诉 ${profile.creatureName}。`);
       return;
     }
 
@@ -453,7 +473,7 @@ export function App() {
         void finishQuickAudioObservation(recorder, mimeType);
       };
       recorder.onerror = () => {
-        setError("这次录音断开了。你可以再录一次，或者直接打字告诉 Papo。");
+        setError(`这次录音断开了。你可以再录一次，或者直接打字告诉 ${profile.creatureName}。`);
         cleanupQuickRecording();
       };
       recorder.start();
@@ -611,11 +631,11 @@ export function App() {
     try {
       stream = await navigator.mediaDevices?.getUserMedia?.({ audio: true });
     } catch {
-      setError("我还听不到麦克风。你可以先用文字告诉 Papo，或者加照片补充。");
+      setError(`我还听不到麦克风。你可以先用文字告诉 ${profile?.creatureName ?? "它"}，或者加照片补充。`);
       return;
     }
     if (!stream) {
-      setError("我还没有听到可用的麦克风声音。你可以先用文字告诉 Papo，或者加照片补充。");
+      setError(`我还没有听到可用的麦克风声音。你可以先用文字告诉 ${profile?.creatureName ?? "它"}，或者加照片补充。`);
       return;
     }
 
@@ -640,7 +660,7 @@ export function App() {
         stopMediaCapture();
         setListening(false);
         listeningStartedAtRef.current = undefined;
-        setError("这个浏览器暂时没法让 Papo 连续听。你可以先写给它，或者加照片补充。");
+        setError(`这个浏览器暂时没法让 ${profile?.creatureName ?? "它"} 连续听。你可以先写给它，或者加照片补充。`);
         return;
       }
     }
@@ -802,7 +822,7 @@ export function App() {
       profileRef.current = result.profile;
       setProfile(result.profile);
     }).catch((caught) => {
-      setError(`Papo 刚才整理这一小段时断开了。${errorMessage(caught)}`);
+      setError(`${profileRef.current?.creatureName ?? "它"} 刚才整理这一小段时断开了。${errorMessage(caught)}`);
     });
   }
 
@@ -932,13 +952,13 @@ export function App() {
     );
   }
 
-  const pageTitle = tab === "home" ? "Papo" : tab === "chat" ? "和 Papo 说话" : tab === "memory" ? "Papo 记得的生活" : "资料";
+  const pageTitle = tab === "home" ? profile.creatureName : tab === "chat" ? `和 ${profile.creatureName} 说话` : tab === "memory" ? `${profile.creatureName} 记得的生活` : "资料";
   const species = petSpeciesNoun(profile.petKind);
 
   return (
     <Tooltip.Provider delayDuration={180}>
       <main className={`shell app-shell tab-${tab}`}>
-        <aside className="app-sidebar" aria-label="Papo 导航">
+        <aside className="app-sidebar" aria-label={`${profile.creatureName} 导航`}>
           <div className="sidebar-brand">
             <AvatarPreview petKind={profile.petKind} state={profile.state} dogState={profile.dogState} />
             <div>
@@ -955,7 +975,7 @@ export function App() {
 
         <section className="app-main">
           <header className="topbar app-topbar">
-            <button className="icon-button" onClick={() => setTab("profile")} aria-label="看看哪只 Papo 在身边">
+            <button className="icon-button" onClick={() => setTab("profile")} aria-label={`看看哪只 ${profile.creatureName} 在身边`}>
               <UserRound size={19} />
             </button>
             <div>
@@ -963,7 +983,7 @@ export function App() {
               <h1>{pageTitle}</h1>
               <p className="eyebrow">{profile.creatureName} 正在陪着你</p>
             </div>
-            <button className="icon-button" onClick={askEmergence} disabled={busy} aria-label="轻轻碰一下 Papo">
+            <button className="icon-button" onClick={askEmergence} disabled={busy} aria-label={`轻轻碰一下 ${profile.creatureName}`}>
               <Sparkles size={19} />
             </button>
           </header>
@@ -981,6 +1001,7 @@ export function App() {
                 onGoCurious={startListening}
                 onGoChat={() => setTab("chat")}
                 onPetTouch={handlePetTouch}
+                onUpdateActionCard={changeActionCard}
               />
             ) : null}
 
@@ -1009,6 +1030,7 @@ export function App() {
               <ProfileView
                 profile={profile}
                 onLogout={logout}
+                onRename={renameCreature}
                 onChangePassword={changePassword}
               />
             ) : null}
@@ -1025,6 +1047,7 @@ export function App() {
           onGoProfile={() => setTab("profile")}
           onAskEmergence={askEmergence}
           onToggleListening={listening ? stopListening : startListening}
+          onUpdateActionCard={changeActionCard}
         />
       </main>
     </Tooltip.Provider>
@@ -1170,6 +1193,7 @@ function HomeView(props: {
   onGoCurious: () => void;
   onGoChat: () => void;
   onPetTouch: (action: PetInteractionAction) => void;
+  onUpdateActionCard: (cardId: string, input: { disabled?: boolean; deleted?: boolean }) => void;
 }) {
   const latestReply = props.unreadPapoCount ? latestVisiblePapoReply(props.profile) : "";
   const actionLine = papoVisibleActionLine(props.profile);
@@ -1185,8 +1209,8 @@ function HomeView(props: {
         <div className="home-stage-top">
           <span className="mood-pill">{papoMoodLabel(props.profile.state)}</span>
           <div className="home-stage-tools">
-            <PapoGuidePoster />
-            <HomeBrainPeek profile={props.profile} />
+            <PapoGuidePoster creatureName={props.profile.creatureName} />
+            <HomeBrainPeek profile={props.profile} onUpdateActionCard={props.onUpdateActionCard} />
           </div>
         </div>
         <div className="home-avatar-wrap">
@@ -1214,22 +1238,23 @@ function HomeView(props: {
         {props.unreadPapoCount ? (
           <button className="proactive-nudge" onClick={props.onGoChat}>
             <MessagesSquare size={16} />
-            Papo 新说
+            {props.profile.creatureName} 新说
             <span>{Math.min(3, props.unreadPapoCount)}</span>
           </button>
         ) : null}
 
         <div className="home-actions">
-          <button className="primary home-listen-action" onClick={props.onGoCurious} title="开启 3 分钟持续听，Papo 会按约 30 秒分段理解你周围发生的事。">
+          <button className="primary home-listen-action" onClick={props.onGoCurious} title={`开启 3 分钟持续听，${props.profile.creatureName} 会按约 30 秒分段理解你周围发生的事。`}>
             <Sparkles size={18} />
             陪我一会儿
           </button>
           <button className="secondary-action" onClick={props.onGoCapture}>
             <MessageCircle size={18} />
-            跟 Papo 说
+            跟 {props.profile.creatureName} 说
           </button>
         </div>
-        <p className="home-action-note">陪伴会持续听 3 分钟，并按约 30 秒分段交给 Papo。</p>
+        <p className="home-action-note">陪伴会持续听 3 分钟，并按约 30 秒分段交给 {props.profile.creatureName}。</p>
+        <HomeActionCardsPeek profile={props.profile} />
         <HomeIllustrationsPeek profile={props.profile} />
 
         {props.emergence?.text ? <EmergenceCard emergence={props.emergence} profile={props.profile} /> : null}
@@ -1248,10 +1273,11 @@ function CompanionPanel(props: {
   onGoProfile: () => void;
   onAskEmergence: () => void;
   onToggleListening: () => void;
+  onUpdateActionCard: (cardId: string, input: { disabled?: boolean; deleted?: boolean }) => void;
 }) {
   const latestReply = props.unreadPapoCount ? latestVisiblePapoReply(props.profile) : "";
   return (
-    <aside className="companion-panel" aria-label="Papo 当前状态">
+    <aside className="companion-panel" aria-label={`${props.profile.creatureName} 当前状态`}>
       <section className="companion-card companion-hero">
         <div className="companion-avatar">
           <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} />
@@ -1266,7 +1292,7 @@ function CompanionPanel(props: {
       {props.unreadPapoCount ? (
         <button className="companion-nudge" onClick={props.onGoChat}>
           <MessagesSquare size={16} />
-          Papo 新说
+          {props.profile.creatureName} 新说
           <span>{Math.min(3, props.unreadPapoCount)}</span>
         </button>
       ) : latestReply ? (
@@ -1277,7 +1303,7 @@ function CompanionPanel(props: {
       ) : null}
 
       <div className="companion-actions">
-        <button className="primary companion-listen-action" onClick={props.onToggleListening} disabled={props.busy} title="开启后 Papo 会持续听一会儿，并分段整理声音线索。">
+        <button className="primary companion-listen-action" onClick={props.onToggleListening} disabled={props.busy} title={`开启后 ${props.profile.creatureName} 会持续听一会儿，并分段整理声音线索。`}>
           <Sparkles size={17} />
           {props.listening ? "停下" : "陪我"}
         </button>
@@ -1298,10 +1324,50 @@ function CompanionPanel(props: {
           <UserRound size={16} />
           资料
         </button>
-        <HomeBrainPeek profile={props.profile} compact />
+        <HomeBrainPeek profile={props.profile} compact onUpdateActionCard={props.onUpdateActionCard} />
       </div>
+      <HomeActionCardsPeek profile={props.profile} compact />
       <HomeIllustrationsPeek profile={props.profile} compact />
     </aside>
+  );
+}
+
+function HomeActionCardsPeek({ profile, compact = false }: { profile: CreatureProfile; compact?: boolean }) {
+  const cards = (profile.actionCards ?? []).filter((card) => !card.deleted && !card.disabled).slice(0, 6);
+  if (!cards.length) return null;
+  const latest = cards[0];
+  return (
+    <Dialog.Root>
+      <Dialog.Trigger asChild>
+        <button className={compact ? "illustration-peek compact" : "illustration-peek"} type="button">
+          <Sparkles size={16} />
+          {profile.creatureName} 动过
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="ui-overlay" />
+        <Dialog.Content className="illustration-dialog" aria-label={`${profile.creatureName} 的动作卡`}>
+          <div className="illustration-dialog-head">
+            <div>
+              <strong>{profile.creatureName} 的动作卡</strong>
+              <span>{namedCreatureText(latest.title, profile.creatureName) || latest.title}</span>
+            </div>
+            <Dialog.Close asChild>
+              <button type="button">收起</button>
+            </Dialog.Close>
+          </div>
+          <div className="action-card-gallery">
+            {cards.map((card) => (
+              <article className="action-card-preview" key={card.id}>
+                <video src={resolveAssetUrl(card.video.url)} controls muted playsInline preload="metadata" />
+                <strong>{namedCreatureText(card.title, profile.creatureName) || card.title}</strong>
+                {card.caption ? <span>{namedCreatureText(card.caption, profile.creatureName) || card.caption}</span> : null}
+              </article>
+            ))}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -1314,15 +1380,15 @@ function HomeIllustrationsPeek({ profile, compact = false }: { profile: Creature
       <Dialog.Trigger asChild>
         <button className={compact ? "illustration-peek compact" : "illustration-peek"} type="button">
           <ImagePlus size={16} />
-          Papo 画过
+          {profile.creatureName} 画过
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="ui-overlay" />
-        <Dialog.Content className="illustration-dialog" aria-label="Papo 画过的小画">
+        <Dialog.Content className="illustration-dialog" aria-label={`${profile.creatureName} 画过的小画`}>
           <div className="illustration-dialog-head">
             <div>
-              <strong>Papo 画过的小画</strong>
+              <strong>{profile.creatureName} 画过的小画</strong>
               <span>{latest.title}</span>
             </div>
             <Dialog.Close asChild>
@@ -1344,15 +1410,15 @@ function HomeIllustrationsPeek({ profile, compact = false }: { profile: Creature
   );
 }
 
-function PapoGuidePoster() {
+function PapoGuidePoster({ creatureName }: { creatureName: string }) {
   const guideItems = [
     {
       title: "持续陪伴，但不打扰",
-      text: "陪我会持续听一小段时间，按约 30 秒整理线索；Papo 会自己判断要不要回应。"
+      text: `陪我会持续听一小段时间，按约 30 秒整理线索；${creatureName} 会自己判断要不要回应。`
     },
     {
       title: "它会主动找你",
-      text: "状态、动机和记忆会一起影响 Papo 是否主动说话；没必要时它也会安静。"
+      text: `状态、动机和记忆会一起影响 ${creatureName} 是否主动说话；没必要时它也会安静。`
     },
     {
       title: "它真的会记住",
@@ -1360,11 +1426,11 @@ function PapoGuidePoster() {
     },
     {
       title: "每晚观察日记漫画",
-      text: "Papo 可以把当天真实片段和照片整理成多格漫画，放进 Papo 画过。"
+      text: `${creatureName} 可以把当天真实片段和照片整理成多格漫画，放进它画过。`
     },
     {
       title: "虾虾是背后的好朋友",
-      text: "需要搜索、查资料或外部任务时，Papo 可以异步请 Hermes/虾虾帮忙。"
+      text: `需要搜索、查资料或外部任务时，${creatureName} 可以异步请 Hermes/虾虾帮忙。`
     },
     {
       title: "你教它，它会变",
@@ -1385,24 +1451,24 @@ function PapoGuidePoster() {
       <Tooltip.Root>
         <Tooltip.Trigger asChild>
           <Dialog.Trigger asChild>
-            <button className="guide-trigger" type="button" aria-label="了解 Papo 怎么陪你">
+            <button className="guide-trigger" type="button" aria-label={`了解 ${creatureName} 怎么陪你`}>
               <HelpCircle size={15} />
             </button>
           </Dialog.Trigger>
         </Tooltip.Trigger>
         <Tooltip.Portal>
           <Tooltip.Content className="ui-tooltip" sideOffset={6}>
-            了解 Papo
+            了解 {creatureName}
           </Tooltip.Content>
         </Tooltip.Portal>
       </Tooltip.Root>
       <Dialog.Portal>
         <Dialog.Overlay className="ui-overlay" />
-        <Dialog.Content className="guide-dialog" aria-label="Papo 使用说明">
+        <Dialog.Content className="guide-dialog" aria-label={`${creatureName} 使用说明`}>
           <div className="guide-poster">
             <div className="guide-poster-head">
               <div>
-                <p className="eyebrow">Papo 是什么</p>
+                <p className="eyebrow">{creatureName} 是什么</p>
                 <Dialog.Title>一只会陪伴、会记住、会自己行动的小动物</Dialog.Title>
               </div>
               <Dialog.Close asChild>
@@ -1412,7 +1478,7 @@ function PapoGuidePoster() {
               </Dialog.Close>
             </div>
             <p className="guide-lead">
-              你可以把文字、照片和声音交给它。Papo 会先理解发生了什么，再决定要不要回应、记住、画下来，或者请虾虾帮忙。
+              你可以把文字、照片和声音交给它。{creatureName} 会先理解发生了什么，再决定要不要回应、记住、画下来，或者请虾虾帮忙。
             </p>
             <div className="guide-grid">
               {guideItems.map((item, index) => (
@@ -1607,7 +1673,7 @@ function ShibaAvatar({ state, dogState, idle = false }: { state?: CreatureState;
   );
 }
 
-function HomeBrainPeek({ profile, compact = false }: { profile: CreatureProfile; compact?: boolean }) {
+function HomeBrainPeek({ profile, compact = false, onUpdateActionCard }: { profile: CreatureProfile; compact?: boolean; onUpdateActionCard?: (cardId: string, input: { disabled?: boolean; deleted?: boolean }) => void }) {
   return (
     <Dialog.Root>
       <Dialog.Trigger asChild>
@@ -1618,27 +1684,28 @@ function HomeBrainPeek({ profile, compact = false }: { profile: CreatureProfile;
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="ui-overlay" />
-        <Dialog.Content className="ui-sheet" aria-label="Papo 状态和模型阶段">
+        <Dialog.Content className="ui-sheet" aria-label={`${profile.creatureName} 状态和模型阶段`}>
           <div className="ui-sheet-head">
-            <Dialog.Title>Papo 状态</Dialog.Title>
+            <Dialog.Title>{profile.creatureName} 状态</Dialog.Title>
             <Dialog.Close asChild>
               <button className="icon-button small" type="button" aria-label="收起小眼睛">
                 <RefreshCcw size={15} />
               </button>
             </Dialog.Close>
           </div>
-          <StatePolicySnapshot profile={profile} />
+          <StatePolicySnapshot profile={profile} onUpdateActionCard={onUpdateActionCard} />
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   );
 }
 
-function StatePolicySnapshot({ profile }: { profile: CreatureProfile }) {
+function StatePolicySnapshot({ profile, onUpdateActionCard }: { profile: CreatureProfile; onUpdateActionCard?: (cardId: string, input: { disabled?: boolean; deleted?: boolean }) => void }) {
   const state = profile.state;
   const policy = profile.policyProfile;
   const recentRuns = (profile.semanticBrainHistory ?? []).slice(0, 3);
   const statusDiary = statusDiaryItems(profile).slice(0, 8);
+  const actionCards = (profile.actionCards ?? []).filter((card) => !card.deleted).slice(0, 8);
   return (
     <div className="state-policy-snapshot">
       <section>
@@ -1677,6 +1744,31 @@ function StatePolicySnapshot({ profile }: { profile: CreatureProfile }) {
           </div>
         </section>
       ) : null}
+      {actionCards.length ? (
+        <section>
+          <strong>动作卡</strong>
+          <div className="action-card-admin-list">
+            {actionCards.map((card) => (
+              <article className={card.disabled ? "action-card-admin disabled" : "action-card-admin"} key={card.id}>
+                <video src={resolveAssetUrl(card.video.url)} controls muted playsInline preload="metadata" />
+                <div>
+                  <b>{namedCreatureText(card.title, profile.creatureName) || card.title}</b>
+                  {card.caption ? <small>{namedCreatureText(card.caption, profile.creatureName) || card.caption}</small> : null}
+                  <small>{formatPapoDateTime(card.createdAt)} · {card.model ?? card.providerName}</small>
+                  <div className="action-card-controls">
+                    <button type="button" onClick={() => onUpdateActionCard?.(card.id, { disabled: !card.disabled })}>
+                      {card.disabled ? "启用" : "禁用"}
+                    </button>
+                    <button type="button" onClick={() => onUpdateActionCard?.(card.id, { deleted: true })}>
+                      删除
+                    </button>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -1700,7 +1792,7 @@ function statusDiaryItems(profile: CreatureProfile): StatusDiaryItem[] {
       id: `dog:${key}`,
       at: dogState.selectedAt,
       title: dogState.label,
-      detail: visibleCreatureText(dogState.actionText || dogState.reason)
+      detail: namedCreatureText(dogState.actionText || dogState.reason, profile.creatureName)
     });
   }
 
@@ -1820,9 +1912,14 @@ function StateMeter({ label, value }: { label: string; value: number }) {
 }
 
 function papoVisibleActionLine(profile: CreatureProfile) {
-  const action = visibleCreatureText(profile.dogState?.actionText);
+  const action = namedCreatureText(profile.dogState?.actionText, profile.creatureName);
   if (action) return action;
-  return "Papo 趴在旁边，等你说下一件事。";
+  return `${profile.creatureName} 趴在旁边，等你说下一件事。`;
+}
+
+function namedCreatureText(text: string | undefined, creatureName: string) {
+  const visible = visibleCreatureText(text);
+  return visible ? visible.replace(/\bPapo\b/g, creatureName) : "";
 }
 
 function papoMoodLabel(state: CreatureState) {
@@ -1929,7 +2026,7 @@ function ChatView(props: {
       <header className="chat-top">
         <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} />
         <div>
-          <strong>{props.listening ? "Papo 正在听" : "Papo 在这里"}</strong>
+          <strong>{props.listening ? `${props.profile.creatureName} 正在听` : `${props.profile.creatureName} 在这里`}</strong>
           <span>{props.listening ? formatListeningTime(props.listeningElapsed) : papoMoodLabel(props.profile.state)}</span>
         </div>
         <button className="listen-toggle" onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
@@ -1938,7 +2035,7 @@ function ChatView(props: {
         </button>
       </header>
       <HermesTaskNotice profile={props.profile} />
-      <section className="chat-thread" aria-label="和 Papo 的对话">
+      <section className="chat-thread" aria-label={`和 ${props.profile.creatureName} 的对话`}>
         {messages.length ? (
           <div className="chat-list">
             {hasOlderMessages ? (
@@ -2011,7 +2108,7 @@ function ChatView(props: {
                       value={segment.content}
                       onChange={(event) => updateStagedSegmentContent(index, event.target.value)}
                       rows={3}
-                      placeholder={stagedSegmentPlaceholder(segment.kind)}
+                      placeholder={stagedSegmentPlaceholder(segment.kind, props.profile.creatureName)}
                     />
                   )}
                   <button className="staged-remove" onClick={() => removeStagedSegment(index)} disabled={props.busy} aria-label="移除这项素材">
@@ -2073,12 +2170,12 @@ function ChatView(props: {
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               rows={1}
-              placeholder="告诉 Papo..."
+              placeholder={`告诉 ${props.profile.creatureName}...`}
             />
             <button className="composer-mic-button" onClick={props.onRecordAudio} disabled={props.busy || props.listening || props.quickRecording || props.quickAudioProcessing} aria-label="录一段声音">
               {props.quickAudioProcessing ? <Loader2 size={18} className="spin-icon" /> : <Mic size={18} />}
             </button>
-            <button className="primary chat-send-button" onClick={submitDraft} disabled={props.busy || submittingMoment || !canSubmit} aria-label="发送给 Papo">
+            <button className="primary chat-send-button" onClick={submitDraft} disabled={props.busy || submittingMoment || !canSubmit} aria-label={`发送给 ${props.profile.creatureName}`}>
               {submittingMoment ? <Loader2 size={18} className="spin-icon" /> : <Send size={18} />}
             </button>
           </div>
@@ -2120,20 +2217,20 @@ function StagedImagePreview({ segment }: { segment: StagedChatSegment }) {
   );
 }
 
-function stagedSegmentPlaceholder(kind: SegmentKind) {
-  if (kind === "image_summary") return "可以改成你想让 Papo 看见的照片内容";
-  if (kind === "audio_observation") return "可以改成你想让 Papo 听见的话";
+function stagedSegmentPlaceholder(kind: SegmentKind, creatureName: string) {
+  if (kind === "image_summary") return `可以改成你想让 ${creatureName} 看见的照片内容`;
+  if (kind === "audio_observation") return `可以改成你想让 ${creatureName} 听见的话`;
   return "可以补充这件事";
 }
 
 function ChatBubble({ message, profile }: { message: ConversationMessage; profile: CreatureProfile }) {
-  const context = messageContextText(message);
+  const context = messageContextText(message, profile.creatureName);
   const text = chatBubbleText(message);
   return (
     <article className={`chat-bubble ${message.role}`}>
       <div className="chat-bubble-head">
         <div>
-          <strong>{messageTitle(message)}</strong>
+          <strong>{messageTitle(message, profile.creatureName)}</strong>
           <span>
             {context ? `${context} · ` : ""}{formatPapoDateTime(message.at)}
           </span>
@@ -2158,13 +2255,17 @@ function ChatBubble({ message, profile }: { message: ConversationMessage; profil
 
 function AttachmentStrip({ attachments }: { attachments?: NonNullable<StreamSegment["attachments"]> }) {
   const images = (attachments ?? []).filter((attachment) => attachment.kind === "image");
-  if (!images.length) return null;
+  const videos = (attachments ?? []).filter((attachment) => attachment.kind === "video");
+  if (!images.length && !videos.length) return null;
   return (
     <div className="attachment-strip">
       {images.map((image) => (
         <a href={resolveAssetUrl(image.url)} target="_blank" rel="noreferrer" className="attachment-thumb" key={image.id}>
           <img src={resolveAssetUrl(image.url)} alt={image.label} loading="lazy" />
         </a>
+      ))}
+      {videos.map((video) => (
+        <video className="attachment-video" src={resolveAssetUrl(video.url)} controls muted playsInline preload="metadata" key={video.id} />
       ))}
     </div>
   );
@@ -2544,6 +2645,20 @@ function ActionResultView({ result }: { result?: ActionResult }) {
       </div>
     );
   }
+  if (result.kind === "action_card_draft" || result.kind === "action_card") {
+    return (
+      <div className="trace-action-result">
+        <b>{result.kind === "action_card" ? "动作卡已生成" : "动作卡草稿"}</b>
+        {result.title ? <p>{result.title}</p> : null}
+        {result.caption ? <small>说明：{result.caption}</small> : null}
+        {result.prompt ? <small>提示词：{result.prompt}</small> : null}
+        {result.style ? <small>风格：{result.style}</small> : null}
+        {result.durationSeconds ? <small>时长：{result.durationSeconds} 秒</small> : null}
+        {result.sourceIds?.length ? <small>基于 {result.sourceIds.length} 条真实素材</small> : null}
+        {result.videoAttachment ? <AttachmentStrip attachments={[result.videoAttachment]} /> : null}
+      </div>
+    );
+  }
   return null;
 }
 
@@ -2578,7 +2693,7 @@ function feedbackKindLabel(kind: string) {
   const labels: Record<string, string> = {
     understood: "用户表示这次懂了",
     continue: "用户补充反馈",
-    not_now: "用户让 Papo 先安静",
+    not_now: "用户让它先安静",
     remember: "用户要求记住",
     important: "用户标记这件事很重要",
     remind: "用户希望以后提醒",
@@ -2633,7 +2748,8 @@ function actionLabel(action: string) {
     draft_reminder: "提醒草稿",
     draft_question_list: "问题清单",
     use_hermes: "问虾虾",
-    generate_illustration: "生成插画"
+    generate_illustration: "生成插画",
+    generate_action_card: "生成动作卡"
   };
   return labels[action] ?? action;
 }
@@ -2662,7 +2778,7 @@ function groupConversationSections(messages: ConversationMessage[]): Conversatio
 
 function batchMomentSummary(messages: ConversationMessage[]) {
   const kinds = [...new Set(messages.map((message) => messageKindNoun(message)))];
-  if (!kinds.length) return "一起给 Papo";
+  if (!kinds.length) return "一起给它";
   if (kinds.length === 1) return `${kinds[0]}一起`;
   if (kinds.length === 2) return `${kinds[0]}和${kinds[1]}一起`;
   return `${kinds.slice(0, -1).join("、")}和${kinds[kinds.length - 1]}一起`;
@@ -2701,8 +2817,8 @@ function MemoryView(props: {
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={History} title="Papo 记得的生活" />
-        <p className="muted">候选是 Papo 还在拿捏的记忆，长期记忆是已经留下来的回忆。你可以分别维护它们。</p>
+        <PanelTitle icon={History} title={`${props.profile.creatureName} 记得的生活`} />
+        <p className="muted">候选是 {props.profile.creatureName} 还在拿捏的记忆，长期记忆是已经留下来的回忆。你可以分别维护它们。</p>
         <button className="dream-button" onClick={props.onDream} disabled={props.busy}>
           <Sparkles size={16} />
           整理记忆
@@ -2778,6 +2894,7 @@ function MemoryView(props: {
             </div>
             <MemoryFeedbackBox
               targetId={memory.id}
+              creatureName={props.profile.creatureName}
               onFeedback={props.onFeedback}
               onObserveFeedbackAudio={props.onObserveFeedbackAudio}
               pending={isFeedbackPending(props.feedbackPendingKey, "continue", memory.id)}
@@ -2843,6 +2960,7 @@ function MemoryCandidateCard(props: {
       </div>
       <MemoryFeedbackBox
         targetId={props.candidate.id}
+        creatureName={props.profile.creatureName}
         onFeedback={props.onFeedback}
         onObserveFeedbackAudio={props.onObserveFeedbackAudio}
         pending={isFeedbackPending(props.feedbackPendingKey, "continue", props.candidate.id)}
@@ -2878,7 +2996,7 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
             </div>
             {episodePapoLine(sourceEpisode) ? (
               <div>
-                <span>Papo 当时回你</span>
+                <span>{profile.creatureName} 当时回你</span>
                 <p>{episodePapoLine(sourceEpisode)}</p>
               </div>
             ) : null}
@@ -2930,13 +3048,14 @@ function memoryTraceMessages(memory: CreatureProfile["longTermMemories"][number]
 function memoryTraceTitle(message: ConversationMessage) {
   const source = message.cognitionTrace?.source;
   if (source === "feedback") return "反馈怎样改变它";
-  if (source === "emergence") return "Papo 后来怎样想起它";
+  if (source === "emergence") return "它后来怎样想起";
   if (source === "curious_stream" || source === "button") return "它当时怎样被理解";
   return "模型流程";
 }
 
 function MemoryFeedbackBox(props: {
   targetId: string;
+  creatureName: string;
   onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
   onObserveFeedbackAudio: (file: File) => Promise<string>;
   pending?: boolean;
@@ -2962,7 +3081,7 @@ function MemoryFeedbackBox(props: {
             setFeedbackModality("text");
           }}
           rows={2}
-          placeholder="告诉 Papo：哪里要记准、放轻，或下次怎么回应"
+          placeholder={`告诉 ${props.creatureName}：哪里要记准、放轻，或下次怎么回应`}
         />
         <label className="upload-button compact-upload">
           <Mic size={16} />
@@ -2994,12 +3113,33 @@ function MemoryFeedbackBox(props: {
 function ProfileView(props: {
   profile: CreatureProfile;
   onLogout: () => void;
+  onRename: (creatureName: string) => Promise<void>;
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }) {
+  const [nameDraft, setNameDraft] = useState(props.profile.creatureName);
+  const [nameBusy, setNameBusy] = useState(false);
+  const [nameMessage, setNameMessage] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState("");
+
+  useEffect(() => {
+    setNameDraft(props.profile.creatureName);
+  }, [props.profile.userId, props.profile.creatureName]);
+
+  async function saveName() {
+    setNameBusy(true);
+    setNameMessage("");
+    try {
+      await props.onRename(nameDraft);
+      setNameMessage("名字已保存");
+    } catch (caught) {
+      setNameMessage(errorMessage(caught));
+    } finally {
+      setNameBusy(false);
+    }
+  }
 
   async function savePassword(nextPassword: string) {
     setPasswordBusy(true);
@@ -3029,6 +3169,24 @@ function ProfileView(props: {
             <span>密码：{props.profile.hasPassword ? "已创建" : "未创建"}</span>
             <span>默认时间：{papoTimeZone}</span>
           </div>
+        </div>
+        <div className="profile-name-settings">
+          <strong>小动物名字</strong>
+          <label className="field-label">
+            名字
+            <input
+              type="text"
+              value={nameDraft}
+              onChange={(event) => setNameDraft(event.target.value)}
+              maxLength={40}
+              placeholder="给它起个名字"
+            />
+          </label>
+          <button className="primary" onClick={() => void saveName()} disabled={nameBusy || !nameDraft.trim() || nameDraft.trim() === props.profile.creatureName} type="button">
+            <Save size={16} />
+            {nameBusy ? "保存中" : "保存名字"}
+          </button>
+          {nameMessage ? <small>{nameMessage}</small> : null}
         </div>
         <div className="password-settings">
           <strong>{props.profile.hasPassword ? "修改密码" : "创建密码"}</strong>
@@ -3118,7 +3276,7 @@ function EmergenceCard({ emergence, profile }: { emergence: EmergenceSurface; pr
   return (
     <section className="memory-surface active">
       <div className="emergence-card-head">
-        <strong>Papo 想起一件事</strong>
+        <strong>{profile.creatureName} 想起一件事</strong>
         {emergence.cognitionTrace ? <DeveloperTrace trace={emergence.cognitionTrace} profile={profile} /> : null}
       </div>
       <p>{visibleCreatureText(emergence.text)}</p>
@@ -3224,7 +3382,7 @@ function NavButton(props: { active: boolean; icon: typeof Check; label: string; 
       <props.icon size={19} />
       <span>
         {props.label}
-        {props.unreadCount ? <i className="unread-dot" aria-label={`${props.unreadCount} 条未读 Papo 回复`}>{Math.min(9, props.unreadCount)}</i> : null}
+        {props.unreadCount ? <i className="unread-dot" aria-label={`${props.unreadCount} 条未读回复`}>{Math.min(9, props.unreadCount)}</i> : null}
       </span>
     </button>
   );
@@ -3284,19 +3442,19 @@ function forgetProfilePassword(userId: string) {
   window.localStorage.removeItem(`${LOCAL_PASSWORD_PREFIX}${userId}`);
 }
 
-function messageTitle(message: CreatureProfile["conversation"][number]) {
-  if (message.role === "papo") return "Papo";
+function messageTitle(message: CreatureProfile["conversation"][number], creatureName: string) {
+  if (message.role === "papo") return creatureName;
   if (message.channel === "feedback") return "你的反馈";
-  if (message.modality === "image_summary") return "你给 Papo 看了照片";
+  if (message.modality === "image_summary") return `你给 ${creatureName} 看了照片`;
   if (message.modality === "audio_observation") return "一段声音";
   return message.role === "world" ? "周围的一段" : "你";
 }
 
-function messageContextText(message: CreatureProfile["conversation"][number]) {
+function messageContextText(message: CreatureProfile["conversation"][number], creatureName: string) {
   if (message.role === "papo") return "";
   if (message.channel === "feedback") return "你在教我";
   if (message.channel === "curious") return "和这次陪伴放在一起";
-  return "说给 Papo";
+  return `说给 ${creatureName}`;
 }
 
 function locationText(location: NonNullable<StreamSegment["location"]>) {

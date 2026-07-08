@@ -11,10 +11,11 @@ export type ActionKind =
   | "draft_reminder"
   | "draft_question_list"
   | "use_hermes"
-  | "generate_illustration";
+  | "generate_illustration"
+  | "generate_action_card";
 
 export interface ActionResult {
-  kind: "none" | "visible_reply" | "memory_intent" | "reminder_draft" | "question_list_draft" | "hermes_task" | "illustration_draft" | "illustration";
+  kind: "none" | "visible_reply" | "memory_intent" | "reminder_draft" | "question_list_draft" | "hermes_task" | "illustration_draft" | "illustration" | "action_card_draft" | "action_card";
   title?: string;
   text?: string;
   dueText?: string;
@@ -26,6 +27,8 @@ export interface ActionResult {
   sourceIds?: string[];
   plan?: IllustrationPlan;
   attachment?: MediaAttachment;
+  videoAttachment?: MediaAttachment;
+  durationSeconds?: number;
 }
 
 export interface IllustrationPlan {
@@ -120,15 +123,15 @@ export interface StreamSegment {
 
 export interface MediaAttachment {
   id: string;
-  kind: "image";
+  kind: "image" | "video";
   label: string;
-  mime: "image/png" | "image/jpeg" | "image/webp";
+  mime: "image/png" | "image/jpeg" | "image/webp" | "video/mp4";
   url: string;
   createdAt: string;
   observedAt?: string;
   location?: StreamSegment["location"];
   sizeBytes?: number;
-  generatedBy?: "user_upload" | "papo_illustration";
+  generatedBy?: "user_upload" | "papo_illustration" | "papo_action_card";
   prompt?: string;
   sourceIds?: string[];
 }
@@ -354,6 +357,27 @@ export interface IllustrationRecord {
   model?: string;
 }
 
+export interface ActionCardRecord {
+  id: string;
+  createdAt: string;
+  title: string;
+  caption?: string;
+  prompt: string;
+  style?: string;
+  durationSeconds: number;
+  cover?: MediaAttachment;
+  video: MediaAttachment;
+  sourceIds: string[];
+  messageId?: string;
+  emergenceId?: string;
+  actionEventId?: string;
+  providerKind: ProviderKind;
+  providerName: string;
+  model?: string;
+  disabled?: boolean;
+  deleted?: boolean;
+}
+
 export interface FeedbackRecord {
   id: string;
   at: string;
@@ -525,6 +549,7 @@ export interface CreatureProfile {
   readState: ReadState;
   hermes: HermesProfileState;
   illustrations?: IllustrationRecord[];
+  actionCards?: ActionCardRecord[];
   dogState: DogInteractionState;
   dogStateHistory: DogInteractionState[];
 }

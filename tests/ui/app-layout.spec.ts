@@ -24,17 +24,29 @@ test("home developer panel opens and closes without overflowing", async ({ page 
   await page.goto("/");
 
   await expect(page.getByRole("heading", { level: 1, name: "Papo" })).toBeVisible();
+  await page.getByRole("button", { name: "Papo 动过" }).click();
+  const actionGallery = page.getByRole("dialog", { name: "Papo 的动作卡" });
+  await expect(actionGallery).toBeVisible();
+  await expect(actionGallery).toContainText("Papo 抓蝴蝶");
+  await expect(actionGallery.locator("video")).toBeVisible();
+  await page.getByRole("button", { name: "收起" }).click();
+
   await page.locator(".home-stage").getByRole("button", { name: "小眼睛" }).click();
 
   const panel = page.getByRole("dialog", { name: /Papo 状态/ });
   await expect(panel).toBeVisible();
   await expect(panel).toContainText("状态");
+  await expect(panel).toContainText("动作卡");
+  await expect(panel.locator("video")).toBeVisible();
+  await panel.getByRole("button", { name: "禁用" }).click();
+  await expect(panel.locator(".action-card-admin.disabled")).toBeVisible();
   await expect(panel).toContainText("最近状态日记");
   await expect(panel).toContainText("悄悄看你");
   await expectInViewport(page, panel);
 
   await page.getByRole("button", { name: "收起小眼睛" }).click();
   await expect(panel).toBeHidden();
+  await expect(page.getByRole("button", { name: "Papo 动过" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Papo 画过" }).click();
   const gallery = page.getByRole("dialog", { name: "Papo 画过的小画" });
@@ -42,6 +54,27 @@ test("home developer panel opens and closes without overflowing", async ({ page 
   await expect(gallery).toContainText("今天的泳池小画");
   await expect(gallery.locator("img")).toBeVisible();
   await expectInViewport(page, gallery);
+});
+
+test("profile can rename the creature and logged-in UI follows the new name", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "看看哪只 Papo 在身边" }).click();
+  await page.getByLabel("名字").fill("吉祥");
+  await page.getByRole("button", { name: "保存名字" }).click();
+  await expect(page.getByText("名字已保存")).toBeVisible();
+  await expect(page.locator(".account-card")).toContainText("吉祥");
+
+  await page.locator(".nav").getByRole("button", { name: /首页/ }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "吉祥" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "吉祥 动过" })).toBeVisible();
+  await page.getByRole("button", { name: "吉祥 动过" }).click();
+  await expect(page.getByRole("dialog", { name: "吉祥 的动作卡" })).toContainText("吉祥 抓蝴蝶");
+  await page.getByRole("button", { name: "收起" }).click();
+
+  await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
+  await expect(page.getByPlaceholder("告诉 吉祥...")).toBeVisible();
+  await expect(page.getByRole("button", { name: "发送给 吉祥" })).toBeVisible();
 });
 
 test("home guide poster explains Papo without overflowing", async ({ page }) => {
@@ -337,6 +370,26 @@ async function installMockApi(page: Page) {
       const nextProfile = await profileWithTestOverrides(route, profile);
       profile = nextProfile;
       await json(route, { profile: nextProfile });
+      return;
+    }
+
+    if (path === "/api/profiles/demo" && route.request().method() === "PATCH") {
+      const requestBody = safePostJson(route) as { creatureName?: string };
+      if (requestBody.creatureName?.trim()) profile = { ...profile, creatureName: requestBody.creatureName.trim() };
+      await json(route, { profile });
+      return;
+    }
+
+    if (path.startsWith("/api/profiles/demo/action-cards/") && route.request().method() === "PATCH") {
+      const cardId = path.split("/").at(-1);
+      const requestBody = safePostJson(route) as { disabled?: boolean; deleted?: boolean };
+      profile = {
+        ...profile,
+        actionCards: (profile.actionCards ?? []).map((card) =>
+          card.id === cardId ? { ...card, ...requestBody } : card
+        )
+      };
+      await json(route, { profile });
       return;
     }
 
@@ -768,6 +821,31 @@ function makeProfile() {
           createdAt: now,
           generatedBy: "papo_illustration",
           sizeBytes: 68
+        }
+      }
+    ],
+    actionCards: [
+      {
+        id: "vid_ui_action",
+        createdAt: now,
+        title: "Papo 抓蝴蝶",
+        caption: "它轻轻追了一下小蝴蝶。",
+        prompt: "cute pet chasing a butterfly",
+        style: "cute commercial pet animation",
+        durationSeconds: 8,
+        sourceIds: ["episode-1"],
+        providerKind: "openrouter",
+        providerName: "openrouter video",
+        model: "alibaba/happyhorse-1.1",
+        video: {
+          id: "vid_ui_action",
+          kind: "video",
+          label: "Papo 抓蝴蝶",
+          mime: "video/mp4",
+          url: "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQ==",
+          createdAt: now,
+          generatedBy: "papo_action_card",
+          sizeBytes: 32
         }
       }
     ],

@@ -78,6 +78,24 @@ try {
   });
   assert.equal(authed.status, 200);
 
+  const renamedWithoutPassword = await fetch(`${baseUrl}/api/profiles/password-user`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ creatureName: "吉祥" })
+  });
+  assert.equal(renamedWithoutPassword.status, 401);
+
+  const renamed = await fetch(`${baseUrl}/api/profiles/password-user`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", "x-papo-password": "secret" },
+    body: JSON.stringify({ creatureName: "吉祥" })
+  });
+  const renamedPayload = await renamed.json();
+  assert.equal(renamed.status, 200, JSON.stringify(renamedPayload));
+  assert.equal(renamedPayload.profile.creatureName, "吉祥");
+  assert.equal(renamedPayload.profile.password, undefined);
+  assert.equal((await store.getProfile("password-user"))?.creatureName, "吉祥");
+
   const changed = await fetch(`${baseUrl}/api/profiles/password-user/password`, {
     method: "PATCH",
     headers: { "content-type": "application/json", "x-papo-password": "secret" },

@@ -19,6 +19,7 @@ export interface ModelProvider {
   summarizeImage(dataUrl: string, prompt: string): Promise<string>;
   observeAudio(dataUrl: string, prompt: string): Promise<string>;
   generateImage(prompt: string, input?: { size?: string; style?: string; references?: ImageReference[] }): Promise<{ dataUrl: string; mime: "image/png" | "image/jpeg" | "image/webp"; model?: string }>;
+  generateVideo?(prompt: string, input?: { durationSeconds?: number; style?: string; referenceImage?: ImageReference }): Promise<{ dataUrl: string; mime: "video/mp4"; model?: string; remoteUrl?: string }>;
 }
 
 export interface ImageReference {
@@ -34,8 +35,11 @@ export interface ProviderDiagnostics {
   visionModel?: string;
   audioModel?: string;
   imageModel?: string;
+  videoModel?: string;
   imageProvider?: ProviderKind;
+  videoProvider?: ProviderKind;
   imageRoute?: "openrouter_images" | "images_generations" | "chat_completions";
+  videoRoute?: "openrouter_videos";
   audioRoute?: "chat_completions" | "audio_transcriptions";
 }
 
@@ -62,22 +66,27 @@ function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
   const visionModel = merged.OPENROUTER_VISION_MODEL ?? "nex-agi/nex-n2-mini";
   const audioModel = merged.OPENROUTER_AUDIO_MODEL ?? "xiaomi/mimo-v2.5";
   const imageModel = merged.OPENROUTER_IMAGE_MODEL ?? "google/gemini-3.1-flash-lite-image";
+  const videoModel = merged.OPENROUTER_VIDEO_MODEL ?? "alibaba/happyhorse-1.1";
   const baseUrl = "https://openrouter.ai/api/v1";
   return openAiCompatibleProvider({
     kind: "openrouter",
     name: "OpenRouter",
     endpoint: `${baseUrl}/chat/completions`,
     imageEndpoint: `${baseUrl}/images`,
+    videoEndpoint: `${baseUrl}/videos`,
     apiKey: merged.OPENROUTER_API_KEY,
     model: textModel,
     visionModel,
     audioModel,
     imageModel,
+    videoModel,
     imageRoute: "openrouter_images",
+    videoRoute: "openrouter_videos",
     audioRoute: "chat_completions",
     chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
     visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
-    audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 90_000)
+    audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 90_000),
+    videoTimeoutMs: longTimeoutFromEnv(merged, "PAPO_VIDEO_TIMEOUT_MS", 480_000)
   });
 }
 
@@ -88,14 +97,17 @@ function mimoProvider(merged: NodeJS.ProcessEnv): ModelProvider {
     name: "Local Mimo",
     endpoint: merged.MIMO_ENDPOINT ?? "http://localhost:11434/v1/chat/completions",
     imageEndpoint: merged.MIMO_IMAGE_ENDPOINT ?? `${baseUrl}/images/generations`,
+    videoEndpoint: merged.MIMO_VIDEO_ENDPOINT,
     apiKey: merged.MIMO_API_KEY,
     model: merged.MIMO_MODEL ?? "mimo",
     visionModel: merged.MIMO_VISION_MODEL ?? merged.MIMO_MODEL ?? "mimo",
     audioModel: merged.MIMO_AUDIO_MODEL ?? merged.MIMO_MODEL ?? "mimo",
     imageModel: merged.MIMO_IMAGE_MODEL ?? merged.MIMO_MODEL ?? "mimo",
+    videoModel: merged.MIMO_VIDEO_MODEL,
     chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
     visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
-    audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 90_000)
+    audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 90_000),
+    videoTimeoutMs: longTimeoutFromEnv(merged, "PAPO_VIDEO_TIMEOUT_MS", 480_000)
   });
 }
 
@@ -110,16 +122,19 @@ function genericProvider(merged: NodeJS.ProcessEnv): ModelProvider {
     name: "Generic model API",
     endpoint: `${baseUrl}/chat/completions`,
     imageEndpoint: `${baseUrl}/images/generations`,
+    videoEndpoint: merged.OPENAI_VIDEO_ENDPOINT ?? merged.GENERIC_VIDEO_ENDPOINT,
     audioEndpoint: audioRoute === "audio_transcriptions" ? `${baseUrl}/audio/transcriptions` : undefined,
     apiKey: merged.OPENAI_API_KEY ?? merged.GENERIC_MODEL_API_KEY,
     model: textModel,
     visionModel: merged.OPENAI_VISION_MODEL ?? textModel,
     audioModel,
     imageModel,
+    videoModel: merged.OPENAI_VIDEO_MODEL ?? merged.GENERIC_VIDEO_MODEL,
     audioRoute,
     chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
     visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
-    audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 90_000)
+    audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 90_000),
+    videoTimeoutMs: longTimeoutFromEnv(merged, "PAPO_VIDEO_TIMEOUT_MS", 480_000)
   });
 }
 
@@ -192,22 +207,32 @@ function timeoutFromEnv(env: NodeJS.ProcessEnv, key: string, defaultMs: number) 
   return Math.max(5_000, Math.min(120_000, Math.round(value)));
 }
 
+function longTimeoutFromEnv(env: NodeJS.ProcessEnv, key: string, defaultMs: number) {
+  const value = Number(env[key]);
+  if (!Number.isFinite(value) || value <= 0) return defaultMs;
+  return Math.max(30_000, Math.min(900_000, Math.round(value)));
+}
+
 function openAiCompatibleProvider(input: {
   kind: ProviderKind;
   name: string;
   endpoint: string;
   audioEndpoint?: string;
   imageEndpoint?: string;
+  videoEndpoint?: string;
   apiKey?: string;
   model: string;
   visionModel?: string;
   audioModel?: string;
   imageModel?: string;
+  videoModel?: string;
   imageRoute?: ProviderDiagnostics["imageRoute"];
+  videoRoute?: ProviderDiagnostics["videoRoute"];
   audioRoute?: ProviderDiagnostics["audioRoute"];
   chatTimeoutMs: number;
   visionTimeoutMs: number;
   audioTimeoutMs: number;
+  videoTimeoutMs: number;
 }): ModelProvider {
   return {
     kind: input.kind,
@@ -219,11 +244,14 @@ function openAiCompatibleProvider(input: {
       visionProvider: input.kind,
       audioProvider: input.kind,
       imageProvider: input.kind,
+      videoProvider: input.videoEndpoint ? input.kind : undefined,
       textModel: input.model,
       visionModel: input.visionModel ?? input.model,
       audioModel: input.audioModel ?? input.model,
       imageModel: input.imageModel ?? input.model,
+      videoModel: input.videoModel,
       imageRoute: input.imageRoute ?? (input.imageEndpoint?.endsWith("/images") ? "openrouter_images" : input.imageEndpoint?.endsWith("/chat/completions") ? "chat_completions" : "images_generations"),
+      videoRoute: input.videoRoute,
       audioRoute: input.audioRoute ?? "chat_completions"
     },
     async generate(prompt: string) {
@@ -248,6 +276,9 @@ function openAiCompatibleProvider(input: {
     },
     async generateImage(prompt: string, imageInput = {}) {
       return callImageGeneration(input, prompt, imageInput);
+    },
+    async generateVideo(prompt: string, videoInput = {}) {
+      return callVideoGeneration(input, prompt, videoInput);
     }
   };
 }
@@ -256,14 +287,16 @@ function withModalityOverrides(primary: ModelProvider, merged: NodeJS.ProcessEnv
   const vision = visionOverrideProvider(primary, merged);
   const audio = audioOverrideProvider(primary, merged);
   const image = imageOverrideProvider(primary, merged);
-  if (!vision && !audio && !image) return primary;
+  const video = videoOverrideProvider(primary, merged);
+  if (!vision && !audio && !image && !video) return primary;
   return {
     ...primary,
     name: [
       primary.name,
       vision ? `${vision.name} vision` : "",
       audio ? `${audio.name} audio` : "",
-      image ? `${image.name} image` : ""
+      image ? `${image.name} image` : "",
+      video ? `${video.name} video` : ""
     ].filter(Boolean).join(" + "),
     diagnostics: {
       ...primary.diagnostics,
@@ -275,6 +308,15 @@ function withModalityOverrides(primary: ModelProvider, merged: NodeJS.ProcessEnv
         imageProvider: primary.diagnostics?.imageProvider,
         imageModel: primary.diagnostics?.imageModel,
         imageRoute: primary.diagnostics?.imageRoute
+      }),
+      ...(video ? {
+        videoProvider: video.kind,
+        videoModel: video.diagnostics?.videoModel,
+        videoRoute: video.diagnostics?.videoRoute
+      } : {
+        videoProvider: primary.diagnostics?.videoProvider,
+        videoModel: primary.diagnostics?.videoModel,
+        videoRoute: primary.diagnostics?.videoRoute
       }),
       ...(vision ? {
         visionProvider: vision.kind,
@@ -288,7 +330,8 @@ function withModalityOverrides(primary: ModelProvider, merged: NodeJS.ProcessEnv
     },
     summarizeImage: vision ? (dataUrl, prompt) => vision.summarizeImage(dataUrl, prompt) : primary.summarizeImage,
     observeAudio: audio ? (dataUrl, prompt) => audio.observeAudio(dataUrl, prompt) : primary.observeAudio,
-    generateImage: image ? (prompt, input) => image.generateImage(prompt, input) : primary.generateImage
+    generateImage: image ? (prompt, input) => image.generateImage(prompt, input) : primary.generateImage,
+    generateVideo: video ? (prompt, input) => video.generateVideo?.(prompt, input) ?? Promise.reject(new Error("Video generation provider is not configured")) : primary.generateVideo
   };
 }
 
@@ -298,6 +341,19 @@ function imageOverrideProvider(primary: ModelProvider, merged: NodeJS.ProcessEnv
   const provider = providerForKind(requested, merged);
   if (provider.kind === primary.kind) return undefined;
   return provider;
+}
+
+function videoOverrideProvider(primary: ModelProvider, merged: NodeJS.ProcessEnv) {
+  const requested = merged.PAPO_VIDEO_PROVIDER;
+  if (requested === "primary") return undefined;
+  if (requested) {
+    const provider = providerForKind(requested, merged);
+    if (provider.kind === primary.kind) return undefined;
+    return provider;
+  }
+  if (primary.diagnostics?.videoProvider) return undefined;
+  if (!merged.OPENROUTER_API_KEY) return undefined;
+  return openRouterProvider(merged);
 }
 
 function audioOverrideProvider(primary: ModelProvider, merged: NodeJS.ProcessEnv) {
@@ -721,6 +777,190 @@ function extractGeneratedImage(message: { images?: Array<{ image_url?: { url?: s
     if (dataUrl) return dataUrl;
   }
   return undefined;
+}
+
+async function callVideoGeneration(
+  input: { videoEndpoint?: string; apiKey?: string; model: string; videoModel?: string; kind: ProviderKind; videoTimeoutMs: number },
+  prompt: string,
+  videoInput: { durationSeconds?: number; style?: string; referenceImage?: ImageReference }
+) {
+  if (!input.videoEndpoint) throw new Error("Video generation endpoint is not configured");
+  const model = input.videoModel ?? input.model;
+  if (!model) throw new Error("Video generation model is not configured");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), input.videoTimeoutMs);
+  try {
+    const started = Date.now();
+    const capability = await videoModelCapability(input, model, controller.signal);
+    const duration = supportedDuration(capability, videoInput.durationSeconds ?? 8);
+    const aspectRatio = supportedAspectRatio(capability, "1:1");
+    const resolution = supportedResolution(capability, "720p");
+    const payload: Record<string, unknown> = {
+      model,
+      prompt: `${prompt}${videoInput.style ? `\n\nStyle: ${videoInput.style}` : ""}`,
+      duration,
+      duration_seconds: duration,
+      aspect_ratio: aspectRatio,
+      resolution,
+      response_format: "url"
+    };
+    if (videoInput.referenceImage?.dataUrl) {
+      payload.image_url = videoInput.referenceImage.dataUrl;
+      payload.input_image = videoInput.referenceImage.dataUrl;
+    }
+    const response = await fetch(input.videoEndpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: openRouterHeaders(input),
+      body: JSON.stringify(payload)
+    });
+    if (!response.ok) throw new Error(`Video generation provider failed: ${response.status} ${await responseErrorSummary(response)}`);
+    const initial = await response.json();
+    const direct = extractGeneratedVideo(initial);
+    if (direct) return await videoResultFromRaw(direct, model, controller.signal);
+
+    const id = extractJobId(initial);
+    if (!id) throw new Error(`Video generation provider returned no video or job id (${jsonDiagnostic(JSON.stringify(initial).slice(0, 1000))})`);
+    const pollingUrl = extractPollingUrl(initial);
+    while (Date.now() - started < input.videoTimeoutMs) {
+      await delay(5_000);
+      const status = await fetch(resolveVideoEndpoint(input.videoEndpoint, pollingUrl ?? id), {
+        method: "GET",
+        signal: controller.signal,
+        headers: openRouterHeaders(input)
+      });
+      if (!status.ok) throw new Error(`Video generation status failed: ${status.status} ${await responseErrorSummary(status)}`);
+      const data = await status.json();
+      const statusText = String((data as Record<string, unknown>).status ?? (data as Record<string, unknown>).state ?? "").toLowerCase();
+      if (/fail|error|cancel/.test(statusText)) throw new Error(`Video generation failed: ${JSON.stringify(data).slice(0, 600)}`);
+      const raw = extractGeneratedVideo(data);
+      if (raw) return await videoResultFromRaw(raw, model, controller.signal);
+      if (/complete|succeed|success|done|finished/.test(statusText)) {
+        const content = await fetch(`${input.videoEndpoint.replace(/\/$/, "")}/${encodeURIComponent(id)}/content`, {
+          method: "GET",
+          signal: controller.signal,
+          headers: openRouterHeaders(input)
+        });
+        if (!content.ok) throw new Error(`Video generation content download failed: ${content.status} ${await responseErrorSummary(content)}`);
+        const bytes = Buffer.from(await content.arrayBuffer());
+        return { dataUrl: `data:video/mp4;base64,${bytes.toString("base64")}`, mime: "video/mp4" as const, model };
+      }
+    }
+    throw new Error(`Video generation timed out after ${Math.round(input.videoTimeoutMs / 1000)}s`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function videoModelCapability(
+  input: { videoEndpoint?: string; apiKey?: string; kind: ProviderKind },
+  model: string,
+  signal: AbortSignal
+) {
+  if (!input.videoEndpoint || input.kind !== "openrouter") return undefined;
+  const response = await fetch(`${input.videoEndpoint.replace(/\/videos$/, "")}/videos/models`, {
+    method: "GET",
+    signal,
+    headers: openRouterHeaders(input)
+  });
+  if (!response.ok) throw new Error(`Video models lookup failed: ${response.status} ${await responseErrorSummary(response)}`);
+  const data = await response.json() as { data?: Array<Record<string, unknown>> };
+  return data.data?.find((item) => item.id === model);
+}
+
+function supportedDuration(capability: Record<string, unknown> | undefined, desired: number) {
+  const durations = Array.isArray(capability?.supported_durations) ? capability.supported_durations.filter((item): item is number => typeof item === "number") : [];
+  if (!durations.length) return desired;
+  return durations.reduce((best, current) => Math.abs(current - desired) < Math.abs(best - desired) ? current : best, durations[0]);
+}
+
+function supportedAspectRatio(capability: Record<string, unknown> | undefined, desired: string) {
+  const ratios = Array.isArray(capability?.supported_aspect_ratios) ? capability.supported_aspect_ratios.filter((item): item is string => typeof item === "string") : [];
+  if (!ratios.length || ratios.includes(desired)) return desired;
+  return ratios.includes("16:9") ? "16:9" : ratios[0];
+}
+
+function supportedResolution(capability: Record<string, unknown> | undefined, desired: string) {
+  const resolutions = Array.isArray(capability?.supported_resolutions) ? capability.supported_resolutions.filter((item): item is string => typeof item === "string") : [];
+  if (!resolutions.length || resolutions.includes(desired)) return desired;
+  return resolutions.includes("480p") ? "480p" : resolutions[0];
+}
+
+function extractPollingUrl(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  return typeof record.polling_url === "string" ? record.polling_url : undefined;
+}
+
+function resolveVideoEndpoint(videoEndpoint: string, idOrPath: string) {
+  if (/^https?:\/\//.test(idOrPath)) return idOrPath;
+  if (idOrPath.startsWith("/")) {
+    const base = new URL(videoEndpoint);
+    return `${base.origin}${idOrPath}`;
+  }
+  return `${videoEndpoint.replace(/\/$/, "")}/${encodeURIComponent(idOrPath)}`;
+}
+
+function openRouterHeaders(input: { apiKey?: string; kind: ProviderKind }) {
+  return {
+    "Content-Type": "application/json",
+    ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {}),
+    ...(input.kind === "openrouter" ? { "HTTP-Referer": "http://localhost:5173", "X-Title": "Papo" } : {})
+  };
+}
+
+function extractJobId(value: unknown): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of ["id", "job_id", "task_id", "generation_id"]) {
+    if (typeof record[key] === "string" && record[key]) return record[key] as string;
+  }
+  if (record.data && typeof record.data === "object") return extractJobId(record.data);
+  return undefined;
+}
+
+function extractGeneratedVideo(value: unknown): string | undefined {
+  if (!value) return undefined;
+  if (typeof value === "string") {
+    if (/^data:video\//.test(value) || /^https?:\/\//.test(value) || /^[A-Za-z0-9+/=]{200,}$/.test(value)) return value;
+    return undefined;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = extractGeneratedVideo(item);
+      if (found) return found;
+    }
+    return undefined;
+  }
+  if (typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of ["url", "video_url", "download_url", "mp4", "b64_json", "base64", "data_url"]) {
+    const found = extractGeneratedVideo(record[key]);
+    if (found) return found;
+  }
+  for (const key of ["video", "videos", "output", "outputs", "result", "results", "data", "artifacts"]) {
+    const found = extractGeneratedVideo(record[key]);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+async function videoResultFromRaw(raw: string, model: string, signal: AbortSignal) {
+  if (/^data:video\//.test(raw)) {
+    const normalized = raw.replace(/^data:video\/quicktime;/i, "data:video/mp4;");
+    return { dataUrl: normalized, mime: "video/mp4" as const, model };
+  }
+  if (/^https?:\/\//.test(raw)) {
+    const response = await fetch(raw, { signal });
+    if (!response.ok) throw new Error(`Generated video download failed: ${response.status}`);
+    const bytes = Buffer.from(await response.arrayBuffer());
+    return { dataUrl: `data:video/mp4;base64,${bytes.toString("base64")}`, mime: "video/mp4" as const, model, remoteUrl: raw };
+  }
+  return { dataUrl: `data:video/mp4;base64,${raw}`, mime: "video/mp4" as const, model };
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function parseAudioDataUrl(dataUrl: string) {

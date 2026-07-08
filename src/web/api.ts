@@ -162,6 +162,24 @@ export async function updateProfilePassword(userId: string, input: { currentPass
   return data.profile;
 }
 
+export async function updateProfileName(userId: string, creatureName: string): Promise<CreatureProfile> {
+  const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}`, {
+    method: "PATCH",
+    headers: profileJsonHeaders(userId),
+    body: JSON.stringify({ creatureName })
+  });
+  return data.profile;
+}
+
+export async function updateActionCard(userId: string, cardId: string, input: { disabled?: boolean; deleted?: boolean }): Promise<CreatureProfile> {
+  const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/action-cards/${cardId}`, {
+    method: "PATCH",
+    headers: profileJsonHeaders(userId),
+    body: JSON.stringify(input)
+  });
+  return data.profile;
+}
+
 export function makeSegment(id: string, kind: SegmentKind, label: string, content: string, extra: Partial<StreamSegment> = {}): StreamSegment {
   return { id, kind, label, content, ...extra };
 }

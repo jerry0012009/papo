@@ -1314,6 +1314,36 @@ select {
   font-size: 0.8rem;
 }
 
+.action-card-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.action-card-preview {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.action-card-preview video {
+  width: 100%;
+  max-height: 280px;
+  border-radius: 12px;
+  background: #111827;
+  object-fit: cover;
+}
+
+.action-card-preview strong,
+.action-card-preview span {
+  overflow-wrap: anywhere;
+}
+
+.action-card-preview span {
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+}
+
 .state-policy-snapshot {
   display: grid;
   gap: 10px;
@@ -1331,6 +1361,51 @@ select {
 .state-policy-snapshot small {
   color: var(--muted);
   line-height: 1.4;
+}
+
+.action-card-admin-list {
+  display: grid;
+  gap: 9px;
+}
+
+.action-card-admin {
+  display: grid;
+  grid-template-columns: minmax(96px, 150px) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  border: 1px solid rgba(70, 82, 72, 0.12);
+  border-radius: 12px;
+  min-width: 0;
+}
+
+.action-card-admin.disabled {
+  opacity: 0.58;
+}
+
+.action-card-admin video {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  background: #111827;
+  object-fit: cover;
+}
+
+.action-card-admin b,
+.action-card-admin small {
+  overflow-wrap: anywhere;
+}
+
+.action-card-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.action-card-controls button {
+  min-height: 32px;
+  padding: 4px 10px;
 }
 
 .status-diary-list {
@@ -2018,6 +2093,14 @@ select {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+.attachment-video {
+  width: min(100%, 320px);
+  max-height: 260px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #111827;
 }
 
 .memory-details,
@@ -2955,6 +3038,7 @@ select {
   overflow-wrap: anywhere;
 }
 
+.profile-name-settings,
 .password-settings {
   display: grid;
   gap: 12px;
@@ -2964,8 +3048,13 @@ select {
   background: #fff;
 }
 
+.profile-name-settings > strong,
 .password-settings > strong {
   font-size: 0.95rem;
+}
+
+.profile-name-settings .primary {
+  width: fit-content;
 }
 
 .password-actions {

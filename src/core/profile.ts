@@ -34,6 +34,7 @@ export function createCreatureProfile(input: {
     readState: {},
     hermes: { sessionName: hermesSessionName(userId), tasks: [] },
     illustrations: [],
+    actionCards: [],
     dogState: seedDogState(now),
     dogStateHistory: []
   };
@@ -70,6 +71,8 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.hermes.tasks = profile.hermes.tasks.slice(0, 30);
   profile.illustrations ??= [];
   profile.illustrations = profile.illustrations.slice(0, 30);
+  profile.actionCards ??= [];
+  profile.actionCards = profile.actionCards.slice(0, 30);
   profile.dogState = normalizeDogState(profile.dogState, new Date().toISOString());
   profile.dogStateHistory ??= [];
   profile.dogStateHistory = profile.dogStateHistory.map((state) => normalizeDogState(state, state.selectedAt)).slice(0, 40);

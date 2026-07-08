@@ -8,8 +8,8 @@ import type { ModelProvider } from "./provider";
 import { applyStateDelta } from "./state";
 import type { ActionResult, CaptureResult, CreatureProfile, SemanticBrainRecord } from "./types";
 
-const actionSchema = z.enum(["observe", "respond", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list", "use_hermes", "generate_illustration"]);
-const actionResultKindSchema = z.enum(["none", "visible_reply", "memory_intent", "reminder_draft", "question_list_draft", "hermes_task", "illustration_draft"]);
+const actionSchema = z.enum(["observe", "respond", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list", "use_hermes", "generate_illustration", "generate_action_card"]);
+const actionResultKindSchema = z.enum(["none", "visible_reply", "memory_intent", "reminder_draft", "question_list_draft", "hermes_task", "illustration_draft", "action_card_draft"]);
 const stateDeltaSchema = z
   .object({
     curiosity: z.number().min(-12).max(12).optional(),
@@ -60,6 +60,7 @@ const semanticActionSchema = z.object({
             prompt: optionalText(1600),
             caption: optionalText(220),
             style: optionalText(160),
+            durationSeconds: z.number().min(4).max(20).optional(),
             sourceIds: optionalTextArray(10, 120).optional()
           })
           .optional(),
@@ -204,6 +205,11 @@ function validatePersistenceDecision(decision: ActionDecisionSuggestion) {
     if (!decision.actionResult.title || !decision.actionResult.prompt) throw new Error("illustration_draft actionResult requires title and prompt");
     if (!decision.reply || decision.shouldReply === false) throw new Error("generate_illustration requires a visible reply so the user knows Papo is drawing");
   }
+  if (decision.action === "generate_action_card") {
+    if (decision.actionResult?.kind !== "action_card_draft") throw new Error("action model selected generate_action_card without an action_card_draft actionResult");
+    if (!decision.actionResult.title || !decision.actionResult.prompt) throw new Error("action_card_draft actionResult requires title and prompt");
+    if (!decision.reply || decision.shouldReply === false) throw new Error("generate_action_card requires a visible reply so the user knows the action is being made");
+  }
 }
 
 function normalizeActionResult(decision: ActionDecisionSuggestion): ActionResult {
@@ -257,6 +263,23 @@ function normalizeActionResult(decision: ActionDecisionSuggestion): ActionResult
   if (raw?.kind === "illustration_draft") {
     throw new Error("action model returned an illustration_draft actionResult for a non-illustration action");
   }
+  if (decision.action === "generate_action_card") {
+    return {
+      kind: "action_card_draft",
+      title: safeProcessText(raw?.title) ?? "",
+      text: safeProcessText(raw?.text),
+      prompt: safeProcessText(raw?.prompt) ?? "",
+      caption: safeProcessText(raw?.caption),
+      style: safeProcessText(raw?.style),
+      sourceIds: raw?.sourceIds?.map((item) => safeProcessText(item)).filter((item): item is string => Boolean(item)).slice(0, 10),
+      durationSeconds: clampDuration(raw?.durationSeconds),
+      dueText: undefined,
+      items: undefined
+    };
+  }
+  if (raw?.kind === "action_card_draft") {
+    throw new Error("action model returned an action_card_draft actionResult for a non-action-card action");
+  }
   if ((decision.action === "save_episode" || decision.action === "save_long_term") && raw?.kind === "memory_intent") {
     return {
       kind: "memory_intent",
@@ -267,6 +290,12 @@ function normalizeActionResult(decision: ActionDecisionSuggestion): ActionResult
     };
   }
   return decision.reply ? { kind: "visible_reply", text: safeProcessText(decision.reply) } : { kind: "none" };
+}
+
+function clampDuration(value: unknown) {
+  const numeric = typeof value === "number" ? value : 10;
+  if (!Number.isFinite(numeric)) return 10;
+  return Math.max(4, Math.min(20, Math.round(numeric)));
 }
 
 function applyPersistenceDecision(
@@ -391,6 +420,7 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - draft_question_list：形成问题清单草稿。
 - use_hermes：把 Papo 自己无法完成、但外部 Hermes/虾虾可能能完成的任务交出去。
 - generate_illustration：把一个当前事件、照片、回忆或一天里的几个真实片段画成手绘/漫画风格插画。
+- generate_action_card：把当前小动物做某个具体动作生成一张动作关键帧，并渲染成 10 秒左右可播放动作卡。
 
 护栏会再次校验：
 - action 必须在白名单内。
@@ -411,6 +441,7 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - draft_reminder 和 draft_question_list 是有结构化产物的动作，不能只写 reply。必须在 actionResult 里返回草稿内容；reply 是 Papo 对用户说出口的自然短回应。
 - use_hermes 是外部任务动作。当用户需要实时搜索、查网页/论文/新闻/天气、执行服务器或文件任务、定时发邮件、查询外部系统、长时间研究，且 Papo 内置 LLM 无法可靠完成时使用。必须在 actionResult 里返回 hermes_task，title 写任务标题，text 写给虾虾/Hermes 的清晰任务说明；reply 写 Papo 对用户说出口的短句，例如“我去问问虾虾，稍等哦”。不要把 Hermes 的任务说明直接当成 Papo 对用户说的话。
 - generate_illustration 是图像动作。当用户明确想要图、今天的片段很适合被画下来、或 Papo 想把一段真实回忆变成一张小画时使用。必须在 actionResult 里返回 illustration_draft：title 是图片标题，prompt 是给图像模型的具体绘图提示词，caption 是给用户看的短说明，style 是手绘/漫画/明信片/多分镜等风格建议，sourceIds 是你依据的 episode/memory/segment/attachment id。prompt 应优先使用真实照片附件、真实对话、音频观察和记忆里的事实，不要编造未发生的情节；可以要求“一张图多个分镜”或“像明信片的一幅画”。reply 只写 Papo 对用户说的短句，例如“我想把这件小事画下来给你看。”，不要把 prompt 直接说给用户。
+- generate_action_card 是动作视频卡动作。当用户要求“让它动起来”、要求小动物做动作，或 Papo 根据状态/记忆很适合外显成一个短动作时使用。必须在 actionResult 里返回 action_card_draft：title 是动作卡标题，prompt 是给图像/视频生成流程的具体视觉提示词，caption 是生成后给用户看的短说明，style 是角色一致性、镜头和画风建议，durationSeconds 通常为 10。prompt 必须包含当前小动物的名字、物种、外观一致性、动作、场景、镜头运动，并基于真实上下文；不要把内部提示词直接说给用户。
 - 不要默认复述整段用户输入；但如果用户明确要求重复、确认原话或询问上一句话，可以自然引用必要原文。
 
 返回严格 JSON：
@@ -458,6 +489,7 @@ actionResult 是这一步行动真实产出的结构化结果：
 - action=draft_question_list 时，必须返回 {"kind":"question_list_draft","title":"...","items":["..."]}；items 至少一条。
 - action=use_hermes 时，必须返回 {"kind":"hermes_task","title":"...","text":"..."}，title 和 text 必填。
 - action=generate_illustration 时，必须返回 {"kind":"illustration_draft","title":"...","prompt":"...","caption":"...","style":"...","sourceIds":["..."]}，title 和 prompt 必填。caption 是图生成后可展示给用户的短句；sourceIds 必须来自当前事件、附件、episode 或 memory 的真实 id，不能编造。
+- action=generate_action_card 时，必须返回 {"kind":"action_card_draft","title":"...","prompt":"...","caption":"...","style":"...","durationSeconds":10,"sourceIds":["..."]}，title 和 prompt 必填。caption 是动作卡生成后可展示给用户的短句；sourceIds 必须来自当前事件、附件、episode 或 memory 的真实 id，不能编造。
 - observe/quiet 应省略 actionResult，或返回 {"kind":"none"}。
 shouldCreateEpisode 决定这次是否应该留下为一条经历。
 shouldConsiderMemory 决定这次是否进入后续记忆判断；只有值得被之后记住、反馈、回忆或整理的事件才为 true。shouldConsiderMemory=true 时 shouldCreateEpisode 必须为 true。
@@ -465,6 +497,7 @@ shouldConsiderMemory 决定这次是否进入后续记忆判断；只有值得�
 如果 action 是 observe 或 quiet，shouldReply 必须为 false 或省略，reply 必须省略。
 如果 action 是 use_hermes，shouldReply 必须为 true，reply 必须是给用户看的短回复，actionResult.text 才是给 Hermes 的任务。
 如果 action 是 generate_illustration，shouldReply 必须为 true，reply 必须是给用户看的短回复，actionResult.prompt 才是给图像模型的提示词。
+如果 action 是 generate_action_card，shouldReply 必须为 true，reply 必须是给用户看的短回复，actionResult.prompt 才是给媒体生成流程的提示词。
 如果 recent_memories 里有自然联想到的旧记忆，可以在 relatedMemoryIds 里返回对应 id；不能编造不存在的 id。
 
 pet_context:
