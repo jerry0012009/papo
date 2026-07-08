@@ -9,7 +9,8 @@
     "dev:api": "tsx watch src/server/index.ts",
     "serve:api": "tsx src/server/index.ts",
     "build": "tsc --noEmit && vite build",
-    "test": "npm run build",
+    "test": "npm run build && npm run test:unit",
+    "test:unit": "node --test --import tsx tests/*.test.ts",
     "test:ui": "playwright test",
     "smoke:real-cognition": "RUN_REAL_MODEL_SMOKE=1 tsx tests/real-cognition-smoke.ts",
     "start": "node dist/server/index.js"

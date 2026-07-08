@@ -1,10 +1,13 @@
 import { makeId } from "./ids";
+import { normalizeDogState, seedDogState } from "./dog-states";
+import { normalizePetKind } from "./pet-kinds";
 import { initialState } from "./state";
 import type { CreatureProfile, FeedbackPolicyProfile } from "./types";
 
 export function createCreatureProfile(input: {
   userId?: string;
   creatureName?: string;
+  petKind?: string;
   now?: string;
 } = {}): CreatureProfile {
   const now = input.now ?? new Date().toISOString();
@@ -12,6 +15,7 @@ export function createCreatureProfile(input: {
   const profile: CreatureProfile = {
     userId,
     creatureName: input.creatureName?.trim() || "Papo",
+    petKind: normalizePetKind(input.petKind),
     createdAt: now,
     lastSeenAt: now,
     state: initialState(userId),
@@ -28,7 +32,9 @@ export function createCreatureProfile(input: {
     conversation: [],
     proactive: initialProactiveState(now),
     readState: {},
-    hermes: { sessionName: hermesSessionName(userId), tasks: [] }
+    hermes: { sessionName: hermesSessionName(userId), tasks: [] },
+    dogState: seedDogState(now),
+    dogStateHistory: []
   };
   return profile;
 }
@@ -47,6 +53,7 @@ export function initialPolicyProfile(): FeedbackPolicyProfile {
 
 export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProfile {
   profile.lastSeenAt ??= profile.createdAt;
+  profile.petKind = normalizePetKind(profile.petKind);
   profile.policyProfile ??= initialPolicyProfile();
   profile.memoryCandidates ??= [];
   profile.emergenceHistory ??= [];
@@ -60,6 +67,9 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.hermes.sessionName ??= hermesSessionName(profile.userId);
   profile.hermes.tasks ??= [];
   profile.hermes.tasks = profile.hermes.tasks.slice(0, 30);
+  profile.dogState = normalizeDogState(profile.dogState, new Date().toISOString());
+  profile.dogStateHistory ??= [];
+  profile.dogStateHistory = profile.dogStateHistory.map((state) => normalizeDogState(state, state.selectedAt)).slice(0, 40);
   profile.proactive.pendingCount = Math.max(0, Math.min(3, Math.round(profile.proactive.pendingCount ?? 0)));
   profile.proactive.paused = Boolean(profile.proactive.paused);
   profile.episodes ??= [];

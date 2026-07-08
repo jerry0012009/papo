@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { makeId } from "./ids";
-import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
+import { modelConversationContext, modelFeedbackContext, modelMemoryContext, modelPetContext } from "./model-context";
 import { normalizeSharedMemoryText, toCreatureMemoryVoice } from "./memory";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
@@ -195,6 +195,9 @@ JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
   ],
   "trace": ["..."]
 }
+
+pet_context:
+${JSON.stringify(modelPetContext(profile))}
 
 current_state:
 ${JSON.stringify(profile.state)}

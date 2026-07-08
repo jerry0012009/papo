@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { makeId } from "./ids";
-import { modelConversationContext, modelFeedbackContext } from "./model-context";
+import { modelConversationContext, modelFeedbackContext, modelPetContext } from "./model-context";
 import { toCreatureMemoryVoice } from "./memory";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import { proactivePromptContext } from "./proactive";
@@ -203,6 +203,9 @@ JSON 字段名保持示例格式；枚举字段值必须使用示例里的英文
 now:
 ${now}
 
+pet_context:
+${JSON.stringify(modelPetContext(profile, now))}
+
 current_state:
 ${JSON.stringify(profile.state)}
 
@@ -233,6 +236,9 @@ JSON 字段名保持示例格式；枚举字段值必须使用示例里的英文
 
 now:
 ${now}
+
+pet_context:
+${JSON.stringify(modelPetContext(profile, now))}
 
 current_state:
 ${JSON.stringify(profile.state)}
@@ -286,6 +292,9 @@ JSON 字段名保持示例格式；枚举字段值必须使用示例里的英文
 
 now:
 ${now}
+
+pet_context:
+${JSON.stringify(modelPetContext(profile, now))}
 
 current_state:
 ${JSON.stringify(profile.state)}

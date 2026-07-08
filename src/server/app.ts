@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
+import { isDogStateCheckDue, refreshDogStateIfDue } from "../core/dog-states";
 import { isDreamingDue, recordDreamingFailure, semanticDreamMemories } from "../core/dreaming";
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
@@ -17,8 +18,9 @@ import { createHermesBridge, type HermesBridge } from "./hermes";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
 const createProfileSchema = z.object({
-  userId: z.string().min(1).optional(),
-  creatureName: z.string().min(1).max(40).optional()
+  userId: z.string().min(3).max(40).regex(/^[a-zA-Z0-9_-]+$/).optional(),
+  creatureName: z.string().min(1).max(40).optional(),
+  petKind: z.string().min(1).max(40).optional()
 });
 
 const buttonSchema = z.object({
@@ -197,6 +199,9 @@ export function createApp(input: {
   app.post("/api/profiles", async (req, res, next) => {
     try {
       const body = createProfileSchema.parse(req.body);
+      if (body.userId && await store.getProfile(body.userId)) {
+        throw new HttpError(409, "User ID already exists");
+      }
       const profile = await store.createProfile(body);
       res.status(201).json({ profile });
     } catch (error) {
@@ -217,6 +222,9 @@ export function createApp(input: {
     try {
       const profile = await requireProfile(store, req.params.userId);
       const wake = wakeCreature(profile);
+      await refreshDogStateIfDue(profile, provider).catch((error) => {
+        console.error(`Dog state check failed for ${profile.userId}`, error);
+      });
       await store.saveProfile(profile);
       res.json({ profile, wake });
     } catch (error) {
@@ -479,6 +487,7 @@ export function startProactiveEmergenceLoop(store: ProfileStore, provider: Model
     running = true;
     try {
       await runAutomaticDreamingSweep(store, provider);
+      await runDogStateSweep(store, provider);
       await hermesBridge?.checkTimeouts();
       await runProactiveEmergenceSweep(store, provider);
     } catch (error) {
@@ -519,6 +528,27 @@ export async function runAutomaticDreamingSweep(store: ProfileStore, provider: M
     }
   }
   return { checked, applied, quiet, deferred };
+}
+
+export async function runDogStateSweep(store: ProfileStore, provider: ModelProvider, now = new Date().toISOString()) {
+  const summaries = await store.listProfiles();
+  let checked = 0;
+  let applied = 0;
+  let deferred = 0;
+  for (const summary of summaries) {
+    const profile = await store.getProfile(summary.userId);
+    if (!profile || !isDogStateCheckDue(profile, now)) continue;
+    checked += 1;
+    try {
+      const state = await refreshDogStateIfDue(profile, provider, { now });
+      if (state) applied += 1;
+      await store.saveProfile(profile);
+    } catch (error) {
+      console.error(`Dog state sweep failed for ${summary.userId}`, error);
+      deferred += 1;
+    }
+  }
+  return { checked, applied, deferred };
 }
 
 export async function runProactiveEmergenceSweep(store: ProfileStore, provider: ModelProvider, now = new Date().toISOString()) {

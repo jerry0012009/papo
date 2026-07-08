@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { buildAttentionEvent, isHighPrivacySegmentContent } from "./attention";
 import { makeId } from "./ids";
-import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
+import { modelConversationContext, modelFeedbackContext, modelMemoryContext, modelPetContext } from "./model-context";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
 import type { AttentionSource, CaptureResult, CreatureProfile, SemanticBrainRecord } from "./types";
@@ -279,6 +279,9 @@ function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureR
   "creatureReport": "...",
   "trace": ["..."]
 }
+
+pet_context:
+${JSON.stringify(modelPetContext(profile))}
 
 current_state:
 ${JSON.stringify(profile.state)}

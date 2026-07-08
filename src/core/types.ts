@@ -37,6 +37,18 @@ export interface CreatureState {
   mood: "curious" | "calm" | "attached" | "careful" | "tired" | "bright";
 }
 
+export interface DogInteractionState {
+  id: string;
+  selectedAt: string;
+  label: string;
+  actionText: string;
+  visualPrompt: string;
+  animation: "idle" | "wag" | "bounce" | "sniff" | "nap" | "stretch" | "play" | "listen" | "peek" | "sun";
+  reason: string;
+  nextCheckAt: string;
+  selectedBy: "seed" | "llm";
+}
+
 export interface FeedbackPolicyProfile {
   preferDepth: number;
   preferProactivity: number;
@@ -340,8 +352,8 @@ export interface WakeEvent {
 export interface SemanticBrainRecord {
   id: string;
   at: string;
-  source: AttentionSource | "memory" | "feedback" | "emergence" | "dreaming";
-  stage?: "attention" | "action" | "memory" | "feedback" | "emergence" | "dreaming" | "harness";
+  source: AttentionSource | "memory" | "feedback" | "emergence" | "dreaming" | "dog_state";
+  stage?: "attention" | "action" | "memory" | "feedback" | "emergence" | "dreaming" | "harness" | "dog_state";
   providerKind: ProviderKind;
   providerName: string;
   model?: string;
@@ -449,6 +461,7 @@ export interface CreatureMessage {
 export interface CreatureProfile {
   userId: string;
   creatureName: string;
+  petKind: string;
   createdAt: string;
   lastSeenAt: string;
   state: CreatureState;
@@ -466,6 +479,8 @@ export interface CreatureProfile {
   proactive: ProactiveEmergenceState;
   readState: ReadState;
   hermes: HermesProfileState;
+  dogState: DogInteractionState;
+  dogStateHistory: DogInteractionState[];
 }
 
 export interface ProactiveEmergenceState {

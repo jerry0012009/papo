@@ -121,6 +121,131 @@ button.primary,
   padding: 0;
 }
 
+.auth-shell {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(233, 138, 46, 0.12), transparent 28%),
+    linear-gradient(180deg, #fbfbf8 0%, var(--app-bg) 100%);
+}
+
+.auth-card {
+  width: min(100%, 720px);
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: var(--shadow-panel);
+}
+
+.auth-hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.auth-hero h1 {
+  margin: 2px 0 8px;
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  letter-spacing: 0;
+}
+
+.auth-hero p {
+  margin: 0;
+  color: var(--muted-foreground);
+  line-height: 1.65;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card-muted);
+}
+
+.auth-tabs button {
+  min-height: 38px;
+  border-color: transparent;
+  background: transparent;
+}
+
+.auth-tabs button.active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.field-label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted-foreground);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.field-label input {
+  min-height: 46px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0 12px;
+  background: var(--card);
+  color: var(--foreground);
+  font: inherit;
+}
+
+.pet-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 10px;
+  max-height: min(40dvh, 360px);
+  overflow: auto;
+  padding: 2px;
+}
+
+.pet-option {
+  min-height: 126px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  background: var(--card);
+}
+
+.pet-option .shiba,
+.pet-option .agent-pet-avatar {
+  transform: scale(0.58);
+  margin: -26px 0;
+}
+
+.pet-option span {
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.pet-option.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.auth-error {
+  margin: 0;
+  color: var(--coral);
+  font-size: 0.9rem;
+}
+
+.auth-submit {
+  min-height: 46px;
+}
+
 .nav {
   background: rgba(255, 255, 255, 0.94);
   border-color: var(--border);
@@ -976,6 +1101,27 @@ select {
   --tail-speed: 1.2s;
 }
 
+.agent-pet-avatar {
+  --sprite-cell-w: 124px;
+  --sprite-cell-h: 134px;
+  --sprite-frames: 6;
+  --sprite-row-y: 0px;
+  --sprite-end-x: -620px;
+  width: var(--sprite-cell-w);
+  height: var(--sprite-cell-h);
+  justify-self: center;
+  background-repeat: no-repeat;
+  background-size: 992px 1206px;
+  background-position: 0 var(--sprite-row-y);
+  image-rendering: pixelated;
+  filter: drop-shadow(0 10px 12px rgba(31, 36, 33, 0.14));
+  animation: pet-sprite 1s steps(var(--sprite-frames)) infinite;
+}
+
+.agent-pet-avatar.idle {
+  margin: 0 auto;
+}
+
 .shiba.idle {
   margin: 0 auto;
 }
@@ -1190,6 +1336,26 @@ select {
   transform: rotate(4deg);
 }
 
+.shiba.dog-action-bounce,
+.shiba.dog-action-play {
+  animation: shiba-hop 1.8s ease-in-out infinite;
+}
+
+.shiba.dog-action-nap {
+  animation-duration: 5.8s;
+}
+
+.shiba.dog-action-peek .shiba-head,
+.shiba.dog-action-sniff .shiba-head {
+  animation: shiba-peek 2.4s ease-in-out infinite;
+}
+
+.shiba.dog-action-stretch .shiba-body {
+  animation: shiba-stretch 3s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center bottom;
+}
+
 @keyframes breathe {
   0%,
   100% {
@@ -1197,6 +1363,45 @@ select {
   }
   50% {
     transform: translateY(-3px) scale(1.025);
+  }
+}
+
+@keyframes pet-sprite {
+  from {
+    background-position: 0 var(--sprite-row-y);
+  }
+  to {
+    background-position: var(--sprite-end-x) var(--sprite-row-y);
+  }
+}
+
+@keyframes shiba-hop {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(-7px);
+  }
+}
+
+@keyframes shiba-peek {
+  0%,
+  100% {
+    transform: rotate(0deg) translateX(0);
+  }
+  45% {
+    transform: rotate(-4deg) translateX(-2px);
+  }
+}
+
+@keyframes shiba-stretch {
+  0%,
+  100% {
+    transform: scaleX(1) scaleY(1);
+  }
+  45% {
+    transform: scaleX(1.08) scaleY(0.94);
   }
 }
 
@@ -2051,6 +2256,96 @@ select {
 .profile-list {
   display: grid;
   gap: 10px;
+}
+
+.account-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--card-muted);
+}
+
+.account-card > div:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.account-card strong {
+  font-size: 1.1rem;
+}
+
+.account-card span {
+  color: var(--muted-foreground);
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+
+/* Final chat layout override: keep the composer in normal flow so it cannot cover the last message. */
+.shell.app-shell {
+  width: min(100%, 1440px);
+  height: 100dvh;
+  min-height: 0;
+  margin: 0 auto;
+  padding: 0;
+  overflow: hidden;
+}
+
+.shell.app-shell .app-main {
+  align-self: stretch;
+}
+
+.chat-screen {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-top {
+  position: static;
+  flex: 0 0 auto;
+}
+
+.chat-thread {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 12px 0 16px;
+}
+
+.chat-list {
+  margin-top: auto;
+  width: min(100%, 780px);
+  max-width: 100%;
+}
+
+.chat-composer {
+  position: static;
+  flex: 0 0 auto;
+  width: min(100%, 780px);
+  max-width: 100%;
+}
+
+@media (max-width: 1039px) {
+  .app-sidebar {
+    display: contents;
+  }
+
+  .app-main {
+    grid-row: 1;
+  }
 }
 
 .memory-actions {
@@ -3047,4 +3342,40 @@ select {
   .memory-section {
     grid-template-columns: 1fr;
   }
+}
+
+/* Final chat layout override: keep the composer in normal flow so it cannot cover the last message. */
+.chat-screen {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chat-top {
+  position: static;
+  flex: 0 0 auto;
+}
+
+.chat-thread {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 12px 0 16px;
+}
+
+.chat-list {
+  margin-top: auto;
+  width: min(100%, 780px);
+  max-width: 100%;
+}
+
+.chat-composer {
+  position: static;
+  flex: 0 0 auto;
 }

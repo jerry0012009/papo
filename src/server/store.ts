@@ -7,7 +7,7 @@ export interface ProfileStore {
   listProfiles(): Promise<Array<{ userId: string; creatureName: string; createdAt: string }>>;
   getProfile(userId: string): Promise<CreatureProfile | undefined>;
   saveProfile(profile: CreatureProfile): Promise<void>;
-  createProfile(input: { userId?: string; creatureName?: string }): Promise<CreatureProfile>;
+  createProfile(input: { userId?: string; creatureName?: string; petKind?: string }): Promise<CreatureProfile>;
 }
 
 interface StoreFile {
@@ -44,7 +44,7 @@ export class JsonProfileStore implements ProfileStore {
     });
   }
 
-  async createProfile(input: { userId?: string; creatureName?: string }) {
+  async createProfile(input: { userId?: string; creatureName?: string; petKind?: string }) {
     return this.withWriteLock(async () => {
       const data = await this.read();
       const profile = createCreatureProfile(input);
@@ -91,6 +91,7 @@ function mergeCreatureProfiles(current: CreatureProfile, incoming: CreatureProfi
   const merged = normalizeCreatureProfile({
     ...current,
     ...incoming,
+    petKind: incoming.petKind ?? current.petKind,
     state: chooseLatestState(current, incoming),
     policyProfile: chooseLatestStateOwner(current, incoming).policyProfile,
     episodes: mergeById(current.episodes, incoming.episodes, "createdAt", mergeEpisode).filter((item) => !purged.has(item.id)).slice(0, 80),
@@ -105,6 +106,8 @@ function mergeCreatureProfiles(current: CreatureProfile, incoming: CreatureProfi
     conversation: mergeById(current.conversation, incoming.conversation, "at").slice(0, 80),
     proactive: chooseLatestProactive(current, incoming),
     readState: chooseLatestReadState(current, incoming),
+    dogState: chooseLatestDogState(current, incoming),
+    dogStateHistory: mergeByCompositeId(current.dogStateHistory, incoming.dogStateHistory, dogStateKey, "selectedAt").slice(0, 40),
     hermes: {
       channelId: incoming.hermes.channelId ?? current.hermes.channelId,
       channelName: incoming.hermes.channelName ?? current.hermes.channelName,
@@ -205,6 +208,10 @@ function chooseLatestProactive(current: CreatureProfile, incoming: CreatureProfi
   return incomingAt >= currentAt ? incoming.proactive : current.proactive;
 }
 
+function chooseLatestDogState(current: CreatureProfile, incoming: CreatureProfile) {
+  return timestamp(incoming.dogState?.selectedAt) >= timestamp(current.dogState?.selectedAt) ? incoming.dogState : current.dogState;
+}
+
 function purgedTargets(profile: CreatureProfile) {
   const ids = new Set<string>();
   for (const message of profile.conversation ?? []) {
@@ -217,6 +224,10 @@ function purgedTargets(profile: CreatureProfile) {
 
 function stateChangeKey(change: StateChange) {
   return `${change.at}:${change.reason}`;
+}
+
+function dogStateKey(state: CreatureProfile["dogState"]) {
+  return `${state.selectedAt}:${state.id}:${state.selectedBy}`;
 }
 
 function timestamp(value: unknown) {
@@ -249,7 +260,7 @@ export class MemoryProfileStore implements ProfileStore {
     this.profiles.set(profile.userId, normalizeCreatureProfile(profile));
   }
 
-  async createProfile(input: { userId?: string; creatureName?: string }) {
+  async createProfile(input: { userId?: string; creatureName?: string; petKind?: string }) {
     const profile = createCreatureProfile(input);
     this.profiles.set(profile.userId, profile);
     return profile;

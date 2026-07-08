@@ -2,7 +2,7 @@ import { z } from "zod";
 import { guardActionDecision } from "./action";
 import { isHighPrivacySegmentContent } from "./attention";
 import { makeId } from "./ids";
-import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
+import { modelConversationContext, modelFeedbackContext, modelMemoryContext, modelPetContext } from "./model-context";
 import { normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
 import { applyStateDelta } from "./state";
@@ -433,6 +433,9 @@ shouldConsiderMemory 决定这次是否进入后续记忆判断；只有值得�
 如果 action 是 observe 或 quiet，shouldReply 必须为 false 或省略，reply 必须省略。
 如果 action 是 use_hermes，shouldReply 必须为 true，reply 必须是给用户看的短回复，actionResult.text 才是给 Hermes 的任务。
 如果 recent_memories 里有自然联想到的旧记忆，可以在 relatedMemoryIds 里返回对应 id；不能编造不存在的 id。
+
+pet_context:
+${JSON.stringify(modelPetContext(profile))}
 
 current_state:
 ${JSON.stringify(profile.state)}

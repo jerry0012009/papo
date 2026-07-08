@@ -34,11 +34,12 @@ export async function listProfiles(): Promise<ProfileSummary[]> {
   return data.profiles;
 }
 
-export async function createProfile(creatureName: string): Promise<CreatureProfile> {
+export async function createProfile(input: { userId?: string; creatureName?: string; petKind?: string } | string = {}): Promise<CreatureProfile> {
+  const body = typeof input === "string" ? { creatureName: input } : input;
   const data = await request<{ profile: CreatureProfile }>("/api/profiles", {
     method: "POST",
     headers: jsonHeaders,
-    body: JSON.stringify({ creatureName })
+    body: JSON.stringify(body)
   });
   return data.profile;
 }

@@ -7,7 +7,6 @@ import {
   MessageCircle,
   MessagesSquare,
   Mic,
-  Plus,
   RefreshCcw,
   Save,
   Sparkles,
@@ -15,12 +14,14 @@ import {
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { toCreatureMemoryVoice } from "../core/memory";
+import { PET_KINDS, normalizePetKind, petKindLabel } from "../core/pet-kinds";
 import type {
   ActionResult,
   CreatureProfile,
   CreatureState,
+  DogInteractionState,
   EpisodeMemory,
   FeedbackKind,
   MessageCognitionTrace,
@@ -35,7 +36,6 @@ import {
   curiousCapture,
   dreamMemories,
   getProfile,
-  listProfiles,
   makeSegment,
   markPapoRead,
   resolveAssetUrl,
@@ -44,7 +44,6 @@ import {
   observeAudio,
   updateLongTermMemory,
   wakeProfile,
-  type ProfileSummary
 } from "./api";
 import {
   audioSliceBatchId,
@@ -57,6 +56,7 @@ import {
   LIVE_LISTENING_MAX_MS,
   shouldSuppressForcedAudioSlice
 } from "./live-listening";
+import { formatPapoDateTime, papoTimeZone } from "./time";
 
 type Tab = "home" | "chat" | "memory" | "profile";
 
@@ -73,6 +73,8 @@ type ConversationSection =
 
 const CHAT_PAGE_SIZE = 24;
 const INITIAL_CHAT_VISIBLE_COUNT = CHAT_PAGE_SIZE * 2;
+const LOCAL_USER_ID_KEY = "papo:userId";
+const PUBLIC_BASE_URL = import.meta.env.BASE_URL ?? "/";
 
 interface AudioSliceMeta {
   index: number;
@@ -90,8 +92,8 @@ interface LiveBatchBuffer {
 
 export function App() {
   const [tab, setTab] = useState<Tab>("home");
-  const [profiles, setProfiles] = useState<ProfileSummary[]>([]);
   const [profile, setProfile] = useState<CreatureProfile>();
+  const [needsAuth, setNeedsAuth] = useState(false);
   const [chatSegments, setChatSegments] = useState<StreamSegment[]>([]);
   const [emergence, setEmergence] = useState<EmergenceSurface>();
   const [listening, setListening] = useState(false);
@@ -162,36 +164,57 @@ export function App() {
   async function bootstrap() {
     try {
       setBusy(true);
-      const existingProfiles = await listProfiles();
-      let nextProfiles = existingProfiles;
-      let active = existingProfiles[0] ? await getProfile(existingProfiles[0].userId) : undefined;
-      if (!active) {
-        active = await createProfile("Papo");
-        nextProfiles = await listProfiles();
+      setNeedsAuth(false);
+      const savedUserId = readSavedUserId();
+      if (!savedUserId) {
+        setNeedsAuth(true);
+        return;
       }
+      const active = await getProfile(savedUserId);
       const woke = await wakeProfile(active.userId);
-      setProfiles(nextProfiles);
+      saveUserId(active.userId);
       setProfile(woke.profile);
     } catch (caught) {
+      forgetSavedUserId();
+      setNeedsAuth(true);
       setError(errorMessage(caught));
     } finally {
       setBusy(false);
     }
   }
 
-  async function selectProfile(userId: string) {
-    const active = await getProfile(userId);
-    const woke = await wakeProfile(active.userId);
-    setProfile(woke.profile);
-    setTab("home");
+  async function login(userId: string) {
+    await run(async () => {
+      const cleanUserId = userId.trim();
+      const active = await getProfile(cleanUserId);
+      const woke = await wakeProfile(active.userId);
+      saveUserId(active.userId);
+      setNeedsAuth(false);
+      setProfile(woke.profile);
+      setTab("home");
+    });
   }
 
-  async function addProfile() {
-    const name = `Papo ${profiles.length + 1}`;
-    const next = await createProfile(name);
-    setProfiles(await listProfiles());
-    const woke = await wakeProfile(next.userId);
-    setProfile(woke.profile);
+  async function register(userId: string, petKind: string) {
+    await run(async () => {
+      const cleanUserId = userId.trim();
+      const active = await createProfile({ userId: cleanUserId, creatureName: "Papo", petKind });
+      const woke = await wakeProfile(active.userId);
+      saveUserId(active.userId);
+      setNeedsAuth(false);
+      setProfile(woke.profile);
+      setTab("home");
+    });
+  }
+
+  function logout() {
+    stopListening();
+    forgetSavedUserId();
+    setProfile(undefined);
+    setChatSegments([]);
+    setEmergence(undefined);
+    setTab("home");
+    setNeedsAuth(true);
   }
 
   async function submitTextCapture(text: string, nextTab: Tab = "chat") {
@@ -716,6 +739,17 @@ export function App() {
     }
   }
 
+  if (!profile && needsAuth) {
+    return (
+      <AuthView
+        busy={busy}
+        error={error}
+        onLogin={login}
+        onRegister={register}
+      />
+    );
+  }
+
   if (!profile) {
     return (
       <main className="shell loading">
@@ -732,7 +766,7 @@ export function App() {
       <main className={`shell app-shell tab-${tab}`}>
         <aside className="app-sidebar" aria-label="Papo 导航">
           <div className="sidebar-brand">
-            <ShibaAvatar state={profile.state} />
+            <AvatarPreview petKind={profile.petKind} state={profile.state} dogState={profile.dogState} />
             <div>
               <strong>{profile.creatureName}</strong>
               <span>{papoMoodLabel(profile.state)}</span>
@@ -795,10 +829,8 @@ export function App() {
             {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} onDream={runDreaming} busy={busy} feedbackPendingKey={feedbackPendingKey} /> : null}
             {tab === "profile" ? (
               <ProfileView
-                profiles={profiles}
-                activeId={profile.userId}
-                onSelect={selectProfile}
-                onAdd={addProfile}
+                profile={profile}
+                onLogout={logout}
               />
             ) : null}
           </section>
@@ -820,6 +852,88 @@ export function App() {
   );
 }
 
+function AuthView(props: {
+  busy: boolean;
+  error?: string;
+  onLogin: (userId: string) => Promise<void>;
+  onRegister: (userId: string, petKind: string) => Promise<void>;
+}) {
+  const [mode, setMode] = useState<"register" | "login">("register");
+  const [userId, setUserId] = useState("");
+  const [petKind, setPetKind] = useState("shiba");
+  const [localError, setLocalError] = useState("");
+  const cleanUserId = userId.trim();
+  const canSubmit = /^[a-zA-Z0-9_-]{3,40}$/.test(cleanUserId);
+
+  async function submit() {
+    if (!canSubmit) {
+      setLocalError("User ID 只能使用 3-40 位英文、数字、下划线或短横线。");
+      return;
+    }
+    setLocalError("");
+    if (mode === "login") {
+      await props.onLogin(cleanUserId);
+      return;
+    }
+    await props.onRegister(cleanUserId, petKind);
+  }
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-card">
+        <div className="auth-hero">
+          <AvatarPreview
+            petKind={petKind}
+            state={{ mood: "bright", curiosity: 80, attachment: 74, energy: 78, confidence: 60, safety: 44, arousal: 60 }}
+          />
+          <div>
+            <p className="eyebrow">Papo</p>
+            <h1>养一只自己的小动物</h1>
+            <p>每个账号只有一只 Papo，记忆、性格、Hermes 会按 User ID 分开保存。</p>
+          </div>
+        </div>
+
+        <div className="auth-tabs" role="tablist" aria-label="登录方式">
+          <button className={mode === "register" ? "active" : ""} onClick={() => setMode("register")} type="button">注册</button>
+          <button className={mode === "login" ? "active" : ""} onClick={() => setMode("login")} type="button">登录</button>
+        </div>
+
+        <label className="field-label">
+          User ID
+          <input
+            autoFocus
+            value={userId}
+            onChange={(event) => setUserId(event.target.value)}
+            placeholder="例如 jerry"
+            autoComplete="username"
+          />
+        </label>
+
+        {mode === "register" ? (
+          <div className="pet-picker" aria-label="选择小动物类型">
+            {PET_KINDS.map((pet) => (
+              <button
+                key={pet.id}
+                type="button"
+                className={normalizePetKind(petKind) === pet.id ? "pet-option active" : "pet-option"}
+                onClick={() => setPetKind(pet.id)}
+              >
+                <AvatarPreview petKind={pet.id} />
+                <span>{pet.label}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+
+        {localError || props.error ? <p className="auth-error">{localError || props.error}</p> : null}
+        <button className="primary auth-submit" onClick={submit} disabled={props.busy || !canSubmit} type="button">
+          {props.busy ? "处理中" : mode === "register" ? "开始养 Papo" : "回到我的 Papo"}
+        </button>
+      </section>
+    </main>
+  );
+}
+
 function HomeView(props: {
   profile: CreatureProfile;
   emergence?: EmergenceSurface;
@@ -830,7 +944,7 @@ function HomeView(props: {
   onGoChat: () => void;
 }) {
   const latestReply = props.unreadPapoCount ? latestVisiblePapoReply(props.profile) : "";
-  const actionLine = papoVisibleActionLine(props.profile.state);
+  const actionLine = papoVisibleActionLine(props.profile);
   return (
     <section className="home-screen">
       <section className="home-stage">
@@ -839,7 +953,7 @@ function HomeView(props: {
           <HomeBrainPeek profile={props.profile} />
         </div>
         <div className="home-avatar-wrap">
-          <ShibaAvatar state={props.profile.state} />
+          <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} />
         </div>
         <div className="home-speech">
           <h2>{props.profile.creatureName}</h2>
@@ -888,12 +1002,12 @@ function CompanionPanel(props: {
     <aside className="companion-panel" aria-label="Papo 当前状态">
       <section className="companion-card companion-hero">
         <div className="companion-avatar">
-          <ShibaAvatar state={props.profile.state} />
+          <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} />
         </div>
         <div>
           <span className="status-dot" />
           <strong>{props.profile.creatureName}</strong>
-          <p>{props.listening ? `正在听 ${formatListeningTime(props.listeningElapsed)}` : papoVisibleActionLine(props.profile.state)}</p>
+          <p>{props.listening ? `正在听 ${formatListeningTime(props.listeningElapsed)}` : papoVisibleActionLine(props.profile)}</p>
         </div>
       </section>
 
@@ -938,11 +1052,60 @@ function CompanionPanel(props: {
   );
 }
 
-function ShibaAvatar({ state, idle = false }: { state?: CreatureState; idle?: boolean }) {
+function AvatarPreview({ petKind, state, dogState, idle = false }: { petKind?: string; state?: CreatureState; dogState?: DogInteractionState; idle?: boolean }) {
+  const normalizedPetKind = normalizePetKind(petKind);
+  if (normalizedPetKind === "shiba") return <ShibaAvatar state={state} dogState={dogState} idle={idle} />;
+  return <AgentPetSprite petKind={normalizedPetKind} dogState={dogState} idle={idle} />;
+}
+
+function AgentPetSprite({ petKind, dogState, idle = false }: { petKind: string; dogState?: DogInteractionState; idle?: boolean }) {
+  const animation = agentPetAnimation(dogState?.animation);
+  return (
+    <div
+      className={`agent-pet-avatar ${idle ? "idle" : ""}`}
+      style={{
+        backgroundImage: `url('${publicAssetPath(`pets/agent-pet/${petKind}/spritesheet.webp`)}')`,
+        "--sprite-frames": animation.frames,
+        "--sprite-row-y": `${animation.row * -134}px`,
+        "--sprite-end-x": `${(animation.frames - 1) * -124}px`
+      } as CSSProperties}
+      aria-label={`${petKindLabel(petKind)} 正在${dogState?.label ?? "陪着你"}`}
+    />
+  );
+}
+
+function agentPetAnimation(animation?: DogInteractionState["animation"]) {
+  switch (animation) {
+    case "play":
+    case "wag":
+      return { row: 3, frames: 4 };
+    case "bounce":
+    case "stretch":
+      return { row: 4, frames: 5 };
+    case "sniff":
+    case "peek":
+      return { row: 8, frames: 6 };
+    case "listen":
+    case "sun":
+      return { row: 6, frames: 6 };
+    case "nap":
+      return { row: 0, frames: 6 };
+    case "idle":
+    default:
+      return { row: 0, frames: 6 };
+  }
+}
+
+function publicAssetPath(path: string) {
+  return `${PUBLIC_BASE_URL.replace(/\/?$/, "/")}${path.replace(/^\//, "")}`;
+}
+
+function ShibaAvatar({ state, dogState, idle = false }: { state?: CreatureState; dogState?: DogInteractionState; idle?: boolean }) {
   const mood = state?.mood ?? "calm";
   const className = [
     "shiba",
     `shiba-${mood}`,
+    dogState ? `dog-action-${dogState.animation}` : "",
     idle ? "idle" : "",
     state && state.curiosity > 72 ? "is-alert" : "",
     state && state.attachment > 68 ? "is-attached" : "",
@@ -1076,12 +1239,9 @@ function StateMeter({ label, value }: { label: string; value: number }) {
   );
 }
 
-function papoVisibleActionLine(state: CreatureState) {
-  if (state.energy < 35) return "Papo 趴低了一点，慢慢眨着眼。";
-  if (state.attachment > 72) return "Papo 靠近了一点，尾巴轻轻晃着。";
-  if (state.curiosity > 72) return "Papo 抬头看着你，耳朵竖起来。";
-  if (state.safety > 76) return "Papo 安静地坐着，先陪在旁边。";
-  if (state.mood === "bright") return "Papo 小跑了两步，尾巴摇得很快。";
+function papoVisibleActionLine(profile: CreatureProfile) {
+  const action = visibleCreatureText(profile.dogState?.actionText);
+  if (action) return action;
   return "Papo 趴在旁边，等你说下一件事。";
 }
 
@@ -1162,7 +1322,7 @@ function ChatView(props: {
   return (
     <section className="chat-screen">
       <header className="chat-top">
-        <ShibaAvatar state={props.profile.state} />
+        <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} />
         <div>
           <strong>{props.listening ? "Papo 正在听" : "Papo 在这里"}</strong>
           <span>{props.listening ? formatListeningTime(props.listeningElapsed) : papoMoodLabel(props.profile.state)}</span>
@@ -1316,7 +1476,7 @@ function ChatBubble({ message, profile }: { message: ConversationMessage; profil
         <div>
           <strong>{messageTitle(message)}</strong>
           <span>
-            {context ? `${context} · ` : ""}{new Date(message.at).toLocaleString("zh-CN")}
+            {context ? `${context} · ` : ""}{formatPapoDateTime(message.at)}
           </span>
         </div>
         {message.cognitionTrace || message.sensingTrace ? <DeveloperTrace trace={message.cognitionTrace} sensingTrace={message.sensingTrace} profile={profile} /> : null}
@@ -1326,7 +1486,7 @@ function ChatBubble({ message, profile }: { message: ConversationMessage; profil
       {message.observedAt || message.location ? (
         <small>
           {[
-            message.observedAt ? `观察 ${new Date(message.observedAt).toLocaleString("zh-CN")}` : "",
+            message.observedAt ? `观察 ${formatPapoDateTime(message.observedAt)}` : "",
             message.location ? locationText(message.location) : ""
           ]
             .filter(Boolean)
@@ -1956,7 +2116,7 @@ function MemoryCandidateCard(props: {
     <article className="memory-surface candidate-memory">
       <div className="memory-main">
         <div>
-          <span>{new Date(props.candidate.createdAt).toLocaleString("zh-CN")} · 候选 · {memoryKindLabel(props.candidate.memoryKind)}</span>
+          <span>{formatPapoDateTime(props.candidate.createdAt)} · 候选 · {memoryKindLabel(props.candidate.memoryKind)}</span>
           <strong className="memory-text-preview">{normalizeMemoryText(props.candidate.candidateText)}</strong>
         </div>
         {shouldShowFullMemoryText(props.candidate.candidateText) ? (
@@ -2008,7 +2168,7 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
   return (
     <div className="memory-main">
       <div>
-        <span>{new Date(memory.createdAt).toLocaleString("zh-CN")}</span>
+        <span>{formatPapoDateTime(memory.createdAt)}</span>
         <strong className="memory-text-preview">{memoryResultLine(memory)}</strong>
       </div>
       {shouldShowFullMemoryText(memoryResultLine(memory)) ? (
@@ -2053,7 +2213,7 @@ function MemoryTraceList({ memory, profile }: { memory: CreatureProfile["longTer
         {traces.map((message) => (
           <section className="memory-trace-item" key={message.id}>
             <strong>{memoryTraceTitle(message)}</strong>
-            <small>{new Date(message.at).toLocaleString("zh-CN")}</small>
+            <small>{formatPapoDateTime(message.at)}</small>
             {message.cognitionTrace ? <DeveloperTraceBody trace={message.cognitionTrace} profile={profile} /> : null}
           </section>
         ))}
@@ -2143,30 +2303,25 @@ function MemoryFeedbackBox(props: {
 }
 
 function ProfileView(props: {
-  profiles: ProfileSummary[];
-  activeId: string;
-  onSelect: (userId: string) => void;
-  onAdd: () => void;
+  profile: CreatureProfile;
+  onLogout: () => void;
 }) {
   return (
     <section className="stack">
       <div className="panel">
-        <PanelTitle icon={UserRound} title="哪只 Papo 在你身边" />
-        <div className="profile-list">
-          {props.profiles.map((profile) => (
-            <button
-              className={profile.userId === props.activeId ? "profile-pill active" : "profile-pill"}
-              key={profile.userId}
-              onClick={() => props.onSelect(profile.userId)}
-            >
-              <UserRound size={18} />
-              <span>{profile.creatureName}</span>
-            </button>
-          ))}
+        <PanelTitle icon={UserRound} title="账号" />
+        <div className="account-card">
+          <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} />
+          <div>
+            <strong>{props.profile.creatureName}</strong>
+            <span>User ID：{props.profile.userId}</span>
+            <span>小动物：{petKindLabel(props.profile.petKind)}</span>
+            <span>默认时间：{papoTimeZone}</span>
+          </div>
         </div>
-        <button className="primary" onClick={props.onAdd}>
-          <Plus size={18} />
-          再养一只 Papo
+        <button onClick={props.onLogout}>
+          <RefreshCcw size={18} />
+          退出登录
         </button>
       </div>
     </section>
@@ -2347,6 +2502,18 @@ function countUnreadPapoMessages(profile: CreatureProfile | undefined) {
   const count = readMessageId ? messages.findIndex((message) => message.id === readMessageId) : Math.min(messages.length, 3);
   if (count < 0) return Math.min(messages.length, 3);
   return Math.min(count, 3);
+}
+
+function readSavedUserId() {
+  return window.localStorage.getItem(LOCAL_USER_ID_KEY)?.trim() || "";
+}
+
+function saveUserId(userId: string) {
+  window.localStorage.setItem(LOCAL_USER_ID_KEY, userId);
+}
+
+function forgetSavedUserId() {
+  window.localStorage.removeItem(LOCAL_USER_ID_KEY);
 }
 
 function messageTitle(message: CreatureProfile["conversation"][number]) {

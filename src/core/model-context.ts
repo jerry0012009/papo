@@ -1,10 +1,22 @@
 import { toCreatureMemoryVoice } from "./memory";
+import { petKindLabel, normalizePetKind } from "./pet-kinds";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
+import { modelTimeContext } from "./time";
 import type { CreatureProfile, FeedbackRecord, LongTermMemory } from "./types";
+
+export function modelPetContext(profile: CreatureProfile, now = new Date().toISOString()) {
+  return {
+    creatureName: profile.creatureName,
+    petKind: normalizePetKind(profile.petKind),
+    petLabel: petKindLabel(profile.petKind),
+    time: modelTimeContext(now)
+  };
+}
 
 export function modelConversationContext(profile: CreatureProfile, limit = 10) {
   return (profile.conversation ?? []).filter((message) => message.channel !== "wake").slice(0, limit).map((message) => {
     const privacyHigh = hasHighPrivacyText(message.text);
+    const time = modelTimeContext(message.at);
     return {
       id: message.id,
       role: message.role,
@@ -12,6 +24,8 @@ export function modelConversationContext(profile: CreatureProfile, limit = 10) {
       text: textForModel(message.text, privacyHigh),
       contentHiddenForPrivacy: privacyHigh,
       at: message.at,
+      localAt: time.localDateTime,
+      timeZone: time.timeZone,
       modality: message.modality,
       sourceId: message.sourceId,
       batchId: message.batchId,

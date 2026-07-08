@@ -2,8 +2,22 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 
 const now = "2026-07-07T12:00:00.000Z";
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page }, testInfo) => {
   await installMockApi(page);
+  if (!testInfo.title.includes("first visit")) {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("papo:userId", "demo");
+    });
+  }
+});
+
+test("first visit shows login and registration instead of creating a public Papo", async ({ page }) => {
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: "养一只自己的小动物" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "注册" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "登录" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "开始养 Papo" })).toBeDisabled();
 });
 
 test("home developer panel opens and closes without overflowing", async ({ page }) => {
@@ -180,6 +194,7 @@ function makeProfile() {
   return {
     userId: "demo",
     creatureName: "Papo",
+    petKind: "shiba",
     createdAt: now,
     lastSeenAt: now,
     state: {
@@ -311,7 +326,19 @@ function makeProfile() {
     ],
     proactive: { pendingCount: 0, paused: false, lastActiveAt: now },
     readState: {},
-    hermes: { tasks: [] }
+    hermes: { tasks: [] },
+    dogState: {
+      id: "curious_peek",
+      selectedAt: now,
+      label: "悄悄看你",
+      actionText: "Papo 从旁边探出小脑袋，悄悄看了你一眼。",
+      visualPrompt: "Shiba peeking from the side with one paw forward",
+      animation: "peek",
+      reason: "ui test",
+      nextCheckAt: "2026-07-07T13:00:00.000Z",
+      selectedBy: "llm"
+    },
+    dogStateHistory: []
   };
 }
 
