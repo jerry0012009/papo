@@ -115,18 +115,32 @@ try {
   const payload = await response.json();
   assert.equal(response.status, 200, JSON.stringify(payload));
   assert.equal(payload.events[0].actionDecision.action, "generate_action_card");
-  assert.equal(payload.events[0].actionResult.kind, "action_card");
+  assert.equal(payload.events[0].actionResult.kind, "action_card_draft");
+
+  const current = await waitForActionCard();
   assert.match(videoPrompt, /吉祥/);
   assert.match(videoPrompt, /British Shorthair/);
-
-  const current = await store.getProfile("action-card-user");
+  assert.match(videoPrompt, /homepage motion avatar loops/);
   const papoMessage = current?.conversation.find((message) => message.role === "papo");
   assert.ok(papoMessage?.attachments?.[0]?.url, "Papo reply should carry generated action video");
   assert.equal(papoMessage.attachments[0].kind, "video");
   assert.equal(papoMessage.attachments[0].generatedBy, "papo_action_card");
+  assert.equal(papoMessage.cognitionTrace?.eventDecisions?.[0]?.actionResult?.kind, "action_card");
   assert.equal(current?.actionCards?.[0]?.video.id, papoMessage.attachments[0].id);
   assert.equal(current?.actionCards?.[0]?.title, "吉祥抓蝴蝶");
   console.log(JSON.stringify({ ok: true, video: papoMessage.attachments[0].url }, null, 2));
 } finally {
   server.close();
+}
+
+async function waitForActionCard() {
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    const current = await store.getProfile("action-card-user");
+    if (current?.actionCards?.[0]?.video?.url && current.conversation.some((message) => message.role === "papo" && message.attachments?.some((attachment) => attachment.kind === "video"))) {
+      return current;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error("action card was not generated asynchronously");
 }

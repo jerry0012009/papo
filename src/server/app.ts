@@ -300,7 +300,6 @@ export function createApp(input: {
       const result = await runButtonHarness(profile, body.text, provider);
       await hermesBridge?.enqueueTasks(profile, result);
       const illustrationAttachments = await executeIllustrationActions(profile, result, provider, "action");
-      const actionCardAttachments = await executeActionCardActions(profile, result, provider, "action");
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const cognitionTrace = captureCognitionTrace(result, provider, "button", modelRuns);
       appendInputMessage(profile, {
@@ -316,10 +315,11 @@ export function createApp(input: {
         text: result.response,
         sourceId: result.episodes[0]?.id ?? result.events[0]?.id,
         relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
-        attachments: [...illustrationAttachments, ...actionCardAttachments],
+        attachments: illustrationAttachments,
         cognitionTrace
       });
       await store.saveProfile(profile);
+      queueActionCardGeneration({ store, userId: profile.userId, result, provider });
       res.json(publicCaptureResult(result, provider.kind));
     } catch (error) {
       next(error);
@@ -335,7 +335,6 @@ export function createApp(input: {
       const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
       await hermesBridge?.enqueueTasks(profile, result);
       const illustrationAttachments = await executeIllustrationActions(profile, result, provider, "action");
-      const actionCardAttachments = await executeActionCardActions(profile, result, provider, "action");
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const sensingTraces = body.segments.flatMap((segment) => segment.sensingTrace ? [segment.sensingTrace as SensingTrace] : []);
       const cognitionTrace = captureCognitionTrace(result, provider, "curious_stream", modelRuns, sensingTraces);
@@ -361,10 +360,11 @@ export function createApp(input: {
         text: result.response,
         sourceId: result.episodes[0]?.id ?? result.curiousSession?.id ?? result.events[0]?.id,
         relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
-        attachments: [...illustrationAttachments, ...actionCardAttachments],
+        attachments: illustrationAttachments,
         cognitionTrace
       });
       await store.saveProfile(profile);
+      queueActionCardGeneration({ store, userId: profile.userId, result, provider });
       res.json(publicCaptureResult(result, provider.kind));
     } catch (error) {
       next(error);
@@ -493,7 +493,6 @@ export function createApp(input: {
       const profile = await requireProfile(store, req.params.userId, req);
       const beforeSemanticIds = semanticRecordIds(profile);
       const emergence = await semanticDecideEmergence(profile, provider, new Date().toISOString(), { delivery: "manual" });
-      const actionCardAttachments = await executeEmergenceActionCard(profile, emergence, provider, new Date().toISOString());
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const cognitionTrace = emergenceCognitionTrace(emergence, provider, modelRuns);
       appendPapoMessage(profile, {
@@ -501,10 +500,11 @@ export function createApp(input: {
         text: emergence.text,
         sourceId: emergence.id,
         relatedMemoryIds: emergence.relatedMemoryIds,
-        attachments: actionCardAttachments,
+        attachments: [],
         cognitionTrace
       });
       await store.saveProfile(profile);
+      queueEmergenceActionCardGeneration({ store, userId: profile.userId, emergence, provider });
       res.json({ profile: publicProfile(profile), emergence: { ...emergence, cognitionTrace } });
     } catch (error) {
       next(error);
@@ -677,7 +677,6 @@ export async function runProactiveEmergenceSweep(store: ProfileStore, provider: 
     try {
       const emergence = await semanticDecideEmergence(profile, provider, now, { delivery: "proactive" });
       const emergenceAttachments = await executeEmergenceIllustration(profile, emergence, provider, now);
-      const actionCardAttachments = await executeEmergenceActionCard(profile, emergence, provider, now);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const cognitionTrace = emergenceCognitionTrace(emergence, provider, modelRuns);
       settleProactiveEmergence(profile, emergence, now);
@@ -687,10 +686,11 @@ export async function runProactiveEmergenceSweep(store: ProfileStore, provider: 
           text: emergence.text,
           sourceId: emergence.id,
           relatedMemoryIds: emergence.relatedMemoryIds,
-          attachments: [...emergenceAttachments, ...actionCardAttachments],
+          attachments: emergenceAttachments,
           cognitionTrace,
           at: now
         });
+        queueEmergenceActionCardGeneration({ store, userId: profile.userId, emergence, provider });
         active += 1;
       } else {
         quiet += 1;
@@ -772,6 +772,97 @@ async function saveGeneratedActionVideo(input: {
   };
 }
 
+function hasActionCardDraft(result: CaptureResult) {
+  return result.events.some((event) => event.actionDecision.action === "generate_action_card" && event.actionResult?.kind === "action_card_draft" && event.actionResult.prompt?.trim());
+}
+
+function queueActionCardGeneration(input: {
+  store: ProfileStore;
+  userId: string;
+  result: CaptureResult;
+  provider: ModelProvider;
+}) {
+  if (!hasActionCardDraft(input.result)) return;
+  void (async () => {
+    try {
+      const profile = await input.store.getProfile(input.userId);
+      if (!profile) return;
+      const attachments = await executeActionCardActions(profile, input.result, input.provider, "action", new Date().toISOString());
+      if (!attachments.length) return;
+      applyActionCardCompletion(profile, input.result, attachments);
+      await input.store.saveProfile(profile);
+    } catch (error) {
+      console.error(`Action card generation failed for ${input.userId}`, error);
+    }
+  })();
+}
+
+function queueEmergenceActionCardGeneration(input: {
+  store: ProfileStore;
+  userId: string;
+  emergence: EmergenceRecord & { text: string; memoryId?: string };
+  provider: ModelProvider;
+}) {
+  if (input.emergence.actionResult?.kind !== "action_card_draft" || !input.emergence.actionResult.prompt?.trim()) return;
+  void (async () => {
+    try {
+      const profile = await input.store.getProfile(input.userId);
+      if (!profile) return;
+      const attachments = await executeEmergenceActionCard(profile, input.emergence, input.provider, new Date().toISOString());
+      if (!attachments.length) return;
+      applyEmergenceActionCardCompletion(profile, input.emergence, attachments);
+      await input.store.saveProfile(profile);
+    } catch (error) {
+      console.error(`Emergence action card generation failed for ${input.userId}`, error);
+    }
+  })();
+}
+
+function applyActionCardCompletion(profile: CreatureProfile, result: CaptureResult, attachments: MediaAttachment[]) {
+  const actionResultsByEvent = new Map<string, ActionResult>();
+  for (const event of result.events) {
+    if (event.actionResult?.kind === "action_card") actionResultsByEvent.set(event.id, event.actionResult);
+  }
+  if (!actionResultsByEvent.size) return;
+  for (const episode of result.episodes) {
+    if (episode.actionResult?.kind !== "action_card") continue;
+    const stored = profile.episodes.find((item) => item.id === episode.id);
+    if (stored) stored.actionResult = episode.actionResult;
+  }
+  for (const message of profile.conversation ?? []) {
+    const decisions = message.cognitionTrace?.eventDecisions;
+    if (!decisions?.length) continue;
+    let touched = false;
+    for (const decision of decisions) {
+      const finalResult = actionResultsByEvent.get(decision.eventId);
+      if (!finalResult) continue;
+      decision.actionResult = finalResult;
+      touched = true;
+    }
+    if (touched && message.role === "papo") {
+      message.attachments = mergeMediaAttachments(message.attachments, attachments);
+    }
+  }
+}
+
+function applyEmergenceActionCardCompletion(profile: CreatureProfile, emergence: EmergenceRecord, attachments: MediaAttachment[]) {
+  const finalResult = emergence.actionResult;
+  if (finalResult?.kind !== "action_card") return;
+  const storedEmergence = profile.emergenceHistory.find((item) => item.id === emergence.id);
+  if (storedEmergence) storedEmergence.actionResult = finalResult;
+  for (const message of profile.conversation ?? []) {
+    if (message.sourceId !== emergence.id && message.cognitionTrace?.emergenceDecision?.emergenceId !== emergence.id) continue;
+    if (message.cognitionTrace?.emergenceDecision) message.cognitionTrace.emergenceDecision.actionResult = finalResult;
+    if (message.role === "papo") message.attachments = mergeMediaAttachments(message.attachments, attachments);
+  }
+}
+
+function mergeMediaAttachments(current: MediaAttachment[] | undefined, incoming: MediaAttachment[]) {
+  const byId = new Map<string, MediaAttachment>();
+  for (const attachment of [...(current ?? []), ...incoming]) byId.set(attachment.id, attachment);
+  return [...byId.values()];
+}
+
 async function executeActionCardActions(
   profile: CreatureProfile,
   result: CaptureResult,
@@ -784,7 +875,7 @@ async function executeActionCardActions(
   for (const event of result.events) {
     const actionResult = event.actionResult;
     if (event.actionDecision.action !== "generate_action_card" || actionResult?.kind !== "action_card_draft" || !actionResult.prompt?.trim()) continue;
-    const references = await illustrationReferences(event.attachments);
+    const references = await actionCardReferences(profile, event.attachments);
     const referenceImage = references[0];
     if (!provider.generateVideo) throw new Error("Video generation provider is not configured");
     const sourceIds = [...new Set([event.id, event.triggerSegmentId, event.triggerBatchId, ...(event.relatedMemoryIds ?? []), ...(event.attachments ?? []).map((item) => item.id), ...(actionResult.sourceIds ?? [])].filter(Boolean) as string[])];
@@ -841,7 +932,8 @@ async function executeEmergenceActionCard(
   const actionResult = emergence.actionResult;
   if (actionResult?.kind !== "action_card_draft" || !actionResult.prompt?.trim()) return [];
   if (!provider.generateVideo) throw new Error("Video generation provider is not configured");
-  const references = await illustrationReferences(
+  const references = await actionCardReferences(
+    profile,
     profile.episodes
       .filter((episode) => actionResult.sourceIds?.includes(episode.id) || emergence.relatedMemoryIds.includes(episode.id))
       .flatMap((episode) => episode.attachments ?? [])
@@ -1006,11 +1098,12 @@ function actionCardVideoPrompt(profile: CreatureProfile, actionResult: ActionRes
   const species = profile.petKind === "british-shorthair" ? "round-faced gray and white British Shorthair kitten" : profile.petKind === "shiba" ? "cute cartoon Shiba Inu dog" : "cute small AI companion pet";
   const sourceImages = (event.attachments ?? []).map((item) => `${item.label} ${item.url}`).join("\n");
   return [
-    `Create a short looping 8 second animated video action card for ${profile.creatureName}, a ${species}.`,
-    "The character must stay consistent with the user's companion pet identity. Cute commercial app quality, clean animation, no UI, no text labels, no subtitles, no watermark.",
-    "Camera: gentle close-up, soft motion, readable single action, stable character proportions, cozy lighting.",
-    "Motion should be simple and adorable: small steps, blinking, tail or paw movement, playful curiosity.",
-    hasReferenceImage ? "Use the attached first frame/reference image as character and pose grounding." : "Keep the character design consistent with the pet kind and current state.",
+    `Create a short looping animated video action card for ${profile.creatureName}, a ${species}.`,
+    "Match the same visual language as Jixiang's homepage motion avatar loops: premium semi-realistic plush 3D mobile companion mascot, warm off-white studio background, soft natural lighting, full body centered, locked camera, gentle natural motion.",
+    "The character must stay consistent with the companion profile card: blue-gray and white fur for British Shorthair, round plush face, warm amber eyes, tiny pink nose, soft paws, slightly chubby body. Do not change identity, face markings, fur colors, eye color, or body proportions.",
+    "No UI, no text labels, no subtitles, no watermark, no extra animals, no human. Keep the action readable and cute, with simple loopable motion.",
+    hasReferenceImage ? "Use the attached first-frame/reference image as strict visual grounding. If it is a user-uploaded photo, preserve the important photographed subject while keeping the companion mascot identity consistent." : "Keep the character design consistent with the pet kind and current state.",
+    "End close to the starting pose so the clip can loop smoothly.",
     `Current visible state: ${profile.dogState?.label ?? "陪着用户"} / ${namedCreatureText(profile.dogState?.actionText, profile.creatureName)}`,
     `Moment: ${event.noticed || event.triggerContent}`,
     sourceImages ? `Source image assets:\n${sourceImages}` : "",
@@ -1025,10 +1118,11 @@ function namedCreatureText(text: string | undefined, creatureName: string) {
 function actionCardVideoPromptForEmergence(profile: CreatureProfile, actionResult: ActionResult, emergence: EmergenceRecord, hasReferenceImage: boolean) {
   const species = profile.petKind === "british-shorthair" ? "round-faced gray and white British Shorthair kitten" : profile.petKind === "shiba" ? "cute cartoon Shiba Inu dog" : "cute small AI companion pet";
   return [
-    `Create a short looping 8 second animated video action card for ${profile.creatureName}, a ${species}.`,
-    "Cute commercial app quality, no UI, no text labels, no subtitles, no watermark. Keep the pet identity consistent.",
-    "Camera: gentle close-up, cozy light, simple readable action.",
-    hasReferenceImage ? "Use the attached first frame/reference image as character and pose grounding." : "",
+    `Create a short looping animated video action card for ${profile.creatureName}, a ${species}.`,
+    "Match the same visual language as Jixiang's homepage motion avatar loops: premium semi-realistic plush 3D mobile companion mascot, warm off-white studio background, soft natural lighting, full body centered, locked camera, gentle natural motion.",
+    "Keep the pet identity consistent: same face markings, fur colors, eye color, plush body proportions, and companion profile-card feeling.",
+    "No UI, no text labels, no subtitles, no watermark, no extra animals, no human. End close to the starting pose so the clip can loop smoothly.",
+    hasReferenceImage ? "Use the attached first-frame/reference image as strict character and pose grounding." : "",
     `Why now: ${emergence.whyNow}`,
     `Visible message: ${emergence.message}`,
     `Action model prompt:\n${actionResult.prompt}`
@@ -1184,6 +1278,27 @@ async function illustrationReferences(attachments?: MediaAttachment[]): Promise<
     if (dataUrl) references.push({ dataUrl, label: image.label });
   }
   return references;
+}
+
+async function actionCardReferences(profile: CreatureProfile, attachments?: MediaAttachment[]): Promise<ImageReference[]> {
+  const uploaded = await illustrationReferences(attachments);
+  if (uploaded.length) return uploaded;
+  const character = await generatedPetReference(profile);
+  return character ? [character] : [];
+}
+
+async function generatedPetReference(profile: CreatureProfile): Promise<ImageReference | undefined> {
+  if (profile.petKind !== "british-shorthair") return undefined;
+  const assetPath = path.join(process.cwd(), "public", "pets", "generated", "british-shorthair-v1", "poke-wave.webp");
+  try {
+    const buffer = await readFile(assetPath);
+    return {
+      dataUrl: `data:image/webp;base64,${buffer.toString("base64")}`,
+      label: `${profile.creatureName} character reference card`
+    };
+  } catch {
+    return undefined;
+  }
 }
 
 async function imageAttachmentDataUrl(image: MediaAttachment) {

@@ -222,7 +222,8 @@ button.primary,
 
 .pet-option .shiba,
 .pet-option .agent-pet-avatar,
-.pet-option .generated-pet-avatar {
+.pet-option .generated-pet-avatar,
+.pet-option .action-card-avatar {
   transform: scale(0.58);
   margin: -26px 0;
 }
@@ -526,7 +527,8 @@ button.primary,
   }
 
   .sidebar-brand .shiba,
-  .sidebar-brand .generated-pet-avatar {
+  .sidebar-brand .generated-pet-avatar,
+  .sidebar-brand .action-card-avatar {
     width: 44px;
   }
 
@@ -599,7 +601,8 @@ button.primary,
   }
 
   .companion-avatar .shiba,
-  .companion-avatar .generated-pet-avatar {
+  .companion-avatar .generated-pet-avatar,
+  .companion-avatar .action-card-avatar {
     width: 128px;
   }
 
@@ -1105,7 +1108,8 @@ select {
 }
 
 .home-avatar-wrap .shiba,
-.home-avatar-wrap .generated-pet-avatar {
+.home-avatar-wrap .generated-pet-avatar,
+.home-avatar-wrap .action-card-avatar {
   width: min(58vw, 230px);
 }
 
@@ -1510,6 +1514,25 @@ select {
   border-radius: 50%;
   animation: generated-pet-breathe 4.2s ease-in-out infinite;
   filter: drop-shadow(0 18px 24px rgba(31, 36, 33, 0.18));
+}
+
+.action-card-avatar {
+  width: 230px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  overflow: hidden;
+  border-radius: 42%;
+  filter: drop-shadow(0 18px 24px rgba(31, 36, 33, 0.18));
+}
+
+.action-card-avatar video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 42%;
+  pointer-events: none;
 }
 
 .generated-pet-avatar img,
@@ -3281,7 +3304,8 @@ select {
   }
 
   .home-avatar-wrap .shiba,
-  .home-avatar-wrap .generated-pet-avatar {
+  .home-avatar-wrap .generated-pet-avatar,
+  .home-avatar-wrap .action-card-avatar {
     width: min(56vw, 176px);
   }
 
@@ -3430,7 +3454,8 @@ select {
   }
 
   .home-avatar-wrap .shiba,
-  .home-avatar-wrap .generated-pet-avatar {
+  .home-avatar-wrap .generated-pet-avatar,
+  .home-avatar-wrap .action-card-avatar {
     width: min(34vw, 280px);
   }
 
@@ -3672,7 +3697,8 @@ select {
   }
 
   .home-avatar-wrap .shiba,
-  .home-avatar-wrap .generated-pet-avatar {
+  .home-avatar-wrap .generated-pet-avatar,
+  .home-avatar-wrap .action-card-avatar {
     width: min(28vw, 300px);
   }
 
@@ -4050,7 +4076,8 @@ select {
   }
 
   .companion-avatar .shiba,
-  .companion-avatar .generated-pet-avatar {
+  .companion-avatar .generated-pet-avatar,
+  .companion-avatar .action-card-avatar {
     width: 136px;
   }
 

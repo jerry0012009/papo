@@ -158,6 +158,7 @@ export function App() {
     () => Boolean(profile?.hermes?.tasks?.some((task) => task.status === "pending" || task.status === "sent")),
     [profile?.hermes?.tasks]
   );
+  const pendingActionCards = useMemo(() => countPendingActionCards(profile), [profile?.conversation, profile?.emergenceHistory]);
 
   useEffect(() => {
     void bootstrap();
@@ -192,7 +193,7 @@ export function App() {
 
   useEffect(() => {
     if (!profile?.userId) return;
-    const intervalMs = hasActiveHermesTask ? 3_000 : 60_000;
+    const intervalMs = hasActiveHermesTask || pendingActionCards > 0 ? 3_000 : 60_000;
     const timer = window.setInterval(async () => {
       try {
         const next = await getProfile(profile.userId);
@@ -202,7 +203,7 @@ export function App() {
       }
     }, intervalMs);
     return () => window.clearInterval(timer);
-  }, [hasActiveHermesTask, profile?.userId]);
+  }, [hasActiveHermesTask, pendingActionCards, profile?.userId]);
 
   async function bootstrap() {
     try {
@@ -990,6 +991,7 @@ export function App() {
 
           <section className="view-frame">
             {error ? <div className="notice">{error}</div> : null}
+            {pendingActionCards ? <ActionCardPendingNotice profile={profile} count={pendingActionCards} /> : null}
 
             {tab === "home" ? (
               <HomeView
@@ -1197,12 +1199,18 @@ function HomeView(props: {
 }) {
   const latestReply = props.unreadPapoCount ? latestVisiblePapoReply(props.profile) : "";
   const actionLine = papoVisibleActionLine(props.profile);
-  const [activeTouchAction, setActiveTouchAction] = useState<{ action: PetInteractionAction; text: string } | undefined>();
+  const [activeMotion, setActiveMotion] = useState<HomeMotion | undefined>();
   const touchActions = petTouchActions(props.profile);
-  const visibleAction = activeTouchAction?.action ?? generatedPetActionFromState(props.profile.dogState);
+  const actionCards = (props.profile.actionCards ?? []).filter((card) => !card.deleted && !card.disabled).slice(0, 6);
+  const motionItems: HomeMotion[] = [
+    ...touchActions.map((item) => ({ kind: "pet" as const, ...item })),
+    ...actionCards.map((card) => ({ kind: "card" as const, cardId: card.id }))
+  ];
+  const visibleAction = activeMotion?.kind === "pet" ? activeMotion.action : generatedPetActionFromState(props.profile.dogState);
+  const activeCard = activeMotion?.kind === "card" ? actionCards.find((card) => card.id === activeMotion.cardId) : undefined;
   useEffect(() => {
-    setActiveTouchAction(undefined);
-  }, [props.profile.userId, props.profile.petKind]);
+    setActiveMotion(undefined);
+  }, [props.profile.userId, props.profile.petKind, props.profile.actionCards?.length]);
   return (
     <section className="home-screen">
       <section className="home-stage">
@@ -1220,18 +1228,22 @@ function HomeView(props: {
             aria-label={`戳戳 ${props.profile.creatureName}`}
             title="戳戳它，换个小动作"
             onClick={() => {
-              const currentIndex = Math.max(0, touchActions.findIndex((item) => item.action === visibleAction));
-              const nextAction = touchActions[(currentIndex + 1) % touchActions.length];
-              setActiveTouchAction(nextAction);
-              if (nextAction) props.onPetTouch(nextAction.action);
+              let foundIndex = -1;
+              if (activeMotion?.kind === "pet") foundIndex = motionItems.findIndex((item) => item.kind === "pet" && item.action === activeMotion.action);
+              else if (activeMotion?.kind === "card") foundIndex = motionItems.findIndex((item) => item.kind === "card" && item.cardId === activeMotion.cardId);
+              else foundIndex = motionItems.findIndex((item) => item.kind === "pet" && item.action === visibleAction);
+              const currentIndex = Math.max(0, foundIndex);
+              const nextMotion = motionItems[(currentIndex + 1) % motionItems.length];
+              setActiveMotion(nextMotion);
+              if (nextMotion?.kind === "pet") props.onPetTouch(nextMotion.action);
             }}
           >
-            <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} interactionAction={activeTouchAction?.action} />
+            {activeCard ? <ActionCardAvatar card={activeCard} /> : <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} interactionAction={activeMotion?.kind === "pet" ? activeMotion.action : undefined} />}
           </button>
         </div>
         <div className="home-speech">
           <h2>{props.profile.creatureName}</h2>
-          <p>{activeTouchAction?.text || latestReply || actionLine}</p>
+          <p>{activeCard ? namedCreatureText(activeCard.caption || activeCard.title, props.profile.creatureName) : activeMotion?.kind === "pet" ? activeMotion.text : latestReply || actionLine}</p>
         </div>
       </section>
       <aside className="home-side">
@@ -1501,6 +1513,9 @@ function PapoGuidePoster({ creatureName }: { creatureName: string }) {
 }
 
 type PetInteractionAction = "idle" | "poke-wave" | "play-ball" | "nap";
+type HomeMotion =
+  | { kind: "pet"; action: PetInteractionAction; text: string }
+  | { kind: "card"; cardId: string };
 
 function AvatarPreview({ petKind, state, dogState, idle = false, interactionAction }: { petKind?: string; state?: CreatureState; dogState?: DogInteractionState; idle?: boolean; interactionAction?: PetInteractionAction }) {
   const normalizedPetKind = normalizePetKind(petKind);
@@ -1516,6 +1531,14 @@ function GeneratedPetAvatar({ petKind, dogState, idle = false, interactionAction
   return (
     <div className={`generated-pet-avatar has-video ${idle ? "idle" : ""} pet-action-${action}`} aria-label={`${petKindLabel(petKind)} 正在${dogState?.label ?? "陪着你"}`}>
       <video src={video} poster={poster} autoPlay loop muted playsInline preload="metadata" aria-hidden="true" />
+    </div>
+  );
+}
+
+function ActionCardAvatar({ card }: { card: NonNullable<CreatureProfile["actionCards"]>[number] }) {
+  return (
+    <div className="action-card-avatar" aria-label={card.title}>
+      <video src={resolveAssetUrl(card.video.url)} autoPlay loop muted playsInline preload="metadata" />
     </div>
   );
 }
@@ -3402,6 +3425,16 @@ function HermesTaskNotice({ profile }: { profile: CreatureProfile }) {
   );
 }
 
+function ActionCardPendingNotice({ profile, count }: { profile: CreatureProfile; count: number }) {
+  return (
+    <div className="hermes-notice action-card-pending" aria-live="polite">
+      <Sparkles size={16} />
+      <span>正在让 {profile.creatureName} 动起来...</span>
+      <small>{count > 1 ? `${count} 张动作卡在生成` : "动作卡生成好后会自动出现"}</small>
+    </div>
+  );
+}
+
 function feedbackActionKey(kind: FeedbackKind, targetId?: string) {
   return `${kind}:${targetId ?? ""}`;
 }
@@ -3417,6 +3450,20 @@ function countUnreadPapoMessages(profile: CreatureProfile | undefined) {
   const count = readMessageId ? messages.findIndex((message) => message.id === readMessageId) : Math.min(messages.length, 3);
   if (count < 0) return Math.min(messages.length, 3);
   return Math.min(count, 3);
+}
+
+function countPendingActionCards(profile: CreatureProfile | undefined) {
+  const pendingIds = new Set<string>();
+  for (const message of profile?.conversation ?? []) {
+    for (const decision of message.cognitionTrace?.eventDecisions ?? []) {
+      if (decision.action === "generate_action_card" && decision.actionResult?.kind === "action_card_draft") pendingIds.add(`event:${decision.eventId ?? message.id}`);
+    }
+    if (message.cognitionTrace?.emergenceDecision?.actionResult?.kind === "action_card_draft") pendingIds.add(`emergence-message:${message.cognitionTrace.emergenceDecision.emergenceId ?? message.id}`);
+  }
+  for (const emergence of profile?.emergenceHistory ?? []) {
+    if (emergence.actionResult?.kind === "action_card_draft") pendingIds.add(`emergence:${emergence.id}`);
+  }
+  return Math.min(pendingIds.size, 9);
 }
 
 function readSavedUserId() {
@@ -3495,7 +3542,7 @@ function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "发生未知错误";
   if (message === "Password required") return "这个账号需要密码。";
   if (message === "Password is incorrect") return "密码不对。";
-  if (/Request failed: 50[234]|Bad Gateway|Gateway Timeout|Service Unavailable/i.test(message)) return "录音整理刚才断开了，请再试一次。";
+  if (/Request failed: 50[234]|Bad Gateway|Gateway Timeout|Service Unavailable/i.test(message)) return "连接刚才等太久断开了。你可以继续使用，稍慢的生成任务会在后台完成。";
   return message;
 }
 

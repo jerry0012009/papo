@@ -16,7 +16,7 @@ for (const phrase of forbiddenVisibleTemplates) {
   assert.equal(appSource.includes(phrase), false, `rule-written visible copy returned: ${phrase}`);
 }
 
-assert.equal(appSource.includes("hasActiveHermesTask ? 3_000 : 60_000"), true, "active Hermes tasks should poll quickly so async results surface without a stale waiting notice");
+assert.equal(appSource.includes("hasActiveHermesTask || pendingActionCards > 0 ? 3_000 : 60_000"), true, "active Hermes tasks and pending action cards should poll quickly so async results surface without a stale waiting notice");
 assert.equal(appSource.includes("props.emergence?.text || props.emergence?.cognitionTrace"), false, "quiet emergence traces should not render on the home page");
 assert.equal(appSource.includes("emergence-audit"), false, "quiet emergence should not expose developer audit as a visible home card");
 
