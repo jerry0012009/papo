@@ -1511,9 +1511,11 @@ function AvatarPreview({ petKind, state, dogState, idle = false, interactionActi
 
 function GeneratedPetAvatar({ petKind, dogState, idle = false, interactionAction }: { petKind: string; dogState?: DogInteractionState; idle?: boolean; interactionAction?: PetInteractionAction }) {
   const action = interactionAction ?? generatedPetActionFromState(dogState);
+  const poster = publicAssetPath(`pets/generated/${petKind}-v1/${action}.webp`);
+  const video = publicAssetPath(`pets/generated/${petKind}-v1/${action}.mp4`);
   return (
-    <div className={`generated-pet-avatar ${idle ? "idle" : ""} pet-action-${action}`} aria-label={`${petKindLabel(petKind)} 正在${dogState?.label ?? "陪着你"}`}>
-      <img src={publicAssetPath(`pets/generated/${petKind}-v1/${action}.webp`)} alt="" draggable={false} />
+    <div className={`generated-pet-avatar has-video ${idle ? "idle" : ""} pet-action-${action}`} aria-label={`${petKindLabel(petKind)} 正在${dogState?.label ?? "陪着你"}`}>
+      <video src={video} poster={poster} autoPlay loop muted playsInline preload="metadata" aria-hidden="true" />
     </div>
   );
 }

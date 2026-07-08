@@ -98,12 +98,13 @@ test("home adapts generated British Shorthair and tap changes pose", async ({ pa
 
   await expect(page.getByText("住在手机里的小猫")).toBeVisible();
   await expect(page.getByText("住在手机里的小狗")).toHaveCount(0);
-  const avatar = page.locator(".home-stage .generated-pet-avatar img");
+  const avatar = page.locator(".home-stage .generated-pet-avatar video");
   await expect(avatar).toBeVisible();
-  await expect(avatar).toHaveAttribute("src", /pets\/generated\/british-shorthair-v1\/poke-wave\.webp/);
+  await expect(avatar).toHaveAttribute("src", /pets\/generated\/british-shorthair-v1\/poke-wave\.mp4/);
+  await expect(avatar).toHaveAttribute("poster", /pets\/generated\/british-shorthair-v1\/poke-wave\.webp/);
 
   await page.getByRole("button", { name: "戳戳 Papo" }).click();
-  await expect(avatar).toHaveAttribute("src", /pets\/generated\/british-shorthair-v1\/play-ball\.webp/);
+  await expect(avatar).toHaveAttribute("src", /pets\/generated\/british-shorthair-v1\/play-ball\.mp4/);
   await expect(page.locator(".home-speech")).toContainText("小球");
 });
 

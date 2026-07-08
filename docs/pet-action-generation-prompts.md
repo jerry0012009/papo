@@ -2,7 +2,7 @@
 
 This file records the asset direction used for generated Papo companions.
 
-## Current Model Choice
+## Current Image Model Choice
 
 - Provider route: OpenRouter `/images`
 - Model: `google/gemini-3.1-flash-lite-image`
@@ -49,10 +49,25 @@ Current action poses:
 
 ## Motion Decision
 
-For the homepage demo, Papo uses high-quality key poses plus CSS motion, not generated video.
+For the homepage demo, generated companions can use short video loops when the identity has a stable key-pose set. Jixiang's British Shorthair V1 now uses four real image-to-video clips as the primary avatar assets, with the original WebP poses as posters/fallbacks.
 
-Reason:
+Video model:
 
-- The pet must respond immediately to taps.
-- Images are cheaper, cacheable, and easier to keep visually consistent.
-- Short videos are useful later, but only after the key-pose identity is stable enough to feed into image-to-video.
+- Provider route: OpenRouter `/videos`
+- Model: `alibaba/happyhorse-1.1`
+- Request shape: 1:1, 720p, 4 seconds, first-frame image reference from the matching WebP key pose.
+- Verification: four real MP4 files were generated on 2026-07-08 and normalized to H.264, 960x960, no audio, about 4.04 seconds each.
+
+Motion prompts:
+
+- `idle`: calm sitting loop, slow blink, tiny ear twitch, subtle breathing, tail tip relaxed movement.
+- `poke-wave`: after a gentle tap, one soft paw raises in a shy wave, blink once, then returns near the starting pose.
+- `play-ball`: gently nudges the small mint-green ball with one paw, watches it move a tiny distance, then settles back.
+- `nap`: curled sleeping loaf, soft breathing, one ear twitch, subtle whisker motion, stays asleep.
+
+Prompt constraints:
+
+- Keep the same single British Shorthair identity from the first frame: blue-gray fur, white muzzle/chest, amber eyes, pink nose, plush body.
+- Premium semi-realistic 3D mobile app mascot style, warm off-white background, full body centered, locked camera.
+- No scene change, extra animals, human, text, subtitles, watermark, or new props beyond the existing ball in `play-ball`.
+- End close to the starting pose so the clip can loop smoothly.
