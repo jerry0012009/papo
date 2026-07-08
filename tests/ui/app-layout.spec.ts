@@ -123,6 +123,46 @@ test("photo upload during companion mode waits for explicit submit", async ({ pa
   await expect(page.locator(".chat-bubble.world", { hasText: "companion-photo.jpg" })).toBeVisible();
 });
 
+test("large phone photos are compressed before image summary upload", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("papo:captureImageUploadBytes", "1");
+  });
+  await page.goto("/");
+  await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
+  const largePhoto = await page.evaluate(async () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 4200;
+    canvas.height = 3200;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("canvas unavailable");
+    const gradient = context.createLinearGradient(0, 0, canvas.width, canvas.height);
+    gradient.addColorStop(0, "#d85d42");
+    gradient.addColorStop(0.35, "#f2c14e");
+    gradient.addColorStop(0.7, "#4f8f7b");
+    gradient.addColorStop(1, "#304f8f");
+    context.fillStyle = gradient;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    for (let index = 0; index < 1200; index += 1) {
+      context.fillStyle = `rgba(${index % 255}, ${(index * 7) % 255}, ${(index * 13) % 255}, 0.38)`;
+      context.fillRect((index * 37) % canvas.width, (index * 53) % canvas.height, 80 + (index % 180), 40 + (index % 120));
+    }
+    const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((value) => value ? resolve(value) : reject(new Error("blob unavailable")), "image/jpeg", 0.96));
+    return Array.from(new Uint8Array(await blob.arrayBuffer()));
+  });
+
+  await page.locator(".compact-upload").filter({ hasText: "加照片" }).locator("input").setInputFiles({
+    name: "phone-original.jpg",
+    mimeType: "image/jpeg",
+    buffer: Buffer.from(largePhoto)
+  });
+
+  const stagedPhoto = page.locator(".staged-segment").filter({ hasText: "phone-original.jpg" });
+  await expect(stagedPhoto).toContainText("照片已加入", { timeout: 5_000 });
+  const uploadedLength = await page.evaluate(() => Number(window.localStorage.getItem("papo:lastImageUploadLength") ?? 0));
+  expect(uploadedLength).toBeGreaterThan(64);
+  expect(uploadedLength).toBeLessThanOrEqual(3_500_000);
+});
+
 test("companion listening starts from home and shows a countdown in chat", async ({ page }) => {
   await installMockMicrophone(page);
   await page.goto("/");
@@ -269,6 +309,11 @@ async function installMockApi(page: Page) {
 
     if (path === "/api/image-summary" && route.request().method() === "POST") {
       const requestBody = safePostJson(route) as { label?: string };
+      if (await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:captureImageUploadBytes") === "1")) {
+        await route.request().frame().page().evaluate((length) => {
+          window.localStorage.setItem("papo:lastImageUploadLength", String(length));
+        }, typeof (requestBody as { dataUrl?: string }).dataUrl === "string" ? (requestBody as { dataUrl: string }).dataUrl.length : 0);
+      }
       await new Promise((resolve) => setTimeout(resolve, 250));
       await json(route, {
         summary: "一张测试照片，画面里有用户分享给 Papo 的生活片段。",

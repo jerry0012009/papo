@@ -80,7 +80,7 @@ const curiousSchema = z.object({
 });
 
 const imageSummarySchema = z.object({
-  dataUrl: z.string().min(64).max(12_000_000).regex(/^data:image\/(png|jpe?g|webp);base64,/),
+  dataUrl: z.string().min(64).max(18_000_000).regex(/^data:image\/(png|jpe?g|webp);base64,/),
   label: z.string().min(1).max(80).optional()
 });
 

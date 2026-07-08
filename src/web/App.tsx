@@ -77,6 +77,8 @@ const CHAT_PAGE_SIZE = 24;
 const INITIAL_CHAT_VISIBLE_COUNT = CHAT_PAGE_SIZE * 2;
 const LOCAL_USER_ID_KEY = "papo:userId";
 const PUBLIC_BASE_URL = import.meta.env.BASE_URL ?? "/";
+const IMAGE_UPLOAD_TARGET_BYTES = 3_500_000;
+const IMAGE_UPLOAD_HARD_LIMIT_BYTES = 11_500_000;
 
 interface AudioSliceMeta {
   index: number;
@@ -2884,32 +2886,35 @@ function readFileAsDataUrl(file: File) {
 
 async function readImageFileAsUploadDataUrl(file: File) {
   if (!/^image\/(png|jpe?g|webp)$/i.test(file.type)) throw new Error("请选择 PNG、JPG 或 WebP 图片。");
-  const dataUrl = await downscaleImageFile(file);
-  if (dataUrl.length > 5_900_000) throw new Error("这张照片还是太大了，可以换一张或截小一点再传。");
+  const dataUrl = await compressImageForUpload(file);
+  if (dataUrl.length > IMAGE_UPLOAD_HARD_LIMIT_BYTES) throw new Error("这张照片没有压缩成功，请再试一次。");
   return dataUrl;
 }
 
-async function downscaleImageFile(file: File) {
+async function compressImageForUpload(file: File) {
   const sourceUrl = URL.createObjectURL(file);
   try {
     const image = await loadImageElement(sourceUrl);
-    const maxSide = 1600;
-    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
-    const width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
-    const height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
     const canvas = document.createElement("canvas");
-    canvas.width = width;
-    canvas.height = height;
     const context = canvas.getContext("2d");
     if (!context) throw new Error("当前浏览器暂时不能处理这张照片。");
-    context.drawImage(image, 0, 0, width, height);
-    const outputMime = file.type === "image/png" && file.size < 1_500_000 ? "image/png" : "image/jpeg";
-    const qualities = outputMime === "image/png" ? [undefined] : [0.82, 0.72, 0.62, 0.52];
-    for (const quality of qualities) {
-      const dataUrl = canvas.toDataURL(outputMime, quality);
-      if (dataUrl.length <= 5_900_000) return dataUrl;
+    let smallest = "";
+    for (const maxSide of [1600, 1280, 1024, 768, 512, 384, 256]) {
+      const scale = Math.min(1, maxSide / Math.max(sourceWidth, sourceHeight));
+      canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+      canvas.height = Math.max(1, Math.round(sourceHeight * scale));
+      context.clearRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      for (const quality of [0.82, 0.74, 0.66, 0.58, 0.5, 0.42]) {
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        if (!smallest || dataUrl.length < smallest.length) smallest = dataUrl;
+        if (dataUrl.length <= IMAGE_UPLOAD_TARGET_BYTES) return dataUrl;
+      }
     }
-    return canvas.toDataURL(outputMime, 0.46);
+    if (smallest && smallest.length <= IMAGE_UPLOAD_HARD_LIMIT_BYTES) return smallest;
+    throw new Error("这张照片没有压缩成功，请再试一次。");
   } finally {
     URL.revokeObjectURL(sourceUrl);
   }
@@ -2931,7 +2936,7 @@ function browserImageMime(type: string): "image/png" | "image/jpeg" | "image/web
 
 function imageUploadErrorMessage(error: unknown) {
   const message = errorMessage(error);
-  if (/Invalid request|too large|PayloadTooLarge|request entity too large|body exceeded/i.test(message)) return "照片太大了，已经没有提交。可以换一张或截小一点。";
+  if (/Invalid request|too large|PayloadTooLarge|request entity too large|body exceeded|Image is too large/i.test(message)) return "照片没有压缩成功，请再试一次。";
   return message;
 }
 
