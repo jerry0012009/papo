@@ -29,6 +29,8 @@ test("home developer panel opens and closes without overflowing", async ({ page 
   const panel = page.getByRole("dialog", { name: /Papo 状态/ });
   await expect(panel).toBeVisible();
   await expect(panel).toContainText("状态");
+  await expect(panel).toContainText("最近状态日记");
+  await expect(panel).toContainText("悄悄看你");
   await expectInViewport(page, panel);
 
   await page.getByRole("button", { name: "收起小眼睛" }).click();
@@ -41,6 +43,12 @@ test("chat opens at latest content and keeps the composer aligned with the threa
 
   await expect(page.locator(".chat-bubble.papo p", { hasText: "最近一条回复在这里。" }).last()).toBeVisible();
   await expect(page.getByPlaceholder("直接告诉 Papo 一件刚发生的事")).toBeVisible();
+  const sendButton = page.locator(".chat-send-button");
+  await expect(sendButton).toBeVisible();
+  await expect(sendButton).toContainText("说给 Papo");
+  await expect(sendButton).toHaveCSS("color", "rgb(77, 86, 79)");
+  await expect(sendButton).toHaveClass(/chat-send-button/);
+  await expectButtonTextFits(sendButton);
 
   const listBox = await page.locator(".chat-list").boundingBox();
   const composerBox = await page.locator(".chat-composer").boundingBox();
@@ -67,7 +75,24 @@ test("quick microphone recording exposes recording, stop, processing, and send s
   await page.getByRole("button", { name: "停止" }).click();
   await expect(page.getByText("正在整理录音")).toBeVisible();
   await expect(page.getByText("麦克风 1")).toBeVisible({ timeout: 3_000 });
+  const stagedAudio = page.locator(".staged-segment").filter({ hasText: "麦克风 1" });
+  await expect(stagedAudio.locator("textarea")).toHaveCount(0);
+  await expect(stagedAudio).toContainText("有一段声音");
+  await expect(stagedAudio).not.toContainText("我听到你说想测试录音按钮。");
   await expect(page.getByRole("button", { name: "让 Papo 听听" })).toBeVisible();
+});
+
+test("companion listening starts from home and shows a countdown in chat", async ({ page }) => {
+  await installMockMicrophone(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: /陪我/ }).first().click();
+  await expect(page.getByPlaceholder("直接告诉 Papo 一件刚发生的事")).toBeVisible();
+  const listeningStatus = page.locator(".listening-session-status");
+  await expect(listeningStatus).toBeVisible();
+  await expect(listeningStatus).toContainText("陪你听着");
+  await expect(listeningStatus).toContainText("剩余");
+  await expect(listeningStatus.getByRole("button", { name: "停止陪我听" })).toBeVisible();
 });
 
 test("memory feedback shows a pending state while the request is in flight", async ({ page }) => {
@@ -275,6 +300,14 @@ async function expectInViewport(page: Page, locator: ReturnType<Page["locator"]>
   expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height + 1);
 }
 
+async function expectButtonTextFits(locator: ReturnType<Page["locator"]>) {
+  const fits = await locator.evaluate((element) => {
+    const html = element as HTMLElement;
+    return html.scrollWidth <= html.clientWidth + 1 && html.scrollHeight <= html.clientHeight + 1;
+  });
+  expect(fits).toBe(true);
+}
+
 function makeProfile() {
   return {
     userId: "demo",
@@ -423,7 +456,19 @@ function makeProfile() {
       nextCheckAt: "2026-07-07T13:00:00.000Z",
       selectedBy: "llm"
     },
-    dogStateHistory: []
+    dogStateHistory: [
+      {
+        id: "listen_softly",
+        selectedAt: "2026-07-07T11:40:00.000Z",
+        label: "竖起耳朵",
+        actionText: "Papo 竖起耳朵，认真听了一会儿。",
+        visualPrompt: "Shiba listening softly",
+        animation: "listen",
+        reason: "ui test history",
+        nextCheckAt: "2026-07-07T12:00:00.000Z",
+        selectedBy: "llm"
+      }
+    ]
   };
 }
 

@@ -498,6 +498,7 @@ export function App() {
   }
 
   async function startListening() {
+    setTab("chat");
     if (listening) return;
     const Recorder = getMediaRecorder();
     if (!Recorder) {
@@ -866,7 +867,7 @@ export function App() {
                 unreadPapoCount={unreadPapoCount}
                 busy={busy}
                 onGoCapture={() => setTab("chat")}
-                onGoCurious={() => setTab("chat")}
+                onGoCurious={startListening}
                 onGoChat={() => setTab("chat")}
               />
             ) : null}
@@ -1035,15 +1036,16 @@ function HomeView(props: {
         ) : null}
 
         <div className="home-actions">
-          <button className="primary" onClick={props.onGoCapture}>
-            <MessageCircle size={18} />
-            跟 Papo 说
-          </button>
-          <button onClick={props.onGoCurious}>
+          <button className="primary home-listen-action" onClick={props.onGoCurious} title="开启 3 分钟持续听，Papo 会按约 30 秒分段理解你周围发生的事。">
             <Sparkles size={18} />
             陪我一会儿
           </button>
+          <button className="secondary-action" onClick={props.onGoCapture}>
+            <MessageCircle size={18} />
+            跟 Papo 说
+          </button>
         </div>
+        <p className="home-action-note">陪伴会持续听 3 分钟，并按约 30 秒分段交给 Papo。</p>
 
         {props.emergence?.text ? <EmergenceCard emergence={props.emergence} profile={props.profile} /> : null}
       </aside>
@@ -1090,13 +1092,13 @@ function CompanionPanel(props: {
       ) : null}
 
       <div className="companion-actions">
-        <button className="primary" onClick={props.onGoChat}>
-          <MessageCircle size={17} />
-          对话
-        </button>
-        <button onClick={props.onToggleListening} disabled={props.busy}>
+        <button className="primary companion-listen-action" onClick={props.onToggleListening} disabled={props.busy} title="开启后 Papo 会持续听一会儿，并分段整理声音线索。">
           <Sparkles size={17} />
           {props.listening ? "停下" : "陪我"}
+        </button>
+        <button className="secondary-action" onClick={props.onGoChat}>
+          <MessageCircle size={17} />
+          对话
         </button>
       </div>
 
@@ -1263,6 +1265,7 @@ function StatePolicySnapshot({ profile }: { profile: CreatureProfile }) {
   const state = profile.state;
   const policy = profile.policyProfile;
   const recentRuns = (profile.semanticBrainHistory ?? []).slice(0, 3);
+  const statusDiary = statusDiaryItems(profile).slice(0, 8);
   return (
     <div className="state-policy-snapshot">
       <section>
@@ -1287,8 +1290,146 @@ function StatePolicySnapshot({ profile }: { profile: CreatureProfile }) {
           ))}
         </section>
       ) : null}
+      {statusDiary.length ? (
+        <section>
+          <strong>最近状态日记</strong>
+          <div className="status-diary-list">
+            {statusDiary.map((item) => (
+              <article className="status-diary-item" key={item.id}>
+                <span>{formatPapoDateTime(item.at)}</span>
+                <b>{item.title}</b>
+                {item.detail ? <small>{item.detail}</small> : null}
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
+}
+
+interface StatusDiaryItem {
+  id: string;
+  at: string;
+  title: string;
+  detail?: string;
+}
+
+function statusDiaryItems(profile: CreatureProfile): StatusDiaryItem[] {
+  const items: StatusDiaryItem[] = [];
+  const dogStates = [profile.dogState, ...(profile.dogStateHistory ?? [])].filter(Boolean);
+  const seenDogStates = new Set<string>();
+  for (const dogState of dogStates) {
+    const key = `${dogState.id}:${dogState.selectedAt}`;
+    if (seenDogStates.has(key)) continue;
+    seenDogStates.add(key);
+    items.push({
+      id: `dog:${key}`,
+      at: dogState.selectedAt,
+      title: dogState.label,
+      detail: visibleCreatureText(dogState.actionText || dogState.reason)
+    });
+  }
+
+  for (const change of profile.stateChanges ?? []) {
+    items.push({
+      id: `state:${change.at}:${change.reason}`,
+      at: change.at,
+      title: "状态变了一点",
+      detail: `${stateChangeSummary(change.before, change.after)}${change.reason ? ` · ${change.reason}` : ""}`
+    });
+  }
+
+  for (const message of profile.conversation ?? []) {
+    const eventDeltas = message.cognitionTrace?.eventDecisions?.flatMap((event) => event.stateDeltas ?? []) ?? [];
+    if (eventDeltas.length) {
+      items.push({
+        id: `message-state:${message.id}`,
+        at: message.at,
+        title: actionDiaryTitle(message),
+        detail: stateDeltaSummary(eventDeltas)
+      });
+    }
+    const feedbackDeltas = message.cognitionTrace?.feedbackDecision?.stateDeltas ?? [];
+    if (feedbackDeltas.length) {
+      items.push({
+        id: `feedback-state:${message.id}`,
+        at: message.at,
+        title: "收到反馈后调整",
+        detail: stateDeltaSummary(feedbackDeltas)
+      });
+    }
+  }
+
+  for (const dream of profile.dreamHistory ?? []) {
+    items.push({
+      id: `dream:${dream.id}`,
+      at: dream.at,
+      title: "整理了一次记忆",
+      detail: [visibleCreatureText(dream.summary), stateDeltaSummary(dream.stateDeltas ?? [])].filter(Boolean).join(" · ")
+    });
+  }
+
+  for (const emergence of profile.emergenceHistory ?? []) {
+    if (!emergence.message?.trim()) continue;
+    items.push({
+      id: `emergence:${emergence.id}`,
+      at: emergence.at,
+      title: "主动想起你",
+      detail: visibleCreatureText(emergence.message)
+    });
+  }
+
+  for (const wake of profile.wakeHistory ?? []) {
+    const deltas = objectStateDeltas(wake.stateDelta);
+    if (!deltas.length) continue;
+    items.push({
+      id: `wake:${wake.id}`,
+      at: wake.at,
+      title: "回来时重新贴近",
+      detail: `${stateDeltaSummary(deltas)}${wake.stateChangeReason ? ` · ${wake.stateChangeReason}` : ""}`
+    });
+  }
+
+  return items.sort((left, right) => Date.parse(right.at) - Date.parse(left.at));
+}
+
+function actionDiaryTitle(message: CreatureProfile["conversation"][number]) {
+  const action = message.cognitionTrace?.eventDecisions?.[0]?.action;
+  if (message.role === "papo") return "回应之后状态变化";
+  if (action === "quiet") return "听完后安静陪着";
+  if (action === "save_long_term" || action === "save_episode") return "听完后留下记忆";
+  if (action === "use_hermes") return "去问虾虾帮忙";
+  return "听完后状态变化";
+}
+
+function stateChangeSummary(before: CreatureState, after: CreatureState) {
+  const deltas = (["curiosity", "attachment", "energy", "arousal", "safety", "confidence"] as const)
+    .map((key) => ({ key, before: before[key], after: after[key], delta: after[key] - before[key] }))
+    .filter((item) => item.delta !== 0);
+  return stateDeltaSummary(deltas);
+}
+
+function objectStateDeltas(deltas: Partial<Record<keyof Omit<CreatureState, "mood">, number>>) {
+  return Object.entries(deltas).flatMap(([key, delta]) => {
+    if (!delta) return [];
+    return [{ key, before: 0, after: delta, delta }];
+  });
+}
+
+function stateDeltaSummary(items: Array<{ key: string; delta: number }>) {
+  const labels: Record<string, string> = {
+    curiosity: "好奇",
+    attachment: "亲近",
+    energy: "精力",
+    arousal: "活跃",
+    safety: "安全感",
+    confidence: "确信"
+  };
+  return items
+    .filter((item) => item.delta !== 0)
+    .map((item) => `${labels[item.key] ?? item.key} ${item.delta > 0 ? "+" : ""}${item.delta}`)
+    .join("，");
 }
 
 function StateMeter({ label, value }: { label: string; value: number }) {
@@ -1349,6 +1490,8 @@ function ChatView(props: {
   const sections = groupConversationSections(messages);
   const canSubmit = Boolean(draft.trim() || props.stagedSegments.some((segment) => segment.content.trim()));
   const hasOlderMessages = allMessages.length > visibleCount;
+  const listeningTotalSeconds = Math.floor(LIVE_LISTENING_MAX_MS / 1000);
+  const listeningRemainingSeconds = Math.max(0, listeningTotalSeconds - props.listeningElapsed);
 
   const loadOlderMessages = useCallback(() => {
     setVisibleCount((current) => Math.min(allMessages.length, current + CHAT_PAGE_SIZE));
@@ -1431,6 +1574,19 @@ function ChatView(props: {
         <div ref={threadEndRef} aria-hidden="true" />
       </section>
       <div className="chat-composer" ref={composerRef}>
+          {props.listening ? (
+            <section className="listening-session-status" aria-live="polite">
+              <div>
+                <Mic size={16} />
+                <span>陪你听着 {formatListeningTime(props.listeningElapsed)} / {formatListeningTime(listeningTotalSeconds)}</span>
+                <small>剩余 {formatListeningTime(listeningRemainingSeconds)}</small>
+              </div>
+              <button type="button" onClick={props.onStopListening} aria-label="停止陪我听">
+                <Square size={15} />
+                停止
+              </button>
+            </section>
+          ) : null}
           {props.quickRecording || props.quickAudioProcessing ? (
             <section className={props.quickRecording ? "quick-audio-status recording" : "quick-audio-status processing"} aria-live="polite">
               <div>
@@ -1457,12 +1613,22 @@ function ChatView(props: {
                     </span>
                     <strong>{segment.label}</strong>
                   </div>
-                  <textarea
-                    value={segment.content}
-                    onChange={(event) => updateStagedSegmentContent(index, event.target.value)}
-                    rows={3}
-                    placeholder={stagedSegmentPlaceholder(segment.kind)}
-                  />
+                  {segment.kind === "audio_observation" ? (
+                    <div className="staged-audio-summary">
+                      <Mic size={18} />
+                      <div>
+                        <strong>有一段声音</strong>
+                        <span>Papo 会直接听这段音频线索。</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <textarea
+                      value={segment.content}
+                      onChange={(event) => updateStagedSegmentContent(index, event.target.value)}
+                      rows={3}
+                      placeholder={stagedSegmentPlaceholder(segment.kind)}
+                    />
+                  )}
                   <AttachmentStrip attachments={segment.attachments} />
                   <button onClick={() => removeStagedSegment(index)} disabled={props.busy}>
                     <RefreshCcw size={16} />
@@ -1523,7 +1689,7 @@ function ChatView(props: {
                 disabled={props.busy}
               />
             </label>
-            <button className="primary" onClick={submitDraft} disabled={props.busy || !canSubmit}>
+            <button className="primary chat-send-button" onClick={submitDraft} disabled={props.busy || !canSubmit}>
               <Send size={18} />
               {props.stagedSegments.length ? "让 Papo 听听" : "说给 Papo"}
             </button>

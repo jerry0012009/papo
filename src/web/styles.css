@@ -976,13 +976,32 @@ select {
 
 .home-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.95fr);
   gap: 10px;
 }
 
 .home-actions button {
   min-height: 54px;
   font-weight: 800;
+}
+
+.home-listen-action,
+.companion-listen-action {
+  font-weight: 900;
+  box-shadow: 0 10px 22px rgba(31, 42, 36, 0.14);
+}
+
+.secondary-action {
+  background: var(--card-muted);
+  color: var(--foreground);
+  border-color: var(--border);
+}
+
+.home-action-note {
+  margin: -2px 2px 0;
+  color: var(--muted-foreground);
+  font-size: 0.82rem;
+  line-height: 1.45;
 }
 
 .home-side {
@@ -1056,6 +1075,37 @@ select {
 .state-policy-snapshot small {
   color: var(--muted);
   line-height: 1.4;
+}
+
+.status-diary-list {
+  display: grid;
+  gap: 8px;
+}
+
+.status-diary-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card-muted);
+}
+
+.status-diary-item span {
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.status-diary-item b {
+  color: var(--foreground);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.status-diary-item small {
+  overflow-wrap: anywhere;
 }
 
 .state-meter {
@@ -1909,6 +1959,44 @@ select {
   color: #714032;
 }
 
+.listening-session-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(63, 127, 102, 0.22);
+  border-radius: 10px;
+  background: #eef8f2;
+  color: #274f42;
+}
+
+.listening-session-status > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 0.88rem;
+  font-weight: 850;
+}
+
+.listening-session-status svg {
+  color: var(--green);
+}
+
+.listening-session-status small {
+  color: #587367;
+  font-weight: 750;
+}
+
+.listening-session-status button {
+  min-height: 32px;
+  padding: 6px 9px;
+  background: var(--surface-strong);
+  color: #274f42;
+}
+
 .staged-segment {
   display: grid;
   gap: 8px;
@@ -1949,6 +2037,44 @@ select {
   justify-self: start;
   min-height: 34px;
   padding: 6px 9px;
+}
+
+.staged-audio-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid rgba(81, 127, 164, 0.16);
+  border-radius: 8px;
+  background: #f5f9fb;
+  color: #425c72;
+}
+
+.staged-audio-summary > svg {
+  flex: 0 0 auto;
+  color: #517fa4;
+}
+
+.staged-audio-summary div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.staged-audio-summary strong,
+.staged-audio-summary span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.staged-audio-summary strong {
+  font-size: 0.9rem;
+}
+
+.staged-audio-summary span {
+  color: #5d7283;
+  font-size: 0.8rem;
 }
 
 .chat-batch {
@@ -3458,4 +3584,60 @@ select {
 .chat-composer {
   position: static;
   flex: 0 0 auto;
+}
+
+.composer-tools .chat-send-button {
+  min-width: 0;
+  min-height: 42px;
+  overflow: hidden;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.18;
+  overflow-wrap: anywhere;
+  font-weight: 900;
+  background: #1f2a24;
+  border-color: #1f2a24;
+  color: var(--primary-foreground);
+  box-shadow: 0 8px 18px rgba(31, 42, 36, 0.16);
+}
+
+.composer-tools .chat-send-button:disabled {
+  background: #f0f2ed;
+  border-color: #cbd2ca;
+  color: #4d564f;
+  box-shadow: none;
+  opacity: 1;
+}
+
+.composer-tools .chat-send-button svg {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 640px) {
+  .composer-tools {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 6px;
+  }
+
+  .composer-tools .primary {
+    grid-column: 1 / -1 !important;
+  }
+
+  .composer-tools button,
+  .composer-tools .upload-button {
+    min-height: 38px !important;
+    padding: 7px 5px !important;
+    font-size: 0.72rem !important;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .composer-tools .chat-send-button {
+    display: inline-flex;
+    min-height: 44px !important;
+    padding: 8px 10px !important;
+    gap: 6px;
+    font-size: 0.86rem !important;
+    white-space: normal;
+  }
 }
