@@ -15,6 +15,7 @@ export interface DogStateCatalogItem {
 }
 
 export const DOG_STATE_CHECK_INTERVAL_MINUTES = 60;
+export type PetTouchAction = "idle" | "poke-wave" | "play-ball" | "nap";
 
 export const DOG_STATE_CATALOG: DogStateCatalogItem[] = [
   state("curious_peek", "悄悄看你", "Papo 从旁边探出小脑袋，悄悄看了你一眼。", "Shiba peeking from the side with one paw forward", "peek", ["curious", "quiet"]),
@@ -201,6 +202,31 @@ export async function refreshDogStateIfDue(
   return next;
 }
 
+export function applyPetTouchState(profile: CreatureProfile, action: PetTouchAction, now = new Date().toISOString()) {
+  const stateId = petTouchStateId(action);
+  if (!stateId) return undefined;
+  const selected = requireDogState(stateId);
+  const next = dogStateFromCatalog(selected, now, "touch", "用户戳了戳小动物，界面把这次外显动作记为当前状态。", action === "nap" ? 45 : 30);
+  profile.dogState = next;
+  profile.dogStateHistory.unshift(next);
+  profile.dogStateHistory = profile.dogStateHistory.slice(0, 40);
+  return next;
+}
+
+function petTouchStateId(action: PetTouchAction) {
+  switch (action) {
+    case "play-ball":
+      return "ball_ready";
+    case "nap":
+      return "sleepy_curl";
+    case "idle":
+      return "calm_presence";
+    case "poke-wave":
+    default:
+      return undefined;
+  }
+}
+
 function dogStateFromCatalog(
   item: DogStateCatalogItem,
   now: string,
@@ -249,7 +275,8 @@ function buildDogStatePrompt(profile: CreatureProfile, now: string) {
 目标：
 - 这不是对用户说话，而是选择 Papo 当前在做什么、画面是什么、身体动作是什么。
 - 不要选择内部心理流程，不要写规则说明，不要证明机制存在。
-- 根据北京时间/配置时区、最近对话、长期记忆、当前状态和性格倾向，选一个自然的小狗外显状态。
+- 根据 pet_context 里的小动物类型、北京时间/配置时区、最近对话、长期记忆、当前状态和性格倾向，选一个自然的小动物外显状态。
+- catalog 是通用动作语义库，部分 visualPrompt 仍以 Shiba 为默认参考；如果 pet_context 不是柴犬，要把动作理解为对应小动物的外显行为，不要在 reason 里把它说成小狗或柴犬。
 - 如果用户刚互动较多，可以更贴近、听着、等待；如果长时间无互动，可以晒太阳、睡觉、玩球、看窗外等。
 - 必须从 catalog 里选择已有 stateId，不能新造。
 - nextCheckMinutes 通常 60；如果状态很短可以 30-45，如果适合久一点可以 90-120。

@@ -6,7 +6,7 @@ import path from "node:path";
 import { z } from "zod";
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
 import { audioObservationPreview, imageSummaryPreview } from "../core/display-text";
-import { isDogStateCheckDue, refreshDogStateIfDue } from "../core/dog-states";
+import { applyPetTouchState, isDogStateCheckDue, refreshDogStateIfDue } from "../core/dog-states";
 import { isDreamingDue, recordDreamingFailure, semanticDreamMemories } from "../core/dreaming";
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
@@ -35,6 +35,10 @@ const passwordSchema = z.object({
 
 const buttonSchema = z.object({
   text: z.string().min(1).max(4000)
+});
+
+const petTouchSchema = z.object({
+  action: z.enum(["idle", "poke-wave", "play-ball", "nap"])
 });
 
 const sensingTraceSchema = z.object({
@@ -248,6 +252,18 @@ export function createApp(input: {
       });
       await store.saveProfile(profile);
       res.json({ profile: publicProfile(profile), wake });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/profiles/:userId/pet-touch", async (req, res, next) => {
+    try {
+      const profile = await requireProfile(store, req.params.userId, req);
+      const body = petTouchSchema.parse(req.body);
+      const dogState = applyPetTouchState(profile, body.action);
+      await store.saveProfile(profile);
+      res.json({ profile: publicProfile(profile), dogState, applied: Boolean(dogState) });
     } catch (error) {
       next(error);
     }

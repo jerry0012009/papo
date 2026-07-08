@@ -50,9 +50,10 @@ import {
   sendFeedback,
   summarizeImage,
   observeAudio,
+  touchPet,
   updateLongTermMemory,
   updateProfilePassword,
-  wakeProfile,
+  wakeProfile
 } from "./api";
 import {
   audioSliceBatchId,
@@ -587,6 +588,16 @@ export function App() {
     });
   }
 
+  async function handlePetTouch(action: PetInteractionAction) {
+    if (!profile) return;
+    try {
+      const result = await touchPet(profile.userId, action);
+      setProfile(result.profile);
+    } catch (error) {
+      setError(errorMessage(error));
+    }
+  }
+
   async function startListening() {
     setTab("chat");
     if (listening) return;
@@ -921,7 +932,8 @@ export function App() {
     );
   }
 
-  const pageTitle = tab === "home" ? "Papo" : tab === "chat" ? "和 Papo 说话" : tab === "memory" ? "Papo 记得的生活" : "小狗资料";
+  const pageTitle = tab === "home" ? "Papo" : tab === "chat" ? "和 Papo 说话" : tab === "memory" ? "Papo 记得的生活" : "资料";
+  const species = petSpeciesNoun(profile.petKind);
 
   return (
     <Tooltip.Provider delayDuration={180}>
@@ -947,7 +959,7 @@ export function App() {
               <UserRound size={19} />
             </button>
             <div>
-              <p className="eyebrow">住在手机里的小狗</p>
+              <p className="eyebrow">住在手机里的{species}</p>
               <h1>{pageTitle}</h1>
               <p className="eyebrow">{profile.creatureName} 正在陪着你</p>
             </div>
@@ -968,6 +980,7 @@ export function App() {
                 onGoCapture={() => setTab("chat")}
                 onGoCurious={startListening}
                 onGoChat={() => setTab("chat")}
+                onPetTouch={handlePetTouch}
               />
             ) : null}
 
@@ -1156,9 +1169,16 @@ function HomeView(props: {
   onGoCapture: () => void;
   onGoCurious: () => void;
   onGoChat: () => void;
+  onPetTouch: (action: PetInteractionAction) => void;
 }) {
   const latestReply = props.unreadPapoCount ? latestVisiblePapoReply(props.profile) : "";
   const actionLine = papoVisibleActionLine(props.profile);
+  const [activeTouchAction, setActiveTouchAction] = useState<{ action: PetInteractionAction; text: string } | undefined>();
+  const touchActions = petTouchActions(props.profile);
+  const visibleAction = activeTouchAction?.action ?? generatedPetActionFromState(props.profile.dogState);
+  useEffect(() => {
+    setActiveTouchAction(undefined);
+  }, [props.profile.userId, props.profile.petKind]);
   return (
     <section className="home-screen">
       <section className="home-stage">
@@ -1170,11 +1190,24 @@ function HomeView(props: {
           </div>
         </div>
         <div className="home-avatar-wrap">
-          <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} />
+          <button
+            className="pet-touch-button"
+            type="button"
+            aria-label={`戳戳 ${props.profile.creatureName}`}
+            title="戳戳它，换个小动作"
+            onClick={() => {
+              const currentIndex = Math.max(0, touchActions.findIndex((item) => item.action === visibleAction));
+              const nextAction = touchActions[(currentIndex + 1) % touchActions.length];
+              setActiveTouchAction(nextAction);
+              if (nextAction) props.onPetTouch(nextAction.action);
+            }}
+          >
+            <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} interactionAction={activeTouchAction?.action} />
+          </button>
         </div>
         <div className="home-speech">
           <h2>{props.profile.creatureName}</h2>
-          <p>{latestReply || actionLine}</p>
+          <p>{activeTouchAction?.text || latestReply || actionLine}</p>
         </div>
       </section>
       <aside className="home-side">
@@ -1401,10 +1434,22 @@ function PapoGuidePoster() {
   );
 }
 
-function AvatarPreview({ petKind, state, dogState, idle = false }: { petKind?: string; state?: CreatureState; dogState?: DogInteractionState; idle?: boolean }) {
+type PetInteractionAction = "idle" | "poke-wave" | "play-ball" | "nap";
+
+function AvatarPreview({ petKind, state, dogState, idle = false, interactionAction }: { petKind?: string; state?: CreatureState; dogState?: DogInteractionState; idle?: boolean; interactionAction?: PetInteractionAction }) {
   const normalizedPetKind = normalizePetKind(petKind);
   if (normalizedPetKind === "shiba") return <ShibaAvatar state={state} dogState={dogState} idle={idle} />;
+  if (normalizedPetKind === "british-shorthair") return <GeneratedPetAvatar petKind={normalizedPetKind} dogState={dogState} idle={idle} interactionAction={interactionAction} />;
   return <AgentPetSprite petKind={normalizedPetKind} dogState={dogState} idle={idle} />;
+}
+
+function GeneratedPetAvatar({ petKind, dogState, idle = false, interactionAction }: { petKind: string; dogState?: DogInteractionState; idle?: boolean; interactionAction?: PetInteractionAction }) {
+  const action = interactionAction ?? generatedPetActionFromState(dogState);
+  return (
+    <div className={`generated-pet-avatar ${idle ? "idle" : ""} pet-action-${action}`} aria-label={`${petKindLabel(petKind)} 正在${dogState?.label ?? "陪着你"}`}>
+      <img src={publicAssetPath(`pets/generated/${petKind}-v1/${action}.webp`)} alt="" draggable={false} />
+    </div>
+  );
 }
 
 function AgentPetSprite({ petKind, dogState, idle = false }: { petKind: string; dogState?: DogInteractionState; idle?: boolean }) {
@@ -1447,6 +1492,52 @@ function agentPetAnimation(animation?: DogInteractionState["animation"]) {
 
 function publicAssetPath(path: string) {
   return `${PUBLIC_BASE_URL.replace(/\/?$/, "/")}${path.replace(/^\//, "")}`;
+}
+
+function generatedPetActionFromState(dogState?: DogInteractionState): PetInteractionAction {
+  switch (dogState?.animation) {
+    case "nap":
+    case "sun":
+      return "nap";
+    case "play":
+    case "bounce":
+    case "wag":
+      return "play-ball";
+    case "listen":
+    case "peek":
+    case "sniff":
+    case "stretch":
+      return "poke-wave";
+    case "idle":
+    default:
+      return "idle";
+  }
+}
+
+function petTouchActions(profile: CreatureProfile): Array<{ action: PetInteractionAction; text: string }> {
+  const name = profile.creatureName;
+  const species = petSpeciesNoun(profile.petKind);
+  const tired = profile.state.energy < 35;
+  if (tired) {
+    return [
+      { action: "nap", text: `${name} 眯着眼趴了一会儿。` },
+      { action: "poke-wave", text: `${name} 抬起小爪，轻轻回应你。` },
+      { action: "idle", text: `${name} 安安静静待在你身边。` }
+    ];
+  }
+  return [
+    { action: "poke-wave", text: `${name} 抬起小爪，像在跟你打招呼。` },
+    { action: "play-ball", text: `${name} 把小球按在爪边，等你再戳一下。` },
+    { action: "idle", text: `${name} 坐好了，圆圆地看着你。` },
+    { action: "nap", text: `${name} ${species === "小猫" ? "缩成软软一团" : "趴下来歇了一小会儿"}。` }
+  ];
+}
+
+function petSpeciesNoun(petKind?: string) {
+  const normalized = normalizePetKind(petKind);
+  if (normalized === "british-shorthair") return "小猫";
+  if (normalized === "shiba") return "小狗";
+  return "小动物";
 }
 
 function ShibaAvatar({ state, dogState, idle = false }: { state?: CreatureState; dogState?: DogInteractionState; idle?: boolean }) {

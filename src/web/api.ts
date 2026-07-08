@@ -77,6 +77,14 @@ export async function wakeProfile(userId: string): Promise<{ profile: CreaturePr
   });
 }
 
+export async function touchPet(userId: string, action: "idle" | "poke-wave" | "play-ball" | "nap"): Promise<{ profile: CreatureProfile; applied: boolean }> {
+  return request<{ profile: CreatureProfile; applied: boolean }>(`/api/profiles/${userId}/pet-touch`, {
+    method: "POST",
+    headers: profileJsonHeaders(userId),
+    body: JSON.stringify({ action })
+  });
+}
+
 export async function summarizeImage(dataUrl: string, label: string): Promise<{ summary: string; asset?: MediaAttachment; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }> {
   return request<{ summary: string; asset?: MediaAttachment; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }>("/api/image-summary", {
     method: "POST",

@@ -10,7 +10,8 @@ export const PET_KINDS = [
   { id: "mo-xia", label: "Mo Xia", description: "戴斗笠的小侠客，安静但有存在感。", renderer: "agent-pet" },
   { id: "rocky", label: "Rocky", description: "稳稳的小石头，适合慢慢陪着。", renderer: "agent-pet" },
   { id: "seedy", label: "Seedy", description: "冒芽的小植物，适合记录新想法。", renderer: "agent-pet" },
-  { id: "stacky", label: "Stacky", description: "叠叠的小伙伴，适合整理和复盘。", renderer: "agent-pet" }
+  { id: "stacky", label: "Stacky", description: "叠叠的小伙伴，适合整理和复盘。", renderer: "agent-pet" },
+  { id: "british-shorthair", label: "英短短", description: "灰白英短小猫咪，圆脸大眼，安静温柔。", renderer: "generated" }
 ] as const;
 
 export type PetKindId = (typeof PET_KINDS)[number]["id"];

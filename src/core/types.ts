@@ -65,7 +65,7 @@ export interface DogInteractionState {
   animation: "idle" | "wag" | "bounce" | "sniff" | "nap" | "stretch" | "play" | "listen" | "peek" | "sun";
   reason: string;
   nextCheckAt: string;
-  selectedBy: "seed" | "llm";
+  selectedBy: "seed" | "llm" | "touch";
 }
 
 export interface FeedbackPolicyProfile {

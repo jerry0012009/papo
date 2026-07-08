@@ -57,6 +57,23 @@ test("home guide poster explains Papo without overflowing", async ({ page }) => 
   await expectInViewport(page, guide);
 });
 
+test("home adapts generated British Shorthair and tap changes pose", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("papo:testPetKind", "british-shorthair");
+  });
+  await page.goto("/");
+
+  await expect(page.getByText("住在手机里的小猫")).toBeVisible();
+  await expect(page.getByText("住在手机里的小狗")).toHaveCount(0);
+  const avatar = page.locator(".home-stage .generated-pet-avatar img");
+  await expect(avatar).toBeVisible();
+  await expect(avatar).toHaveAttribute("src", /pets\/generated\/british-shorthair-v1\/poke-wave\.webp/);
+
+  await page.getByRole("button", { name: "戳戳 Papo" }).click();
+  await expect(avatar).toHaveAttribute("src", /pets\/generated\/british-shorthair-v1\/play-ball\.webp/);
+  await expect(page.locator(".home-speech")).toContainText("小球");
+});
+
 test("chat opens at latest content and keeps the composer aligned with the thread", async ({ page }) => {
   await page.goto("/");
   await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
@@ -317,11 +334,14 @@ async function installMockApi(page: Page) {
     }
 
     if (path === "/api/profiles/demo" && route.request().method() === "GET") {
-      await json(route, { profile });
+      const nextProfile = await profileWithTestOverrides(route, profile);
+      profile = nextProfile;
+      await json(route, { profile: nextProfile });
       return;
     }
 
     if (path === "/api/profiles/demo/wake" && route.request().method() === "POST") {
+      profile = await profileWithTestOverrides(route, profile);
       await json(route, {
         profile,
         wake: {
@@ -335,6 +355,25 @@ async function installMockApi(page: Page) {
           ruleTrace: []
         }
       });
+      return;
+    }
+
+    if (path === "/api/profiles/demo/pet-touch" && route.request().method() === "POST") {
+      const requestBody = safePostJson(route) as { action?: string };
+      if (requestBody.action === "play-ball") {
+        profile = {
+          ...profile,
+          dogState: {
+            ...profile.dogState,
+            id: "ball_ready",
+            label: "抱着球等你",
+            actionText: "Papo 把小球抱在爪子边，等你看过来。",
+            animation: "play",
+            selectedBy: "touch"
+          }
+        };
+      }
+      await json(route, { profile, applied: requestBody.action === "play-ball" });
       return;
     }
 
@@ -466,6 +505,12 @@ async function installMockApi(page: Page) {
 
     await json(route, { error: `Unhandled mock route: ${route.request().method()} ${path}` }, 404);
   });
+}
+
+async function profileWithTestOverrides(route: Route, profile: ReturnType<typeof makeProfile>) {
+  const petKind = await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:testPetKind")).catch(() => null);
+  if (!petKind) return profile;
+  return { ...profile, petKind };
 }
 
 async function installMockMicrophone(page: Page) {
