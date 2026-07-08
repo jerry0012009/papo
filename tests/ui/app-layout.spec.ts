@@ -10,20 +10,20 @@ test("home developer panel opens and closes without overflowing", async ({ page 
   await page.goto("/");
 
   await expect(page.getByRole("heading", { level: 1, name: "Papo" })).toBeVisible();
-  await page.getByRole("button", { name: "小眼睛" }).click();
+  await page.locator(".home-stage").getByRole("button", { name: "小眼睛" }).click();
 
-  const panel = page.getByRole("dialog", { name: "Papo 状态和模型阶段" });
+  const panel = page.getByRole("dialog", { name: /Papo 状态/ });
   await expect(panel).toBeVisible();
   await expect(panel).toContainText("状态");
   await expectInViewport(page, panel);
 
-  await page.getByRole("button", { name: "收起" }).click();
+  await page.getByRole("button", { name: "收起小眼睛" }).click();
   await expect(panel).toBeHidden();
 });
 
 test("chat opens at latest content and keeps the composer aligned with the thread", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "对话" }).click();
+  await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
 
   await expect(page.locator(".chat-bubble.papo p", { hasText: "最近一条回复在这里。" }).last()).toBeVisible();
   await expect(page.getByPlaceholder("直接告诉 Papo 一件刚发生的事")).toBeVisible();
@@ -34,7 +34,7 @@ test("chat opens at latest content and keeps the composer aligned with the threa
   expect(composerBox).toBeTruthy();
   expect(Math.abs(listBox!.width - composerBox!.width)).toBeLessThanOrEqual(2);
 
-  await page.locator('summary[aria-label="查看这句话背后的模型调用"]').first().click();
+  await page.getByRole("button", { name: "查看这句话背后的模型调用" }).first().click();
   const trace = page.locator(".developer-trace-body").first();
   await expect(trace).toBeVisible();
   await expect(trace).toContainText("模型调用");
@@ -43,7 +43,7 @@ test("chat opens at latest content and keeps the composer aligned with the threa
 
 test("memory feedback shows a pending state while the request is in flight", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "记忆" }).click();
+  await page.locator(".nav").getByRole("button", { name: /记忆/ }).click();
 
   const memoryCard = page.locator(".memory-surface").filter({ hasText: "你喜欢旺旺仙贝。" }).first();
   await expect(memoryCard).toBeVisible();

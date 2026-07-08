@@ -51,6 +51,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 
 - Dialogue and companionship are one surface.
 - Text, photo, uploaded audio, and continuous listening chunks enter the same conversation timeline.
+- The default UI is the companion product, not a harness demo. Internal cognition, model calls, state, personality, and memory decisions belong behind small inspection controls; the first-view experience should show Papo, the conversation, and memories in ordinary user language.
 - Continuous listening is internally batched around 30 seconds for up to 3 minutes, but the user should experience it as Papo listening with them.
 - Continuous listening records audio chunks and sends them to the configured audio model. Browser/local speech recognition output must not bypass the model into the life stream.
 - Browser `MediaRecorder` chunks may be `webm/opus` or another container. Provider code must convert chat-completions audio input to a model-readable format such as wav when the selected model rejects the browser container; this is an ingestion format fix, not a transcription fallback.

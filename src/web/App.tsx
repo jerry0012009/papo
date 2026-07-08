@@ -13,6 +13,8 @@ import {
   Sparkles,
   UserRound
 } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { toCreatureMemoryVoice } from "../core/memory";
 import type {
@@ -723,71 +725,98 @@ export function App() {
     );
   }
 
+  const pageTitle = tab === "home" ? "Papo" : tab === "chat" ? "和 Papo 说话" : tab === "memory" ? "Papo 记得的生活" : "小狗资料";
+
   return (
-    <main className={`shell tab-${tab}`}>
-      <header className="topbar">
-        <button className="icon-button" onClick={() => setTab("profile")} aria-label="看看哪只 Papo 在身边">
-          <UserRound size={19} />
-        </button>
-        <div>
-          <p className="eyebrow">住在手机里的小狗</p>
-          <h1>{profile.creatureName}</h1>
-          <p className="eyebrow">正在陪着你</p>
-        </div>
-        <button className="icon-button" onClick={askEmergence} disabled={busy} aria-label="轻轻碰一下 Papo">
-          <Sparkles size={19} />
-        </button>
-      </header>
+    <Tooltip.Provider delayDuration={180}>
+      <main className={`shell app-shell tab-${tab}`}>
+        <aside className="app-sidebar" aria-label="Papo 导航">
+          <div className="sidebar-brand">
+            <ShibaAvatar state={profile.state} />
+            <div>
+              <strong>{profile.creatureName}</strong>
+              <span>{papoMoodLabel(profile.state)}</span>
+            </div>
+          </div>
+          <nav className="nav">
+            <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => setTab("home")} />
+            <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" unreadCount={hasUnreadPapoMessage ? unreadPapoCount : 0} onClick={() => setTab("chat")} />
+            <NavButton active={tab === "memory"} icon={History} label="记忆" onClick={() => setTab("memory")} />
+          </nav>
+        </aside>
 
-      <section className="view-frame">
-        {error ? <div className="notice">{error}</div> : null}
+        <section className="app-main">
+          <header className="topbar app-topbar">
+            <button className="icon-button" onClick={() => setTab("profile")} aria-label="看看哪只 Papo 在身边">
+              <UserRound size={19} />
+            </button>
+            <div>
+              <p className="eyebrow">住在手机里的小狗</p>
+              <h1>{pageTitle}</h1>
+              <p className="eyebrow">{profile.creatureName} 正在陪着你</p>
+            </div>
+            <button className="icon-button" onClick={askEmergence} disabled={busy} aria-label="轻轻碰一下 Papo">
+              <Sparkles size={19} />
+            </button>
+          </header>
 
-        {tab === "home" ? (
-          <HomeView
-            profile={profile}
-            emergence={emergence}
-            unreadPapoCount={unreadPapoCount}
-            busy={busy}
-            onGoCapture={() => setTab("chat")}
-            onGoCurious={() => setTab("chat")}
-            onGoChat={() => setTab("chat")}
-          />
-        ) : null}
+          <section className="view-frame">
+            {error ? <div className="notice">{error}</div> : null}
 
-        {tab === "chat" ? (
-          <ChatView
-            profile={profile}
-            busy={busy}
-            stagedSegments={chatSegments}
-            onChangeStagedSegments={setChatSegments}
-            onSubmitMoment={submitChatMoment}
-            onUploadImage={uploadChatImageSummary}
-            onUploadAudio={uploadChatAudioObservation}
-            onRecordAudio={recordQuickAudioObservation}
-            listening={listening}
-            listeningElapsed={listeningElapsed}
-            quickRecording={quickRecording}
-            onStartListening={startListening}
-            onStopListening={stopListening}
-          />
-        ) : null}
-        {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} onDream={runDreaming} busy={busy} feedbackPendingKey={feedbackPendingKey} /> : null}
-        {tab === "profile" ? (
-          <ProfileView
-            profiles={profiles}
-            activeId={profile.userId}
-            onSelect={selectProfile}
-            onAdd={addProfile}
-          />
-        ) : null}
-      </section>
+            {tab === "home" ? (
+              <HomeView
+                profile={profile}
+                emergence={emergence}
+                unreadPapoCount={unreadPapoCount}
+                busy={busy}
+                onGoCapture={() => setTab("chat")}
+                onGoCurious={() => setTab("chat")}
+                onGoChat={() => setTab("chat")}
+              />
+            ) : null}
 
-      <nav className="nav">
-        <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => setTab("home")} />
-        <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" unreadCount={hasUnreadPapoMessage ? unreadPapoCount : 0} onClick={() => setTab("chat")} />
-        <NavButton active={tab === "memory"} icon={History} label="记忆" onClick={() => setTab("memory")} />
-      </nav>
-    </main>
+            {tab === "chat" ? (
+              <ChatView
+                profile={profile}
+                busy={busy}
+                stagedSegments={chatSegments}
+                onChangeStagedSegments={setChatSegments}
+                onSubmitMoment={submitChatMoment}
+                onUploadImage={uploadChatImageSummary}
+                onUploadAudio={uploadChatAudioObservation}
+                onRecordAudio={recordQuickAudioObservation}
+                listening={listening}
+                listeningElapsed={listeningElapsed}
+                quickRecording={quickRecording}
+                onStartListening={startListening}
+                onStopListening={stopListening}
+              />
+            ) : null}
+            {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} onDream={runDreaming} busy={busy} feedbackPendingKey={feedbackPendingKey} /> : null}
+            {tab === "profile" ? (
+              <ProfileView
+                profiles={profiles}
+                activeId={profile.userId}
+                onSelect={selectProfile}
+                onAdd={addProfile}
+              />
+            ) : null}
+          </section>
+        </section>
+
+        <CompanionPanel
+          profile={profile}
+          unreadPapoCount={unreadPapoCount}
+          busy={busy}
+          listening={listening}
+          listeningElapsed={listeningElapsed}
+          onGoChat={() => setTab("chat")}
+          onGoProfile={() => setTab("profile")}
+          onAskEmergence={askEmergence}
+          onToggleListening={listening ? stopListening : startListening}
+        />
+      </main>
+    </Tooltip.Provider>
   );
 }
 
@@ -840,6 +869,72 @@ function HomeView(props: {
         {props.emergence?.text ? <EmergenceCard emergence={props.emergence} profile={props.profile} /> : null}
       </aside>
     </section>
+  );
+}
+
+function CompanionPanel(props: {
+  profile: CreatureProfile;
+  unreadPapoCount: number;
+  busy: boolean;
+  listening: boolean;
+  listeningElapsed: number;
+  onGoChat: () => void;
+  onGoProfile: () => void;
+  onAskEmergence: () => void;
+  onToggleListening: () => void;
+}) {
+  const latestReply = props.unreadPapoCount ? latestVisiblePapoReply(props.profile) : "";
+  return (
+    <aside className="companion-panel" aria-label="Papo 当前状态">
+      <section className="companion-card companion-hero">
+        <div className="companion-avatar">
+          <ShibaAvatar state={props.profile.state} />
+        </div>
+        <div>
+          <span className="status-dot" />
+          <strong>{props.profile.creatureName}</strong>
+          <p>{props.listening ? `正在听 ${formatListeningTime(props.listeningElapsed)}` : papoVisibleActionLine(props.profile.state)}</p>
+        </div>
+      </section>
+
+      {props.unreadPapoCount ? (
+        <button className="companion-nudge" onClick={props.onGoChat}>
+          <MessagesSquare size={16} />
+          Papo 新说
+          <span>{Math.min(3, props.unreadPapoCount)}</span>
+        </button>
+      ) : latestReply ? (
+        <section className="companion-card companion-last">
+          <small>刚才</small>
+          <p>{latestReply}</p>
+        </section>
+      ) : null}
+
+      <div className="companion-actions">
+        <button className="primary" onClick={props.onGoChat}>
+          <MessageCircle size={17} />
+          对话
+        </button>
+        <button onClick={props.onToggleListening} disabled={props.busy}>
+          <Sparkles size={17} />
+          {props.listening ? "停下" : "陪我"}
+        </button>
+      </div>
+
+      <HermesTaskNotice profile={props.profile} />
+
+      <div className="companion-tools">
+        <button onClick={props.onAskEmergence} disabled={props.busy}>
+          <Sparkles size={16} />
+          轻轻碰一下
+        </button>
+        <button onClick={props.onGoProfile}>
+          <UserRound size={16} />
+          资料
+        </button>
+        <HomeBrainPeek profile={props.profile} compact />
+      </div>
+    </aside>
   );
 }
 
@@ -909,23 +1004,30 @@ function ShibaAvatar({ state, idle = false }: { state?: CreatureState; idle?: bo
   );
 }
 
-function HomeBrainPeek({ profile }: { profile: CreatureProfile }) {
-  const [open, setOpen] = useState(false);
+function HomeBrainPeek({ profile, compact = false }: { profile: CreatureProfile; compact?: boolean }) {
   return (
-    <div className="home-brain-peek">
-      <button className="home-brain-trigger" type="button" aria-expanded={open} onClick={() => setOpen((current) => !current)}>
-        <Eye size={14} />
-        小眼睛
-      </button>
-      {open ? (
-        <div className="home-brain-panel" role="dialog" aria-label="Papo 状态和模型阶段">
-          <button className="home-brain-close" type="button" onClick={() => setOpen(false)}>
-            收起
-          </button>
+    <Dialog.Root>
+      <Dialog.Trigger asChild>
+        <button className={compact ? "home-brain-trigger compact" : "home-brain-trigger"} type="button">
+          <Eye size={14} />
+          小眼睛
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="ui-overlay" />
+        <Dialog.Content className="ui-sheet" aria-label="Papo 状态和模型阶段">
+          <div className="ui-sheet-head">
+            <Dialog.Title>Papo 状态</Dialog.Title>
+            <Dialog.Close asChild>
+              <button className="icon-button small" type="button" aria-label="收起小眼睛">
+                <RefreshCcw size={15} />
+              </button>
+            </Dialog.Close>
+          </div>
           <StatePolicySnapshot profile={profile} />
-        </div>
-      ) : null}
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -952,8 +1054,8 @@ function StatePolicySnapshot({ profile }: { profile: CreatureProfile }) {
       {recentRuns.length ? (
         <section>
           <strong>最近模型阶段</strong>
-          {recentRuns.map((run) => (
-            <small key={run.id}>{stageLabel(run.stage ?? run.source)} · {run.model ?? run.providerName} · {run.status}</small>
+          {recentRuns.map((run, index) => (
+            <small key={`${run.id}-${run.stage ?? run.source}-${index}`}>{stageLabel(run.stage ?? run.source)} · {run.model ?? run.providerName} · {run.status}</small>
           ))}
         </section>
       ) : null}
@@ -1251,13 +1353,37 @@ function AttachmentStrip({ attachments }: { attachments?: NonNullable<StreamSegm
 
 function DeveloperTrace({ trace, sensingTrace, profile }: { trace?: ConversationMessage["cognitionTrace"]; sensingTrace?: SensingTrace; profile: CreatureProfile }) {
   return (
-    <details className="developer-trace">
-      <summary aria-label="查看这句话背后的模型调用">
-        <Eye size={14} />
-        背后
-      </summary>
-      <DeveloperTraceBody trace={trace} sensingTraces={sensingTrace ? [sensingTrace] : undefined} profile={profile} />
-    </details>
+    <Dialog.Root>
+      <Tooltip.Root>
+        <Tooltip.Trigger asChild>
+          <Dialog.Trigger asChild>
+            <button className="trace-trigger" type="button" aria-label="查看这句话背后的模型调用">
+              <Eye size={14} />
+              背后
+            </button>
+          </Dialog.Trigger>
+        </Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content className="ui-tooltip" sideOffset={6}>
+            查看认知流程
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+      <Dialog.Portal>
+        <Dialog.Overlay className="ui-overlay" />
+        <Dialog.Content className="ui-sheet trace-sheet" aria-label="这句话背后的模型调用">
+          <div className="ui-sheet-head">
+            <Dialog.Title>认知流程</Dialog.Title>
+            <Dialog.Close asChild>
+              <button className="icon-button small" type="button" aria-label="关闭认知流程">
+                <RefreshCcw size={15} />
+              </button>
+            </Dialog.Close>
+          </div>
+          <DeveloperTraceBody trace={trace} sensingTraces={sensingTrace ? [sensingTrace] : undefined} profile={profile} />
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -1281,8 +1407,8 @@ function DeveloperTraceBody({ trace, sensingTraces, profile }: { trace?: Convers
           <strong>模型调用</strong>
           {trace.modelRuns.length ? (
             <ul>
-              {trace.modelRuns.map((run) => (
-                <li key={run.id}>
+              {trace.modelRuns.map((run, index) => (
+                <li key={`${run.id}-${run.stage ?? run.source}-${index}`}>
                   <span>{stageLabel(run.stage ?? run.source)}</span>
                   <code>{run.model ?? trace.model ?? run.providerName}</code>
                   <small>{run.status} · {run.message}</small>
@@ -1321,8 +1447,8 @@ function DeveloperTraceBody({ trace, sensingTraces, profile }: { trace?: Convers
             {trace.memoryDecisions?.length ? (
               <div className="flow-chain">
                 <TraceBlock title="4. 记忆模型结果">
-                  {trace.memoryDecisions.map((memory) => (
-                    <div className="trace-memory-result" key={memory.candidateId}>
+                  {trace.memoryDecisions.map((memory, index) => (
+                    <div className="trace-memory-result" key={`${memory.candidateId}-${memory.status}-${index}`}>
                       <b>{memoryStatusText(memory.status, memory.writePolicy)}</b>
                       <p>{memory.text}</p>
                       <small>{memory.memoryKind} · {memory.why}</small>
@@ -1352,8 +1478,8 @@ function DeveloperTraceBody({ trace, sensingTraces, profile }: { trace?: Convers
                 {(trace.feedbackDecision.memoryCandidateIds ?? []).length ? (
                   <small>关联候选：{(trace.feedbackDecision.memoryCandidateIds ?? []).join("、")}</small>
                 ) : null}
-                {(trace.feedbackDecision.memoryChanges ?? []).map((change) => (
-                  <div className="trace-memory-result" key={`${change.targetType}-${change.targetId}`}>
+                {(trace.feedbackDecision.memoryChanges ?? []).map((change, index) => (
+                  <div className="trace-memory-result" key={`${change.targetType}-${change.targetId}-${index}`}>
                     <b>{feedbackMemoryChangeTitle(change)}</b>
                     {change.beforeWeight !== undefined || change.afterWeight !== undefined ? (
                       <small>权重：{change.beforeWeight ?? "无"} -&gt; {change.afterWeight ?? "已删除"}</small>
@@ -1505,7 +1631,13 @@ function uniqueSensingTraces(items: SensingTrace[]) {
 }
 
 function RelatedMemories({ ids, profile }: { ids: string[]; profile: CreatureProfile }) {
+  const seen = new Set<string>();
   const memories = ids
+    .filter((id) => {
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    })
     .map((id) => profile.longTermMemories.find((memory) => memory.id === id))
     .filter((memory): memory is CreatureProfile["longTermMemories"][number] => Boolean(memory));
   if (!memories.length) return null;
@@ -1735,11 +1867,11 @@ function MemoryView(props: {
         {showCandidates && candidates.length ? (
           <section className="memory-section">
             <h3>候选记忆</h3>
-            {candidates.map((candidate) => (
+            {candidates.map((candidate, index) => (
               <MemoryCandidateCard
                 candidate={candidate}
                 profile={props.profile}
-                key={candidate.id}
+                key={`candidate-${candidate.id}-${index}`}
                 onFeedback={props.onFeedback}
                 onObserveFeedbackAudio={props.onObserveFeedbackAudio}
                 feedbackPendingKey={props.feedbackPendingKey}
@@ -1750,8 +1882,8 @@ function MemoryView(props: {
         {showLongTerm && otherMemories.length ? (
           <section className="memory-section">
             <h3>长期记忆</h3>
-            {otherMemories.map((memory) => (
-          <article className="memory-surface" key={memory.id}>
+            {otherMemories.map((memory, index) => (
+          <article className="memory-surface" key={`long-${memory.id}-${index}`}>
             {editingId === memory.id ? (
               <>
                 <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={3} />

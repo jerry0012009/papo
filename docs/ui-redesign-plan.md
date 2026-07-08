@@ -126,3 +126,18 @@ Preferred implementation:
 4. `Refine memory page hierarchy`
 5. `Add UI interaction tests`
 6. `Deploy Papo UI redesign`
+
+## 2026-07-08 Implementation Status
+
+- Adopted a Radix Dialog/Tooltip base for developer disclosures instead of hand-rolled popovers.
+- Reworked the app shell into a product layout: desktop left navigation, center work area, and right companion rail; mobile keeps compact top bar and bottom navigation.
+- Chat now uses a bounded messenger surface with the composer aligned to the message column and latest-content positioning covered by Playwright tests.
+- Developer cognition traces moved into sheet-style overlays so internal process is inspectable without polluting the creature-facing UI.
+- Memory remains functionally the same but uses a cleaner list hierarchy with candidate/long-term filters, collapsed source/feedback/trace details, and stable pending button labels.
+- Added mobile/desktop UI interaction coverage for home eye open/close, chat latest/composer alignment, and memory feedback pending state.
+
+Remaining product polish:
+
+1. Replace the legacy memory card internals with a dedicated memory detail drawer once backend pagination lands.
+2. Add screenshot-diff review for demo pages, not just structural Playwright assertions.
+3. Continue trimming old CSS after this stage is stable; the current release intentionally uses final override layers to reduce regression risk.
