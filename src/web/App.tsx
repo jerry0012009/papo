@@ -92,11 +92,18 @@ interface LiveBatchBuffer {
   updatedAt: number;
 }
 
+type PendingSegmentState = "processing" | "ready" | "failed";
+type StagedChatSegment = StreamSegment & {
+  status?: PendingSegmentState;
+  previewUrl?: string;
+  statusText?: string;
+};
+
 export function App() {
   const [tab, setTab] = useState<Tab>("home");
   const [profile, setProfile] = useState<CreatureProfile>();
   const [needsAuth, setNeedsAuth] = useState(false);
-  const [chatSegments, setChatSegments] = useState<StreamSegment[]>([]);
+  const [chatSegments, setChatSegments] = useState<StagedChatSegment[]>([]);
   const [emergence, setEmergence] = useState<EmergenceSurface>();
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
@@ -258,17 +265,19 @@ export function App() {
     }
     if (!cleanText && !chatSegments.length) return;
     await run(async () => {
-      const batchId = chatSegments[0]?.batchId ?? currentBatchId();
+      const readySegments = chatSegments.filter((segment) => stagedSegmentReady(segment));
+      const batchId = readySegments[0]?.batchId ?? currentBatchId();
       const textSegment = cleanText
         ? [makeSegment(`chat-text-${Date.now()}`, "text", listening ? "这 30 秒里你补充的话" : "你刚说的话", cleanText, { observedAt: new Date().toISOString(), batchId })]
         : [];
-      const segments = [...textSegment, ...chatSegments].filter((segment) => segment.content.trim()).map((segment, index) => ensureSegmentContext(segment, index));
+      const segments = [...textSegment, ...readySegments].filter((segment) => segment.content.trim()).map((segment, index) => ensureSegmentContext(segment, index));
       if (listening) {
-        await submitLiveSegments(segments);
+        await submitLiveSegments(segments, { flushDelayMs: LIVE_BATCH_AUDIO_GRACE_MS });
       } else {
         const result = await curiousCapture(profile.userId, segments);
         setProfile(result.profile);
       }
+      revokeStagedPreviewUrls(chatSegments);
       setChatSegments([]);
       setTab("chat");
     });
@@ -276,10 +285,35 @@ export function App() {
 
   async function uploadChatImageSummary(file?: File) {
     if (!file) return;
-    await run(async () => {
-      const observedAt = file.lastModified ? new Date(file.lastModified).toISOString() : new Date().toISOString();
+    const observedAt = file.lastModified ? new Date(file.lastModified).toISOString() : new Date().toISOString();
+    const localPreviewUrl = URL.createObjectURL(file);
+    const localSegmentId = `chat-image-${Date.now()}`;
+    const label = file.name || "照片";
+    setError(undefined);
+    setChatSegments((current) => [
+      ...current,
+      makeSegment(localSegmentId, "image_summary", label, "", {
+        observedAt,
+        batchId: current[0]?.batchId ?? currentBatchId(),
+        attachments: [
+          {
+            id: `${localSegmentId}-local`,
+            kind: "image",
+            label,
+            mime: browserImageMime(file.type),
+            url: localPreviewUrl,
+            createdAt: new Date().toISOString(),
+            observedAt,
+            sizeBytes: file.size
+          }
+        ]
+      }) as StagedChatSegment
+    ].map((segment) => segment.id === localSegmentId ? { ...segment, previewUrl: localPreviewUrl, status: "processing", statusText: "正在看照片" } : segment));
+    setTab("chat");
+
+    try {
       const location = await currentLocationSnapshot();
-      const dataUrl = await readFileAsDataUrl(file);
+      const dataUrl = await readImageFileAsUploadDataUrl(file);
       const result = await summarizeImage(dataUrl, file.name || "对话照片");
       const content = imageSegmentContent(result.summary, file.name || "照片");
       const asset = result.asset
@@ -290,23 +324,35 @@ export function App() {
             location
           }
         : undefined;
-      const segment = makeSegment(`chat-image-${Date.now()}`, "image_summary", file.name || "照片", content, {
-        observedAt,
-        batchId: currentBatchId(),
-        location,
-        attachments: asset ? [asset] : []
-      });
-      segment.sensingTrace = result.sensingTrace;
-      if (listening) {
-        await submitLiveSegments([ensureSegmentContext(segment, 0)]);
-      } else {
-        setChatSegments((current) => [
-          ...current,
-          { ...segment, label: file.name || `照片 ${current.length + 1}`, batchId: current[0]?.batchId ?? segment.batchId }
-        ]);
-      }
-      setTab("chat");
-    });
+      setChatSegments((current) =>
+        current.map((segment) =>
+          segment.id === localSegmentId
+            ? {
+                ...segment,
+                content,
+                location,
+                attachments: asset ? [asset] : segment.attachments,
+                sensingTrace: result.sensingTrace,
+                status: "ready",
+                statusText: "照片已准备好"
+              }
+            : segment
+        )
+      );
+    } catch (caught) {
+      setChatSegments((current) =>
+        current.map((segment) =>
+          segment.id === localSegmentId
+            ? {
+                ...segment,
+                status: "failed",
+                statusText: imageUploadErrorMessage(caught)
+              }
+            : segment
+        )
+      );
+      setError(imageUploadErrorMessage(caught));
+    }
   }
 
   async function uploadChatAudioObservation(file?: File) {
@@ -667,12 +713,13 @@ export function App() {
     ].map((segment) => ({ ...segment, sensingTrace: result.sensingTrace })), { audioSettledBatchId: meta.batchId });
   }
 
-  function submitLiveSegments(segments: StreamSegment[], options: { audioSettledBatchId?: string } = {}) {
+  function submitLiveSegments(segments: StreamSegment[], options: { audioSettledBatchId?: string; flushDelayMs?: number } = {}) {
     const usefulSegments = segments.filter((segment) => segment.content.trim()).map((segment, index) => ensureSegmentContext(segment, index));
     if (!usefulSegments.length) {
       if (options.audioSettledBatchId) markLiveBatchAudioSettled(options.audioSettledBatchId);
       return;
     }
+    const touchedBatchIds = new Set<string>();
     for (const segment of usefulSegments) {
       const batchId = segment.batchId ?? currentBatchId();
       const buffer = ensureLiveBatchBuffer(batchId);
@@ -681,6 +728,10 @@ export function App() {
       }
       buffer.updatedAt = Date.now();
       scheduleLiveBatchFlush(batchId);
+      touchedBatchIds.add(batchId);
+    }
+    if (typeof options.flushDelayMs === "number") {
+      for (const batchId of touchedBatchIds) scheduleLiveBatchFlush(batchId, options.flushDelayMs);
     }
     if (options.audioSettledBatchId) markLiveBatchAudioSettled(options.audioSettledBatchId);
   }
@@ -1476,8 +1527,8 @@ function papoMoodLabel(state: CreatureState) {
 function ChatView(props: {
   profile: CreatureProfile;
   busy: boolean;
-  stagedSegments: StreamSegment[];
-  onChangeStagedSegments: (segments: StreamSegment[] | ((current: StreamSegment[]) => StreamSegment[])) => void;
+  stagedSegments: StagedChatSegment[];
+  onChangeStagedSegments: (segments: StagedChatSegment[] | ((current: StagedChatSegment[]) => StagedChatSegment[])) => void;
   onSubmitMoment: (text: string) => Promise<void>;
   onUploadImage: (file?: File) => void;
   onUploadAudio: (file?: File) => void;
@@ -1501,7 +1552,8 @@ function ChatView(props: {
   );
   const messages = allMessages.slice(0, visibleCount).reverse();
   const sections = groupConversationSections(messages);
-  const canSubmit = Boolean(draft.trim() || props.stagedSegments.some((segment) => segment.content.trim()));
+  const waitingForStagedSegments = props.stagedSegments.some((segment) => !stagedSegmentReady(segment));
+  const canSubmit = !waitingForStagedSegments && Boolean(draft.trim() || props.stagedSegments.some((segment) => stagedSegmentReady(segment) && segment.content.trim()));
   const hasOlderMessages = allMessages.length > visibleCount;
   const listeningTotalSeconds = Math.floor(LIVE_LISTENING_MAX_MS / 1000);
   const listeningRemainingSeconds = Math.max(0, listeningTotalSeconds - props.listeningElapsed);
@@ -1534,6 +1586,8 @@ function ChatView(props: {
   }
 
   function removeStagedSegment(index: number) {
+    const segment = props.stagedSegments[index] as StagedChatSegment | undefined;
+    if (segment?.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(segment.previewUrl);
     props.onChangeStagedSegments((current) => current.filter((_, currentIndex) => currentIndex !== index));
   }
 
@@ -1626,7 +1680,15 @@ function ChatView(props: {
                     </span>
                     <strong>{segment.label}</strong>
                   </div>
-                  {segment.kind === "audio_observation" ? (
+                  {segment.kind === "image_summary" ? (
+                    <div className={`staged-image-summary ${segment.status ?? "ready"}`}>
+                      <ImagePlus size={18} />
+                      <div>
+                        <strong>{segment.status === "processing" ? "照片正在准备" : segment.status === "failed" ? "照片没有准备好" : "照片已加入"}</strong>
+                        <span>{segment.statusText ?? "Papo 会把这张照片作为这次分享的素材。"}</span>
+                      </div>
+                    </div>
+                  ) : segment.kind === "audio_observation" ? (
                     <div className="staged-audio-summary">
                       <Mic size={18} />
                       <div>
@@ -2801,6 +2863,16 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "发生未知错误";
 }
 
+function stagedSegmentReady(segment: StagedChatSegment | StreamSegment) {
+  return !("status" in segment) || !segment.status || segment.status === "ready";
+}
+
+function revokeStagedPreviewUrls(segments: StagedChatSegment[]) {
+  for (const segment of segments) {
+    if (segment.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(segment.previewUrl);
+  }
+}
+
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -2808,6 +2880,59 @@ function readFileAsDataUrl(file: File) {
     reader.onerror = () => reject(new Error("文件读取失败"));
     reader.readAsDataURL(file);
   });
+}
+
+async function readImageFileAsUploadDataUrl(file: File) {
+  if (!/^image\/(png|jpe?g|webp)$/i.test(file.type)) throw new Error("请选择 PNG、JPG 或 WebP 图片。");
+  const dataUrl = await downscaleImageFile(file);
+  if (dataUrl.length > 5_900_000) throw new Error("这张照片还是太大了，可以换一张或截小一点再传。");
+  return dataUrl;
+}
+
+async function downscaleImageFile(file: File) {
+  const sourceUrl = URL.createObjectURL(file);
+  try {
+    const image = await loadImageElement(sourceUrl);
+    const maxSide = 1600;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+    const width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+    const height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("当前浏览器暂时不能处理这张照片。");
+    context.drawImage(image, 0, 0, width, height);
+    const outputMime = file.type === "image/png" && file.size < 1_500_000 ? "image/png" : "image/jpeg";
+    const qualities = outputMime === "image/png" ? [undefined] : [0.82, 0.72, 0.62, 0.52];
+    for (const quality of qualities) {
+      const dataUrl = canvas.toDataURL(outputMime, quality);
+      if (dataUrl.length <= 5_900_000) return dataUrl;
+    }
+    return canvas.toDataURL(outputMime, 0.46);
+  } finally {
+    URL.revokeObjectURL(sourceUrl);
+  }
+}
+
+function loadImageElement(url: string) {
+  return new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("这张照片没有读出来。"));
+    image.src = url;
+  });
+}
+
+function browserImageMime(type: string): "image/png" | "image/jpeg" | "image/webp" {
+  if (type === "image/png" || type === "image/webp") return type;
+  return "image/jpeg";
+}
+
+function imageUploadErrorMessage(error: unknown) {
+  const message = errorMessage(error);
+  if (/Invalid request|too large|PayloadTooLarge|request entity too large|body exceeded/i.test(message)) return "照片太大了，已经没有提交。可以换一张或截小一点。";
+  return message;
 }
 
 async function readAudioFileAsDataUrl(file: File) {

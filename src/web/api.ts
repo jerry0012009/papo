@@ -132,6 +132,7 @@ export function makeSegment(id: string, kind: SegmentKind, label: string, conten
 }
 
 export function resolveAssetUrl(url: string) {
+  if (/^(https?:|blob:|data:)/.test(url)) return url;
   if (/^https?:\/\//.test(url)) return url;
   return resolveApiPath(url);
 }

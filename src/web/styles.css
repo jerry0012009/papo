@@ -2039,7 +2039,8 @@ select {
   padding: 6px 9px;
 }
 
-.staged-audio-summary {
+.staged-audio-summary,
+.staged-image-summary {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -2051,30 +2052,56 @@ select {
   color: #425c72;
 }
 
-.staged-audio-summary > svg {
+.staged-audio-summary > svg,
+.staged-image-summary > svg {
   flex: 0 0 auto;
   color: #517fa4;
 }
 
-.staged-audio-summary div {
+.staged-audio-summary div,
+.staged-image-summary div {
   min-width: 0;
   display: grid;
   gap: 2px;
 }
 
 .staged-audio-summary strong,
-.staged-audio-summary span {
+.staged-audio-summary span,
+.staged-image-summary strong,
+.staged-image-summary span {
   min-width: 0;
   overflow-wrap: anywhere;
 }
 
-.staged-audio-summary strong {
+.staged-audio-summary strong,
+.staged-image-summary strong {
   font-size: 0.9rem;
 }
 
-.staged-audio-summary span {
+.staged-audio-summary span,
+.staged-image-summary span {
   color: #5d7283;
   font-size: 0.8rem;
+}
+
+.staged-image-summary.processing {
+  background: #fff8e8;
+  border-color: rgba(226, 184, 78, 0.28);
+  color: #725c22;
+}
+
+.staged-image-summary.processing > svg {
+  color: var(--amber);
+}
+
+.staged-image-summary.failed {
+  background: #fff1ee;
+  border-color: rgba(207, 85, 72, 0.22);
+  color: #743629;
+}
+
+.staged-image-summary.failed > svg {
+  color: var(--coral);
 }
 
 .chat-batch {

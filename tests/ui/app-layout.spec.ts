@@ -82,6 +82,47 @@ test("quick microphone recording exposes recording, stop, processing, and send s
   await expect(page.getByRole("button", { name: "让 Papo 听听" })).toBeVisible();
 });
 
+test("photo upload stages a thumbnail that can be removed before submit", async ({ page }) => {
+  await page.goto("/");
+  await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
+
+  await page.locator(".compact-upload").filter({ hasText: "加照片" }).locator("input").setInputFiles({
+    name: "pool.jpg",
+    mimeType: "image/jpeg",
+    buffer: tinyJpeg()
+  });
+
+  const stagedPhoto = page.locator(".staged-segment").filter({ hasText: "pool.jpg" });
+  await expect(stagedPhoto).toBeVisible();
+  await expect(stagedPhoto.locator("img")).toBeVisible();
+  await expect(stagedPhoto).toContainText(/照片正在准备|照片已加入/);
+  await expect(stagedPhoto).toContainText("照片已加入", { timeout: 3_000 });
+
+  await stagedPhoto.getByRole("button", { name: "这次先不带" }).click();
+  await expect(stagedPhoto).toHaveCount(0);
+});
+
+test("photo upload during companion mode waits for explicit submit", async ({ page }) => {
+  await installMockMicrophone(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: /陪我/ }).first().click();
+  await expect(page.locator(".listening-session-status")).toBeVisible();
+
+  await page.locator(".compact-upload").filter({ hasText: "加照片" }).locator("input").setInputFiles({
+    name: "companion-photo.jpg",
+    mimeType: "image/jpeg",
+    buffer: tinyJpeg()
+  });
+
+  const stagedPhoto = page.locator(".staged-segment").filter({ hasText: "companion-photo.jpg" });
+  await expect(stagedPhoto).toContainText("照片已加入", { timeout: 3_000 });
+  await expect(page.locator(".chat-bubble.world", { hasText: "companion-photo.jpg" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "让 Papo 听听" }).click();
+  await expect(page.locator(".staged-segment").filter({ hasText: "companion-photo.jpg" })).toHaveCount(0);
+  await expect(page.locator(".chat-bubble.world", { hasText: "companion-photo.jpg" })).toBeVisible();
+});
+
 test("companion listening starts from home and shows a countdown in chat", async ({ page }) => {
   await installMockMicrophone(page);
   await page.goto("/");
@@ -226,6 +267,64 @@ async function installMockApi(page: Page) {
       return;
     }
 
+    if (path === "/api/image-summary" && route.request().method() === "POST") {
+      const requestBody = safePostJson(route) as { label?: string };
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      await json(route, {
+        summary: "一张测试照片，画面里有用户分享给 Papo 的生活片段。",
+        asset: {
+          id: "img_test_photo",
+          kind: "image",
+          label: requestBody.label ?? "照片",
+          mime: "image/jpeg",
+          url: "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2w==",
+          createdAt: now,
+          sizeBytes: 24
+        },
+        provider: "mock-vision",
+        model: "mock-vision",
+        route: "chat_completions",
+        semanticSource: "llm",
+        sensingTrace: {
+          at: now,
+          modality: "image",
+          label: requestBody.label ?? "照片",
+          provider: "mock-vision",
+          semanticSource: "llm",
+          status: "content",
+          decision: "测试图片可用",
+          observation: "一张测试照片，画面里有用户分享给 Papo 的生活片段。",
+          ruleTrace: ["route=curious_candidate"]
+        }
+      });
+      return;
+    }
+
+    if (path === "/api/profiles/demo/curious" && route.request().method() === "POST") {
+      const requestBody = safePostJson(route) as { segments?: Array<{ id: string; label: string; content: string; kind: string; attachments?: unknown[] }> };
+      const firstSegment = requestBody.segments?.[0];
+      if (firstSegment) {
+        profile = {
+          ...profile,
+          conversation: [
+            {
+              id: `msg-world-${Date.now()}`,
+              at: now,
+              role: "world",
+              channel: "curious",
+              text: `${firstSegment.label}：${firstSegment.content}`,
+              relatedMemoryIds: [],
+              modality: firstSegment.kind,
+              attachments: firstSegment.attachments as never
+            },
+            ...profile.conversation
+          ]
+        };
+      }
+      await json(route, { profile, events: [], episodes: [], response: "" });
+      return;
+    }
+
     if (path === "/api/profiles/demo/feedback" && route.request().method() === "POST") {
       await new Promise((resolve) => setTimeout(resolve, 450));
       profile = {
@@ -312,6 +411,14 @@ async function json(route: Route, body: unknown, status = 200) {
   });
 }
 
+function safePostJson(route: Route) {
+  try {
+    return route.request().postDataJSON();
+  } catch {
+    return {};
+  }
+}
+
 async function expectInViewport(page: Page, locator: ReturnType<Page["locator"]>) {
   const box = await locator.boundingBox();
   const viewport = page.viewportSize();
@@ -329,6 +436,13 @@ async function expectButtonTextFits(locator: ReturnType<Page["locator"]>) {
     return html.scrollWidth <= html.clientWidth + 1 && html.scrollHeight <= html.clientHeight + 1;
   });
   expect(fits).toBe(true);
+}
+
+function tinyJpeg() {
+  return Buffer.from(
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAEFAqf/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAEDAQE/ASP/xAAUEQEAAAAAAAAAAAAAAAAAAAAA/9oACAECAQE/ASP/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAY/Ar//xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAE/IV//2gAMAwEAAgADAAAAEP/EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8QH//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8QH//EABQQAQAAAAAAAAAAAAAAAAAAABD/2gAIAQEAAT8QH//Z",
+    "base64"
+  );
 }
 
 function makeProfile() {

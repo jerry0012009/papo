@@ -80,7 +80,7 @@ const curiousSchema = z.object({
 });
 
 const imageSummarySchema = z.object({
-  dataUrl: z.string().min(64).max(6_000_000).regex(/^data:image\/(png|jpe?g|webp);base64,/),
+  dataUrl: z.string().min(64).max(12_000_000).regex(/^data:image\/(png|jpe?g|webp);base64,/),
   label: z.string().min(1).max(80).optional()
 });
 
@@ -445,7 +445,7 @@ export function createApp(input: {
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (error instanceof z.ZodError) {
-      res.status(400).json({ error: "Invalid request", details: error.flatten() });
+      res.status(400).json({ error: zodErrorMessage(error), details: error.flatten() });
       return;
     }
     if (error instanceof HttpError) {
@@ -1007,6 +1007,16 @@ function sensingProvider(provider: ModelProvider, modality: "vision" | "audio") 
 
 function sensingError(error: unknown) {
   return error instanceof Error ? error.message : String(error);
+}
+
+function zodErrorMessage(error: z.ZodError) {
+  const flat = error.flatten();
+  const dataUrlErrors = flat.fieldErrors.dataUrl ?? [];
+  if (dataUrlErrors.some((message) => /too big|at most|String must contain at most|maximum/i.test(message))) {
+    return "Image is too large";
+  }
+  if (dataUrlErrors.length) return "Invalid image data";
+  return "Invalid request";
 }
 
 class HttpError extends Error {
