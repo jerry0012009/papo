@@ -181,6 +181,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Real online smoke: direct dialogue should produce a context-specific reply, not repeated template wording.
 - Real online smoke: photo/audio sensing should either return real model output or fail visibly.
 - Real online smoke: noisy or empty audio should not become life content.
+- Real online smoke: `generate_illustration` should let the LLM choose the action, call a real image model, persist the generated asset, attach it to the Papo message, and show it in the illustration history.
 - Public nginx deployment:
   - Web: `https://eu.jerrypsy.top/papo/`
   - API: `https://eu.jerrypsy.top/papo-api/health`
@@ -193,6 +194,6 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 2. Add real backend conversation pagination before user history grows large. The current web UI renders only the latest pages and can load older records, but the API still returns the full profile.
 3. Add browser-level screenshot checks for mobile and desktop app states so future UI changes catch overflow, hidden composers, and broken Brain Mode popovers before demo use.
 4. Verify OpenRouter vision/audio model routing with real accounts periodically, using cost-effective models first and switching only when a real scenario proves the current model weak.
-5. Resolve real image generation provider availability. Current engineering path supports `generate_illustration`, but live smoke on 2026-07-08 showed OpenRouter image-output models returning provider 403 ToS errors and the generic OpenAI-compatible image route returning insufficient balance. Configure a funded/allowed image provider, then rerun a real illustration smoke before marking the illustration goal complete.
+5. Track image generation cost and quality during real-user pilots. OpenRouter `/api/v1/images` with `google/gemini-3.1-flash-lite-image` is currently verified for real illustration generation; switch models only when real diary/dialogue examples show a clear quality or reliability gap.
 6. Improve the Shiba animation only where it helps the interaction, such as clearer listening, thinking, resting, and happy states tied to model-chosen actions.
 7. Prepare a short demo script using real inputs and real model calls, not seeded fake life material, so the commercial demo proves the harness rather than the happy path.
