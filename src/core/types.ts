@@ -447,6 +447,7 @@ export interface CreatureMessage {
   role: "user" | "world" | "papo";
   channel: ConversationChannel;
   text: string;
+  displayText?: string;
   sourceId?: string;
   relatedMemoryIds: string[];
   modality?: SegmentKind | "button";

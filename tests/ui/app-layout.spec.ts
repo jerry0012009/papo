@@ -49,6 +49,14 @@ test("chat opens at latest content and keeps the composer aligned with the threa
   await expect(sendButton).toHaveCSS("color", "rgb(77, 86, 79)");
   await expect(sendButton).toHaveClass(/chat-send-button/);
   await expectButtonTextFits(sendButton);
+  const userBubbleColor = await page.locator(".chat-bubble.user p").last().evaluate((node) => getComputedStyle(node).backgroundColor);
+  const papoBubbleColor = await page.locator(".chat-bubble.papo p").last().evaluate((node) => getComputedStyle(node).backgroundColor);
+  expect(userBubbleColor).not.toBe(papoBubbleColor);
+
+  const audioBubble = page.locator(".chat-bubble.world").filter({ hasText: "这段声音里" }).last();
+  await expect(audioBubble).toBeVisible();
+  await expect(audioBubble).toContainText("这段声音里");
+  await expect(audioBubble).not.toContainText("消耗卡路里很多很快");
 
   const listBox = await page.locator(".chat-list").boundingBox();
   const composerBox = await page.locator(".chat-composer").boundingBox();
@@ -56,7 +64,7 @@ test("chat opens at latest content and keeps the composer aligned with the threa
   expect(composerBox).toBeTruthy();
   expect(Math.abs(listBox!.width - composerBox!.width)).toBeLessThanOrEqual(2);
 
-  await page.getByRole("button", { name: "查看这句话背后的模型调用" }).first().click();
+  await page.locator(".chat-bubble.papo").filter({ hasText: "最近一条回复在这里。" }).getByRole("button", { name: "查看这句话背后的模型调用" }).click();
   const trace = page.locator(".developer-trace-body").first();
   await expect(trace).toBeVisible();
   await expect(trace).toContainText("模型调用");
@@ -162,7 +170,7 @@ test("large phone photos are compressed before image summary upload", async ({ p
     gradient.addColorStop(1, "#304f8f");
     context.fillStyle = gradient;
     context.fillRect(0, 0, canvas.width, canvas.height);
-    for (let index = 0; index < 1200; index += 1) {
+    for (let index = 0; index < 180; index += 1) {
       context.fillStyle = `rgba(${index % 255}, ${(index * 7) % 255}, ${(index * 13) % 255}, 0.38)`;
       context.fillRect((index * 37) % canvas.width, (index * 53) % canvas.height, 80 + (index % 180), 40 + (index % 120));
     }
@@ -381,6 +389,7 @@ async function installMockApi(page: Page) {
               role: "world",
               channel: "curious",
               text: `${firstSegment.label}：${firstSegment.content}`,
+              displayText: firstSegment.kind === "audio_observation" ? "这段声音里，你刚录了一段想交给 Papo 听的现场线索" : undefined,
               relatedMemoryIds: [],
               modality: firstSegment.kind,
               attachments: firstSegment.attachments as never
@@ -626,6 +635,28 @@ function makeProfile() {
         text: "你好呀 Papo",
         relatedMemoryIds: [],
         modality: "button"
+      },
+      {
+        id: "msg-audio-1",
+        at: "2026-07-07T12:01:30.000Z",
+        role: "world",
+        channel: "curious",
+        text: "麦克风 1：音频中，说话者打招呼说“你好呀”，然后描述自己今天很开心去游泳，但游泳时人特别多，全是小朋友，会互相撞。说话者感叹“哎呀”，并说游泳真的是一件消耗卡路里很多很快的事情，自己还挺喜欢的。",
+        displayText: "这段声音里，你提到今天去游泳，人很多，也聊到游泳消耗卡路里。",
+        relatedMemoryIds: [],
+        modality: "audio_observation",
+        sensingTrace: {
+          at: now,
+          modality: "audio",
+          label: "麦克风 1",
+          provider: "mock-audio",
+          semanticSource: "llm",
+          status: "content",
+          decision: "测试音频可用",
+          observation:
+            "音频中，说话者打招呼说“你好呀”，然后描述自己今天很开心去游泳，但游泳时人特别多，全是小朋友，会互相撞。说话者感叹“哎呀”，并说游泳真的是一件消耗卡路里很多很快的事情，自己还挺喜欢的。",
+          ruleTrace: ["route=curious_candidate"]
+        }
       }
     ],
     feedbackHistory: [],

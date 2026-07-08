@@ -5,6 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
+import { audioObservationPreview } from "../core/display-text";
 import { isDogStateCheckDue, refreshDogStateIfDue } from "../core/dog-states";
 import { isDreamingDue, recordDreamingFailure, semanticDreamMemories } from "../core/dreaming";
 import { semanticDecideEmergence } from "../core/emergence";
@@ -277,10 +278,12 @@ export function createApp(input: {
       const sensingTraces = body.segments.flatMap((segment) => segment.sensingTrace ? [segment.sensingTrace as SensingTrace] : []);
       const cognitionTrace = captureCognitionTrace(result, provider, "curious_stream", modelRuns, sensingTraces);
       for (const segment of body.segments) {
+        const text = `${segment.label}：${segment.content}`;
         appendInputMessage(profile, {
           channel: "curious",
           role: segment.kind === "text" ? "user" : "world",
-          text: `${segment.label}：${segment.content}`,
+          text,
+          displayText: segment.kind === "audio_observation" ? audioObservationPreview(text) : undefined,
           sourceId: segment.id,
           modality: segment.kind,
           batchId: segment.batchId,

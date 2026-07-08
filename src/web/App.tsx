@@ -17,6 +17,7 @@ import {
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { audioObservationPreview } from "../core/display-text";
 import { toCreatureMemoryVoice } from "../core/memory";
 import { PET_KINDS, normalizePetKind, petKindLabel } from "../core/pet-kinds";
 import type {
@@ -1810,6 +1811,7 @@ function stagedSegmentPlaceholder(kind: SegmentKind) {
 
 function ChatBubble({ message, profile }: { message: ConversationMessage; profile: CreatureProfile }) {
   const context = messageContextText(message);
+  const text = chatBubbleText(message);
   return (
     <article className={`chat-bubble ${message.role}`}>
       <div className="chat-bubble-head">
@@ -1821,7 +1823,7 @@ function ChatBubble({ message, profile }: { message: ConversationMessage; profil
         </div>
         {message.cognitionTrace || message.sensingTrace ? <DeveloperTrace trace={message.cognitionTrace} sensingTrace={message.sensingTrace} profile={profile} /> : null}
       </div>
-      <p>{visibleMessageText(message)}</p>
+      <p>{text}</p>
       <AttachmentStrip attachments={message.attachments} />
       {message.observedAt || message.location ? (
         <small>
@@ -2776,6 +2778,13 @@ function extractRememberedMoment(text: string) {
 
 function visibleMessageText(message: ConversationMessage) {
   return message.role === "papo" ? visiblePapoReplyText(message.text) : visibleCreatureText(message.text);
+}
+
+function chatBubbleText(message: ConversationMessage) {
+  if (message.displayText?.trim()) return visibleCreatureText(message.displayText);
+  const text = visibleMessageText(message);
+  if (message.modality === "audio_observation") return audioObservationPreview(text);
+  return text;
 }
 
 function latestVisiblePapoReply(profile: CreatureProfile) {

@@ -43,6 +43,7 @@ export function appendInputMessage(
     channel: ConversationChannel;
     role?: "user" | "world";
     text?: string;
+    displayText?: string;
     sourceId?: string;
     modality?: SegmentKind | "button";
     batchId?: string;
@@ -69,6 +70,7 @@ export function appendInputMessage(
     role: input.role ?? "world",
     channel: input.channel,
     text,
+    displayText: input.displayText?.trim() || undefined,
     sourceId: input.sourceId,
     relatedMemoryIds: input.relatedMemoryIds ?? [],
     modality: input.modality,
