@@ -120,7 +120,9 @@ try {
   const current = await waitForActionCard();
   assert.match(videoPrompt, /吉祥/);
   assert.match(videoPrompt, /British Shorthair/);
-  assert.match(videoPrompt, /homepage motion avatar loops/);
+  assert.match(videoPrompt, /living digital pet/);
+  assert.match(videoPrompt, /first frame and final frame should match/i);
+  assert.match(videoPrompt, /Forbidden look: stuffed animal, plush toy/);
   const papoMessage = current?.conversation.find((message) => message.role === "papo");
   assert.ok(papoMessage?.attachments?.[0]?.url, "Papo reply should carry generated action video");
   assert.equal(papoMessage.attachments[0].kind, "video");

@@ -20,25 +20,16 @@ const provider: ModelProvider = {
   },
   async generateJson(prompt) {
     if (prompt.includes("动作卡导演")) {
+      assert.match(prompt, /轻轻探头/);
       return {
-        cards: [
-          {
-            key: "curious",
-            title: "吉祥探头",
-            caption: "它轻轻探头看你。",
-            prompt: "吉祥保持灰白英短形象，轻轻探头看向镜头。",
-            style: "looping plush mascot animation",
-            durationSeconds: 8
-          },
-          {
-            key: "nap",
-            title: "吉祥小睡",
-            caption: "它安静团成一小团。",
-            prompt: "吉祥保持灰白英短形象，慢慢团成一小团休息。",
-            style: "looping plush mascot animation",
-            durationSeconds: 8
-          }
-        ]
+        card: {
+          key: "curious",
+          title: "吉祥探头",
+          caption: "它轻轻探头看你。",
+          prompt: "吉祥保持灰白英短形象，轻轻探头看向镜头。",
+          style: "looping natural digital pet animation",
+          durationSeconds: 8
+        }
       };
     }
     return {
@@ -60,10 +51,13 @@ const provider: ModelProvider = {
   },
   async generateImage(prompt) {
     assert.match(prompt, /British Shorthair|英短|灰白/);
+    assert.match(prompt, /stuffed animal|plush toy/i);
     return { dataUrl: imageDataUrl, mime: "image/png", model: "fake-image" };
   },
   async generateVideo(prompt) {
     assert.match(prompt, /圆脸灰白英短|British Shorthair/);
+    assert.match(prompt, /first frame and final frame should match/i);
+    assert.match(prompt, /not a plush toy or figurine/i);
     return { dataUrl: videoDataUrl, mime: "video/mp4", model: "fake-video" };
   }
 };
@@ -85,14 +79,19 @@ try {
   assert.equal(profilePayload.profile.petProfile.displaySpecies, "圆脸灰白英短小猫");
   assert.equal(profilePayload.profile.petProfile.avatarImage.generatedBy, "papo_profile");
 
-  const motionResponse = await fetch(`${base}/api/profiles/pet-profile-user/pet-profile/initial-action-cards`, { method: "POST" });
+  const motionResponse = await fetch(`${base}/api/profiles/pet-profile-user/pet-profile/initial-action-cards`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ guidance: "轻轻探头看我" })
+  });
   const motionPayload = await motionResponse.json();
   assert.equal(motionResponse.status, 200, JSON.stringify(motionPayload));
   assert.equal(motionPayload.profile.petProfile.initialMotion.status, "pending");
 
   const current = await waitForInitialMotions();
   assert.equal(current.petProfile.initialMotion?.status, "ready");
-  assert.equal(current.actionCards?.length, 2);
+  assert.equal(current.actionCards?.length, 1);
+  assert.equal(current.actionCards?.[0].cover?.generatedBy, "papo_action_card");
   assert.equal(current.actionCards?.[0].video.generatedBy, "papo_action_card");
   console.log(JSON.stringify({ ok: true, avatar: current.petProfile.avatarImage?.url, actionCards: current.actionCards?.length }, null, 2));
 } finally {
@@ -103,7 +102,7 @@ async function waitForInitialMotions() {
   const deadline = Date.now() + 3000;
   while (Date.now() < deadline) {
     const profile = await store.getProfile("pet-profile-user");
-    if (profile?.petProfile.initialMotion?.status === "ready" && (profile.actionCards?.length ?? 0) >= 2) return profile;
+    if (profile?.petProfile.initialMotion?.status === "ready" && (profile.actionCards?.length ?? 0) >= 1) return profile;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
   throw new Error("initial pet motions were not generated asynchronously");

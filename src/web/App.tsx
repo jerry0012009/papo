@@ -315,9 +315,9 @@ export function App() {
     setProfile(next);
   }
 
-  async function startInitialActionCards() {
+  async function startInitialActionCards(guidance?: string) {
     if (!profile) return;
-    const next = await generateInitialActionCards(profile.userId);
+    const next = await generateInitialActionCards(profile.userId, guidance);
     setProfile(next);
   }
 
@@ -3210,9 +3210,10 @@ function ProfileView(props: {
   onRename: (creatureName: string) => Promise<void>;
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   onChangePetProfile: (input: { guidance?: string; referenceSummary?: string; referenceAttachment?: MediaAttachment }) => Promise<void>;
-  onGenerateInitialActionCards: () => Promise<void>;
+  onGenerateInitialActionCards: (guidance?: string) => Promise<void>;
 }) {
   const petProfile = petProfileFor(props.profile);
+  const initialMotionCount = initialMotionActionCardCount(props.profile);
   const [nameDraft, setNameDraft] = useState(props.profile.creatureName);
   const [nameBusy, setNameBusy] = useState(false);
   const [nameMessage, setNameMessage] = useState("");
@@ -3227,6 +3228,7 @@ function ProfileView(props: {
   const [petBusy, setPetBusy] = useState(false);
   const [petMessage, setPetMessage] = useState("");
   const [motionBusy, setMotionBusy] = useState(false);
+  const [motionGuidance, setMotionGuidance] = useState("");
 
   useEffect(() => {
     setNameDraft(props.profile.creatureName);
@@ -3317,7 +3319,8 @@ function ProfileView(props: {
     setMotionBusy(true);
     setPetMessage("");
     try {
-      await props.onGenerateInitialActionCards();
+      await props.onGenerateInitialActionCards(motionGuidance.trim() || undefined);
+      setMotionGuidance("");
       setPetMessage("开始生成动作了，完成后会自动出现在动作卡里。");
     } catch (caught) {
       setPetMessage(errorMessage(caught));
@@ -3413,16 +3416,27 @@ function ProfileView(props: {
               />
             </label>
           </div>
+          <label className="field-label">
+            这次想让它做什么
+            <input
+              type="text"
+              value={motionGuidance}
+              onChange={(event) => setMotionGuidance(event.target.value)}
+              maxLength={800}
+              placeholder="可选，例如：轻轻眨眼、追蝴蝶、趴下来睡觉"
+            />
+          </label>
           <div className="pet-profile-actions">
             <button className="primary" onClick={() => void savePetProfile()} disabled={petBusy} type="button">
               <Sparkles size={16} />
               {petBusy ? "生成形象中" : "更换小动物形象"}
             </button>
-            <button onClick={() => void generateMotions()} disabled={motionBusy || petProfile.initialMotion?.status === "pending"} type="button">
+            <button onClick={() => void generateMotions()} disabled={motionBusy || petProfile.initialMotion?.status === "pending" || initialMotionCount >= 4} type="button">
               <Sparkles size={16} />
-              {petProfile.initialMotion?.status === "pending" ? "动作生成中" : motionBusy ? "启动中" : "生成初始动画"}
+              {petProfile.initialMotion?.status === "pending" ? "动作生成中" : motionBusy ? "启动中" : initialMotionCount >= 4 ? "初始动画已够用" : "生成一个初始动画"}
             </button>
           </div>
+          <small>初始动作 {Math.min(initialMotionCount, 4)}/4。这里每次先生成一张动作首帧，再让它动起来；更多具体动作可以直接在对话里告诉 {props.profile.creatureName}。</small>
           {petProfile.initialMotion?.status === "failed" ? <small>动作生成失败：{petProfile.initialMotion.error}</small> : null}
           {petMessage ? <small>{petMessage}</small> : null}
         </div>
@@ -3677,6 +3691,10 @@ function countPendingActionCards(profile: CreatureProfile | undefined) {
     if (emergence.actionResult?.kind === "action_card_draft") pendingIds.add(`emergence:${emergence.id}`);
   }
   return Math.min(pendingIds.size, 9);
+}
+
+function initialMotionActionCardCount(profile: CreatureProfile | undefined) {
+  return (profile?.actionCards ?? []).filter((card) => !card.deleted && card.sourceIds.some((id) => id.startsWith("initial-motion:"))).length;
 }
 
 function readSavedUserId() {

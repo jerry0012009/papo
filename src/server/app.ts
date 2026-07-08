@@ -89,6 +89,10 @@ const petProfileRequestSchema = z.object({
   referenceAttachment: mediaAttachmentSchema.optional()
 }).refine((body) => Boolean(body.guidance || body.referenceSummary || body.referenceAttachment), { message: "No pet profile material" });
 
+const initialActionCardSchema = z.object({
+  guidance: z.string().trim().max(800).optional()
+});
+
 const curiousSchema = z.object({
   segments: z
     .array(
@@ -286,10 +290,18 @@ export function createApp(input: {
   app.post("/api/profiles/:userId/pet-profile/initial-action-cards", async (req, res, next) => {
     try {
       const profile = await requireProfile(store, req.params.userId, req);
+      const body = initialActionCardSchema.parse(req.body ?? {});
+      const existingCount = initialMotionActionCards(profile).length;
+      if (existingCount >= 4) {
+        profile.petProfile.initialMotion = { status: "ready", completedAt: profile.petProfile.initialMotion?.completedAt, pendingCount: 0 };
+        await store.saveProfile(profile);
+        res.json({ profile: publicProfile(profile), status: profile.petProfile.initialMotion });
+        return;
+      }
       const now = new Date().toISOString();
-      profile.petProfile.initialMotion = { status: "pending", requestedAt: now, pendingCount: 4 };
+      profile.petProfile.initialMotion = { status: "pending", requestedAt: now, pendingCount: 1 };
       await store.saveProfile(profile);
-      queueInitialPetMotionGeneration({ store, userId: profile.userId, provider });
+      queueInitialPetMotionGeneration({ store, userId: profile.userId, provider, guidance: body.guidance });
       res.json({ profile: publicProfile(profile), status: profile.petProfile.initialMotion });
     } catch (error) {
       next(error);
@@ -806,6 +818,21 @@ async function saveGeneratedActionVideo(input: {
   };
 }
 
+async function saveGeneratedActionKeyframe(input: {
+  dataUrl: string;
+  label: string;
+  prompt: string;
+  sourceIds: string[];
+}): Promise<MediaAttachment> {
+  const asset = await saveImageAsset(input.dataUrl, input.label);
+  return {
+    ...asset,
+    generatedBy: "papo_action_card",
+    prompt: input.prompt,
+    sourceIds: input.sourceIds
+  };
+}
+
 async function saveGeneratedProfileImage(input: {
   dataUrl: string;
   label: string;
@@ -870,46 +897,55 @@ function queueInitialPetMotionGeneration(input: {
   store: ProfileStore;
   userId: string;
   provider: ModelProvider;
+  guidance?: string;
 }) {
   void (async () => {
     try {
       const profile = await input.store.getProfile(input.userId);
       if (!profile) return;
       if (!input.provider.generateVideo) throw new Error("Video generation provider is not configured");
-      const cards = await planInitialPetMotionCards(profile, input.provider);
+      const card = await planInitialPetMotionCard(profile, input.provider, input.guidance);
       const references = await petProfileVisualReferences(profile);
-      const referenceImage = references[0];
-      const created: ActionCardRecord[] = [];
-      for (const card of cards) {
-        const videoPrompt = buildInitialMotionVideoPrompt(profile, card, Boolean(referenceImage));
-        const generated = await input.provider.generateVideo(videoPrompt, {
-          durationSeconds: card.durationSeconds,
-          style: card.style,
-          referenceImage
-        });
-        const sourceIds = [`pet-profile:${profile.petProfile.updatedAt}`, `initial-motion:${card.key}`];
-        const video = await saveGeneratedActionVideo({
-          dataUrl: generated.dataUrl,
-          label: card.title,
-          prompt: videoPrompt,
-          sourceIds
-        });
-        created.push({
-          id: video.id,
-          createdAt: new Date().toISOString(),
-          title: card.title,
-          caption: card.caption,
-          prompt: videoPrompt,
-          style: card.style,
-          durationSeconds: card.durationSeconds,
-          video,
-          sourceIds,
-          providerKind: input.provider.diagnostics?.videoProvider ?? input.provider.kind,
-          providerName: input.provider.diagnostics?.videoProvider ? `${input.provider.diagnostics.videoProvider} video` : input.provider.name,
-          model: generated.model ?? input.provider.diagnostics?.videoModel
-        });
-      }
-      profile.actionCards = [...created, ...(profile.actionCards ?? [])].slice(0, 30);
+      const sourceIds = [`pet-profile:${profile.petProfile.updatedAt}`, `initial-motion:${card.key}`];
+      const keyframePrompt = buildInitialMotionKeyframePrompt(profile, card, Boolean(references[0]));
+      const keyframeGenerated = await input.provider.generateImage(keyframePrompt, {
+        style: card.style,
+        references
+      });
+      const cover = await saveGeneratedActionKeyframe({
+        dataUrl: keyframeGenerated.dataUrl,
+        label: `${card.title} 首帧`,
+        prompt: keyframePrompt,
+        sourceIds
+      });
+      const videoPrompt = buildInitialMotionVideoPrompt(profile, card, true);
+      const generated = await input.provider.generateVideo(videoPrompt, {
+        durationSeconds: card.durationSeconds,
+        style: card.style,
+        referenceImage: { dataUrl: keyframeGenerated.dataUrl, label: cover.label }
+      });
+      const video = await saveGeneratedActionVideo({
+        dataUrl: generated.dataUrl,
+        label: card.title,
+        prompt: videoPrompt,
+        sourceIds
+      });
+      const created: ActionCardRecord = {
+        id: video.id,
+        createdAt: new Date().toISOString(),
+        title: card.title,
+        caption: card.caption,
+        prompt: videoPrompt,
+        style: card.style,
+        durationSeconds: card.durationSeconds,
+        cover,
+        video,
+        sourceIds,
+        providerKind: input.provider.diagnostics?.videoProvider ?? input.provider.kind,
+        providerName: input.provider.diagnostics?.videoProvider ? `${input.provider.diagnostics.videoProvider} video` : input.provider.name,
+        model: generated.model ?? input.provider.diagnostics?.videoModel
+      };
+      profile.actionCards = [created, ...(profile.actionCards ?? [])].slice(0, 30);
       profile.petProfile.initialMotion = {
         status: "ready",
         requestedAt: profile.petProfile.initialMotion?.requestedAt,
@@ -1258,14 +1294,16 @@ function actionCardVideoPrompt(profile: CreatureProfile, actionResult: ActionRes
   const sourceImages = (event.attachments ?? []).map((item) => `${item.label} ${item.url}`).join("\n");
   return [
     `Create a short looping animated video action card for ${profile.creatureName}, a ${identity.species}.`,
-    "Match the same visual language as Jixiang's homepage motion avatar loops: premium semi-realistic plush 3D mobile companion mascot, warm off-white studio background, soft natural lighting, full body centered, locked camera, gentle natural motion.",
+    "Visual goal: a living digital pet based on the current profile image/photo, lightly stylized for a polished companion app. It must look like the same animal/creature from the profile, not a plush toy or figurine.",
+    "Scene and camera: warm clean app background, soft natural light, full body centered, locked camera, stable scale, no cuts, no zoom unless extremely subtle.",
     `The character must stay consistent with this companion profile: ${identity.appearance}`,
     `Personality and habits to express through motion: ${identity.personality} ${identity.habits}`,
     `Visual style: ${identity.visualStyle}`,
     `Motion style: ${identity.motionStyle}`,
-    "No UI, no text labels, no subtitles, no watermark, no extra animals, no human. Keep the action readable and cute, with simple loopable motion.",
-    hasReferenceImage ? "Use the attached first-frame/reference image as strict visual grounding. If it is a user-uploaded photo, preserve the important photographed subject while keeping the companion mascot identity consistent." : "Keep the character design consistent with the pet kind and current state.",
-    "End close to the starting pose so the clip can loop smoothly.",
+    hasReferenceImage ? "Use the attached profile/reference image as strict visual grounding. Preserve coat colors, markings, face shape, body proportions, expression, and overall identity from the image." : "Keep the character design consistent with the pet kind and current profile.",
+    "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
+    "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
+    "No UI, no text labels, no subtitles, no watermark, no extra animals, no human, no props that hide the body. Keep the action readable and cute, with simple loopable motion.",
     `Current visible state: ${profile.dogState?.label ?? "陪着用户"} / ${namedCreatureText(profile.dogState?.actionText, profile.creatureName)}`,
     `Moment: ${event.noticed || event.triggerContent}`,
     sourceImages ? `Source image assets:\n${sourceImages}` : "",
@@ -1281,12 +1319,15 @@ function actionCardVideoPromptForEmergence(profile: CreatureProfile, actionResul
   const identity = petVisualIdentity(profile);
   return [
     `Create a short looping animated video action card for ${profile.creatureName}, a ${identity.species}.`,
-    "Match the same visual language as Jixiang's homepage motion avatar loops: premium semi-realistic plush 3D mobile companion mascot, warm off-white studio background, soft natural lighting, full body centered, locked camera, gentle natural motion.",
+    "Visual goal: a living digital pet based on the current profile image/photo, lightly stylized for a polished companion app. It must look like the same animal/creature from the profile, not a plush toy or figurine.",
+    "Scene and camera: warm clean app background, soft natural light, full body centered, locked camera, stable scale, no cuts, no zoom unless extremely subtle.",
     `Keep the pet identity consistent: ${identity.appearance}`,
     `Personality and habits to express through motion: ${identity.personality} ${identity.habits}`,
     `Visual and motion style: ${identity.visualStyle} ${identity.motionStyle}`,
-    "No UI, no text labels, no subtitles, no watermark, no extra animals, no human. End close to the starting pose so the clip can loop smoothly.",
-    hasReferenceImage ? "Use the attached first-frame/reference image as strict character and pose grounding." : "",
+    hasReferenceImage ? "Use the attached profile/reference image as strict visual grounding. Preserve coat colors, markings, face shape, body proportions, expression, and overall identity from the image." : "",
+    "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
+    "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
+    "No UI, no text labels, no subtitles, no watermark, no extra animals, no human, no props that hide the body.",
     `Why now: ${emergence.whyNow}`,
     `Visible message: ${emergence.message}`,
     `Action model prompt:\n${actionResult.prompt}`
@@ -1365,56 +1406,65 @@ function normalizePetProfileDesign(raw: unknown): Partial<PetIdentityProfile> {
 function buildProfileImagePrompt(profile: CreatureProfile, patch: Partial<PetIdentityProfile>, hasReferenceImage: boolean) {
   return [
     `Create a square character reference image for ${profile.creatureName}, a ${patch.displaySpecies ?? profile.petProfile.displaySpecies}.`,
-    "Premium semi-realistic plush 3D mobile companion mascot for a polished AI pet app.",
-    "Warm off-white studio background, soft natural lighting, full body centered, clean silhouette, cute but not childish, commercial app quality.",
-    hasReferenceImage ? "Use the attached user photo as visual grounding for identity, colors, and important markings while translating it into the mascot style." : "Use the written profile as the identity source.",
+    "Create a living digital pet character for a polished AI companion app. It should feel like the user's real animal or chosen creature has become a clean animated app character, not a toy.",
+    "Warm off-white studio background, soft natural lighting, full body centered, clean silhouette, expressive natural eyes, natural fur or skin texture, commercial app quality.",
+    hasReferenceImage ? "Use the attached user photo as the primary identity source. Preserve the animal's real species, coat colors, markings, face shape, body proportions, and recognizable expression while lightly stylizing it for an app." : "Use the written profile as the identity source.",
     `Appearance: ${patch.appearance ?? profile.petProfile.appearance}`,
     `Personality: ${patch.personality ?? profile.petProfile.personality}`,
     `Visual style: ${patch.visualStyle ?? profile.petProfile.visualStyle}`,
     `Model prompt from design brain: ${patch.imagePrompt ?? profile.petProfile.imagePrompt}`,
-    "No text, no UI, no watermark, no extra animals, no human, no props that hide the body."
+    "Do not make it a stuffed animal, plush toy, figurine, vinyl toy, statue, doll, or product mockup. No visible seams, fabric nap, plastic surface, joints, toy stitching, text, UI, watermark, extra animals, human, or props that hide the body."
   ].filter(Boolean).join("\n\n");
 }
 
-async function planInitialPetMotionCards(profile: CreatureProfile, provider: ModelProvider) {
-  const raw = await provider.generateJson<unknown>(buildInitialPetMotionPlanPrompt(profile));
+async function planInitialPetMotionCard(profile: CreatureProfile, provider: ModelProvider, guidance?: string) {
+  const raw = await provider.generateJson<unknown>(buildInitialPetMotionPlanPrompt(profile, guidance));
   const schema = z.object({
-    cards: z.array(z.object({
+    card: z.object({
       key: z.string().min(1).max(40),
       title: z.string().min(1).max(120),
       caption: z.string().min(1).max(220).optional(),
       prompt: z.string().min(1).max(1200),
       style: z.string().min(1).max(240).optional(),
       durationSeconds: z.number().min(4).max(20).optional()
-    })).min(1).max(4)
+    })
   });
   const parsed = schema.safeParse(raw);
   if (!parsed.success) throw new Error(`invalid initial motion plan JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
-  return parsed.data.cards.map((card) => ({ ...card, durationSeconds: Math.max(4, Math.min(20, Math.round(card.durationSeconds ?? 8))) }));
+  const card = parsed.data.card;
+  return { ...card, durationSeconds: Math.max(4, Math.min(20, Math.round(card.durationSeconds ?? 8))) };
 }
 
-function buildInitialPetMotionPlanPrompt(profile: CreatureProfile) {
-  return `你是 Papo 的动作卡导演。请基于当前小动物 profile，为首页准备 4 张初始动作视频卡。
+function buildInitialPetMotionPlanPrompt(profile: CreatureProfile, guidance?: string) {
+  const existing = initialMotionActionCards(profile).map((card) => ({
+    title: card.title,
+    sourceIds: card.sourceIds
+  }));
+  return `你是 Papo 的动作卡导演。请基于当前小动物 profile，为首页准备 1 张初始动作视频卡。
 
 目标：
-- 这些动作应该像首页默认状态视频一样自然，可循环，可被用户点击切换。
-- 动作要覆盖陪伴产品最常用的状态：待着、回应用户、玩耍/好奇、休息。
-- 每张卡的 prompt 只描述画面和动作，不写内部流程。
+- 这次只规划一张动作卡，不要一次返回多张。用户可以重复点击，最多补到 4 张初始动作。
+- 动作应该像首页状态视频一样自然，可循环，可被用户点击切换。
+- 优先补齐陪伴产品最常用的状态：待着、回应用户、玩耍/好奇、休息；不要重复已有动作。
+- prompt 只描述画面和动作，不写内部流程。
+- 如果用户这次给了动作提示，结合默认约束和用户提示来规划；用户提示不够具体时，选择最适合当前 profile 的基础动作。
 - 必须保持同一个角色外观，不要创造新角色。
+- 必须明确这是“真实动物/当前数字形象的动作视频”，不是玩具、毛绒公仔、摆件或产品模型。
+- 要求动作用固定镜头、全身可见、首尾姿态尽量一致，适合无缝循环。
 
 pet_profile:
 ${JSON.stringify({
   creatureName: profile.creatureName,
   petKind: profile.petKind,
   petProfile: profile.petProfile,
-  dogState: profile.dogState
+  dogState: profile.dogState,
+  existingInitialMotions: existing,
+  userMotionGuidance: guidance?.trim() || "未提供"
 })}
 
 返回严格 JSON：
 {
-  "cards": [
-    {"key":"idle","title":"...","caption":"...","prompt":"...","style":"...","durationSeconds":8}
-  ]
+  "card": {"key":"idle","title":"...","caption":"...","prompt":"...","style":"...","durationSeconds":8}
 }`;
 }
 
@@ -1422,16 +1472,41 @@ function buildInitialMotionVideoPrompt(profile: CreatureProfile, card: { title: 
   const identity = petVisualIdentity(profile);
   return [
     `Create a short looping animated video action card for ${profile.creatureName}, a ${identity.species}.`,
-    "Same style as the homepage motion avatar loops: premium semi-realistic plush 3D mobile companion mascot, warm off-white studio, soft natural light, full body centered, locked camera.",
+    "Visual goal: a living digital pet based on the current profile image/photo, lightly stylized for a polished companion app. It must look like the same animal/creature from the profile, not a plush toy or figurine.",
+    "Scene and camera: warm clean app background, soft natural light, full body centered, locked camera, stable scale, no cuts, no zoom unless extremely subtle.",
     `Character identity: ${identity.appearance}`,
     `Personality/habits: ${identity.personality} ${identity.habits}`,
     `Motion style: ${identity.motionStyle}`,
-    hasReferenceImage ? "Use the attached profile/reference image as strict grounding for character identity." : "Use the written profile as strict grounding for character identity.",
-    "No UI, no text, no watermark, no human, no extra animals. End near the starting pose so it loops.",
+    hasReferenceImage ? "The attached image is the generated first-frame/keyframe for this exact action. Animate from it while preserving the same identity, pose family, coat colors, markings, face shape, body proportions, expression, and background." : "Use the written profile as strict grounding for character identity.",
+    "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
+    "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
+    "No UI, no text, no watermark, no human, no extra animals, no props that hide the body.",
     `Action card title: ${card.title}`,
     `Action direction: ${card.prompt}`,
     card.style ? `Extra style: ${card.style}` : ""
   ].filter(Boolean).join("\n\n");
+}
+
+function buildInitialMotionKeyframePrompt(profile: CreatureProfile, card: { title: string; prompt: string; style?: string }, hasReferenceImage: boolean) {
+  const identity = petVisualIdentity(profile);
+  return [
+    `Create one square first-frame key image for a looping action video of ${profile.creatureName}, a ${identity.species}.`,
+    "This is not the final video. It is the still keyframe that the video model will animate from.",
+    "Visual goal: a living digital pet based on the current profile image/photo, lightly stylized for a polished companion app. It must look like the same animal/creature from the profile, not a plush toy or figurine.",
+    hasReferenceImage ? "Use the attached user/profile reference image as the primary identity source. Preserve coat colors, markings, face shape, body proportions, recognizable expression, and species." : "Use the written profile as the identity source.",
+    "Composition: warm clean app background, soft natural light, full body centered, stable scale, clear silhouette. The pose should be the starting pose and also suitable as the ending pose for a loop.",
+    `Character identity: ${identity.appearance}`,
+    `Personality/habits: ${identity.personality} ${identity.habits}`,
+    `Action title: ${card.title}`,
+    `Action keyframe direction: ${card.prompt}`,
+    card.style ? `Extra style: ${card.style}` : "",
+    "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
+    "No UI, no text, no watermark, no human, no extra animals, no props that hide the body."
+  ].filter(Boolean).join("\n\n");
+}
+
+function initialMotionActionCards(profile: CreatureProfile) {
+  return (profile.actionCards ?? []).filter((card) => !card.deleted && card.sourceIds.some((id) => id.startsWith("initial-motion:")));
 }
 
 async function planEveningDiaryIllustration(
@@ -1602,7 +1677,7 @@ async function petProfileReferences(referenceAttachment?: MediaAttachment): Prom
 
 async function petProfileVisualReferences(profile: CreatureProfile): Promise<ImageReference[]> {
   const references: ImageReference[] = [];
-  for (const image of [profile.petProfile?.avatarImage, profile.petProfile?.referenceImage]) {
+  for (const image of [profile.petProfile?.referenceImage, profile.petProfile?.avatarImage]) {
     if (!image) continue;
     const dataUrl = await imageAttachmentDataUrl(image);
     if (dataUrl) references.push({ dataUrl, label: image.label });

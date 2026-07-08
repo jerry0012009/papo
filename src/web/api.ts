@@ -180,10 +180,11 @@ export async function updatePetProfile(userId: string, input: { guidance?: strin
   return data.profile;
 }
 
-export async function generateInitialActionCards(userId: string): Promise<CreatureProfile> {
+export async function generateInitialActionCards(userId: string, guidance?: string): Promise<CreatureProfile> {
   const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/pet-profile/initial-action-cards`, {
     method: "POST",
-    headers: profileJsonHeaders(userId)
+    headers: profileJsonHeaders(userId),
+    body: JSON.stringify({ guidance: guidance?.trim() || undefined })
   });
   return data.profile;
 }
