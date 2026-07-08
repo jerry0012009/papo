@@ -55,6 +55,21 @@ test("chat opens at latest content and keeps the composer aligned with the threa
   await expectInViewport(page, trace);
 });
 
+test("quick microphone recording exposes recording, stop, processing, and send states", async ({ page }) => {
+  await installMockMicrophone(page);
+  await page.goto("/");
+  await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
+
+  await page.getByRole("button", { name: "录一段" }).click();
+  await expect(page.locator(".quick-audio-status").getByText(/录音中/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "停止" })).toBeVisible();
+
+  await page.getByRole("button", { name: "停止" }).click();
+  await expect(page.getByText("正在整理录音")).toBeVisible();
+  await expect(page.getByText("麦克风 1")).toBeVisible({ timeout: 3_000 });
+  await expect(page.getByRole("button", { name: "让 Papo 听听" })).toBeVisible();
+});
+
 test("memory feedback shows a pending state while the request is in flight", async ({ page }) => {
   await page.goto("/");
   await page.locator(".nav").getByRole("button", { name: /记忆/ }).click();
@@ -142,6 +157,27 @@ async function installMockApi(page: Page) {
       return;
     }
 
+    if (path === "/api/audio-observation" && route.request().method() === "POST") {
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      await json(route, {
+        observation: "我听到你说想测试录音按钮。",
+        provider: "mock-audio",
+        semanticSource: "llm",
+        sensingTrace: {
+          at: now,
+          modality: "audio",
+          label: "刚录的一段声音",
+          provider: "mock-audio",
+          semanticSource: "llm",
+          status: "content",
+          decision: "测试音频可用",
+          observation: "我听到你说想测试录音按钮。",
+          ruleTrace: []
+        }
+      });
+      return;
+    }
+
     if (path === "/api/profiles/demo/feedback" && route.request().method() === "POST") {
       await new Promise((resolve) => setTimeout(resolve, 450));
       profile = {
@@ -168,6 +204,55 @@ async function installMockApi(page: Page) {
     }
 
     await json(route, { error: `Unhandled mock route: ${route.request().method()} ${path}` }, 404);
+  });
+}
+
+async function installMockMicrophone(page: Page) {
+  await page.addInitScript(() => {
+    class FakeMediaRecorder {
+      static isTypeSupported() {
+        return true;
+      }
+
+      public state = "inactive";
+      public mimeType = "audio/webm";
+      public ondataavailable?: (event: { data: Blob }) => void;
+      public onstop?: () => void;
+      public onerror?: () => void;
+
+      constructor(public stream: MediaStream, public options?: { mimeType?: string }) {
+        this.mimeType = options?.mimeType ?? "audio/webm";
+      }
+
+      start() {
+        this.state = "recording";
+      }
+
+      stop() {
+        if (this.state === "inactive") return;
+        this.state = "inactive";
+        const data = new Blob(["mock audio"], { type: this.mimeType });
+        setTimeout(() => {
+          this.ondataavailable?.({ data });
+          this.onstop?.();
+        }, 20);
+      }
+    }
+
+    Object.defineProperty(window, "MediaRecorder", {
+      configurable: true,
+      writable: true,
+      value: FakeMediaRecorder
+    });
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: {
+        getUserMedia: async () => ({
+          active: true,
+          getTracks: () => [{ stop() {} }]
+        })
+      }
+    });
   });
 }
 

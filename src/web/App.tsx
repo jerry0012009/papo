@@ -9,7 +9,9 @@ import {
   Mic,
   RefreshCcw,
   Save,
+  Send,
   Sparkles,
+  Square,
   UserRound
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -99,11 +101,19 @@ export function App() {
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
   const [quickRecording, setQuickRecording] = useState(false);
+  const [quickAudioProcessing, setQuickAudioProcessing] = useState(false);
+  const [quickRecordingElapsed, setQuickRecordingElapsed] = useState(0);
   const [feedbackPendingKey, setFeedbackPendingKey] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const quickMediaStreamRef = useRef<MediaStream | null>(null);
+  const quickMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const quickAudioChunksRef = useRef<Blob[]>([]);
+  const quickRecordingStartedAtRef = useRef<number | undefined>(undefined);
+  const quickRecordingTickTimerRef = useRef<number | undefined>(undefined);
+  const quickRecordingStopTimerRef = useRef<number | undefined>(undefined);
   const audioRecorderChunksRef = useRef<Blob[]>([]);
   const activeAudioSliceMetaRef = useRef<AudioSliceMeta | undefined>(undefined);
   const audioObservationQueueRef = useRef<Promise<void>>(Promise.resolve());
@@ -130,7 +140,10 @@ export function App() {
 
   useEffect(() => {
     void bootstrap();
-    return () => stopListening();
+    return () => {
+      stopListening();
+      stopQuickAudioObservation();
+    };
   }, []);
 
   useEffect(() => {
@@ -312,7 +325,7 @@ export function App() {
   }
 
   async function recordQuickAudioObservation() {
-    if (!profile || listening || quickRecording) return;
+    if (!profile || listening || quickRecording || quickAudioProcessing) return;
     const Recorder = getMediaRecorder();
     if (!Recorder) {
       setError("当前浏览器不支持直接录音。你可以继续上传音频或开始陪我听。");
@@ -331,33 +344,68 @@ export function App() {
       return;
     }
 
+    stopQuickAudioObservation();
+    quickMediaStreamRef.current = stream;
+    quickAudioChunksRef.current = [];
+    quickRecordingStartedAtRef.current = Date.now();
+    setQuickRecordingElapsed(0);
     setQuickRecording(true);
+    setError(undefined);
+    const mimeType = preferredAudioMimeType(Recorder);
+    try {
+      const recorder = new Recorder(stream, mimeType ? { mimeType } : undefined);
+      quickMediaRecorderRef.current = recorder;
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) quickAudioChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        void finishQuickAudioObservation(recorder, mimeType);
+      };
+      recorder.onerror = () => {
+        setError("这次录音断开了。你可以再录一次，或者直接打字告诉 Papo。");
+        cleanupQuickRecording();
+      };
+      recorder.start();
+      quickRecordingTickTimerRef.current = window.setInterval(() => {
+        if (!quickRecordingStartedAtRef.current) return;
+        setQuickRecordingElapsed(Math.floor((Date.now() - quickRecordingStartedAtRef.current) / 1000));
+      }, 250);
+      quickRecordingStopTimerRef.current = window.setTimeout(() => {
+        stopQuickAudioObservation();
+      }, 60_000);
+      setTab("chat");
+    } catch (caught) {
+      cleanupQuickRecording();
+      setError(errorMessage(caught));
+    }
+  }
+
+  function stopQuickAudioObservation() {
+    const recorder = quickMediaRecorderRef.current;
+    if (recorder && recorder.state === "recording") {
+      try {
+        recorder.stop();
+      } catch (caught) {
+        setError(errorMessage(caught));
+        cleanupQuickRecording();
+      }
+      return;
+    }
+    if (quickRecording && !quickAudioProcessing) cleanupQuickRecording();
+  }
+
+  async function finishQuickAudioObservation(recorder: MediaRecorder, mimeType: string) {
+    const chunks = quickAudioChunksRef.current;
+    const totalSize = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
+    cleanupQuickRecording({ keepChunks: true });
+    if (totalSize <= 0) {
+      quickAudioChunksRef.current = [];
+      return;
+    }
+    setQuickAudioProcessing(true);
     setBusy(true);
     setError(undefined);
-    const chunks: Blob[] = [];
-    const mimeType = preferredAudioMimeType(Recorder);
-    let recorder: MediaRecorder | undefined;
     try {
-      recorder = new Recorder(stream, mimeType ? { mimeType } : undefined);
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunks.push(event.data);
-      };
-      await new Promise<void>((resolve, reject) => {
-        const timeout = window.setTimeout(() => {
-          if (recorder?.state === "recording") recorder.stop();
-        }, 10_000);
-        recorder!.onstop = () => {
-          window.clearTimeout(timeout);
-          resolve();
-        };
-        recorder!.onerror = () => {
-          window.clearTimeout(timeout);
-          reject(new Error("这次录音断开了"));
-        };
-        recorder!.start();
-      });
-      const totalSize = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
-      if (totalSize <= 0) return;
       const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || chunks[0]?.type || "audio/webm" });
       const dataUrl = await blobToDataUrl(blob);
       const result = await observeAudio(dataUrl, "刚录的一段声音");
@@ -376,10 +424,24 @@ export function App() {
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
-      stream.getTracks().forEach((track) => track.stop());
-      setQuickRecording(false);
+      quickAudioChunksRef.current = [];
+      setQuickAudioProcessing(false);
       setBusy(false);
     }
+  }
+
+  function cleanupQuickRecording(options: { keepChunks?: boolean } = {}) {
+    if (quickRecordingTickTimerRef.current) window.clearInterval(quickRecordingTickTimerRef.current);
+    if (quickRecordingStopTimerRef.current) window.clearTimeout(quickRecordingStopTimerRef.current);
+    quickRecordingTickTimerRef.current = undefined;
+    quickRecordingStopTimerRef.current = undefined;
+    quickRecordingStartedAtRef.current = undefined;
+    quickMediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+    quickMediaStreamRef.current = null;
+    quickMediaRecorderRef.current = null;
+    if (!options.keepChunks) quickAudioChunksRef.current = [];
+    setQuickRecording(false);
+    setQuickRecordingElapsed(0);
   }
 
   async function giveFeedback(kind: FeedbackKind, targetId?: string, content?: string, modality: "text" | "audio_observation" | "button" = content ? "text" : "button") {
@@ -819,9 +881,12 @@ export function App() {
                 onUploadImage={uploadChatImageSummary}
                 onUploadAudio={uploadChatAudioObservation}
                 onRecordAudio={recordQuickAudioObservation}
+                onStopQuickRecording={stopQuickAudioObservation}
                 listening={listening}
                 listeningElapsed={listeningElapsed}
                 quickRecording={quickRecording}
+                quickAudioProcessing={quickAudioProcessing}
+                quickRecordingElapsed={quickRecordingElapsed}
                 onStartListening={startListening}
                 onStopListening={stopListening}
               />
@@ -1263,9 +1328,12 @@ function ChatView(props: {
   onUploadImage: (file?: File) => void;
   onUploadAudio: (file?: File) => void;
   onRecordAudio: () => void;
+  onStopQuickRecording: () => void;
   listening: boolean;
   listeningElapsed: number;
   quickRecording: boolean;
+  quickAudioProcessing: boolean;
+  quickRecordingElapsed: number;
   onStartListening: () => void;
   onStopListening: () => void;
 }) {
@@ -1363,6 +1431,20 @@ function ChatView(props: {
         <div ref={threadEndRef} aria-hidden="true" />
       </section>
       <div className="chat-composer" ref={composerRef}>
+          {props.quickRecording || props.quickAudioProcessing ? (
+            <section className={props.quickRecording ? "quick-audio-status recording" : "quick-audio-status processing"} aria-live="polite">
+              <div>
+                <Mic size={16} />
+                <span>{props.quickRecording ? `录音中 ${formatListeningTime(props.quickRecordingElapsed)}` : "正在整理录音"}</span>
+              </div>
+              {props.quickRecording ? (
+                <button type="button" onClick={props.onStopQuickRecording}>
+                  <Square size={15} />
+                  停止
+                </button>
+              ) : null}
+            </section>
+          ) : null}
           {props.stagedSegments.length ? (
             <section className="staged-moment">
               <strong>这次分享里还带着</strong>
@@ -1424,9 +1506,9 @@ function ChatView(props: {
                 disabled={props.busy}
               />
             </label>
-            <button onClick={props.onRecordAudio} disabled={props.busy || props.listening || props.quickRecording}>
+            <button onClick={props.onRecordAudio} disabled={props.busy || props.listening || props.quickRecording || props.quickAudioProcessing}>
               <Mic size={16} />
-              {props.quickRecording ? "录音中" : "录一段"}
+              {props.quickAudioProcessing ? "整理中" : props.quickRecording ? "录音中" : "录一段"}
             </button>
             <label className="upload-button compact-upload">
               <Mic size={16} />
@@ -1442,7 +1524,7 @@ function ChatView(props: {
               />
             </label>
             <button className="primary" onClick={submitDraft} disabled={props.busy || !canSubmit}>
-              <MessageCircle size={18} />
+              <Send size={18} />
               {props.stagedSegments.length ? "让 Papo 听听" : "说给 Papo"}
             </button>
           </div>

@@ -1405,6 +1405,18 @@ select {
   }
 }
 
+@keyframes audio-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+}
+
 @keyframes tail-wag {
   0%,
   100% {
@@ -1856,6 +1868,45 @@ select {
   background: rgba(255, 253, 247, 0.84);
   border: 1px solid var(--line);
   padding: 10px;
+}
+
+.quick-audio-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 1px solid rgba(207, 85, 72, 0.2);
+  border-radius: 10px;
+  background: #fff4ee;
+  color: #714032;
+}
+
+.quick-audio-status > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.quick-audio-status.recording svg {
+  color: var(--coral);
+  animation: audio-pulse 1s ease-in-out infinite;
+}
+
+.quick-audio-status.processing {
+  border-color: rgba(81, 127, 164, 0.2);
+  background: #f3f8fb;
+  color: #425c72;
+}
+
+.quick-audio-status button {
+  min-height: 32px;
+  padding: 6px 9px;
+  background: var(--surface-strong);
+  color: #714032;
 }
 
 .staged-segment {
@@ -2336,6 +2387,35 @@ select {
   flex: 0 0 auto;
   width: min(100%, 780px);
   max-width: 100%;
+}
+
+@media (max-width: 640px) {
+  .composer-tools {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    gap: 6px;
+  }
+
+  .composer-tools .primary {
+    grid-column: 1 / -1 !important;
+  }
+
+  .composer-tools button,
+  .composer-tools .upload-button {
+    min-height: 38px !important;
+    padding: 7px 5px !important;
+    font-size: 0.72rem !important;
+    gap: 4px;
+    white-space: nowrap;
+  }
+
+  .composer-tools .primary {
+    min-height: 42px !important;
+    font-size: 0.86rem !important;
+  }
+
+  .quick-audio-status {
+    align-items: stretch;
+  }
 }
 
 @media (max-width: 1039px) {
