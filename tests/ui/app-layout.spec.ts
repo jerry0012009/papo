@@ -35,6 +35,13 @@ test("home developer panel opens and closes without overflowing", async ({ page 
 
   await page.getByRole("button", { name: "收起小眼睛" }).click();
   await expect(panel).toBeHidden();
+
+  await page.getByRole("button", { name: "Papo 画过" }).click();
+  const gallery = page.getByRole("dialog", { name: "Papo 画过的小画" });
+  await expect(gallery).toBeVisible();
+  await expect(gallery).toContainText("今天的泳池小画");
+  await expect(gallery.locator("img")).toBeVisible();
+  await expectInViewport(page, gallery);
 });
 
 test("chat opens at latest content and keeps the composer aligned with the thread", async ({ page }) => {
@@ -106,9 +113,19 @@ test("photo upload stages a thumbnail that can be removed before submit", async 
   const stagedPhoto = page.locator(".staged-segment.image_summary");
   await expect(stagedPhoto).toBeVisible();
   await expect(stagedPhoto.locator("img")).toBeVisible();
+  await expect(stagedPhoto).not.toContainText("Papo 正在接住这次分享");
+  await expect(stagedPhoto).not.toContainText("照片、文字和声音线索正在传过去");
   await expect(stagedPhoto).not.toContainText("照片已加入");
+  await expect(stagedPhoto).not.toContainText("照片已准备好");
   await expect(stagedPhoto).not.toContainText("pool.jpg");
   await expect(stagedPhoto.locator(".staged-image-overlay")).toHaveCount(0, { timeout: 3_000 });
+
+  await stagedPhoto.getByRole("button", { name: "查看待发送照片" }).click();
+  const preview = page.getByRole("dialog");
+  await expect(preview.locator("img")).toBeVisible();
+  await expectInViewport(page, preview);
+  await preview.getByRole("button", { name: "关闭" }).click();
+  await expect(preview).toHaveCount(0);
 
   await stagedPhoto.getByRole("button", { name: "移除这项素材" }).click();
   await expect(stagedPhoto).toHaveCount(0);
@@ -671,6 +688,31 @@ function makeProfile() {
     emergenceHistory: [],
     wakeHistory: [],
     dreamHistory: [],
+    illustrations: [
+      {
+        id: "img_ui_illustration",
+        createdAt: now,
+        kind: "evening_diary",
+        title: "今天的泳池小画",
+        caption: "泳池很热闹，但你还是游得开心。",
+        prompt: "手绘漫画泳池明信片",
+        style: "手绘漫画明信片",
+        sourceIds: ["episode-1"],
+        providerKind: "generic",
+        providerName: "ui provider",
+        model: "fake-image",
+        attachment: {
+          id: "img_ui_illustration",
+          kind: "image",
+          label: "今天的泳池小画",
+          mime: "image/png",
+          url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+          createdAt: now,
+          generatedBy: "papo_illustration",
+          sizeBytes: 68
+        }
+      }
+    ],
     semanticBrainHistory: [
       {
         id: "brain-1",

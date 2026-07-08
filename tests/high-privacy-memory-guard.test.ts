@@ -90,6 +90,13 @@ const provider: ModelProvider = {
   },
   async observeAudio() {
     return "";
+  },
+  async generateImage() {
+    return {
+      dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      mime: "image/png",
+      model: "fake-image"
+    };
   }
 };
 

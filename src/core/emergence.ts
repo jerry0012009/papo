@@ -5,7 +5,8 @@ import { toCreatureMemoryVoice } from "./memory";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import { proactivePromptContext } from "./proactive";
 import type { ModelProvider } from "./provider";
-import type { CreatureProfile, EmergenceRecord } from "./types";
+import { configuredTimeZone } from "./time";
+import type { ActionResult, CreatureProfile, EmergenceRecord } from "./types";
 
 const EMERGENCE_COOLDOWN_MINUTES = 10;
 const MINUTE_MS = 60_000;
@@ -28,6 +29,15 @@ const semanticEmergenceSchema = z
     whyNow: optionalText(320),
     message: optionalText(520),
     proactiveLevel: z.enum(["quiet", "gentle", "active"]).optional(),
+    illustrationDraft: z
+      .object({
+        title: optionalText(120),
+        prompt: optionalText(1600),
+        caption: optionalText(220),
+        style: optionalText(160),
+        sourceIds: z.array(z.string().min(1).max(120)).max(12).optional()
+      })
+      .optional(),
     trace: z.array(z.string().min(1).max(160)).max(8).optional()
   })
   .refine((value) => !value.shouldEmerge || Boolean(value.memoryId && value.driveSource && value.whyNow && value.message), {
@@ -94,6 +104,7 @@ function quietEmergence(now: string, suggestion: SemanticEmergenceSuggestion, de
     proactiveLevel: suggestion.proactiveLevel ?? "quiet",
     message: "",
     delivery,
+    actionResult: undefined,
     text: "",
     ruleTrace
   };
@@ -142,6 +153,7 @@ function createSemanticEmergenceRecord(
     driveSource: suggestion.driveSource ?? "curiosity",
     proactiveLevel: suggestion.proactiveLevel ?? "gentle",
     message,
+    actionResult: normalizeEmergenceIllustration(suggestion),
     delivery,
     ruleTrace: [
       "llm: selected active emergence",
@@ -149,6 +161,19 @@ function createSemanticEmergenceRecord(
       `drive=${suggestion.driveSource ?? "curiosity"}`,
       `proactive=${suggestion.proactiveLevel ?? "gentle"}`
     ]
+  };
+}
+
+function normalizeEmergenceIllustration(suggestion: SemanticEmergenceSuggestion): ActionResult | undefined {
+  const draft = suggestion.illustrationDraft;
+  if (!draft?.title || !draft.prompt) return undefined;
+  return {
+    kind: "illustration_draft",
+    title: safeCreatureText(draft.title) ?? draft.title,
+    prompt: draft.prompt.trim(),
+    caption: safeCreatureText(draft.caption),
+    style: draft.style?.trim(),
+    sourceIds: draft.sourceIds?.slice(0, 12)
   };
 }
 
@@ -186,6 +211,7 @@ function recordEmergenceSemanticRun(
 function buildSemanticEmergencePrompt(profile: CreatureProfile, now: string, cooldown: ReturnType<typeof emergenceCooldown>, delivery: "manual" | "proactive") {
   const candidateMemories = availableSemanticMemories(profile).slice(0, 12);
   const proactiveContext = proactivePromptContext(profile);
+  const eveningDiary = eveningDiaryContext(profile, now);
   if (cooldown.active) {
     return `请作为 Papo 的主动浮现大脑，判断此刻是否要主动浮现。
 
@@ -214,6 +240,9 @@ ${delivery}
 
 proactive_context:
 ${JSON.stringify(proactiveContext)}
+
+evening_diary_context:
+${JSON.stringify(eveningDiary)}
 
 recent_emergence:
 ${JSON.stringify(profile.emergenceHistory.slice(0, 5).map((item) => ({
@@ -248,6 +277,9 @@ ${delivery}
 
 proactive_context:
 ${JSON.stringify(proactiveContext)}
+
+evening_diary_context:
+${JSON.stringify(eveningDiary)}
 `;
   }
 
@@ -261,6 +293,7 @@ ${JSON.stringify(proactiveContext)}
 - Papo 应该说什么，主动程度是 quiet/gentle/active。
 - 如果 delivery=proactive，这不是用户手动碰一下 Papo，而是后台 30 分钟节律触发的一次主动判断。你可以选择安静，很多时候安静是更自然的；如果要主动说话，应短、轻、不催促。
 - proactive_context.pendingUnansweredMessages 表示此前主动消息还没收到用户回应。数值越高越应该克制；规则会负责未回应上限和下次触发时间，你负责判断此刻是否真的值得开口。
+- evening_diary_context.eligible=true 表示现在处于本地 19:00-24:00，且今天还没有发过“观察日记”插画。此时你可以选择安静、普通浮现，或返回 illustrationDraft 让 Papo 画一张今天的观察日记。是否画由你决定；如果画，应基于今天真实发生的 episode、对话、音频观察、照片附件和记忆，优先使用真实照片素材中的内容，不要编造今天没有发生的事情。
 
 你必须返回一个 JSON object，不要输出解释性文字、Markdown 或空内容。
 JSON 字段名保持示例格式；枚举字段值必须使用示例里的英文原文，不要翻译。只有 whyNow/message/trace 等自然语言字段值使用中文。
@@ -284,6 +317,13 @@ JSON 字段名保持示例格式；枚举字段值必须使用示例里的英文
   "whyNow": "...",
   "message": "...",
   "proactiveLevel": "gentle",
+  "illustrationDraft": {
+    "title": "...",
+    "prompt": "...",
+    "caption": "...",
+    "style": "手绘漫画明信片 / 多分镜",
+    "sourceIds": ["episode_xxx", "img_xxx"]
+  },
   "trace": ["..."]
 }
 
@@ -304,6 +344,9 @@ ${delivery}
 
 proactive_context:
 ${JSON.stringify(proactiveContext)}
+
+evening_diary_context:
+${JSON.stringify(eveningDiary)}
 
 current_policy:
 ${JSON.stringify(profile.policyProfile)}
@@ -350,4 +393,56 @@ ${JSON.stringify(candidateMemories.map((memory) => ({
   sourceEpisodeId: memory.sourceEpisodeId
 })))}
 `;
+}
+
+function eveningDiaryContext(profile: CreatureProfile, now: string) {
+  const timeZone = configuredTimeZone();
+  const localDate = localDateForIso(now, timeZone);
+  const hour = localHourForIso(now, timeZone);
+  const alreadySent = (profile.illustrations ?? []).some((item) => item.kind === "evening_diary" && localDateForIso(item.createdAt, timeZone) === localDate);
+  const todayEpisodes = profile.episodes
+    .filter((episode) => localDateForIso(episode.createdAt, timeZone) === localDate)
+    .slice(0, 8)
+    .map((episode) => ({
+      id: episode.id,
+      inputSummary: episode.inputSummary,
+      noticed: episode.noticed,
+      response: episode.creatureResponse,
+      attachments: (episode.attachments ?? []).map((attachment) => ({
+        id: attachment.id,
+        label: attachment.label,
+        url: attachment.url,
+        observedAt: attachment.observedAt
+      }))
+    }));
+  return {
+    localDate,
+    localHour: hour,
+    timeZone,
+    eligible: hour >= 19 && hour < 24 && !alreadySent,
+    alreadySent,
+    todayEpisodes
+  };
+}
+
+function localDateForIso(iso: string, timeZone: string) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(new Date(iso)).map((part) => [part.type, part.value])
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function localHourForIso(iso: string, timeZone: string) {
+  const hour = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "2-digit",
+    hour12: false
+  }).format(new Date(iso));
+  const parsed = Number(hour);
+  return Number.isFinite(parsed) ? parsed : -1;
 }

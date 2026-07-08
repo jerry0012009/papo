@@ -25,6 +25,13 @@ const provider: ModelProvider = {
   async observeAudio(_dataUrl: string, prompt: string) {
     if (prompt.includes("aborted webm chunk")) throw new Error("This operation was aborted");
     throw new Error("Audio input conversion failed: EBML header parsing failed");
+  },
+  async generateImage() {
+    return {
+      dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      mime: "image/png",
+      model: "fake-image"
+    };
   }
 };
 

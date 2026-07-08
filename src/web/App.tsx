@@ -315,7 +315,7 @@ export function App() {
           }
         ]
       }) as StagedChatSegment
-    ].map((segment) => segment.id === localSegmentId ? { ...segment, previewUrl: localPreviewUrl, status: "processing", statusText: "正在看照片" } : segment));
+    ].map((segment) => segment.id === localSegmentId ? { ...segment, previewUrl: localPreviewUrl, status: "processing" } : segment));
     setTab("chat");
 
     try {
@@ -1117,6 +1117,7 @@ function HomeView(props: {
           </button>
         </div>
         <p className="home-action-note">陪伴会持续听 3 分钟，并按约 30 秒分段交给 Papo。</p>
+        <HomeIllustrationsPeek profile={props.profile} />
 
         {props.emergence?.text ? <EmergenceCard emergence={props.emergence} profile={props.profile} /> : null}
       </aside>
@@ -1186,7 +1187,47 @@ function CompanionPanel(props: {
         </button>
         <HomeBrainPeek profile={props.profile} compact />
       </div>
+      <HomeIllustrationsPeek profile={props.profile} compact />
     </aside>
+  );
+}
+
+function HomeIllustrationsPeek({ profile, compact = false }: { profile: CreatureProfile; compact?: boolean }) {
+  const illustrations = (profile.illustrations ?? []).slice(0, 6);
+  if (!illustrations.length) return null;
+  const latest = illustrations[0];
+  return (
+    <Dialog.Root>
+      <Dialog.Trigger asChild>
+        <button className={compact ? "illustration-peek compact" : "illustration-peek"} type="button">
+          <ImagePlus size={16} />
+          Papo 画过
+        </button>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="ui-overlay" />
+        <Dialog.Content className="illustration-dialog" aria-label="Papo 画过的小画">
+          <div className="illustration-dialog-head">
+            <div>
+              <strong>Papo 画过的小画</strong>
+              <span>{latest.title}</span>
+            </div>
+            <Dialog.Close asChild>
+              <button type="button">收起</button>
+            </Dialog.Close>
+          </div>
+          <div className="illustration-grid">
+            {illustrations.map((item) => (
+              <a href={resolveAssetUrl(item.attachment.url)} target="_blank" rel="noreferrer" className="illustration-card" key={item.id}>
+                <img src={resolveAssetUrl(item.attachment.url)} alt={item.title} loading="lazy" />
+                <strong>{item.title}</strong>
+                {item.caption ? <span>{item.caption}</span> : null}
+              </a>
+            ))}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -1471,6 +1512,7 @@ function actionDiaryTitle(message: CreatureProfile["conversation"][number]) {
   if (action === "quiet") return "听完后安静陪着";
   if (action === "save_long_term" || action === "save_episode") return "听完后留下记忆";
   if (action === "use_hermes") return "去问虾虾帮忙";
+  if (action === "generate_illustration") return "画了一张小画";
   return "听完后状态变化";
 }
 
@@ -1786,16 +1828,34 @@ function ChatView(props: {
 
 function StagedImagePreview({ segment }: { segment: StagedChatSegment }) {
   const image = segment.attachments?.find((attachment) => attachment.kind === "image");
+  const src = image ? resolveAssetUrl(image.url) : undefined;
   return (
-    <div className="staged-image-preview">
-      {image ? <img src={resolveAssetUrl(image.url)} alt="待发送照片" /> : <ImagePlus size={20} />}
+    <Dialog.Root>
+      <Dialog.Trigger asChild disabled={!src}>
+        <button className="staged-image-preview" type="button" aria-label="查看待发送照片">
+          {src ? <img src={src} alt="待发送照片" /> : <ImagePlus size={20} />}
+        </button>
+      </Dialog.Trigger>
       {segment.status === "processing" ? (
-        <span className="staged-image-overlay" aria-label="照片处理中">
+        <span className="staged-image-overlay" aria-label="正在处理图片">
           <Loader2 size={18} className="spin-icon" />
         </span>
       ) : null}
       {segment.status === "failed" ? <span className="staged-image-error">{segment.statusText ?? "没传上去"}</span> : null}
-    </div>
+      {src ? (
+        <Dialog.Portal>
+          <Dialog.Overlay className="ui-overlay" />
+          <Dialog.Content className="photo-preview-dialog">
+            <Dialog.Close asChild>
+              <button className="dialog-close" aria-label="关闭">
+                <X size={16} />
+              </button>
+            </Dialog.Close>
+            <img src={src} alt="待发送照片预览" />
+          </Dialog.Content>
+        </Dialog.Portal>
+      ) : null}
+    </Dialog.Root>
   );
 }
 
@@ -2190,7 +2250,20 @@ function ActionResultView({ result }: { result?: ActionResult }) {
         <b>虾虾任务</b>
         {result.title ? <p>{result.title}</p> : null}
         {result.text ? <small>{result.text}</small> : null}
-        {result.hermesTaskId ? <small>taskId：{result.hermesTaskId}</small> : null}
+        {result.hermesTaskId ? <small>异步任务已发送</small> : null}
+      </div>
+    );
+  }
+  if (result.kind === "illustration_draft" || result.kind === "illustration") {
+    return (
+      <div className="trace-action-result">
+        <b>{result.kind === "illustration" ? "插画已生成" : "插画草稿"}</b>
+        {result.title ? <p>{result.title}</p> : null}
+        {result.caption ? <small>说明：{result.caption}</small> : null}
+        {result.prompt ? <small>提示词：{result.prompt}</small> : null}
+        {result.style ? <small>风格：{result.style}</small> : null}
+        {result.sourceIds?.length ? <small>基于 {result.sourceIds.length} 条真实素材</small> : null}
+        {result.attachment ? <AttachmentStrip attachments={[result.attachment]} /> : null}
       </div>
     );
   }
@@ -2282,7 +2355,8 @@ function actionLabel(action: string) {
     quiet: "安静",
     draft_reminder: "提醒草稿",
     draft_question_list: "问题清单",
-    use_hermes: "问虾虾"
+    use_hermes: "问虾虾",
+    generate_illustration: "生成插画"
   };
   return labels[action] ?? action;
 }

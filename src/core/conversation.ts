@@ -10,6 +10,7 @@ export function appendPapoMessage(
     text?: string;
     sourceId?: string;
     relatedMemoryIds?: string[];
+    attachments?: StreamSegment["attachments"];
     cognitionTrace?: MessageCognitionTrace;
     at?: string;
   }
@@ -30,6 +31,7 @@ export function appendPapoMessage(
     text,
     sourceId: input.sourceId,
     relatedMemoryIds: input.relatedMemoryIds ?? [],
+    attachments: input.attachments ?? [],
     cognitionTrace: input.cognitionTrace
   };
   profile.conversation.unshift(message);

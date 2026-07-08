@@ -104,6 +104,7 @@ function mergeCreatureProfiles(current: CreatureProfile, incoming: CreatureProfi
     dreamHistory: mergeById(current.dreamHistory, incoming.dreamHistory, "at").slice(0, 30),
     semanticBrainHistory: mergeById(current.semanticBrainHistory, incoming.semanticBrainHistory, "at").slice(0, 30),
     conversation: mergeById(current.conversation, incoming.conversation, "at").slice(0, 80),
+    illustrations: mergeById(current.illustrations ?? [], incoming.illustrations ?? [], "createdAt").slice(0, 30),
     proactive: chooseLatestProactive(current, incoming),
     readState: chooseLatestReadState(current, incoming),
     dogState: chooseLatestDogState(current, incoming),

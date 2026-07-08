@@ -10,15 +10,21 @@ export type ActionKind =
   | "quiet"
   | "draft_reminder"
   | "draft_question_list"
-  | "use_hermes";
+  | "use_hermes"
+  | "generate_illustration";
 
 export interface ActionResult {
-  kind: "none" | "visible_reply" | "memory_intent" | "reminder_draft" | "question_list_draft" | "hermes_task";
+  kind: "none" | "visible_reply" | "memory_intent" | "reminder_draft" | "question_list_draft" | "hermes_task" | "illustration_draft" | "illustration";
   title?: string;
   text?: string;
   dueText?: string;
   items?: string[];
   hermesTaskId?: string;
+  prompt?: string;
+  caption?: string;
+  style?: string;
+  sourceIds?: string[];
+  attachment?: MediaAttachment;
 }
 
 export type FeedbackKind = "understood" | "continue" | "not_now" | "remember" | "important" | "remind" | "correct" | "forget";
@@ -109,6 +115,9 @@ export interface MediaAttachment {
   observedAt?: string;
   location?: StreamSegment["location"];
   sizeBytes?: number;
+  generatedBy?: "user_upload" | "papo_illustration";
+  prompt?: string;
+  sourceIds?: string[];
 }
 
 export interface SensingTrace {
@@ -313,6 +322,24 @@ export interface HermesProfileState {
   tasks: HermesTaskRecord[];
 }
 
+export interface IllustrationRecord {
+  id: string;
+  createdAt: string;
+  kind: "action" | "evening_diary";
+  title: string;
+  caption?: string;
+  prompt: string;
+  style?: string;
+  attachment: MediaAttachment;
+  sourceIds: string[];
+  messageId?: string;
+  emergenceId?: string;
+  actionEventId?: string;
+  providerKind: ProviderKind;
+  providerName: string;
+  model?: string;
+}
+
 export interface FeedbackRecord {
   id: string;
   at: string;
@@ -434,6 +461,7 @@ export interface MessageCognitionTrace {
     driveSource: string;
     whyNow: string;
     message: string;
+    actionResult?: ActionResult;
     memoryId?: string;
     proactiveLevel?: string;
     relatedMemoryIds: string[];
@@ -480,6 +508,7 @@ export interface CreatureProfile {
   proactive: ProactiveEmergenceState;
   readState: ReadState;
   hermes: HermesProfileState;
+  illustrations?: IllustrationRecord[];
   dogState: DogInteractionState;
   dogStateHistory: DogInteractionState[];
 }
@@ -504,6 +533,7 @@ export interface EmergenceRecord {
   driveSource: string;
   proactiveLevel?: "quiet" | "gentle" | "active";
   message: string;
+  actionResult?: ActionResult;
   delivery?: "manual" | "proactive";
   pendingIndex?: number;
   ruleTrace: string[];

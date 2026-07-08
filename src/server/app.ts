@@ -14,7 +14,7 @@ import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { createModelProvider, type ModelProvider } from "../core/provider";
 import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
 import { wakeCreature } from "../core/rhythm";
-import type { CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, MediaAttachment, MessageCognitionTrace, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
+import type { ActionResult, CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationRecord, MediaAttachment, MessageCognitionTrace, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
 import { createHermesBridge, type HermesBridge } from "./hermes";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
@@ -274,6 +274,7 @@ export function createApp(input: {
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
       await hermesBridge?.enqueueTasks(profile, result);
+      const illustrationAttachments = await executeIllustrationActions(profile, result, provider, "action");
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const sensingTraces = body.segments.flatMap((segment) => segment.sensingTrace ? [segment.sensingTrace as SensingTrace] : []);
       const cognitionTrace = captureCognitionTrace(result, provider, "curious_stream", modelRuns, sensingTraces);
@@ -299,6 +300,7 @@ export function createApp(input: {
         text: result.response,
         sourceId: result.episodes[0]?.id ?? result.curiousSession?.id ?? result.events[0]?.id,
         relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
+        attachments: illustrationAttachments,
         cognitionTrace
       });
       await store.saveProfile(profile);
@@ -575,6 +577,7 @@ export async function runProactiveEmergenceSweep(store: ProfileStore, provider: 
     const beforeSemanticIds = semanticRecordIds(profile);
     try {
       const emergence = await semanticDecideEmergence(profile, provider, now, { delivery: "proactive" });
+      const emergenceAttachments = await executeEmergenceIllustration(profile, emergence, provider, now);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const cognitionTrace = emergenceCognitionTrace(emergence, provider, modelRuns);
       settleProactiveEmergence(profile, emergence, now);
@@ -584,6 +587,7 @@ export async function runProactiveEmergenceSweep(store: ProfileStore, provider: 
           text: emergence.text,
           sourceId: emergence.id,
           relatedMemoryIds: emergence.relatedMemoryIds,
+          attachments: emergenceAttachments,
           cognitionTrace,
           at: now
         });
@@ -624,6 +628,144 @@ async function saveImageAsset(dataUrl: string, label: string): Promise<MediaAtta
     createdAt: now,
     sizeBytes: parsed.buffer.byteLength
   };
+}
+
+async function saveGeneratedIllustration(input: {
+  dataUrl: string;
+  label: string;
+  prompt: string;
+  sourceIds: string[];
+}): Promise<MediaAttachment> {
+  const asset = await saveImageAsset(input.dataUrl, input.label);
+  return {
+    ...asset,
+    generatedBy: "papo_illustration",
+    prompt: input.prompt,
+    sourceIds: input.sourceIds
+  };
+}
+
+async function executeIllustrationActions(
+  profile: CreatureProfile,
+  result: CaptureResult,
+  provider: ModelProvider,
+  kind: IllustrationRecord["kind"],
+  now = new Date().toISOString()
+) {
+  const attachments: MediaAttachment[] = [];
+  for (const event of result.events) {
+    const actionResult = event.actionResult;
+    if (event.actionDecision.action !== "generate_illustration" || actionResult?.kind !== "illustration_draft" || !actionResult.prompt?.trim()) continue;
+    const generated = await provider.generateImage(illustrationPrompt(actionResult, event), { style: actionResult.style });
+    const sourceIds = [...new Set([event.id, event.triggerSegmentId, event.triggerBatchId, ...(event.relatedMemoryIds ?? []), ...(event.attachments ?? []).map((item) => item.id), ...(actionResult.sourceIds ?? [])].filter(Boolean) as string[])];
+    const attachment = await saveGeneratedIllustration({
+      dataUrl: generated.dataUrl,
+      label: actionResult.title ?? "Papo 画的小画",
+      prompt: actionResult.prompt,
+      sourceIds
+    });
+    const finalResult: ActionResult = {
+      ...actionResult,
+      kind: "illustration",
+      attachment
+    };
+    event.actionResult = finalResult;
+    const episode = result.episodes.find((item) => item.actionDecision?.reason === event.actionDecision.reason || item.sourceSegmentId === event.triggerSegmentId || item.sourceBatchId === event.triggerBatchId);
+    if (episode?.actionResult?.kind === "illustration_draft") episode.actionResult = finalResult;
+    profile.illustrations ??= [];
+    profile.illustrations.unshift({
+      id: attachment.id,
+      createdAt: now,
+      kind,
+      title: actionResult.title ?? "Papo 画的小画",
+      caption: actionResult.caption ?? actionResult.text,
+      prompt: actionResult.prompt,
+      style: actionResult.style,
+      attachment,
+      sourceIds,
+      actionEventId: event.id,
+      providerKind: provider.kind,
+      providerName: provider.name,
+      model: generated.model ?? provider.diagnostics?.imageModel
+    });
+    profile.illustrations = profile.illustrations.slice(0, 30);
+    attachments.push(attachment);
+  }
+  return attachments;
+}
+
+async function executeEmergenceIllustration(
+  profile: CreatureProfile,
+  emergence: EmergenceRecord & { text: string; memoryId?: string },
+  provider: ModelProvider,
+  now: string
+) {
+  const actionResult = emergence.actionResult;
+  if (actionResult?.kind !== "illustration_draft" || !actionResult.prompt?.trim()) return [];
+  const generated = await provider.generateImage(illustrationPromptForEmergence(actionResult, emergence, profile), { style: actionResult.style });
+  const sourceIds = [...new Set([emergence.id, emergence.memoryId, ...(emergence.relatedMemoryIds ?? []), ...(actionResult.sourceIds ?? [])].filter(Boolean) as string[])];
+  const attachment = await saveGeneratedIllustration({
+    dataUrl: generated.dataUrl,
+    label: actionResult.title ?? "Papo 的观察日记",
+    prompt: actionResult.prompt,
+    sourceIds
+  });
+  emergence.actionResult = {
+    ...actionResult,
+    kind: "illustration",
+    attachment,
+    sourceIds
+  };
+  profile.illustrations ??= [];
+  profile.illustrations.unshift({
+    id: attachment.id,
+    createdAt: now,
+    kind: "evening_diary",
+    title: actionResult.title ?? "Papo 的观察日记",
+    caption: actionResult.caption ?? actionResult.text ?? emergence.text,
+    prompt: actionResult.prompt,
+    style: actionResult.style,
+    attachment,
+    sourceIds,
+    emergenceId: emergence.id,
+    providerKind: provider.kind,
+    providerName: provider.name,
+    model: generated.model ?? provider.diagnostics?.imageModel
+  });
+  profile.illustrations = profile.illustrations.slice(0, 30);
+  return [attachment];
+}
+
+function illustrationPrompt(actionResult: ActionResult, event: CaptureResult["events"][number]) {
+  const sourceImages = (event.attachments ?? []).map((item) => `${item.label} ${item.url}`).join("\n");
+  return [
+    "Create one warm hand-drawn comic / postcard style illustration for Papo, a cute companion pet.",
+    "No UI, no text labels, no screenshots, no photorealistic rendering.",
+    "Style: soft hand-drawn lines, cozy colors, gentle manga/comic feeling.",
+    actionResult.style ? `Requested style: ${actionResult.style}` : "",
+    "Ground the image in the real moment below. Do not invent unrelated events.",
+    `Moment: ${event.noticed || event.triggerContent}`,
+    sourceImages ? `Available source image references by asset URL/id:\n${sourceImages}` : "",
+    `Image prompt from action model:\n${actionResult.prompt}`
+  ].filter(Boolean).join("\n\n");
+}
+
+function illustrationPromptForEmergence(actionResult: ActionResult, emergence: EmergenceRecord, profile: CreatureProfile) {
+  const sourceEpisodes = profile.episodes
+    .filter((episode) => actionResult.sourceIds?.includes(episode.id) || emergence.relatedMemoryIds.includes(episode.id))
+    .slice(0, 5)
+    .map((episode) => `${episode.id}: ${episode.inputSummary} ${episode.noticed}`)
+    .join("\n");
+  return [
+    "Create one warm hand-drawn comic / postcard style observation diary from Papo.",
+    "No UI, no text labels, no screenshots, no photorealistic rendering.",
+    "Style: soft hand-drawn lines, cozy colors, gentle manga/comic feeling.",
+    actionResult.style ? `Requested style: ${actionResult.style}` : "",
+    "Ground the image in real memories and episodes. Do not invent unrelated events.",
+    `Papo message: ${emergence.message}`,
+    sourceEpisodes ? `Source episodes:\n${sourceEpisodes}` : "",
+    `Image prompt from emergence model:\n${actionResult.prompt}`
+  ].filter(Boolean).join("\n\n");
 }
 
 function parseImageDataUrl(dataUrl: string): { mime: MediaAttachment["mime"]; extension: "png" | "jpg" | "webp"; buffer: Buffer } {
@@ -920,6 +1062,7 @@ function emergenceCognitionTrace(
       driveSource: emergence.driveSource,
       whyNow: emergence.whyNow,
       message: emergence.text,
+      actionResult: emergence.actionResult,
       memoryId: emergence.memoryId,
       proactiveLevel: emergence.proactiveLevel,
       relatedMemoryIds: emergence.relatedMemoryIds,
