@@ -1903,12 +1903,15 @@ select {
 
 .composer-tools {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: 40px minmax(0, 1fr) 40px 42px;
+  align-items: end;
   gap: 8px;
+  position: relative;
 }
 
 .composer-tools button,
-.composer-tools .upload-button {
+.composer-tools .upload-button,
+.composer-add-menu summary {
   min-width: 0;
   width: 100%;
   min-height: 38px;
@@ -1918,12 +1921,14 @@ select {
 }
 
 .staged-moment {
-  display: grid;
+  display: flex;
+  flex-wrap: wrap;
   gap: 8px;
-  border-radius: 8px;
-  background: rgba(255, 253, 247, 0.84);
-  border: 1px solid var(--line);
-  padding: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 0 2px;
+  background: transparent;
+  border: 0;
 }
 
 .quick-audio-status {
@@ -1965,39 +1970,6 @@ select {
   color: #714032;
 }
 
-.moment-submit-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px;
-  border: 1px solid rgba(81, 127, 164, 0.18);
-  border-radius: 10px;
-  background: #f3f8fb;
-  color: #425c72;
-}
-
-.moment-submit-status svg {
-  flex: 0 0 auto;
-  color: #517fa4;
-  animation: audio-pulse 1s ease-in-out infinite;
-}
-
-.moment-submit-status div {
-  min-width: 0;
-  display: grid;
-  gap: 2px;
-}
-
-.moment-submit-status strong {
-  font-size: 0.88rem;
-}
-
-.moment-submit-status span {
-  color: #5d7283;
-  font-size: 0.8rem;
-  line-height: 1.35;
-}
-
 .listening-session-status {
   display: flex;
   align-items: center;
@@ -2037,110 +2009,91 @@ select {
 }
 
 .staged-segment {
-  display: grid;
-  gap: 8px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.58);
-  border: 1px solid rgba(63, 127, 102, 0.12);
-  padding: 8px;
-}
-
-.staged-attachment-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.staged-attachment-head strong {
+  position: relative;
+  display: inline-grid;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.86rem;
 }
 
-.staged-kind {
+.staged-image-preview {
+  position: relative;
+  width: 58px;
+  height: 58px;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  border: 1px solid rgba(63, 127, 102, 0.14);
+  background: #eef2ee;
+  color: #627064;
+}
+
+.staged-image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.staged-image-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.62);
+  color: #1f2a24;
+}
+
+.staged-image-error {
+  position: absolute;
+  inset: auto 4px 4px;
+  padding: 2px 4px;
+  border-radius: 6px;
+  background: rgba(116, 54, 41, 0.9);
+  color: #fffdf7;
+  font-size: 0.62rem;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.staged-audio-summary {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  flex: 0 0 auto;
-  padding: 4px 7px;
+  gap: 7px;
+  min-width: 0;
+  min-height: 38px;
+  padding: 8px 12px;
   border-radius: 999px;
-  background: var(--ink);
-  color: var(--surface-strong);
-  font-size: 0.74rem;
+  border: 1px solid rgba(63, 127, 102, 0.14);
+  background: #eef8f2;
+  color: #244c3e;
+  font-size: 0.82rem;
+  font-weight: 750;
 }
 
-.staged-segment button {
-  justify-self: start;
-  min-height: 34px;
-  padding: 6px 9px;
-}
-
-.staged-audio-summary,
-.staged-image-summary {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid rgba(81, 127, 164, 0.16);
-  border-radius: 8px;
-  background: #f5f9fb;
-  color: #425c72;
-}
-
-.staged-audio-summary > svg,
-.staged-image-summary > svg {
-  flex: 0 0 auto;
-  color: #517fa4;
-}
-
-.staged-audio-summary div,
-.staged-image-summary div {
-  min-width: 0;
+.staged-remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
   display: grid;
-  gap: 2px;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(31, 42, 36, 0.9);
+  color: #fffdf7;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow: 0 3px 8px rgba(31, 42, 36, 0.18);
 }
 
-.staged-audio-summary strong,
-.staged-audio-summary span,
-.staged-image-summary strong,
-.staged-image-summary span {
-  min-width: 0;
-  overflow-wrap: anywhere;
+.spin-icon {
+  animation: spin 0.9s linear infinite;
 }
 
-.staged-audio-summary strong,
-.staged-image-summary strong {
-  font-size: 0.9rem;
-}
-
-.staged-audio-summary span,
-.staged-image-summary span {
-  color: #5d7283;
-  font-size: 0.8rem;
-}
-
-.staged-image-summary.processing {
-  background: #fff8e8;
-  border-color: rgba(226, 184, 78, 0.28);
-  color: #725c22;
-}
-
-.staged-image-summary.processing > svg {
-  color: var(--amber);
-}
-
-.staged-image-summary.failed {
-  background: #fff1ee;
-  border-color: rgba(207, 85, 72, 0.22);
-  color: #743629;
-}
-
-.staged-image-summary.failed > svg {
-  color: var(--coral);
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .chat-batch {
@@ -2462,6 +2415,54 @@ select {
 .compact-upload {
   min-height: 36px;
   justify-content: center;
+}
+
+.composer-add-menu {
+  position: relative;
+}
+
+.composer-add-menu summary {
+  display: grid;
+  place-items: center;
+  min-height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card-muted);
+  color: #334139;
+  cursor: pointer;
+  list-style: none;
+}
+
+.composer-add-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.composer-add-options {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 15;
+  display: grid;
+  gap: 6px;
+  min-width: 132px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 28px rgba(31, 42, 36, 0.16);
+}
+
+.composer-add-options .upload-button {
+  justify-content: flex-start;
+  min-height: 36px;
+  border-radius: 10px;
+  background: transparent;
+}
+
+.composer-mic-button {
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
 }
 
 .feedback-row {
@@ -3713,14 +3714,15 @@ select {
 }
 
 .composer-tools .chat-send-button {
+  display: grid;
+  place-items: center;
   min-width: 0;
+  width: 42px;
   min-height: 42px;
+  padding: 0;
   overflow: hidden;
-  white-space: normal;
-  text-align: center;
-  line-height: 1.18;
-  overflow-wrap: anywhere;
   font-weight: 900;
+  border-radius: 999px;
   background: #1f2a24;
   border-color: #1f2a24;
   color: var(--primary-foreground);
@@ -3739,31 +3741,67 @@ select {
   flex: 0 0 auto;
 }
 
+.chat-composer .composer-tools {
+  grid-template-columns: 40px minmax(0, 1fr) 40px 42px !important;
+  align-items: end;
+  border-top: 0;
+  padding-top: 0;
+}
+
+.chat-composer .composer-tools textarea {
+  min-height: 40px !important;
+  max-height: 120px;
+  resize: none;
+  border-radius: 18px;
+  padding: 10px 12px !important;
+}
+
+.chat-composer .composer-tools .composer-add-menu summary,
+.chat-composer .composer-tools .composer-mic-button,
+.chat-composer .composer-tools .chat-send-button {
+  width: 40px;
+  min-height: 40px !important;
+  padding: 0 !important;
+  font-size: 0 !important;
+  gap: 0;
+}
+
+.chat-composer .composer-tools .composer-add-options .upload-button {
+  width: 100%;
+  min-height: 36px !important;
+  padding: 8px 10px !important;
+  font-size: 0.82rem !important;
+  gap: 7px;
+}
+
 @media (max-width: 640px) {
   .composer-tools {
-    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+    grid-template-columns: 38px minmax(0, 1fr) 38px 40px !important;
     gap: 6px;
   }
 
   .composer-tools .primary {
-    grid-column: 1 / -1 !important;
+    grid-column: auto !important;
   }
 
   .composer-tools button,
   .composer-tools .upload-button {
     min-height: 38px !important;
-    padding: 7px 5px !important;
-    font-size: 0.72rem !important;
+    padding: 0 !important;
+    font-size: 0.82rem !important;
     gap: 4px;
     white-space: nowrap;
   }
 
   .composer-tools .chat-send-button {
-    display: inline-flex;
-    min-height: 44px !important;
+    width: 40px;
+    min-height: 40px !important;
+  }
+
+  .composer-add-options .upload-button {
+    min-height: 36px !important;
     padding: 8px 10px !important;
-    gap: 6px;
-    font-size: 0.86rem !important;
-    white-space: normal;
+    font-size: 0.82rem !important;
+    gap: 7px;
   }
 }

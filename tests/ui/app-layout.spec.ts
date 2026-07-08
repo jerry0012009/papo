@@ -42,13 +42,15 @@ test("chat opens at latest content and keeps the composer aligned with the threa
   await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
 
   await expect(page.locator(".chat-bubble.papo p", { hasText: "最近一条回复在这里。" }).last()).toBeVisible();
-  await expect(page.getByPlaceholder("直接告诉 Papo 一件刚发生的事")).toBeVisible();
+  await expect(page.getByPlaceholder("告诉 Papo...")).toBeVisible();
   const sendButton = page.locator(".chat-send-button");
   await expect(sendButton).toBeVisible();
-  await expect(sendButton).toContainText("说给 Papo");
   await expect(sendButton).toHaveCSS("color", "rgb(77, 86, 79)");
   await expect(sendButton).toHaveClass(/chat-send-button/);
   await expectButtonTextFits(sendButton);
+  await page.getByLabel("添加素材").click();
+  await expect(page.locator(".composer-add-options")).toBeVisible();
+  await expect(page.locator(".composer-add-options").getByText("相册")).toBeVisible();
   const userBubbleColor = await page.locator(".chat-bubble.user p").last().evaluate((node) => getComputedStyle(node).backgroundColor);
   const papoBubbleColor = await page.locator(".chat-bubble.papo p").last().evaluate((node) => getComputedStyle(node).backgroundColor);
   expect(userBubbleColor).not.toBe(papoBubbleColor);
@@ -76,37 +78,39 @@ test("quick microphone recording exposes recording, stop, processing, and send s
   await page.goto("/");
   await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
 
-  await page.getByRole("button", { name: "录一段" }).click();
+  await page.getByRole("button", { name: "录一段声音" }).click();
   await expect(page.locator(".quick-audio-status").getByText(/录音中/)).toBeVisible();
   await expect(page.getByRole("button", { name: "停止" })).toBeVisible();
 
   await page.getByRole("button", { name: "停止" }).click();
   await expect(page.getByText("正在整理录音")).toBeVisible();
-  await expect(page.getByText("麦克风 1")).toBeVisible({ timeout: 3_000 });
-  const stagedAudio = page.locator(".staged-segment").filter({ hasText: "麦克风 1" });
+  const stagedAudio = page.locator(".staged-segment.audio_observation");
+  await expect(stagedAudio).toBeVisible({ timeout: 3_000 });
   await expect(stagedAudio.locator("textarea")).toHaveCount(0);
-  await expect(stagedAudio).toContainText("有一段声音");
+  await expect(stagedAudio).toContainText("一段声音");
   await expect(stagedAudio).not.toContainText("我听到你说想测试录音按钮。");
-  await expect(page.getByRole("button", { name: "让 Papo 听听" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "发送给 Papo" })).toBeVisible();
 });
 
 test("photo upload stages a thumbnail that can be removed before submit", async ({ page }) => {
   await page.goto("/");
   await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
 
-  await page.locator(".compact-upload").filter({ hasText: "加照片" }).locator("input").setInputFiles({
+  await page.getByLabel("添加素材").click();
+  await page.locator(".compact-upload").filter({ hasText: "相册" }).locator("input").setInputFiles({
     name: "pool.jpg",
     mimeType: "image/jpeg",
     buffer: tinyJpeg()
   });
 
-  const stagedPhoto = page.locator(".staged-segment").filter({ hasText: "pool.jpg" });
+  const stagedPhoto = page.locator(".staged-segment.image_summary");
   await expect(stagedPhoto).toBeVisible();
   await expect(stagedPhoto.locator("img")).toBeVisible();
-  await expect(stagedPhoto).toContainText(/照片正在准备|照片已加入/);
-  await expect(stagedPhoto).toContainText("照片已加入", { timeout: 3_000 });
+  await expect(stagedPhoto).not.toContainText("照片已加入");
+  await expect(stagedPhoto).not.toContainText("pool.jpg");
+  await expect(stagedPhoto.locator(".staged-image-overlay")).toHaveCount(0, { timeout: 3_000 });
 
-  await stagedPhoto.getByRole("button", { name: "这次先不带" }).click();
+  await stagedPhoto.getByRole("button", { name: "移除这项素材" }).click();
   await expect(stagedPhoto).toHaveCount(0);
 });
 
@@ -116,19 +120,20 @@ test("photo upload during companion mode waits for explicit submit", async ({ pa
   await page.getByRole("button", { name: /陪我/ }).first().click();
   await expect(page.locator(".listening-session-status")).toBeVisible();
 
-  await page.locator(".compact-upload").filter({ hasText: "加照片" }).locator("input").setInputFiles({
+  await page.getByLabel("添加素材").click();
+  await page.locator(".compact-upload").filter({ hasText: "相册" }).locator("input").setInputFiles({
     name: "companion-photo.jpg",
     mimeType: "image/jpeg",
     buffer: tinyJpeg()
   });
 
-  const stagedPhoto = page.locator(".staged-segment").filter({ hasText: "companion-photo.jpg" });
-  await expect(stagedPhoto).toContainText("照片已加入", { timeout: 3_000 });
+  const stagedPhoto = page.locator(".staged-segment.image_summary");
+  await expect(stagedPhoto.locator("img")).toBeVisible({ timeout: 3_000 });
   await expect(page.locator(".chat-bubble.world", { hasText: "companion-photo.jpg" })).toHaveCount(0);
 
-  await page.getByRole("button", { name: "让 Papo 听听" }).click();
-  await expect(page.locator(".staged-segment").filter({ hasText: "companion-photo.jpg" })).toHaveCount(0);
-  await expect(page.locator(".chat-bubble.world", { hasText: "companion-photo.jpg" })).toBeVisible();
+  await page.getByRole("button", { name: "发送给 Papo" }).click();
+  await expect(page.locator(".staged-segment.image_summary")).toHaveCount(0);
+  await expect(page.locator(".chat-bubble.world", { hasText: "这张照片里" })).toBeVisible();
 });
 
 test("photo submit shows a visible in-flight handoff state", async ({ page }) => {
@@ -138,17 +143,18 @@ test("photo submit shows a visible in-flight handoff state", async ({ page }) =>
   await page.goto("/");
   await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
 
-  await page.locator(".compact-upload").filter({ hasText: "加照片" }).locator("input").setInputFiles({
+  await page.getByLabel("添加素材").click();
+  await page.locator(".compact-upload").filter({ hasText: "相册" }).locator("input").setInputFiles({
     name: "handoff-photo.jpg",
     mimeType: "image/jpeg",
     buffer: tinyJpeg()
   });
 
-  await expect(page.locator(".staged-segment").filter({ hasText: "handoff-photo.jpg" })).toContainText("照片已加入", { timeout: 3_000 });
-  await page.getByRole("button", { name: "让 Papo 听听" }).click();
-  await expect(page.getByText("Papo 正在接住这次分享")).toBeVisible();
-  await expect(page.getByRole("button", { name: "传给 Papo 中" })).toBeDisabled();
-  await expect(page.locator(".chat-bubble.world", { hasText: "handoff-photo.jpg" })).toBeVisible({ timeout: 4_000 });
+  await expect(page.locator(".staged-segment.image_summary img")).toBeVisible({ timeout: 3_000 });
+  await page.getByRole("button", { name: "发送给 Papo" }).click();
+  await expect(page.getByRole("button", { name: "发送给 Papo" })).toBeDisabled();
+  await expect(page.locator(".chat-bubble.world", { hasText: "这张照片里" })).toBeVisible({ timeout: 4_000 });
+  await expect(page.locator(".chat-bubble.world", { hasText: "handoff-photo.jpg" })).toHaveCount(0);
 });
 
 test("large phone photos are compressed before image summary upload", async ({ page }) => {
@@ -178,14 +184,15 @@ test("large phone photos are compressed before image summary upload", async ({ p
     return Array.from(new Uint8Array(await blob.arrayBuffer()));
   });
 
-  await page.locator(".compact-upload").filter({ hasText: "加照片" }).locator("input").setInputFiles({
+  await page.getByLabel("添加素材").click();
+  await page.locator(".compact-upload").filter({ hasText: "相册" }).locator("input").setInputFiles({
     name: "phone-original.jpg",
     mimeType: "image/jpeg",
     buffer: Buffer.from(largePhoto)
   });
 
-  const stagedPhoto = page.locator(".staged-segment").filter({ hasText: "phone-original.jpg" });
-  await expect(stagedPhoto).toContainText("照片已加入", { timeout: 5_000 });
+  const stagedPhoto = page.locator(".staged-segment.image_summary");
+  await expect(stagedPhoto.locator(".staged-image-overlay")).toHaveCount(0, { timeout: 5_000 });
   const uploadedLength = await page.evaluate(() => Number(window.localStorage.getItem("papo:lastImageUploadLength") ?? 0));
   expect(uploadedLength).toBeGreaterThan(64);
   expect(uploadedLength).toBeLessThanOrEqual(3_500_000);
@@ -196,7 +203,7 @@ test("companion listening starts from home and shows a countdown in chat", async
   await page.goto("/");
 
   await page.getByRole("button", { name: /陪我/ }).first().click();
-  await expect(page.getByPlaceholder("直接告诉 Papo 一件刚发生的事")).toBeVisible();
+  await expect(page.getByPlaceholder("告诉 Papo...")).toBeVisible();
   const listeningStatus = page.locator(".listening-session-status");
   await expect(listeningStatus).toBeVisible();
   await expect(listeningStatus).toContainText("陪你听着");

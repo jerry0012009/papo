@@ -4,20 +4,23 @@ import {
   History,
   ImagePlus,
   Lightbulb,
+  Loader2,
   MessageCircle,
   MessagesSquare,
   Mic,
+  Plus,
   RefreshCcw,
   Save,
   Send,
   Sparkles,
   Square,
-  UserRound
+  UserRound,
+  X
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { audioObservationPreview } from "../core/display-text";
+import { audioObservationPreview, imageSummaryPreview } from "../core/display-text";
 import { toCreatureMemoryVoice } from "../core/memory";
 import { PET_KINDS, normalizePetKind, petKindLabel } from "../core/pet-kinds";
 import type {
@@ -100,6 +103,7 @@ type StagedChatSegment = StreamSegment & {
   status?: PendingSegmentState;
   previewUrl?: string;
   statusText?: string;
+  displayText?: string;
 };
 
 export function App() {
@@ -291,7 +295,7 @@ export function App() {
     const observedAt = file.lastModified ? new Date(file.lastModified).toISOString() : new Date().toISOString();
     const localPreviewUrl = URL.createObjectURL(file);
     const localSegmentId = `chat-image-${Date.now()}`;
-    const label = file.name || "照片";
+    const label = "照片";
     setError(undefined);
     setChatSegments((current) => [
       ...current,
@@ -302,7 +306,7 @@ export function App() {
           {
             id: `${localSegmentId}-local`,
             kind: "image",
-            label,
+            label: file.name || label,
             mime: browserImageMime(file.type),
             url: localPreviewUrl,
             createdAt: new Date().toISOString(),
@@ -337,7 +341,7 @@ export function App() {
                 attachments: asset ? [asset] : segment.attachments,
                 sensingTrace: result.sensingTrace,
                 status: "ready",
-                statusText: "照片已准备好"
+                displayText: imageSummaryPreview(content)
               }
             : segment
         )
@@ -1549,6 +1553,7 @@ function ChatView(props: {
   const [submittingMoment, setSubmittingMoment] = useState(false);
   const [visibleCount, setVisibleCount] = useState(INITIAL_CHAT_VISIBLE_COUNT);
   const composerRef = useRef<HTMLDivElement>(null);
+  const addMenuRef = useRef<HTMLDetailsElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
   const allMessages = useMemo(
     () => [...(props.profile.conversation ?? [])].filter((message) => message.channel !== "wake"),
@@ -1593,6 +1598,16 @@ function ChatView(props: {
     const segment = props.stagedSegments[index] as StagedChatSegment | undefined;
     if (segment?.previewUrl?.startsWith("blob:")) URL.revokeObjectURL(segment.previewUrl);
     props.onChangeStagedSegments((current) => current.filter((_, currentIndex) => currentIndex !== index));
+  }
+
+  function uploadImageFromMenu(file?: File) {
+    addMenuRef.current?.removeAttribute("open");
+    props.onUploadImage(file);
+  }
+
+  function uploadAudioFromMenu(file?: File) {
+    addMenuRef.current?.removeAttribute("open");
+    props.onUploadAudio(file);
   }
 
   async function submitDraft() {
@@ -1650,15 +1665,6 @@ function ChatView(props: {
         <div ref={threadEndRef} aria-hidden="true" />
       </section>
       <div className="chat-composer" ref={composerRef}>
-          {submittingMoment ? (
-            <section className="moment-submit-status" aria-live="polite">
-              <Sparkles size={16} />
-              <div>
-                <strong>Papo 正在接住这次分享</strong>
-                <span>照片、文字和声音线索正在传过去。</span>
-              </div>
-            </section>
-          ) : null}
           {props.listening ? (
             <section className="listening-session-status" aria-live="polite">
               <div>
@@ -1687,32 +1693,15 @@ function ChatView(props: {
             </section>
           ) : null}
           {props.stagedSegments.length ? (
-            <section className="staged-moment">
-              <strong>这次分享里还带着</strong>
+            <section className="staged-moment" aria-label="待发送的素材">
               {props.stagedSegments.map((segment, index) => (
-                <article className="staged-segment" key={segment.id}>
-                  <div className="staged-attachment-head">
-                    <span className="staged-kind">
-                      <StagedSegmentIcon kind={segment.kind} />
-                      {stagedSegmentKindText(segment.kind)}
-                    </span>
-                    <strong>{segment.label}</strong>
-                  </div>
+                <article className={`staged-segment ${segment.kind} ${segment.status ?? "ready"}`} key={segment.id}>
                   {segment.kind === "image_summary" ? (
-                    <div className={`staged-image-summary ${segment.status ?? "ready"}`}>
-                      <ImagePlus size={18} />
-                      <div>
-                        <strong>{segment.status === "processing" ? "照片正在准备" : segment.status === "failed" ? "照片没有准备好" : "照片已加入"}</strong>
-                        <span>{segment.statusText ?? "Papo 会把这张照片作为这次分享的素材。"}</span>
-                      </div>
-                    </div>
+                    <StagedImagePreview segment={segment} />
                   ) : segment.kind === "audio_observation" ? (
                     <div className="staged-audio-summary">
                       <Mic size={18} />
-                      <div>
-                        <strong>有一段声音</strong>
-                        <span>Papo 会直接听这段音频线索。</span>
-                      </div>
+                      <span>一段声音</span>
                     </div>
                   ) : (
                     <textarea
@@ -1722,69 +1711,72 @@ function ChatView(props: {
                       placeholder={stagedSegmentPlaceholder(segment.kind)}
                     />
                   )}
-                  <AttachmentStrip attachments={segment.attachments} />
-                  <button onClick={() => removeStagedSegment(index)} disabled={props.busy}>
-                    <RefreshCcw size={16} />
-                    这次先不带
+                  <button className="staged-remove" onClick={() => removeStagedSegment(index)} disabled={props.busy} aria-label="移除这项素材">
+                    <X size={14} />
                   </button>
                 </article>
               ))}
             </section>
           ) : null}
-          <textarea
-            value={draft}
-            onChange={(event) => setDraft(event.target.value)}
-            rows={2}
-            placeholder="直接告诉 Papo 一件刚发生的事"
-          />
           <div className="composer-tools">
-            <label className="upload-button compact-upload">
-              <ImagePlus size={16} />
-              加照片
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={(event) => {
-                  props.onUploadImage(event.currentTarget.files?.[0]);
-                  event.currentTarget.value = "";
-                }}
-                disabled={props.busy}
-              />
-            </label>
-            <label className="upload-button compact-upload">
-              <ImagePlus size={16} />
-              拍一张
-              <input
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                capture="environment"
-                onChange={(event) => {
-                  props.onUploadImage(event.currentTarget.files?.[0]);
-                  event.currentTarget.value = "";
-                }}
-                disabled={props.busy}
-              />
-            </label>
-            <button onClick={props.onRecordAudio} disabled={props.busy || props.listening || props.quickRecording || props.quickAudioProcessing}>
-              <Mic size={16} />
-              {props.quickAudioProcessing ? "整理中" : props.quickRecording ? "录音中" : "录一段"}
+            <details className="composer-add-menu" ref={addMenuRef}>
+              <summary aria-label="添加素材">
+                <Plus size={19} />
+              </summary>
+              <div className="composer-add-options">
+                <label className="upload-button compact-upload">
+                  <ImagePlus size={16} />
+                  相册
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(event) => {
+                      uploadImageFromMenu(event.currentTarget.files?.[0]);
+                      event.currentTarget.value = "";
+                    }}
+                    disabled={props.busy}
+                  />
+                </label>
+                <label className="upload-button compact-upload">
+                  <ImagePlus size={16} />
+                  拍照
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    capture="environment"
+                    onChange={(event) => {
+                      uploadImageFromMenu(event.currentTarget.files?.[0]);
+                      event.currentTarget.value = "";
+                    }}
+                    disabled={props.busy}
+                  />
+                </label>
+                <label className="upload-button compact-upload">
+                  <Mic size={16} />
+                  音频
+                  <input
+                    type="file"
+                    accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg,audio/aac"
+                    onChange={(event) => {
+                      uploadAudioFromMenu(event.currentTarget.files?.[0]);
+                      event.currentTarget.value = "";
+                    }}
+                    disabled={props.busy}
+                  />
+                </label>
+              </div>
+            </details>
+            <textarea
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              rows={1}
+              placeholder="告诉 Papo..."
+            />
+            <button className="composer-mic-button" onClick={props.onRecordAudio} disabled={props.busy || props.listening || props.quickRecording || props.quickAudioProcessing} aria-label="录一段声音">
+              {props.quickAudioProcessing ? <Loader2 size={18} className="spin-icon" /> : <Mic size={18} />}
             </button>
-            <label className="upload-button compact-upload">
-              <Mic size={16} />
-              传录音
-              <input
-                type="file"
-                accept="audio/webm,audio/wav,audio/mpeg,audio/mp3,audio/mp4,audio/m4a,audio/ogg,audio/aac"
-                onChange={(event) => {
-                  props.onUploadAudio(event.currentTarget.files?.[0]);
-                  event.currentTarget.value = "";
-                }}
-                disabled={props.busy}
-              />
-            </label>
-            <button className="primary chat-send-button" onClick={submitDraft} disabled={props.busy || submittingMoment || !canSubmit}>
-              <Send size={18} />
-              {submittingMoment ? "传给 Papo 中" : props.stagedSegments.length ? "让 Papo 听听" : "说给 Papo"}
+            <button className="primary chat-send-button" onClick={submitDraft} disabled={props.busy || submittingMoment || !canSubmit} aria-label="发送给 Papo">
+              {submittingMoment ? <Loader2 size={18} className="spin-icon" /> : <Send size={18} />}
             </button>
           </div>
       </div>
@@ -1792,15 +1784,19 @@ function ChatView(props: {
   );
 }
 
-function StagedSegmentIcon({ kind }: { kind: SegmentKind }) {
-  const Icon = kind === "image_summary" ? ImagePlus : kind === "audio_observation" ? Mic : MessageCircle;
-  return <Icon size={15} />;
-}
-
-function stagedSegmentKindText(kind: SegmentKind) {
-  if (kind === "image_summary") return "照片";
-  if (kind === "audio_observation") return "录音";
-  return "文字";
+function StagedImagePreview({ segment }: { segment: StagedChatSegment }) {
+  const image = segment.attachments?.find((attachment) => attachment.kind === "image");
+  return (
+    <div className="staged-image-preview">
+      {image ? <img src={resolveAssetUrl(image.url)} alt="待发送照片" /> : <ImagePlus size={20} />}
+      {segment.status === "processing" ? (
+        <span className="staged-image-overlay" aria-label="照片处理中">
+          <Loader2 size={18} className="spin-icon" />
+        </span>
+      ) : null}
+      {segment.status === "failed" ? <span className="staged-image-error">{segment.statusText ?? "没传上去"}</span> : null}
+    </div>
+  );
 }
 
 function stagedSegmentPlaceholder(kind: SegmentKind) {
@@ -2784,6 +2780,7 @@ function chatBubbleText(message: ConversationMessage) {
   if (message.displayText?.trim()) return visibleCreatureText(message.displayText);
   const text = visibleMessageText(message);
   if (message.modality === "audio_observation") return audioObservationPreview(text);
+  if (message.modality === "image_summary") return imageSummaryPreview(text);
   return text;
 }
 

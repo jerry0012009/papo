@@ -5,7 +5,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
-import { audioObservationPreview } from "../core/display-text";
+import { audioObservationPreview, imageSummaryPreview } from "../core/display-text";
 import { isDogStateCheckDue, refreshDogStateIfDue } from "../core/dog-states";
 import { isDreamingDue, recordDreamingFailure, semanticDreamMemories } from "../core/dreaming";
 import { semanticDecideEmergence } from "../core/emergence";
@@ -283,7 +283,7 @@ export function createApp(input: {
           channel: "curious",
           role: segment.kind === "text" ? "user" : "world",
           text,
-          displayText: segment.kind === "audio_observation" ? audioObservationPreview(text) : undefined,
+          displayText: segmentDisplayText(segment.kind, text),
           sourceId: segment.id,
           modality: segment.kind,
           batchId: segment.batchId,
@@ -660,6 +660,12 @@ function feedbackInputText(kind: string, content?: string) {
 
 function semanticRecordIds(profile: CreatureProfile) {
   return new Set((profile.semanticBrainHistory ?? []).map((record) => record.id));
+}
+
+function segmentDisplayText(kind: StreamSegment["kind"], text: string) {
+  if (kind === "audio_observation") return audioObservationPreview(text);
+  if (kind === "image_summary") return imageSummaryPreview(text);
+  return undefined;
 }
 
 function newSemanticRuns(profile: CreatureProfile, beforeIds: Set<string>) {

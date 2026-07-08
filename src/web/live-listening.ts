@@ -40,6 +40,5 @@ export function plannedLiveAudioSliceBatchIds(startedAt: number, totalMs = LIVE_
 export function imageSegmentContent(summary: string, label: string) {
   const cleanSummary = summary.trim();
   if (cleanSummary) return cleanSummary;
-  const cleanLabel = label.trim() || "照片";
-  return `你给 Papo 看了一张照片：${cleanLabel}。这张照片这次没有被看清。`;
+  return "你给 Papo 看了一张照片，但这张照片这次没有被看清。";
 }
