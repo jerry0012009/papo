@@ -3229,6 +3229,7 @@ function ProfileView(props: {
   const [petMessage, setPetMessage] = useState("");
   const [motionBusy, setMotionBusy] = useState(false);
   const [motionGuidance, setMotionGuidance] = useState("");
+  const [motionMessage, setMotionMessage] = useState("");
 
   useEffect(() => {
     setNameDraft(props.profile.creatureName);
@@ -3317,13 +3318,13 @@ function ProfileView(props: {
 
   async function generateMotions() {
     setMotionBusy(true);
-    setPetMessage("");
+    setMotionMessage("");
     try {
       await props.onGenerateInitialActionCards(motionGuidance.trim() || undefined);
       setMotionGuidance("");
-      setPetMessage("开始生成动作了，完成后会自动出现在动作卡里。");
+      setMotionMessage("开始生成动作了，完成后会自动出现在动作卡里。");
     } catch (caught) {
-      setPetMessage(errorMessage(caught));
+      setMotionMessage(errorMessage(caught));
     } finally {
       setMotionBusy(false);
     }
@@ -3416,6 +3417,20 @@ function ProfileView(props: {
               />
             </label>
           </div>
+          <div className="pet-profile-actions">
+            <button className="primary" onClick={() => void savePetProfile()} disabled={petBusy} type="button">
+              <Sparkles size={16} />
+              {petBusy ? "生成形象中" : "更换小动物形象"}
+            </button>
+          </div>
+          {petMessage ? <small>{petMessage}</small> : null}
+        </div>
+        <div className="pet-motion-settings">
+          <div className="pet-profile-head">
+            <strong>动作卡</strong>
+            <span>初始动作 {Math.min(initialMotionCount, 4)}/4</span>
+          </div>
+          <p className="muted">这里每次只生成一个动作：先生成动作首帧，再让它动起来。更多具体动作可以直接在对话里告诉 {props.profile.creatureName}。</p>
           <label className="field-label">
             这次想让它做什么
             <input
@@ -3427,18 +3442,13 @@ function ProfileView(props: {
             />
           </label>
           <div className="pet-profile-actions">
-            <button className="primary" onClick={() => void savePetProfile()} disabled={petBusy} type="button">
-              <Sparkles size={16} />
-              {petBusy ? "生成形象中" : "更换小动物形象"}
-            </button>
             <button onClick={() => void generateMotions()} disabled={motionBusy || petProfile.initialMotion?.status === "pending" || initialMotionCount >= 4} type="button">
               <Sparkles size={16} />
               {petProfile.initialMotion?.status === "pending" ? "动作生成中" : motionBusy ? "启动中" : initialMotionCount >= 4 ? "初始动画已够用" : "生成一个初始动画"}
             </button>
           </div>
-          <small>初始动作 {Math.min(initialMotionCount, 4)}/4。这里每次先生成一张动作首帧，再让它动起来；更多具体动作可以直接在对话里告诉 {props.profile.creatureName}。</small>
           {petProfile.initialMotion?.status === "failed" ? <small>动作生成失败：{petProfile.initialMotion.error}</small> : null}
-          {petMessage ? <small>{petMessage}</small> : null}
+          {motionMessage ? <small>{motionMessage}</small> : null}
         </div>
         <div className="password-settings">
           <strong>{props.profile.hasPassword ? "修改密码" : "创建密码"}</strong>

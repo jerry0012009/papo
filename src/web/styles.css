@@ -3097,7 +3097,8 @@ select {
 
 .profile-name-settings,
 .password-settings,
-.pet-profile-settings {
+.pet-profile-settings,
+.pet-motion-settings {
   display: grid;
   gap: 12px;
   padding: 14px;
@@ -3130,7 +3131,9 @@ select {
 
 .pet-profile-head span,
 .pet-profile-current small,
-.pet-profile-settings small {
+.pet-profile-settings small,
+.pet-motion-settings small,
+.pet-motion-settings .muted {
   overflow-wrap: anywhere;
 }
 
