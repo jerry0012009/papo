@@ -42,6 +42,7 @@ import {
   curiousCapture,
   dreamMemories,
   getProfile,
+  loginProfile,
   makeSegment,
   markPapoRead,
   resolveAssetUrl,
@@ -49,6 +50,7 @@ import {
   summarizeImage,
   observeAudio,
   updateLongTermMemory,
+  updateProfilePassword,
   wakeProfile,
 } from "./api";
 import {
@@ -80,6 +82,7 @@ type ConversationSection =
 const CHAT_PAGE_SIZE = 24;
 const INITIAL_CHAT_VISIBLE_COUNT = CHAT_PAGE_SIZE * 2;
 const LOCAL_USER_ID_KEY = "papo:userId";
+const LOCAL_PASSWORD_PREFIX = "papo:password:";
 const PUBLIC_BASE_URL = import.meta.env.BASE_URL ?? "/";
 const IMAGE_UPLOAD_TARGET_BYTES = 3_500_000;
 const IMAGE_UPLOAD_HARD_LIMIT_BYTES = 11_500_000;
@@ -219,22 +222,35 @@ export function App() {
     }
   }
 
-  async function login(userId: string) {
-    await run(async () => {
+  async function login(userId: string, password?: string): Promise<{ ok: boolean; passwordRequired?: boolean }> {
+    try {
+      setBusy(true);
+      setError(undefined);
       const cleanUserId = userId.trim();
-      const active = await getProfile(cleanUserId);
+      const active = await loginProfile(cleanUserId, password);
+      saveProfilePassword(active.userId, password);
       const woke = await wakeProfile(active.userId);
       saveUserId(active.userId);
       setNeedsAuth(false);
       setProfile(woke.profile);
       setTab("home");
-    });
+      return { ok: true };
+    } catch (caught) {
+      const rawMessage = caught instanceof Error ? caught.message : "";
+      const message = errorMessage(caught);
+      if (rawMessage === "Password required") return { ok: false, passwordRequired: true };
+      setError(message);
+      return { ok: false };
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function register(userId: string, petKind: string) {
     await run(async () => {
       const cleanUserId = userId.trim();
       const active = await createProfile({ userId: cleanUserId, creatureName: "Papo", petKind });
+      saveProfilePassword(active.userId);
       const woke = await wakeProfile(active.userId);
       saveUserId(active.userId);
       setNeedsAuth(false);
@@ -245,6 +261,7 @@ export function App() {
 
   function logout() {
     stopListening();
+    if (profile?.userId) forgetProfilePassword(profile.userId);
     forgetSavedUserId();
     setProfile(undefined);
     setChatSegments([]);
@@ -261,6 +278,16 @@ export function App() {
       setProfile(result.profile);
       setTab(nextTab);
     });
+  }
+
+  async function changePassword(currentPassword: string, newPassword: string) {
+    if (!profile) return;
+    const next = await updateProfilePassword(profile.userId, {
+      currentPassword: currentPassword.trim() || undefined,
+      newPassword: newPassword.trim() || undefined
+    });
+    saveProfilePassword(next.userId, newPassword.trim() || undefined);
+    setProfile(next);
   }
 
   async function submitChatMoment(text: string) {
@@ -968,6 +995,7 @@ export function App() {
               <ProfileView
                 profile={profile}
                 onLogout={logout}
+                onChangePassword={changePassword}
               />
             ) : null}
           </section>
@@ -992,13 +1020,15 @@ export function App() {
 function AuthView(props: {
   busy: boolean;
   error?: string;
-  onLogin: (userId: string) => Promise<void>;
+  onLogin: (userId: string, password?: string) => Promise<{ ok: boolean; passwordRequired?: boolean }>;
   onRegister: (userId: string, petKind: string) => Promise<void>;
 }) {
   const [mode, setMode] = useState<"register" | "login">("register");
   const [userId, setUserId] = useState("");
   const [petKind, setPetKind] = useState("shiba");
   const [localError, setLocalError] = useState("");
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [password, setPassword] = useState("");
   const cleanUserId = userId.trim();
   const canSubmit = /^[a-zA-Z0-9_-]{3,40}$/.test(cleanUserId);
 
@@ -1009,10 +1039,24 @@ function AuthView(props: {
     }
     setLocalError("");
     if (mode === "login") {
-      await props.onLogin(cleanUserId);
+      const result = await props.onLogin(cleanUserId);
+      if (result.passwordRequired) {
+        setPassword("");
+        setPasswordDialogOpen(true);
+      }
       return;
     }
     await props.onRegister(cleanUserId, petKind);
+  }
+
+  async function submitPasswordLogin() {
+    if (!password.trim()) {
+      setLocalError("请输入这个账号的密码。");
+      return;
+    }
+    setLocalError("");
+    const result = await props.onLogin(cleanUserId, password);
+    if (result.ok) setPasswordDialogOpen(false);
   }
 
   return (
@@ -1066,6 +1110,38 @@ function AuthView(props: {
         <button className="primary auth-submit" onClick={submit} disabled={props.busy || !canSubmit} type="button">
           {props.busy ? "处理中" : mode === "register" ? "开始养 Papo" : "回到我的 Papo"}
         </button>
+        <Dialog.Root open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="ui-overlay" />
+            <Dialog.Content className="ui-sheet password-dialog" aria-label="输入账号密码">
+              <div className="ui-sheet-head">
+                <Dialog.Title>输入密码</Dialog.Title>
+                <Dialog.Close asChild>
+                  <button className="icon-button small" type="button" aria-label="关闭">
+                    <X size={15} />
+                  </button>
+                </Dialog.Close>
+              </div>
+              <label className="field-label">
+                {cleanUserId}
+                <input
+                  autoFocus
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void submitPasswordLogin();
+                  }}
+                  autoComplete="current-password"
+                />
+              </label>
+              {localError || props.error ? <p className="auth-error">{localError || props.error}</p> : null}
+              <button className="primary auth-submit" onClick={submitPasswordLogin} disabled={props.busy || !password.trim()} type="button">
+                {props.busy ? "确认中" : "进入 Papo"}
+              </button>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
       </section>
     </main>
   );
@@ -2733,7 +2809,28 @@ function MemoryFeedbackBox(props: {
 function ProfileView(props: {
   profile: CreatureProfile;
   onLogout: () => void;
+  onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }) {
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const [passwordMessage, setPasswordMessage] = useState("");
+
+  async function savePassword(nextPassword: string) {
+    setPasswordBusy(true);
+    setPasswordMessage("");
+    try {
+      await props.onChangePassword(currentPassword, nextPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setPasswordMessage(nextPassword.trim() ? "密码已保存" : "密码已清除");
+    } catch (caught) {
+      setPasswordMessage(errorMessage(caught));
+    } finally {
+      setPasswordBusy(false);
+    }
+  }
+
   return (
     <section className="stack">
       <div className="panel">
@@ -2744,8 +2841,45 @@ function ProfileView(props: {
             <strong>{props.profile.creatureName}</strong>
             <span>User ID：{props.profile.userId}</span>
             <span>小动物：{petKindLabel(props.profile.petKind)}</span>
+            <span>密码：{props.profile.hasPassword ? "已创建" : "未创建"}</span>
             <span>默认时间：{papoTimeZone}</span>
           </div>
+        </div>
+        <div className="password-settings">
+          <strong>{props.profile.hasPassword ? "修改密码" : "创建密码"}</strong>
+          {props.profile.hasPassword ? (
+            <label className="field-label">
+              当前密码
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                autoComplete="current-password"
+              />
+            </label>
+          ) : null}
+          <label className="field-label">
+            新密码
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(event) => setNewPassword(event.target.value)}
+              placeholder={props.profile.hasPassword ? "输入新密码" : "输入后，这个账号会需要密码登录"}
+              autoComplete="new-password"
+            />
+          </label>
+          <div className="password-actions">
+            <button className="primary" onClick={() => void savePassword(newPassword)} disabled={passwordBusy || !newPassword.trim()} type="button">
+              <Save size={16} />
+              {passwordBusy ? "保存中" : props.profile.hasPassword ? "保存新密码" : "创建密码"}
+            </button>
+            {props.profile.hasPassword ? (
+              <button onClick={() => void savePassword("")} disabled={passwordBusy} type="button">
+                清除密码
+              </button>
+            ) : null}
+          </div>
+          {passwordMessage ? <small>{passwordMessage}</small> : null}
         </div>
         <button onClick={props.onLogout}>
           <RefreshCcw size={18} />
@@ -2952,6 +3086,19 @@ function forgetSavedUserId() {
   window.localStorage.removeItem(LOCAL_USER_ID_KEY);
 }
 
+function saveProfilePassword(userId: string, password?: string) {
+  const key = `${LOCAL_PASSWORD_PREFIX}${userId}`;
+  if (password?.trim()) {
+    window.localStorage.setItem(key, password);
+    return;
+  }
+  window.localStorage.removeItem(key);
+}
+
+function forgetProfilePassword(userId: string) {
+  window.localStorage.removeItem(`${LOCAL_PASSWORD_PREFIX}${userId}`);
+}
+
 function messageTitle(message: CreatureProfile["conversation"][number]) {
   if (message.role === "papo") return "Papo";
   if (message.channel === "feedback") return "你的反馈";
@@ -2973,7 +3120,10 @@ function locationText(location: NonNullable<StreamSegment["location"]>) {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "发生未知错误";
+  const message = error instanceof Error ? error.message : "发生未知错误";
+  if (message === "Password required") return "这个账号需要密码。";
+  if (message === "Password is incorrect") return "密码不对。";
+  return message;
 }
 
 function stagedSegmentReady(segment: StagedChatSegment | StreamSegment) {

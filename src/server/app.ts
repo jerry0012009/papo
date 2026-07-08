@@ -24,6 +24,15 @@ const createProfileSchema = z.object({
   petKind: z.string().min(1).max(40).optional()
 });
 
+const loginProfileSchema = z.object({
+  password: z.string().max(120).optional()
+});
+
+const passwordSchema = z.object({
+  currentPassword: z.string().max(120).optional(),
+  newPassword: z.string().max(120).optional()
+});
+
 const buttonSchema = z.object({
   text: z.string().min(1).max(4000)
 });
@@ -204,7 +213,18 @@ export function createApp(input: {
         throw new HttpError(409, "User ID already exists");
       }
       const profile = await store.createProfile(body);
-      res.status(201).json({ profile });
+      res.status(201).json({ profile: publicProfile(profile) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/profiles/:userId/login", async (req, res, next) => {
+    try {
+      const profile = await requireExistingProfile(store, req.params.userId);
+      const body = loginProfileSchema.parse(req.body);
+      assertProfilePassword(profile, body.password);
+      res.json({ profile: publicProfile(profile) });
     } catch (error) {
       next(error);
     }
@@ -212,8 +232,8 @@ export function createApp(input: {
 
   app.get("/api/profiles/:userId", async (req, res, next) => {
     try {
-      const profile = await requireProfile(store, req.params.userId);
-      res.json({ profile });
+      const profile = await requireProfile(store, req.params.userId, req);
+      res.json({ profile: publicProfile(profile) });
     } catch (error) {
       next(error);
     }
@@ -221,13 +241,13 @@ export function createApp(input: {
 
   app.post("/api/profiles/:userId/wake", async (req, res, next) => {
     try {
-      const profile = await requireProfile(store, req.params.userId);
+      const profile = await requireProfile(store, req.params.userId, req);
       const wake = wakeCreature(profile);
       await refreshDogStateIfDue(profile, provider).catch((error) => {
         console.error(`Dog state check failed for ${profile.userId}`, error);
       });
       await store.saveProfile(profile);
-      res.json({ profile, wake });
+      res.json({ profile: publicProfile(profile), wake });
     } catch (error) {
       next(error);
     }
@@ -235,7 +255,7 @@ export function createApp(input: {
 
   app.post("/api/profiles/:userId/button", async (req, res, next) => {
     try {
-      const profile = await requireProfile(store, req.params.userId);
+      const profile = await requireProfile(store, req.params.userId, req);
       const body = buttonSchema.parse(req.body);
       const inputSourceId = `button-${Date.now()}`;
       markProactiveUserResponse(profile);
@@ -262,7 +282,7 @@ export function createApp(input: {
         cognitionTrace
       });
       await store.saveProfile(profile);
-      res.json({ ...result, provider: provider.kind });
+      res.json(publicCaptureResult(result, provider.kind));
     } catch (error) {
       next(error);
     }
@@ -270,7 +290,7 @@ export function createApp(input: {
 
   app.post("/api/profiles/:userId/curious", async (req, res, next) => {
     try {
-      const profile = await requireProfile(store, req.params.userId);
+      const profile = await requireProfile(store, req.params.userId, req);
       const body = curiousSchema.parse(req.body);
       markProactiveUserResponse(profile);
       const beforeSemanticIds = semanticRecordIds(profile);
@@ -306,7 +326,7 @@ export function createApp(input: {
         cognitionTrace
       });
       await store.saveProfile(profile);
-      res.json({ ...result, provider: provider.kind });
+      res.json(publicCaptureResult(result, provider.kind));
     } catch (error) {
       next(error);
     }
@@ -314,7 +334,7 @@ export function createApp(input: {
 
   app.post("/api/profiles/:userId/feedback", async (req, res, next) => {
     try {
-      const profile = await requireProfile(store, req.params.userId);
+      const profile = await requireProfile(store, req.params.userId, req);
       const body = feedbackSchema.parse(req.body);
       markProactiveUserResponse(profile, new Date().toISOString());
       const targetBefore = feedbackTargetSnapshot(profile, body.targetId);
@@ -343,7 +363,7 @@ export function createApp(input: {
         cognitionTrace
       });
       await store.saveProfile(profile);
-      res.json({ profile, feedback });
+      res.json({ profile: publicProfile(profile), feedback });
     } catch (error) {
       next(error);
     }
@@ -351,7 +371,7 @@ export function createApp(input: {
 
   app.patch("/api/profiles/:userId/read-state", async (req, res, next) => {
     try {
-      const profile = await requireProfile(store, req.params.userId);
+      const profile = await requireProfile(store, req.params.userId, req);
       const body = readStateSchema.parse(req.body);
       const latestReadable = profile.conversation.find((message) => message.role === "papo" && message.channel !== "wake");
       const requested = body.lastReadPapoMessageId;
@@ -363,7 +383,7 @@ export function createApp(input: {
         lastReadAt: new Date().toISOString()
       };
       await store.saveProfile(profile);
-      res.json({ profile });
+      res.json({ profile: publicProfile(profile) });
     } catch (error) {
       next(error);
     }
@@ -371,7 +391,7 @@ export function createApp(input: {
 
   app.patch("/api/profiles/:userId/memories/:memoryId", async (req, res, next) => {
     try {
-      const profile = await requireProfile(store, req.params.userId);
+      const profile = await requireProfile(store, req.params.userId, req);
       const body = updateMemorySchema.parse(req.body);
       const previousMemory = profile.longTermMemories.find((item) => item.id === req.params.memoryId);
       if (!previousMemory) throw new HttpError(404, "Memory not found");
@@ -411,7 +431,7 @@ export function createApp(input: {
         at
       });
       await store.saveProfile(profile);
-      res.json({ profile, memory });
+      res.json({ profile: publicProfile(profile), memory });
     } catch (error) {
       next(error);
     }
@@ -419,11 +439,11 @@ export function createApp(input: {
 
   app.post("/api/profiles/:userId/dreaming", async (req, res, next) => {
     try {
-      const profile = await requireProfile(store, req.params.userId);
+      const profile = await requireProfile(store, req.params.userId, req);
       markProactiveUserResponse(profile, new Date().toISOString());
       const dream = await semanticDreamMemories(profile, provider, { force: true });
       await store.saveProfile(profile);
-      res.json({ profile, dream });
+      res.json({ profile: publicProfile(profile), dream });
     } catch (error) {
       next(error);
     }
@@ -431,7 +451,7 @@ export function createApp(input: {
 
   app.post("/api/profiles/:userId/emergence", async (req, res, next) => {
     try {
-      const profile = await requireProfile(store, req.params.userId);
+      const profile = await requireProfile(store, req.params.userId, req);
       const beforeSemanticIds = semanticRecordIds(profile);
       const emergence = await semanticDecideEmergence(profile, provider, new Date().toISOString(), { delivery: "manual" });
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
@@ -444,7 +464,28 @@ export function createApp(input: {
         cognitionTrace
       });
       await store.saveProfile(profile);
-      res.json({ profile, emergence: { ...emergence, cognitionTrace } });
+      res.json({ profile: publicProfile(profile), emergence: { ...emergence, cognitionTrace } });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch("/api/profiles/:userId/password", async (req, res, next) => {
+    try {
+      const profile = await requireProfile(store, req.params.userId, req);
+      const body = passwordSchema.parse(req.body);
+      const currentPassword = profilePassword(profile);
+      if (currentPassword && body.currentPassword && body.currentPassword !== currentPassword) {
+        throw new HttpError(401, "Password is incorrect");
+      }
+      const nextPassword = body.newPassword?.trim();
+      if (nextPassword) {
+        profile.password = nextPassword;
+      } else {
+        delete profile.password;
+      }
+      await store.saveProfile(profile);
+      res.json({ profile: publicProfile(profile) });
     } catch (error) {
       next(error);
     }
@@ -935,10 +976,41 @@ function parseImageDataUrl(dataUrl: string): { mime: MediaAttachment["mime"]; ex
   return { mime, extension, buffer };
 }
 
-async function requireProfile(store: ProfileStore, userId: string) {
+async function requireExistingProfile(store: ProfileStore, userId: string) {
   const profile = await store.getProfile(userId);
   if (!profile) throw new HttpError(404, "Profile not found");
   return profile;
+}
+
+async function requireProfile(store: ProfileStore, userId: string, req?: express.Request) {
+  const profile = await requireExistingProfile(store, userId);
+  if (req) assertProfilePassword(profile, authPasswordFromRequest(req));
+  return profile;
+}
+
+function assertProfilePassword(profile: CreatureProfile, inputPassword?: string) {
+  const password = profilePassword(profile);
+  if (!password) return;
+  if (!inputPassword) throw new HttpError(401, "Password required");
+  if (inputPassword !== password) throw new HttpError(401, "Password is incorrect");
+}
+
+function profilePassword(profile: CreatureProfile) {
+  return typeof profile.password === "string" && profile.password.trim() ? profile.password : undefined;
+}
+
+function authPasswordFromRequest(req: express.Request) {
+  const value = req.header("x-papo-password");
+  return typeof value === "string" ? value : undefined;
+}
+
+function publicProfile(profile: CreatureProfile): CreatureProfile {
+  const { password: _password, ...rest } = profile;
+  return { ...rest, hasPassword: Boolean(profilePassword(profile)) };
+}
+
+function publicCaptureResult(result: CaptureResult, providerKind: string) {
+  return { ...result, profile: publicProfile(result.profile), provider: providerKind };
 }
 
 function feedbackInputText(kind: string, content?: string) {

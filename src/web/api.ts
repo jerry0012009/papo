@@ -2,6 +2,7 @@ import type { CaptureResult, CreatureProfile, DreamRecord, FeedbackKind, Feedbac
 
 const jsonHeaders = { "Content-Type": "application/json" };
 const apiBase = import.meta.env.VITE_API_BASE as string | undefined;
+const LOCAL_PASSWORD_PREFIX = "papo:password:";
 
 export interface ProviderInfo {
   kind: string;
@@ -44,22 +45,36 @@ export async function createProfile(input: { userId?: string; creatureName?: str
   return data.profile;
 }
 
+export async function loginProfile(userId: string, password?: string): Promise<CreatureProfile> {
+  const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/login`, {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({ password })
+  });
+  return data.profile;
+}
+
 export async function getProfile(userId: string): Promise<CreatureProfile> {
-  const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}`);
+  const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}`, {
+    headers: authHeaders(userId)
+  });
   return data.profile;
 }
 
 export async function markPapoRead(userId: string, lastReadPapoMessageId?: string): Promise<CreatureProfile> {
   const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/read-state`, {
     method: "PATCH",
-    headers: jsonHeaders,
+    headers: profileJsonHeaders(userId),
     body: JSON.stringify({ lastReadPapoMessageId })
   });
   return data.profile;
 }
 
 export async function wakeProfile(userId: string): Promise<{ profile: CreatureProfile; wake: WakeEvent }> {
-  return request<{ profile: CreatureProfile; wake: WakeEvent }>(`/api/profiles/${userId}/wake`, { method: "POST" });
+  return request<{ profile: CreatureProfile; wake: WakeEvent }>(`/api/profiles/${userId}/wake`, {
+    method: "POST",
+    headers: authHeaders(userId)
+  });
 }
 
 export async function summarizeImage(dataUrl: string, label: string): Promise<{ summary: string; asset?: MediaAttachment; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }> {
@@ -81,7 +96,7 @@ export async function observeAudio(dataUrl: string, label: string): Promise<{ ob
 export async function buttonCapture(userId: string, text: string): Promise<CaptureResult> {
   return request(`/api/profiles/${userId}/button`, {
     method: "POST",
-    headers: jsonHeaders,
+    headers: profileJsonHeaders(userId),
     body: JSON.stringify({ text })
   });
 }
@@ -89,7 +104,7 @@ export async function buttonCapture(userId: string, text: string): Promise<Captu
 export async function curiousCapture(userId: string, segments: StreamSegment[]): Promise<CaptureResult> {
   return request(`/api/profiles/${userId}/curious`, {
     method: "POST",
-    headers: jsonHeaders,
+    headers: profileJsonHeaders(userId),
     body: JSON.stringify({ segments })
   });
 }
@@ -102,7 +117,7 @@ export async function sendFeedback(
 ): Promise<{ profile: CreatureProfile; feedback: FeedbackRecord }> {
   return request<{ profile: CreatureProfile; feedback: FeedbackRecord }>(`/api/profiles/${userId}/feedback`, {
     method: "POST",
-    headers: jsonHeaders,
+    headers: profileJsonHeaders(userId),
     body: JSON.stringify({ kind, targetId, ...input })
   });
 }
@@ -110,21 +125,33 @@ export async function sendFeedback(
 export async function updateLongTermMemory(userId: string, memoryId: string, text: string): Promise<CreatureProfile> {
   const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/memories/${memoryId}`, {
     method: "PATCH",
-    headers: jsonHeaders,
+    headers: profileJsonHeaders(userId),
     body: JSON.stringify({ text })
   });
   return data.profile;
 }
 
 export async function dreamMemories(userId: string): Promise<{ profile: CreatureProfile; dream?: DreamRecord }> {
-  return request<{ profile: CreatureProfile; dream?: DreamRecord }>(`/api/profiles/${userId}/dreaming`, { method: "POST" });
+  return request<{ profile: CreatureProfile; dream?: DreamRecord }>(`/api/profiles/${userId}/dreaming`, {
+    method: "POST",
+    headers: authHeaders(userId)
+  });
 }
 
 export async function activeEmergence(userId: string) {
   return request<{ profile: CreatureProfile; emergence: { text: string; memoryId?: string; cognitionTrace?: MessageCognitionTrace } }>(
     `/api/profiles/${userId}/emergence`,
-    { method: "POST" }
+    { method: "POST", headers: authHeaders(userId) }
   );
+}
+
+export async function updateProfilePassword(userId: string, input: { currentPassword?: string; newPassword?: string }): Promise<CreatureProfile> {
+  const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/password`, {
+    method: "PATCH",
+    headers: profileJsonHeaders(userId),
+    body: JSON.stringify(input)
+  });
+  return data.profile;
 }
 
 export function makeSegment(id: string, kind: SegmentKind, label: string, content: string, extra: Partial<StreamSegment> = {}): StreamSegment {
@@ -149,4 +176,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 function resolveApiPath(path: string) {
   if (!apiBase) return path;
   return `${apiBase.replace(/\/$/, "")}${path.replace(/^\/api/, "")}`;
+}
+
+function profileJsonHeaders(userId: string): Record<string, string> {
+  return { ...jsonHeaders, ...authHeaders(userId) };
+}
+
+function authHeaders(userId: string): Record<string, string> {
+  const password = storedProfilePassword(userId);
+  return password ? { "x-papo-password": password } : {};
+}
+
+function storedProfilePassword(userId: string) {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(`${LOCAL_PASSWORD_PREFIX}${userId}`) ?? "";
 }

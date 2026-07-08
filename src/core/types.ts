@@ -505,6 +505,8 @@ export interface CreatureProfile {
   userId: string;
   creatureName: string;
   petKind: string;
+  password?: string;
+  hasPassword?: boolean;
   createdAt: string;
   lastSeenAt: string;
   state: CreatureState;
