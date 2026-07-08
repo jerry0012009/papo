@@ -477,7 +477,7 @@ async function observeAudioForSensing(provider: ModelProvider, dataUrl: string, 
 
 function isUnreadableAudioInputError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
-  return /Audio input conversion failed|invalid_request_audio|Failed to load audio file|Invalid data found when processing input|EBML header parsing failed/i.test(message);
+  return /Audio input conversion failed|invalid_request_audio|Failed to load audio file|Invalid data found when processing input|EBML header parsing failed|operation was aborted|AbortError|aborted/i.test(message);
 }
 
 export function startProactiveEmergenceLoop(store: ProfileStore, provider: ModelProvider, intervalMs = 60_000, hermesBridge?: HermesBridge) {

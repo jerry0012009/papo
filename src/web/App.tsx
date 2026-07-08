@@ -161,6 +161,15 @@ export function App() {
   }, [profile]);
 
   useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    const testWindow = window as typeof window & { papoRequestAudioSliceForTest?: (force: boolean) => void };
+    testWindow.papoRequestAudioSliceForTest = requestAudioSlice;
+    return () => {
+      delete testWindow.papoRequestAudioSliceForTest;
+    };
+  });
+
+  useEffect(() => {
     if (!profile?.userId) return;
     const intervalMs = hasActiveHermesTask ? 3_000 : 60_000;
     const timer = window.setInterval(async () => {
@@ -634,7 +643,11 @@ export function App() {
       .then(() => processAudioObservationBlob(blob, meta))
       .catch((caught) => {
         markLiveBatchAudioSettled(meta.batchId);
-        setError(`Papo 刚才听到一点声音，但整理时断开了。${errorMessage(caught)}`);
+        console.warn("Papo live audio slice was skipped after sensing failed.", {
+          batchId: meta.batchId,
+          index: meta.index,
+          error: errorMessage(caught)
+        });
       });
   }
 

@@ -22,7 +22,8 @@ const provider: ModelProvider = {
   async summarizeImage() {
     return "";
   },
-  async observeAudio() {
+  async observeAudio(_dataUrl: string, prompt: string) {
+    if (prompt.includes("aborted webm chunk")) throw new Error("This operation was aborted");
     throw new Error("Audio input conversion failed: EBML header parsing failed");
   }
 };
@@ -49,6 +50,21 @@ try {
   assert.equal(body.sensingTrace.status, "unreadable");
   assert.equal(body.sensingTrace.observation, undefined);
   assert.equal(body.sensingTrace.ruleTrace.includes("route=settle_audio_batch_only"), true);
+
+  const abortedResponse = await fetch(`http://127.0.0.1:${address.port}/api/audio-observation`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      label: "aborted webm chunk",
+      dataUrl: `data:audio/webm;base64,${Buffer.from("slow audio chunk".repeat(4)).toString("base64")}`
+    })
+  });
+  const abortedBody = await abortedResponse.json();
+  assert.equal(abortedResponse.status, 200, JSON.stringify(abortedBody));
+  assert.equal(abortedBody.observation, "");
+  assert.equal(abortedBody.noSpeech, true);
+  assert.equal(abortedBody.unreadable, true);
+  assert.equal(abortedBody.sensingTrace.status, "unreadable");
   console.log(JSON.stringify({ ok: true }, null, 2));
 } finally {
   server.close();

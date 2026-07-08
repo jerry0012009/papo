@@ -95,6 +95,25 @@ test("companion listening starts from home and shows a countdown in chat", async
   await expect(listeningStatus.getByRole("button", { name: "停止陪我听" })).toBeVisible();
 });
 
+test("companion listening skips a failed audio slice without showing technical abort errors", async ({ page }) => {
+  await installMockMicrophone(page);
+  await page.addInitScript(() => {
+    window.localStorage.setItem("papo:testAudioAbort", "1");
+  });
+  await page.goto("/");
+
+  await page.getByRole("button", { name: /陪我/ }).first().click();
+  await expect(page.locator(".listening-session-status")).toBeVisible();
+  await page.evaluate(() => {
+    (window as unknown as { papoRequestAudioSliceForTest?: (force: boolean) => void }).papoRequestAudioSliceForTest?.(true);
+  });
+  await page.waitForTimeout(500);
+
+  await expect(page.getByText(/This operation was aborted/)).toHaveCount(0);
+  await expect(page.getByText(/整理时断开/)).toHaveCount(0);
+  await expect(page.locator(".listening-session-status")).toBeVisible();
+});
+
 test("memory feedback shows a pending state while the request is in flight", async ({ page }) => {
   await page.goto("/");
   await page.locator(".nav").getByRole("button", { name: /记忆/ }).click();
@@ -184,6 +203,10 @@ async function installMockApi(page: Page) {
 
     if (path === "/api/audio-observation" && route.request().method() === "POST") {
       await new Promise((resolve) => setTimeout(resolve, 250));
+      if (await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:testAudioAbort") === "1")) {
+        await json(route, { error: "This operation was aborted" }, 500);
+        return;
+      }
       await json(route, {
         observation: "我听到你说想测试录音按钮。",
         provider: "mock-audio",
