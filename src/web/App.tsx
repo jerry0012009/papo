@@ -3418,28 +3418,55 @@ function countUnreadPapoMessages(profile: CreatureProfile | undefined) {
 }
 
 function readSavedUserId() {
-  return window.localStorage.getItem(LOCAL_USER_ID_KEY)?.trim() || "";
+  return safeLocalStorageGet(LOCAL_USER_ID_KEY)?.trim() || "";
 }
 
 function saveUserId(userId: string) {
-  window.localStorage.setItem(LOCAL_USER_ID_KEY, userId);
+  safeLocalStorageSet(LOCAL_USER_ID_KEY, userId);
 }
 
 function forgetSavedUserId() {
-  window.localStorage.removeItem(LOCAL_USER_ID_KEY);
+  safeLocalStorageRemove(LOCAL_USER_ID_KEY);
 }
 
 function saveProfilePassword(userId: string, password?: string) {
   const key = `${LOCAL_PASSWORD_PREFIX}${userId}`;
   if (password?.trim()) {
-    window.localStorage.setItem(key, password);
+    safeLocalStorageSet(key, password);
     return;
   }
-  window.localStorage.removeItem(key);
+  safeLocalStorageRemove(key);
 }
 
 function forgetProfilePassword(userId: string) {
-  window.localStorage.removeItem(`${LOCAL_PASSWORD_PREFIX}${userId}`);
+  safeLocalStorageRemove(`${LOCAL_PASSWORD_PREFIX}${userId}`);
+}
+
+function safeLocalStorageGet(key: string) {
+  try {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem(key) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function safeLocalStorageSet(key: string, value: string) {
+  try {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Storage may be blocked in embedded/private contexts. The app must still render.
+  }
+}
+
+function safeLocalStorageRemove(key: string) {
+  try {
+    if (typeof window === "undefined") return;
+    window.localStorage.removeItem(key);
+  } catch {
+    // Storage may be blocked in embedded/private contexts. The app must still render.
+  }
 }
 
 function messageTitle(message: CreatureProfile["conversation"][number], creatureName: string) {

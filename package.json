@@ -9,6 +9,7 @@
     "dev:api": "tsx watch src/server/index.ts",
     "serve:api": "tsx src/server/index.ts",
     "build": "tsc --noEmit && vite build",
+    "build:papo": "VITE_BASE_PATH=/papo/ VITE_API_BASE=/papo-api npm run build",
     "test": "npm run build && npm run test:unit",
     "test:unit": "node --test --import tsx tests/*.test.ts",
     "test:ui": "playwright test",

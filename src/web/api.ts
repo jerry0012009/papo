@@ -242,6 +242,10 @@ function authHeaders(userId: string): Record<string, string> {
 }
 
 function storedProfilePassword(userId: string) {
-  if (typeof window === "undefined") return "";
-  return window.localStorage.getItem(`${LOCAL_PASSWORD_PREFIX}${userId}`) ?? "";
+  try {
+    if (typeof window === "undefined") return "";
+    return window.localStorage.getItem(`${LOCAL_PASSWORD_PREFIX}${userId}`) ?? "";
+  } catch {
+    return "";
+  }
 }
