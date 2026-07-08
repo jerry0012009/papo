@@ -242,6 +242,7 @@ export function createApp(input: {
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runButtonHarness(profile, body.text, provider);
       await hermesBridge?.enqueueTasks(profile, result);
+      const illustrationAttachments = await executeIllustrationActions(profile, result, provider, "action");
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const cognitionTrace = captureCognitionTrace(result, provider, "button", modelRuns);
       appendInputMessage(profile, {
@@ -257,6 +258,7 @@ export function createApp(input: {
         text: result.response,
         sourceId: result.episodes[0]?.id ?? result.events[0]?.id,
         relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
+        attachments: illustrationAttachments,
         cognitionTrace
       });
       await store.saveProfile(profile);
