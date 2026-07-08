@@ -123,6 +123,26 @@ test("photo upload during companion mode waits for explicit submit", async ({ pa
   await expect(page.locator(".chat-bubble.world", { hasText: "companion-photo.jpg" })).toBeVisible();
 });
 
+test("photo submit shows a visible in-flight handoff state", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("papo:slowCuriousCapture", "1");
+  });
+  await page.goto("/");
+  await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
+
+  await page.locator(".compact-upload").filter({ hasText: "加照片" }).locator("input").setInputFiles({
+    name: "handoff-photo.jpg",
+    mimeType: "image/jpeg",
+    buffer: tinyJpeg()
+  });
+
+  await expect(page.locator(".staged-segment").filter({ hasText: "handoff-photo.jpg" })).toContainText("照片已加入", { timeout: 3_000 });
+  await page.getByRole("button", { name: "让 Papo 听听" }).click();
+  await expect(page.getByText("Papo 正在接住这次分享")).toBeVisible();
+  await expect(page.getByRole("button", { name: "传给 Papo 中" })).toBeDisabled();
+  await expect(page.locator(".chat-bubble.world", { hasText: "handoff-photo.jpg" })).toBeVisible({ timeout: 4_000 });
+});
+
 test("large phone photos are compressed before image summary upload", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("papo:captureImageUploadBytes", "1");
@@ -346,6 +366,9 @@ async function installMockApi(page: Page) {
     }
 
     if (path === "/api/profiles/demo/curious" && route.request().method() === "POST") {
+      if (await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:slowCuriousCapture") === "1")) {
+        await new Promise((resolve) => setTimeout(resolve, 900));
+      }
       const requestBody = safePostJson(route) as { segments?: Array<{ id: string; label: string; content: string; kind: string; attachments?: unknown[] }> };
       const firstSegment = requestBody.segments?.[0];
       if (firstSegment) {

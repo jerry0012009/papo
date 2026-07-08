@@ -1959,6 +1959,39 @@ select {
   color: #714032;
 }
 
+.moment-submit-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(81, 127, 164, 0.18);
+  border-radius: 10px;
+  background: #f3f8fb;
+  color: #425c72;
+}
+
+.moment-submit-status svg {
+  flex: 0 0 auto;
+  color: #517fa4;
+  animation: audio-pulse 1s ease-in-out infinite;
+}
+
+.moment-submit-status div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.moment-submit-status strong {
+  font-size: 0.88rem;
+}
+
+.moment-submit-status span {
+  color: #5d7283;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
 .listening-session-status {
   display: flex;
   align-items: center;

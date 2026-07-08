@@ -1545,6 +1545,7 @@ function ChatView(props: {
   onStopListening: () => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [submittingMoment, setSubmittingMoment] = useState(false);
   const [visibleCount, setVisibleCount] = useState(INITIAL_CHAT_VISIBLE_COUNT);
   const composerRef = useRef<HTMLDivElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
@@ -1595,9 +1596,14 @@ function ChatView(props: {
 
   async function submitDraft() {
     const text = draft.trim();
-    if (!text && !props.stagedSegments.length) return;
+    if (submittingMoment || (!text && !props.stagedSegments.length)) return;
     setDraft("");
-    await props.onSubmitMoment(text);
+    setSubmittingMoment(true);
+    try {
+      await props.onSubmitMoment(text);
+    } finally {
+      setSubmittingMoment(false);
+    }
   }
   return (
     <section className="chat-screen">
@@ -1643,6 +1649,15 @@ function ChatView(props: {
         <div ref={threadEndRef} aria-hidden="true" />
       </section>
       <div className="chat-composer" ref={composerRef}>
+          {submittingMoment ? (
+            <section className="moment-submit-status" aria-live="polite">
+              <Sparkles size={16} />
+              <div>
+                <strong>Papo 正在接住这次分享</strong>
+                <span>照片、文字和声音线索正在传过去。</span>
+              </div>
+            </section>
+          ) : null}
           {props.listening ? (
             <section className="listening-session-status" aria-live="polite">
               <div>
@@ -1766,9 +1781,9 @@ function ChatView(props: {
                 disabled={props.busy}
               />
             </label>
-            <button className="primary chat-send-button" onClick={submitDraft} disabled={props.busy || !canSubmit}>
+            <button className="primary chat-send-button" onClick={submitDraft} disabled={props.busy || submittingMoment || !canSubmit}>
               <Send size={18} />
-              {props.stagedSegments.length ? "让 Papo 听听" : "说给 Papo"}
+              {submittingMoment ? "传给 Papo 中" : props.stagedSegments.length ? "让 Papo 听听" : "说给 Papo"}
             </button>
           </div>
       </div>
