@@ -24,7 +24,20 @@ export interface ActionResult {
   caption?: string;
   style?: string;
   sourceIds?: string[];
+  plan?: IllustrationPlan;
   attachment?: MediaAttachment;
+}
+
+export interface IllustrationPlan {
+  summary: string;
+  elements: string[];
+  panels: Array<{
+    title: string;
+    scene: string;
+    sourceIds?: string[];
+  }>;
+  realityMix: string;
+  finalPrompt: string;
 }
 
 export type FeedbackKind = "understood" | "continue" | "not_now" | "remember" | "important" | "remind" | "correct" | "forget";
@@ -330,6 +343,7 @@ export interface IllustrationRecord {
   caption?: string;
   prompt: string;
   style?: string;
+  plan?: IllustrationPlan;
   attachment: MediaAttachment;
   sourceIds: string[];
   messageId?: string;

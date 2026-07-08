@@ -2262,6 +2262,22 @@ function ActionResultView({ result }: { result?: ActionResult }) {
         {result.caption ? <small>说明：{result.caption}</small> : null}
         {result.prompt ? <small>提示词：{result.prompt}</small> : null}
         {result.style ? <small>风格：{result.style}</small> : null}
+        {result.plan ? (
+          <div className="trace-illustration-plan">
+            <small>漫画规划：{result.plan.summary}</small>
+            {result.plan.elements?.length ? <small>元素：{result.plan.elements.join(" / ")}</small> : null}
+            {result.plan.panels?.length ? (
+              <ol>
+                {result.plan.panels.map((panel, index) => (
+                  <li key={`${panel.title}-${index}`}>
+                    <b>{panel.title}</b>
+                    <span>{panel.scene}</span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </div>
+        ) : null}
         {result.sourceIds?.length ? <small>基于 {result.sourceIds.length} 条真实素材</small> : null}
         {result.attachment ? <AttachmentStrip attachments={[result.attachment]} /> : null}
       </div>

@@ -14,7 +14,7 @@ import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { createModelProvider, type ImageReference, type ModelProvider } from "../core/provider";
 import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
 import { wakeCreature } from "../core/rhythm";
-import type { ActionResult, CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationRecord, MediaAttachment, MessageCognitionTrace, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
+import type { ActionResult, CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationPlan, IllustrationRecord, MediaAttachment, MessageCognitionTrace, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
 import { createHermesBridge, type HermesBridge } from "./hermes";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
@@ -708,18 +708,20 @@ async function executeEmergenceIllustration(
       .filter((episode) => actionResult.sourceIds?.includes(episode.id) || emergence.relatedMemoryIds.includes(episode.id))
       .flatMap((episode) => episode.attachments ?? [])
   );
-  const generated = await provider.generateImage(illustrationPromptForEmergence(actionResult, emergence, profile, references), { style: actionResult.style, references });
+  const plan = await planEveningDiaryIllustration(profile, emergence, actionResult, references, provider, now);
+  const generated = await provider.generateImage(illustrationPromptForEmergence(actionResult, emergence, profile, references, plan), { style: actionResult.style, references });
   const sourceIds = [...new Set([emergence.id, emergence.memoryId, ...(emergence.relatedMemoryIds ?? []), ...(actionResult.sourceIds ?? [])].filter(Boolean) as string[])];
   const attachment = await saveGeneratedIllustration({
     dataUrl: generated.dataUrl,
     label: actionResult.title ?? "Papo 的观察日记",
-    prompt: actionResult.prompt,
+    prompt: plan.finalPrompt,
     sourceIds
   });
   emergence.actionResult = {
     ...actionResult,
     kind: "illustration",
     attachment,
+    plan,
     sourceIds
   };
   profile.illustrations ??= [];
@@ -729,8 +731,9 @@ async function executeEmergenceIllustration(
     kind: "evening_diary",
     title: actionResult.title ?? "Papo 的观察日记",
     caption: actionResult.caption ?? actionResult.text ?? emergence.text,
-    prompt: actionResult.prompt,
+    prompt: plan.finalPrompt,
     style: actionResult.style,
+    plan,
     attachment,
     sourceIds,
     emergenceId: emergence.id,
@@ -757,7 +760,125 @@ function illustrationPrompt(actionResult: ActionResult, event: CaptureResult["ev
   ].filter(Boolean).join("\n\n");
 }
 
-function illustrationPromptForEmergence(actionResult: ActionResult, emergence: EmergenceRecord, profile: CreatureProfile, references: ImageReference[] = []) {
+async function planEveningDiaryIllustration(
+  profile: CreatureProfile,
+  emergence: EmergenceRecord,
+  actionResult: ActionResult,
+  references: ImageReference[],
+  provider: ModelProvider,
+  now: string
+): Promise<IllustrationPlan> {
+  const raw = await provider.generateJson<unknown>(buildEveningDiaryIllustrationPlanPrompt(profile, emergence, actionResult, references, now));
+  return normalizeIllustrationPlan(raw);
+}
+
+function buildEveningDiaryIllustrationPlanPrompt(
+  profile: CreatureProfile,
+  emergence: EmergenceRecord & { memoryId?: string },
+  actionResult: ActionResult,
+  references: ImageReference[],
+  now: string
+) {
+  const sourceEpisodes = profile.episodes
+    .filter((episode) => actionResult.sourceIds?.includes(episode.id) || emergence.relatedMemoryIds.includes(episode.id))
+    .slice(0, 8)
+    .map((episode) => ({
+      id: episode.id,
+      createdAt: episode.createdAt,
+      inputSummary: episode.inputSummary,
+      noticed: episode.noticed,
+      response: episode.creatureResponse,
+      tags: episode.tags,
+      attachmentIds: (episode.attachments ?? []).map((attachment) => attachment.id)
+    }));
+  const sourceMemories = profile.longTermMemories
+    .filter((memory) => actionResult.sourceIds?.includes(memory.id) || emergence.relatedMemoryIds.includes(memory.id) || memory.id === emergence.memoryId)
+    .slice(0, 8)
+    .map((memory) => ({
+      id: memory.id,
+      kind: memory.kind,
+      text: memory.text,
+      tags: memory.tags,
+      sourceEpisodeId: memory.sourceEpisodeId
+    }));
+  return `你是 Papo 的观察日记漫画规划脑。你不生成图片，只规划一张晚间观察日记漫画，然后给图片模型写最终提示词。
+
+目标：
+- 先理解当天真实素材，再决定这张漫画包含哪些元素、几个分镜、现实与想象如何有机组合。
+- 优先画成 3-6 格手绘多格漫画，像“Papo 今天看到的用户的一天”。
+- 可以有温柔的想象世界和 Papo 视角，但必须锚定真实 episode、记忆、照片或音频观察；不要编造当天没有发生的核心事件。
+- 如果有原始图片引用，它们已经会作为 image references 交给图片模型；你的 finalPrompt 要提醒图片模型使用这些引用作为视觉依据。
+- 不要写 UI、文字标签、气泡文字、截图、真实照片风格。
+
+当前时间：${now}
+Papo 主动消息：${emergence.message}
+初始图像草稿：
+${JSON.stringify({
+  title: actionResult.title,
+  caption: actionResult.caption,
+  prompt: actionResult.prompt,
+  style: actionResult.style,
+  sourceIds: actionResult.sourceIds
+})}
+source_episodes:
+${JSON.stringify(sourceEpisodes)}
+source_memories:
+${JSON.stringify(sourceMemories)}
+reference_images:
+${JSON.stringify(references.map((reference, index) => ({ index: index + 1, label: reference.label })))}
+
+返回严格 JSON object：
+{
+  "summary": "这张漫画整体想表达什么",
+  "elements": ["画面必须包含的元素1", "元素2"],
+  "panels": [
+    {"title":"第1格主题","scene":"第1格画面描述","sourceIds":["episode_xxx","img_xxx"]}
+  ],
+  "realityMix": "哪些来自现实素材，哪些是 Papo 视角的温柔想象",
+  "finalPrompt": "给图片生成模型的完整英文或中英混合提示词，必须明确 3-6 panel hand-drawn comic diary, from Papo's point of view, no text labels, grounded in sources"
+}`;
+}
+
+function normalizeIllustrationPlan(raw: unknown): IllustrationPlan {
+  if (!raw || typeof raw !== "object") throw new Error("illustration planner returned empty result");
+  const value = raw as Partial<IllustrationPlan>;
+  const summary = cleanPlanText(value.summary, "illustration planner requires summary");
+  const elements = cleanPlanList(value.elements, "illustration planner requires elements").slice(0, 12);
+  const panels = Array.isArray(value.panels)
+    ? value.panels
+        .map((panel) => normalizeIllustrationPanel(panel))
+        .filter((panel): panel is IllustrationPlan["panels"][number] => Boolean(panel))
+        .slice(0, 6)
+    : [];
+  if (!panels.length) throw new Error("illustration planner requires at least one panel");
+  const realityMix = cleanPlanText(value.realityMix, "illustration planner requires realityMix");
+  const finalPrompt = cleanPlanText(value.finalPrompt, "illustration planner requires finalPrompt");
+  return { summary, elements, panels, realityMix, finalPrompt };
+}
+
+function normalizeIllustrationPanel(panel: unknown): IllustrationPlan["panels"][number] | undefined {
+  if (!panel || typeof panel !== "object") return undefined;
+  const value = panel as { title?: unknown; scene?: unknown; sourceIds?: unknown };
+  const title = typeof value.title === "string" ? value.title.trim().slice(0, 120) : "";
+  const scene = typeof value.scene === "string" ? value.scene.trim().slice(0, 600) : "";
+  if (!title || !scene) return undefined;
+  const sourceIds = Array.isArray(value.sourceIds) ? value.sourceIds.filter((id): id is string => typeof id === "string" && Boolean(id.trim())).slice(0, 8) : undefined;
+  return { title, scene, sourceIds };
+}
+
+function cleanPlanText(value: unknown, error: string) {
+  if (typeof value !== "string" || !value.trim()) throw new Error(error);
+  return value.trim().slice(0, 4000);
+}
+
+function cleanPlanList(value: unknown, error: string) {
+  if (!Array.isArray(value)) throw new Error(error);
+  const items = value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())).map((item) => item.trim().slice(0, 240));
+  if (!items.length) throw new Error(error);
+  return items;
+}
+
+function illustrationPromptForEmergence(actionResult: ActionResult, emergence: EmergenceRecord, profile: CreatureProfile, references: ImageReference[] = [], plan?: IllustrationPlan) {
   const sourceEpisodes = profile.episodes
     .filter((episode) => actionResult.sourceIds?.includes(episode.id) || emergence.relatedMemoryIds.includes(episode.id))
     .slice(0, 5)
@@ -774,6 +895,8 @@ function illustrationPromptForEmergence(actionResult: ActionResult, emergence: E
     `Papo message: ${emergence.message}`,
     sourceEpisodes ? `Source episodes:\n${sourceEpisodes}` : "",
     references.length ? `${references.length} original uploaded image reference(s) are attached to the image generation request. Use them as visual grounding.` : "",
+    plan ? `LLM comic plan:\n${JSON.stringify(plan)}` : "",
+    plan?.finalPrompt ? `Final image prompt from comic planner:\n${plan.finalPrompt}` : "",
     `Image prompt from emergence model:\n${actionResult.prompt}`
   ].filter(Boolean).join("\n\n");
 }

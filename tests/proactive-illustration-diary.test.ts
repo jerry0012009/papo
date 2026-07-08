@@ -36,6 +36,7 @@ profile.proactive.nextCheckAt = "2026-07-08T12:00:00.000Z";
 await store.saveProfile(profile);
 
 let imagePrompt = "";
+let plannerPrompt = "";
 const provider: ModelProvider = {
   kind: "generic",
   name: "Evening diary provider",
@@ -46,6 +47,20 @@ const provider: ModelProvider = {
     return "";
   },
   async generateJson(prompt) {
+    if (prompt.includes("观察日记漫画规划脑")) {
+      plannerPrompt = prompt;
+      return {
+        summary: "Papo 把今天泳池很热闹但用户仍然开心这件事画成一天里的小漫画。",
+        elements: ["泳池", "很多人", "发亮的水面", "Papo 视角"],
+        panels: [
+          { title: "听见今天的事", scene: "Papo 在旁边听用户说起今天去游泳。", sourceIds: ["episode_pool"] },
+          { title: "热闹的泳池", scene: "泳池里人很多，水面亮亮的。", sourceIds: ["episode_pool"] },
+          { title: "晚上的回想", scene: "Papo 把这一天收进观察日记。", sourceIds: ["ltm_pool"] }
+        ],
+        realityMix: "泳池和开心来自真实片段，Papo 旁观和整理日记是温柔想象。",
+        finalPrompt: "A 3-panel hand-drawn comic diary from Papo's point of view: the user tells Papo about swimming, the pool is crowded with shimmering water, and Papo remembers the day warmly at night. No text labels."
+      };
+    }
     assert.match(prompt, /evening_diary_context/);
     assert.match(prompt, /"eligible":true/);
     return {
@@ -84,13 +99,18 @@ const provider: ModelProvider = {
 const result = await runProactiveEmergenceSweep(store, provider, "2026-07-08T12:00:00.000Z");
 const current = await store.getProfile("diary-user");
 assert.deepEqual(result, { checked: 1, active: 1, quiet: 0, deferred: 0 });
+assert.match(plannerPrompt, /source_episodes/);
 assert.match(imagePrompt, /观察日记/);
 assert.match(imagePrompt, /multi-panel comic observation diary/);
 assert.match(imagePrompt, /Papo's point of view/);
+assert.match(imagePrompt, /Final image prompt from comic planner/);
+assert.match(imagePrompt, /3-panel hand-drawn comic diary/);
 assert.equal(current?.illustrations?.[0]?.kind, "evening_diary");
+assert.equal(current?.illustrations?.[0]?.plan?.panels.length, 3);
 assert.equal(current?.illustrations?.[0]?.attachment.generatedBy, "papo_illustration");
 const message = current?.conversation.find((item) => item.channel === "emergence");
 assert.ok(message?.attachments?.[0]?.url, "proactive diary message should carry illustration attachment");
 assert.equal(message.cognitionTrace?.emergenceDecision?.actionResult?.kind, "illustration");
+assert.equal(message.cognitionTrace?.emergenceDecision?.actionResult?.plan?.summary.includes("泳池"), true);
 
 console.log(JSON.stringify({ ok: true, image: message.attachments[0].url }, null, 2));

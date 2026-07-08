@@ -2469,6 +2469,34 @@ select {
   margin: 0;
 }
 
+.trace-illustration-plan {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.trace-illustration-plan ol {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 3px;
+  color: #5d6a61;
+  font-size: 0.78rem;
+}
+
+.trace-illustration-plan li {
+  overflow-wrap: anywhere;
+}
+
+.trace-illustration-plan li b {
+  margin-right: 4px;
+  color: #303a34;
+}
+
+.trace-illustration-plan li span {
+  overflow-wrap: anywhere;
+}
+
 .trace-list {
   color: #5d6a61;
   font-size: 0.78rem;
