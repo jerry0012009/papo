@@ -57,9 +57,9 @@ const provider: ModelProvider = {
       proactiveLevel: "gentle",
       illustrationDraft: {
         title: "今天的泳池观察日记",
-        prompt: "一张手绘漫画明信片：晚上回想今天的泳池，人很多，水面亮亮的，旁边有可爱的 Papo 安静看着。",
+        prompt: "一张 3-6 格手绘多格漫画观察日记：从 Papo 视角回想今天的泳池，人很多，水面亮亮的，旁边有可爱的 Papo 安静看着。",
         caption: "今天泳池很挤，但你还是游得开心。",
-        style: "手绘漫画明信片",
+        style: "手绘多格漫画观察日记 / 3-6 格分镜",
         sourceIds: ["episode_pool", "ltm_pool"]
       },
       trace: ["evening diary selected"]
@@ -85,6 +85,8 @@ const result = await runProactiveEmergenceSweep(store, provider, "2026-07-08T12:
 const current = await store.getProfile("diary-user");
 assert.deepEqual(result, { checked: 1, active: 1, quiet: 0, deferred: 0 });
 assert.match(imagePrompt, /观察日记/);
+assert.match(imagePrompt, /multi-panel comic observation diary/);
+assert.match(imagePrompt, /Papo's point of view/);
 assert.equal(current?.illustrations?.[0]?.kind, "evening_diary");
 assert.equal(current?.illustrations?.[0]?.attachment.generatedBy, "papo_illustration");
 const message = current?.conversation.find((item) => item.channel === "emergence");

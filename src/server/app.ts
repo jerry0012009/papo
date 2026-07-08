@@ -764,9 +764,11 @@ function illustrationPromptForEmergence(actionResult: ActionResult, emergence: E
     .map((episode) => `${episode.id}: ${episode.inputSummary} ${episode.noticed}`)
     .join("\n");
   return [
-    "Create one warm hand-drawn comic / postcard style observation diary from Papo.",
+    "Create one warm hand-drawn multi-panel comic observation diary from Papo's point of view.",
     "No UI, no text labels, no screenshots, no photorealistic rendering.",
-    "Style: soft hand-drawn lines, cozy colors, gentle manga/comic feeling.",
+    "Preferred composition: 3-6 comic panels that gently depict the user's day as Papo saw it, with small visual continuity across panels.",
+    "Use a single postcard-like scene only if the source material clearly contains just one simple moment.",
+    "Style: soft hand-drawn lines, cozy colors, gentle manga/comic feeling, diary-like pacing.",
     actionResult.style ? `Requested style: ${actionResult.style}` : "",
     "Ground the image in real memories and episodes. Do not invent unrelated events.",
     `Papo message: ${emergence.message}`,
