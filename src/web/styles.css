@@ -2705,7 +2705,7 @@ select {
   }
 }
 
-/* Final mobile chat ergonomics. Keep this file-ending block last. */
+/* Final mobile chat ergonomics. Keep after legacy mobile blocks. */
 @media (max-width: 520px) {
   .app-main {
     padding-top: 6px;
@@ -2836,5 +2836,215 @@ select {
   .nav button svg {
     width: 18px;
     height: 18px;
+  }
+}
+
+/* Final desktop product refinements. Keep after legacy desktop blocks. */
+@media (min-width: 1040px) {
+  .app-sidebar,
+  .app-topbar,
+  .companion-panel,
+  .panel,
+  .home-stage,
+  .chat-composer,
+  .ui-sheet {
+    border-color: rgba(24, 28, 24, 0.1);
+  }
+
+  .app-sidebar,
+  .companion-panel {
+    background: rgba(255, 255, 255, 0.72);
+    backdrop-filter: blur(18px);
+  }
+
+  .app-topbar {
+    min-height: 84px;
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .app-topbar h1 {
+    font-size: 1.18rem;
+  }
+
+  .app-topbar .eyebrow {
+    font-size: 0.72rem;
+  }
+
+  .view-frame {
+    border-radius: 14px;
+    scrollbar-gutter: stable;
+  }
+
+  .companion-panel {
+    position: sticky;
+    top: 12px;
+    overflow: auto;
+  }
+
+  .companion-card,
+  .companion-nudge,
+  .companion-actions button,
+  .companion-tools button {
+    box-shadow: none;
+  }
+
+  .companion-avatar {
+    min-height: 160px;
+  }
+
+  .companion-avatar .shiba {
+    width: 136px;
+  }
+
+  .home-stage {
+    min-height: min(78dvh, 720px);
+  }
+
+  .home-stage .home-chip,
+  .home-brain-trigger {
+    backdrop-filter: blur(12px);
+  }
+
+  .chat-thread {
+    padding: 18px 0 20px;
+  }
+
+  .chat-list {
+    width: min(100%, 780px);
+  }
+
+  .chat-bubble {
+    width: fit-content;
+    min-width: min(300px, 58%);
+    max-width: min(76%, 660px);
+  }
+
+  .chat-bubble.user,
+  .chat-bubble.world {
+    justify-self: end;
+  }
+
+  .chat-bubble-head {
+    width: 100%;
+    gap: 8px;
+  }
+
+  .chat-bubble-head > div {
+    min-width: 0;
+  }
+
+  .chat-bubble-head span {
+    overflow-wrap: anywhere;
+  }
+
+  .trace-trigger {
+    opacity: 0.76;
+  }
+
+  .chat-bubble:hover .trace-trigger,
+  .trace-trigger:focus-visible {
+    opacity: 1;
+  }
+
+  .chat-bubble p {
+    max-width: 100%;
+  }
+
+  .chat-composer {
+    width: min(100%, 780px);
+    margin-inline: auto;
+  }
+
+  .tab-memory .view-frame > .stack {
+    min-height: 100%;
+  }
+
+  .tab-memory .panel {
+    align-content: start;
+    min-height: 100%;
+    padding: 16px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.76);
+  }
+
+  .tab-memory .panel > .muted {
+    max-width: 680px;
+  }
+
+  .tab-memory .dream-button {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+  }
+
+  .tab-memory .panel {
+    position: relative;
+  }
+
+  .tab-memory .segmented-control,
+  .tab-memory input {
+    width: min(100%, 760px);
+  }
+
+  .memory-section {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 12px;
+  }
+
+  .memory-section h3 {
+    grid-column: 1 / -1;
+    margin-top: 4px;
+  }
+
+  .memory-surface {
+    min-height: 0;
+    padding: 13px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.76);
+  }
+
+  .memory-text-preview {
+    -webkit-line-clamp: 3;
+  }
+
+  .memory-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+  }
+
+  .memory-actions button {
+    flex: 0 1 auto;
+    min-height: 34px;
+    padding: 7px 10px;
+    font-size: 0.82rem;
+  }
+
+  .memory-feedback summary,
+  .memory-trace-list summary,
+  .memory-details summary {
+    width: fit-content;
+  }
+
+  .ui-sheet {
+    top: 14px;
+    right: max(14px, calc((100vw - 1440px) / 2 + 14px));
+    bottom: 14px;
+  }
+}
+
+@media (min-width: 1040px) and (max-width: 1320px) {
+  .shell.app-shell {
+    grid-template-columns: 88px minmax(0, 1fr) 292px;
+  }
+
+  .companion-panel {
+    padding: 10px;
+  }
+
+  .memory-section {
+    grid-template-columns: 1fr;
   }
 }

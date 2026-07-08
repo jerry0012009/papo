@@ -53,6 +53,36 @@ test("memory feedback shows a pending state while the request is in flight", asy
   await expect(memoryCard.getByRole("button", { name: /忘掉|彻底忘掉/ })).toBeVisible({ timeout: 2_000 });
 });
 
+test("wide desktop uses a scan-friendly memory grid and local trace controls", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "desktop", "wide desktop layout is verified in the desktop project");
+
+  await page.setViewportSize({ width: 1440, height: 920 });
+  await page.goto("/");
+
+  await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
+  await expect(page.locator(".chat-bubble.papo p", { hasText: "最近一条回复在这里。" }).last()).toBeVisible();
+  const bubbleBox = await page.locator(".chat-bubble.papo").last().boundingBox();
+  const traceBox = await page.getByRole("button", { name: "查看这句话背后的模型调用" }).last().boundingBox();
+  expect(bubbleBox).toBeTruthy();
+  expect(traceBox).toBeTruthy();
+  expect(traceBox!.x).toBeGreaterThanOrEqual(bubbleBox!.x - 1);
+  expect(traceBox!.x + traceBox!.width).toBeLessThanOrEqual(bubbleBox!.x + bubbleBox!.width + 1);
+
+  await page.locator(".nav").getByRole("button", { name: /记忆/ }).click();
+  const candidateCards = page.locator(".candidate-memory");
+  await expect(candidateCards).toHaveCount(2);
+  const first = await candidateCards.nth(0).boundingBox();
+  const second = await candidateCards.nth(1).boundingBox();
+  expect(first).toBeTruthy();
+  expect(second).toBeTruthy();
+  expect(Math.abs(first!.y - second!.y)).toBeLessThanOrEqual(2);
+  expect(second!.x).toBeGreaterThan(first!.x + first!.width * 0.8);
+
+  const companionBox = await page.locator(".companion-panel").boundingBox();
+  expect(companionBox).toBeTruthy();
+  expect(companionBox!.width).toBeGreaterThanOrEqual(300);
+});
+
 async function installMockApi(page: Page) {
   let profile = makeProfile();
 
@@ -223,6 +253,19 @@ function makeProfile() {
         decayPolicy: "decay_without_feedback",
         status: "candidate",
         tags: ["product"]
+      },
+      {
+        id: "cand-2",
+        createdAt: "2026-07-07T11:58:00.000Z",
+        candidateText: "你希望 Papo 的界面像真正的 companion app。",
+        memoryKind: "long_theme",
+        confidence: 0.7,
+        sourceEpisodeId: "episode-1",
+        whyConsolidate: "持续产品偏好。",
+        writePolicy: "wait_feedback",
+        decayPolicy: "decay_without_feedback",
+        status: "candidate",
+        tags: ["ui"]
       }
     ],
     conversation: [

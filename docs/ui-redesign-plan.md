@@ -132,9 +132,11 @@ Preferred implementation:
 - Adopted a Radix Dialog/Tooltip base for developer disclosures instead of hand-rolled popovers.
 - Reworked the app shell into a product layout: desktop left navigation, center work area, and right companion rail; mobile keeps compact top bar and bottom navigation.
 - Chat now uses a bounded messenger surface with the composer aligned to the message column and latest-content positioning covered by Playwright tests.
+- Desktop chat now keeps per-message cognition controls local to the message bubble instead of floating at the far edge of the thread.
 - Developer cognition traces moved into sheet-style overlays so internal process is inspectable without polluting the creature-facing UI.
-- Memory remains functionally the same but uses a cleaner list hierarchy with candidate/long-term filters, collapsed source/feedback/trace details, and stable pending button labels.
+- Memory remains functionally the same but uses a cleaner list hierarchy with candidate/long-term filters, collapsed source/feedback/trace details, and stable pending button labels. Wide desktop uses a two-column scan layout, while narrower desktop stays single-column.
 - Added mobile/desktop UI interaction coverage for home eye open/close, chat latest/composer alignment, and memory feedback pending state.
+- Added a desktop-specific regression check for the wide memory grid, local trace controls, and companion rail width.
 
 Remaining product polish:
 
