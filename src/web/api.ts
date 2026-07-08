@@ -171,6 +171,23 @@ export async function updateProfileName(userId: string, creatureName: string): P
   return data.profile;
 }
 
+export async function updatePetProfile(userId: string, input: { guidance?: string; referenceSummary?: string; referenceAttachment?: MediaAttachment }): Promise<CreatureProfile> {
+  const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/pet-profile`, {
+    method: "POST",
+    headers: profileJsonHeaders(userId),
+    body: JSON.stringify(input)
+  });
+  return data.profile;
+}
+
+export async function generateInitialActionCards(userId: string): Promise<CreatureProfile> {
+  const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/pet-profile/initial-action-cards`, {
+    method: "POST",
+    headers: profileJsonHeaders(userId)
+  });
+  return data.profile;
+}
+
 export async function updateActionCard(userId: string, cardId: string, input: { disabled?: boolean; deleted?: boolean }): Promise<CreatureProfile> {
   const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/action-cards/${cardId}`, {
     method: "PATCH",

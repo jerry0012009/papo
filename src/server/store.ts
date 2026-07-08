@@ -92,6 +92,7 @@ function mergeCreatureProfiles(current: CreatureProfile, incoming: CreatureProfi
     ...current,
     ...incoming,
     petKind: incoming.petKind ?? current.petKind,
+    petProfile: chooseLatestPetProfile(current, incoming),
     state: chooseLatestState(current, incoming),
     policyProfile: chooseLatestStateOwner(current, incoming).policyProfile,
     episodes: mergeById(current.episodes, incoming.episodes, "createdAt", mergeEpisode).filter((item) => !purged.has(item.id)).slice(0, 80),
@@ -212,6 +213,10 @@ function chooseLatestProactive(current: CreatureProfile, incoming: CreatureProfi
 
 function chooseLatestDogState(current: CreatureProfile, incoming: CreatureProfile) {
   return timestamp(incoming.dogState?.selectedAt) >= timestamp(current.dogState?.selectedAt) ? incoming.dogState : current.dogState;
+}
+
+function chooseLatestPetProfile(current: CreatureProfile, incoming: CreatureProfile) {
+  return timestamp(incoming.petProfile?.updatedAt) >= timestamp(current.petProfile?.updatedAt) ? incoming.petProfile : current.petProfile;
 }
 
 function purgedTargets(profile: CreatureProfile) {

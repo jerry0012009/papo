@@ -9,6 +9,15 @@ export function modelPetContext(profile: CreatureProfile, now = new Date().toISO
     creatureName: profile.creatureName,
     petKind: normalizePetKind(profile.petKind),
     petLabel: petKindLabel(profile.petKind),
+    petProfile: {
+      displaySpecies: profile.petProfile?.displaySpecies,
+      appearance: profile.petProfile?.appearance,
+      personality: profile.petProfile?.personality,
+      habits: profile.petProfile?.habits,
+      visualStyle: profile.petProfile?.visualStyle,
+      motionStyle: profile.petProfile?.motionStyle,
+      updatedAt: profile.petProfile?.updatedAt
+    },
     time: modelTimeContext(now)
   };
 }

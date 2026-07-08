@@ -12,10 +12,11 @@ export type ActionKind =
   | "draft_question_list"
   | "use_hermes"
   | "generate_illustration"
-  | "generate_action_card";
+  | "generate_action_card"
+  | "update_pet_profile";
 
 export interface ActionResult {
-  kind: "none" | "visible_reply" | "memory_intent" | "reminder_draft" | "question_list_draft" | "hermes_task" | "illustration_draft" | "illustration" | "action_card_draft" | "action_card";
+  kind: "none" | "visible_reply" | "memory_intent" | "reminder_draft" | "question_list_draft" | "hermes_task" | "illustration_draft" | "illustration" | "action_card_draft" | "action_card" | "pet_profile_update";
   title?: string;
   text?: string;
   dueText?: string;
@@ -29,6 +30,7 @@ export interface ActionResult {
   attachment?: MediaAttachment;
   videoAttachment?: MediaAttachment;
   durationSeconds?: number;
+  petProfile?: Partial<PetIdentityProfile>;
 }
 
 export interface IllustrationPlan {
@@ -131,9 +133,32 @@ export interface MediaAttachment {
   observedAt?: string;
   location?: StreamSegment["location"];
   sizeBytes?: number;
-  generatedBy?: "user_upload" | "papo_illustration" | "papo_action_card";
+  generatedBy?: "user_upload" | "papo_illustration" | "papo_action_card" | "papo_profile";
   prompt?: string;
   sourceIds?: string[];
+}
+
+export interface PetIdentityProfile {
+  updatedAt: string;
+  source: "registration" | "profile_editor" | "conversation";
+  displaySpecies: string;
+  appearance: string;
+  personality: string;
+  habits: string;
+  visualStyle: string;
+  imagePrompt: string;
+  motionStyle: string;
+  userGuidance?: string;
+  referenceImage?: MediaAttachment;
+  avatarImage?: MediaAttachment;
+  initialMotion?: {
+    status: "idle" | "pending" | "ready" | "failed";
+    requestedAt?: string;
+    completedAt?: string;
+    pendingCount?: number;
+    error?: string;
+  };
+  model?: string;
 }
 
 export interface SensingTrace {
@@ -550,6 +575,7 @@ export interface CreatureProfile {
   hermes: HermesProfileState;
   illustrations?: IllustrationRecord[];
   actionCards?: ActionCardRecord[];
+  petProfile: PetIdentityProfile;
   dogState: DogInteractionState;
   dogStateHistory: DogInteractionState[];
 }

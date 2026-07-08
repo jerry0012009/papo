@@ -223,7 +223,8 @@ button.primary,
 .pet-option .shiba,
 .pet-option .agent-pet-avatar,
 .pet-option .generated-pet-avatar,
-.pet-option .action-card-avatar {
+.pet-option .action-card-avatar,
+.pet-option .custom-pet-avatar {
   transform: scale(0.58);
   margin: -26px 0;
 }
@@ -526,9 +527,10 @@ button.primary,
     text-align: center;
   }
 
-  .sidebar-brand .shiba,
-  .sidebar-brand .generated-pet-avatar,
-  .sidebar-brand .action-card-avatar {
+.sidebar-brand .shiba,
+.sidebar-brand .generated-pet-avatar,
+.sidebar-brand .action-card-avatar,
+.sidebar-brand .custom-pet-avatar {
     width: 44px;
   }
 
@@ -600,9 +602,10 @@ button.primary,
       var(--card-muted);
   }
 
-  .companion-avatar .shiba,
-  .companion-avatar .generated-pet-avatar,
-  .companion-avatar .action-card-avatar {
+.companion-avatar .shiba,
+.companion-avatar .generated-pet-avatar,
+.companion-avatar .action-card-avatar,
+.companion-avatar .custom-pet-avatar {
     width: 128px;
   }
 
@@ -1109,7 +1112,8 @@ select {
 
 .home-avatar-wrap .shiba,
 .home-avatar-wrap .generated-pet-avatar,
-.home-avatar-wrap .action-card-avatar {
+.home-avatar-wrap .action-card-avatar,
+.home-avatar-wrap .custom-pet-avatar {
   width: min(58vw, 230px);
 }
 
@@ -1533,6 +1537,24 @@ select {
   object-fit: contain;
   border-radius: 42%;
   pointer-events: none;
+}
+
+.custom-pet-avatar {
+  width: 230px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  overflow: hidden;
+  border-radius: 42%;
+  filter: drop-shadow(0 18px 24px rgba(31, 36, 33, 0.18));
+}
+
+.custom-pet-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .generated-pet-avatar img,
@@ -2284,7 +2306,8 @@ select {
 }
 
 .chat-top .shiba,
-.chat-top .generated-pet-avatar {
+.chat-top .generated-pet-avatar,
+.chat-top .custom-pet-avatar {
   width: 56px;
 }
 
@@ -3073,7 +3096,8 @@ select {
 }
 
 .profile-name-settings,
-.password-settings {
+.password-settings,
+.pet-profile-settings {
   display: grid;
   gap: 12px;
   padding: 14px;
@@ -3085,6 +3109,62 @@ select {
 .profile-name-settings > strong,
 .password-settings > strong {
   font-size: 0.95rem;
+}
+
+.pet-profile-head,
+.pet-profile-actions,
+.pet-profile-reference {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pet-profile-head {
+  justify-content: space-between;
+}
+
+.pet-profile-head strong {
+  font-size: 0.95rem;
+}
+
+.pet-profile-head span,
+.pet-profile-current small,
+.pet-profile-settings small {
+  overflow-wrap: anywhere;
+}
+
+.pet-profile-current {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.pet-profile-current > img,
+.profile-reference-thumb img {
+  width: 88px;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 12px;
+  background: rgba(255, 253, 247, 0.75);
+}
+
+.pet-profile-current > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.profile-reference-thumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pet-profile-settings textarea {
+  resize: vertical;
+  min-height: 96px;
 }
 
 .profile-name-settings .primary {
@@ -3305,7 +3385,8 @@ select {
 
   .home-avatar-wrap .shiba,
   .home-avatar-wrap .generated-pet-avatar,
-  .home-avatar-wrap .action-card-avatar {
+  .home-avatar-wrap .action-card-avatar,
+  .home-avatar-wrap .custom-pet-avatar {
     width: min(56vw, 176px);
   }
 
@@ -3455,7 +3536,8 @@ select {
 
   .home-avatar-wrap .shiba,
   .home-avatar-wrap .generated-pet-avatar,
-  .home-avatar-wrap .action-card-avatar {
+  .home-avatar-wrap .action-card-avatar,
+  .home-avatar-wrap .custom-pet-avatar {
     width: min(34vw, 280px);
   }
 
@@ -3621,7 +3703,8 @@ select {
   }
 
   .sidebar-brand .shiba,
-  .sidebar-brand .generated-pet-avatar {
+  .sidebar-brand .generated-pet-avatar,
+  .sidebar-brand .custom-pet-avatar {
     width: 44px;
   }
 
@@ -3698,7 +3781,8 @@ select {
 
   .home-avatar-wrap .shiba,
   .home-avatar-wrap .generated-pet-avatar,
-  .home-avatar-wrap .action-card-avatar {
+  .home-avatar-wrap .action-card-avatar,
+  .home-avatar-wrap .custom-pet-avatar {
     width: min(28vw, 300px);
   }
 
@@ -4077,7 +4161,8 @@ select {
 
   .companion-avatar .shiba,
   .companion-avatar .generated-pet-avatar,
-  .companion-avatar .action-card-avatar {
+  .companion-avatar .action-card-avatar,
+  .companion-avatar .custom-pet-avatar {
     width: 136px;
   }
 

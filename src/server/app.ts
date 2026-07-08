@@ -14,7 +14,7 @@ import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { createModelProvider, type ImageReference, type ModelProvider } from "../core/provider";
 import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
 import { wakeCreature } from "../core/rhythm";
-import type { ActionCardRecord, ActionResult, CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationPlan, IllustrationRecord, MediaAttachment, MessageCognitionTrace, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
+import type { ActionCardRecord, ActionResult, CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationPlan, IllustrationRecord, MediaAttachment, MessageCognitionTrace, PetIdentityProfile, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
 import { createHermesBridge, type HermesBridge } from "./hermes";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
@@ -82,6 +82,12 @@ const mediaAttachmentSchema = z.object({
   location: locationSchema.optional(),
   sizeBytes: z.number().int().nonnegative().optional()
 });
+
+const petProfileRequestSchema = z.object({
+  guidance: z.string().trim().max(1200).optional(),
+  referenceSummary: z.string().trim().max(1200).optional(),
+  referenceAttachment: mediaAttachmentSchema.optional()
+}).refine((body) => Boolean(body.guidance || body.referenceSummary || body.referenceAttachment), { message: "No pet profile material" });
 
 const curiousSchema = z.object({
   segments: z
@@ -264,6 +270,32 @@ export function createApp(input: {
     }
   });
 
+  app.post("/api/profiles/:userId/pet-profile", async (req, res, next) => {
+    try {
+      const profile = await requireProfile(store, req.params.userId, req);
+      const body = petProfileRequestSchema.parse(req.body);
+      const designed = await designPetProfile(profile, body, provider);
+      profile.petProfile = designed;
+      await store.saveProfile(profile);
+      res.json({ profile: publicProfile(profile), petProfile: profile.petProfile });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/profiles/:userId/pet-profile/initial-action-cards", async (req, res, next) => {
+    try {
+      const profile = await requireProfile(store, req.params.userId, req);
+      const now = new Date().toISOString();
+      profile.petProfile.initialMotion = { status: "pending", requestedAt: now, pendingCount: 4 };
+      await store.saveProfile(profile);
+      queueInitialPetMotionGeneration({ store, userId: profile.userId, provider });
+      res.json({ profile: publicProfile(profile), status: profile.petProfile.initialMotion });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post("/api/profiles/:userId/wake", async (req, res, next) => {
     try {
       const profile = await requireProfile(store, req.params.userId, req);
@@ -299,6 +331,7 @@ export function createApp(input: {
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runButtonHarness(profile, body.text, provider);
       await hermesBridge?.enqueueTasks(profile, result);
+      applyPetProfileActionResults(profile, result);
       const illustrationAttachments = await executeIllustrationActions(profile, result, provider, "action");
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const cognitionTrace = captureCognitionTrace(result, provider, "button", modelRuns);
@@ -334,6 +367,7 @@ export function createApp(input: {
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
       await hermesBridge?.enqueueTasks(profile, result);
+      applyPetProfileActionResults(profile, result);
       const illustrationAttachments = await executeIllustrationActions(profile, result, provider, "action");
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const sensingTraces = body.segments.flatMap((segment) => segment.sensingTrace ? [segment.sensingTrace as SensingTrace] : []);
@@ -772,6 +806,131 @@ async function saveGeneratedActionVideo(input: {
   };
 }
 
+async function saveGeneratedProfileImage(input: {
+  dataUrl: string;
+  label: string;
+  prompt: string;
+  sourceIds: string[];
+}): Promise<MediaAttachment> {
+  const asset = await saveImageAsset(input.dataUrl, input.label);
+  return {
+    ...asset,
+    generatedBy: "papo_profile",
+    prompt: input.prompt,
+    sourceIds: input.sourceIds
+  };
+}
+
+async function designPetProfile(
+  profile: CreatureProfile,
+  input: { guidance?: string; referenceSummary?: string; referenceAttachment?: MediaAttachment },
+  provider: ModelProvider
+): Promise<PetIdentityProfile> {
+  const raw = await provider.generateJson<unknown>(buildPetProfileDesignPrompt(profile, input));
+  const patch = normalizePetProfileDesign(raw);
+  const references = await petProfileReferences(input.referenceAttachment);
+  const sourceIds = [input.referenceAttachment?.id, `pet-profile:${Date.now()}`].filter(Boolean) as string[];
+  const imagePrompt = buildProfileImagePrompt(profile, patch, Boolean(references[0]));
+  const generated = await provider.generateImage(imagePrompt, { style: patch.visualStyle, references });
+  const avatarImage = await saveGeneratedProfileImage({
+    dataUrl: generated.dataUrl,
+    label: `${profile.creatureName} 的形象`,
+    prompt: imagePrompt,
+    sourceIds
+  });
+  return {
+    ...profile.petProfile,
+    ...patch,
+    updatedAt: new Date().toISOString(),
+    source: "profile_editor",
+    userGuidance: input.guidance?.trim() || patch.userGuidance,
+    referenceImage: input.referenceAttachment ?? profile.petProfile.referenceImage,
+    avatarImage,
+    initialMotion: { status: "idle" },
+    model: generated.model ?? provider.diagnostics?.imageModel ?? provider.diagnostics?.textModel
+  };
+}
+
+function applyPetProfileActionResults(profile: CreatureProfile, result: CaptureResult) {
+  for (const event of result.events) {
+    const actionResult = event.actionResult;
+    if (event.actionDecision.action !== "update_pet_profile" || actionResult?.kind !== "pet_profile_update" || !actionResult.petProfile) continue;
+    profile.petProfile = {
+      ...profile.petProfile,
+      ...actionResult.petProfile,
+      updatedAt: event.createdAt,
+      source: "conversation",
+      userGuidance: actionResult.text ?? actionResult.petProfile.userGuidance ?? profile.petProfile.userGuidance
+    };
+    event.decisionTrace = [...(event.decisionTrace ?? []), "pet_profile: llm patch applied"];
+  }
+}
+
+function queueInitialPetMotionGeneration(input: {
+  store: ProfileStore;
+  userId: string;
+  provider: ModelProvider;
+}) {
+  void (async () => {
+    try {
+      const profile = await input.store.getProfile(input.userId);
+      if (!profile) return;
+      if (!input.provider.generateVideo) throw new Error("Video generation provider is not configured");
+      const cards = await planInitialPetMotionCards(profile, input.provider);
+      const references = await petProfileVisualReferences(profile);
+      const referenceImage = references[0];
+      const created: ActionCardRecord[] = [];
+      for (const card of cards) {
+        const videoPrompt = buildInitialMotionVideoPrompt(profile, card, Boolean(referenceImage));
+        const generated = await input.provider.generateVideo(videoPrompt, {
+          durationSeconds: card.durationSeconds,
+          style: card.style,
+          referenceImage
+        });
+        const sourceIds = [`pet-profile:${profile.petProfile.updatedAt}`, `initial-motion:${card.key}`];
+        const video = await saveGeneratedActionVideo({
+          dataUrl: generated.dataUrl,
+          label: card.title,
+          prompt: videoPrompt,
+          sourceIds
+        });
+        created.push({
+          id: video.id,
+          createdAt: new Date().toISOString(),
+          title: card.title,
+          caption: card.caption,
+          prompt: videoPrompt,
+          style: card.style,
+          durationSeconds: card.durationSeconds,
+          video,
+          sourceIds,
+          providerKind: input.provider.diagnostics?.videoProvider ?? input.provider.kind,
+          providerName: input.provider.diagnostics?.videoProvider ? `${input.provider.diagnostics.videoProvider} video` : input.provider.name,
+          model: generated.model ?? input.provider.diagnostics?.videoModel
+        });
+      }
+      profile.actionCards = [...created, ...(profile.actionCards ?? [])].slice(0, 30);
+      profile.petProfile.initialMotion = {
+        status: "ready",
+        requestedAt: profile.petProfile.initialMotion?.requestedAt,
+        completedAt: new Date().toISOString(),
+        pendingCount: 0
+      };
+      await input.store.saveProfile(profile);
+    } catch (error) {
+      console.error(`Initial pet motion generation failed for ${input.userId}`, error);
+      const profile = await input.store.getProfile(input.userId);
+      if (!profile) return;
+      profile.petProfile.initialMotion = {
+        status: "failed",
+        requestedAt: profile.petProfile.initialMotion?.requestedAt,
+        error: error instanceof Error ? error.message.slice(0, 300) : "Unknown video generation error"
+      };
+      await input.store.saveProfile(profile);
+    }
+  })();
+}
+
 function hasActionCardDraft(result: CaptureResult) {
   return result.events.some((event) => event.actionDecision.action === "generate_action_card" && event.actionResult?.kind === "action_card_draft" && event.actionResult.prompt?.trim());
 }
@@ -1095,12 +1254,15 @@ function illustrationPrompt(actionResult: ActionResult, event: CaptureResult["ev
 }
 
 function actionCardVideoPrompt(profile: CreatureProfile, actionResult: ActionResult, event: CaptureResult["events"][number], hasReferenceImage: boolean) {
-  const species = profile.petKind === "british-shorthair" ? "round-faced gray and white British Shorthair kitten" : profile.petKind === "shiba" ? "cute cartoon Shiba Inu dog" : "cute small AI companion pet";
+  const identity = petVisualIdentity(profile);
   const sourceImages = (event.attachments ?? []).map((item) => `${item.label} ${item.url}`).join("\n");
   return [
-    `Create a short looping animated video action card for ${profile.creatureName}, a ${species}.`,
+    `Create a short looping animated video action card for ${profile.creatureName}, a ${identity.species}.`,
     "Match the same visual language as Jixiang's homepage motion avatar loops: premium semi-realistic plush 3D mobile companion mascot, warm off-white studio background, soft natural lighting, full body centered, locked camera, gentle natural motion.",
-    "The character must stay consistent with the companion profile card: blue-gray and white fur for British Shorthair, round plush face, warm amber eyes, tiny pink nose, soft paws, slightly chubby body. Do not change identity, face markings, fur colors, eye color, or body proportions.",
+    `The character must stay consistent with this companion profile: ${identity.appearance}`,
+    `Personality and habits to express through motion: ${identity.personality} ${identity.habits}`,
+    `Visual style: ${identity.visualStyle}`,
+    `Motion style: ${identity.motionStyle}`,
     "No UI, no text labels, no subtitles, no watermark, no extra animals, no human. Keep the action readable and cute, with simple loopable motion.",
     hasReferenceImage ? "Use the attached first-frame/reference image as strict visual grounding. If it is a user-uploaded photo, preserve the important photographed subject while keeping the companion mascot identity consistent." : "Keep the character design consistent with the pet kind and current state.",
     "End close to the starting pose so the clip can loop smoothly.",
@@ -1116,16 +1278,159 @@ function namedCreatureText(text: string | undefined, creatureName: string) {
 }
 
 function actionCardVideoPromptForEmergence(profile: CreatureProfile, actionResult: ActionResult, emergence: EmergenceRecord, hasReferenceImage: boolean) {
-  const species = profile.petKind === "british-shorthair" ? "round-faced gray and white British Shorthair kitten" : profile.petKind === "shiba" ? "cute cartoon Shiba Inu dog" : "cute small AI companion pet";
+  const identity = petVisualIdentity(profile);
   return [
-    `Create a short looping animated video action card for ${profile.creatureName}, a ${species}.`,
+    `Create a short looping animated video action card for ${profile.creatureName}, a ${identity.species}.`,
     "Match the same visual language as Jixiang's homepage motion avatar loops: premium semi-realistic plush 3D mobile companion mascot, warm off-white studio background, soft natural lighting, full body centered, locked camera, gentle natural motion.",
-    "Keep the pet identity consistent: same face markings, fur colors, eye color, plush body proportions, and companion profile-card feeling.",
+    `Keep the pet identity consistent: ${identity.appearance}`,
+    `Personality and habits to express through motion: ${identity.personality} ${identity.habits}`,
+    `Visual and motion style: ${identity.visualStyle} ${identity.motionStyle}`,
     "No UI, no text labels, no subtitles, no watermark, no extra animals, no human. End close to the starting pose so the clip can loop smoothly.",
     hasReferenceImage ? "Use the attached first-frame/reference image as strict character and pose grounding." : "",
     `Why now: ${emergence.whyNow}`,
     `Visible message: ${emergence.message}`,
     `Action model prompt:\n${actionResult.prompt}`
+  ].filter(Boolean).join("\n\n");
+}
+
+function petVisualIdentity(profile: CreatureProfile) {
+  const fallbackSpecies = profile.petKind === "british-shorthair" ? "round-faced gray and white British Shorthair kitten" : profile.petKind === "shiba" ? "cute cartoon Shiba Inu dog" : "cute small AI companion pet";
+  const species = profile.petProfile?.displaySpecies || fallbackSpecies;
+  return {
+    species: profile.petKind === "british-shorthair" && !/British Shorthair/i.test(species) ? `${species} (British Shorthair)` : species,
+    appearance: profile.petProfile?.appearance || fallbackSpecies,
+    personality: profile.petProfile?.personality || "curious, warm, companionable",
+    habits: profile.petProfile?.habits || "stays near the user and reacts gently",
+    visualStyle: profile.petProfile?.visualStyle || "premium cute mobile companion mascot",
+    motionStyle: profile.petProfile?.motionStyle || "short loopable motion, stable camera, full-body centered"
+  };
+}
+
+function buildPetProfileDesignPrompt(
+  profile: CreatureProfile,
+  input: { guidance?: string; referenceSummary?: string; referenceAttachment?: MediaAttachment }
+) {
+  return `你是 Papo 的小动物形象设计脑。你不和用户聊天，只把用户给的照片/描述整理成一个稳定的小动物 profile，并写给图像模型的头像提示词。
+
+要求：
+- 设计必须服务于一个移动端 AI 小动物商业 demo：可爱、清晰、可持续生成动作视频。
+- 如果用户给了照片摘要，要把照片里的关键形象作为参考，但可以转译成统一的 app mascot 风格。
+- 如果用户文字和照片冲突，优先保留用户明确文字要求，并在 appearance 中自然融合照片特征。
+- 不要编造无关背景故事，不要写用户隐私。
+- imagePrompt 要能直接交给图像生成模型，生成一张干净的正方形角色参考图。
+- motionStyle 要能约束后续动作视频，让动作卡和首页视频风格一致。
+
+当前小动物：
+${JSON.stringify({
+  creatureName: profile.creatureName,
+  petKind: profile.petKind,
+  currentProfile: profile.petProfile
+})}
+
+用户要求：
+${input.guidance || "未提供文字要求"}
+
+照片摘要：
+${input.referenceSummary || "未提供照片"}
+
+返回严格 JSON：
+{
+  "displaySpecies": "例如 圆脸灰白英短小猫",
+  "appearance": "稳定外观描述，含颜色、体型、脸、眼睛、标志性特征",
+  "personality": "性格和陪伴气质",
+  "habits": "它常见的小动作/习惯",
+  "visualStyle": "视觉风格约束",
+  "imagePrompt": "英文或中文均可，但要足够具体，可直接给图像模型生成角色参考图",
+  "motionStyle": "后续动作视频的镜头、光线、循环和动作风格",
+  "userGuidance": "用户这次要求的简短归纳"
+}`;
+}
+
+function normalizePetProfileDesign(raw: unknown): Partial<PetIdentityProfile> {
+  const schema = z.object({
+    displaySpecies: z.string().min(1).max(120),
+    appearance: z.string().min(1).max(800),
+    personality: z.string().min(1).max(600),
+    habits: z.string().min(1).max(600),
+    visualStyle: z.string().min(1).max(600),
+    imagePrompt: z.string().min(1).max(1600),
+    motionStyle: z.string().min(1).max(800),
+    userGuidance: z.string().max(800).optional()
+  });
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) throw new Error(`invalid pet profile design JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
+  return parsed.data;
+}
+
+function buildProfileImagePrompt(profile: CreatureProfile, patch: Partial<PetIdentityProfile>, hasReferenceImage: boolean) {
+  return [
+    `Create a square character reference image for ${profile.creatureName}, a ${patch.displaySpecies ?? profile.petProfile.displaySpecies}.`,
+    "Premium semi-realistic plush 3D mobile companion mascot for a polished AI pet app.",
+    "Warm off-white studio background, soft natural lighting, full body centered, clean silhouette, cute but not childish, commercial app quality.",
+    hasReferenceImage ? "Use the attached user photo as visual grounding for identity, colors, and important markings while translating it into the mascot style." : "Use the written profile as the identity source.",
+    `Appearance: ${patch.appearance ?? profile.petProfile.appearance}`,
+    `Personality: ${patch.personality ?? profile.petProfile.personality}`,
+    `Visual style: ${patch.visualStyle ?? profile.petProfile.visualStyle}`,
+    `Model prompt from design brain: ${patch.imagePrompt ?? profile.petProfile.imagePrompt}`,
+    "No text, no UI, no watermark, no extra animals, no human, no props that hide the body."
+  ].filter(Boolean).join("\n\n");
+}
+
+async function planInitialPetMotionCards(profile: CreatureProfile, provider: ModelProvider) {
+  const raw = await provider.generateJson<unknown>(buildInitialPetMotionPlanPrompt(profile));
+  const schema = z.object({
+    cards: z.array(z.object({
+      key: z.string().min(1).max(40),
+      title: z.string().min(1).max(120),
+      caption: z.string().min(1).max(220).optional(),
+      prompt: z.string().min(1).max(1200),
+      style: z.string().min(1).max(240).optional(),
+      durationSeconds: z.number().min(4).max(20).optional()
+    })).min(1).max(4)
+  });
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) throw new Error(`invalid initial motion plan JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
+  return parsed.data.cards.map((card) => ({ ...card, durationSeconds: Math.max(4, Math.min(20, Math.round(card.durationSeconds ?? 8))) }));
+}
+
+function buildInitialPetMotionPlanPrompt(profile: CreatureProfile) {
+  return `你是 Papo 的动作卡导演。请基于当前小动物 profile，为首页准备 4 张初始动作视频卡。
+
+目标：
+- 这些动作应该像首页默认状态视频一样自然，可循环，可被用户点击切换。
+- 动作要覆盖陪伴产品最常用的状态：待着、回应用户、玩耍/好奇、休息。
+- 每张卡的 prompt 只描述画面和动作，不写内部流程。
+- 必须保持同一个角色外观，不要创造新角色。
+
+pet_profile:
+${JSON.stringify({
+  creatureName: profile.creatureName,
+  petKind: profile.petKind,
+  petProfile: profile.petProfile,
+  dogState: profile.dogState
+})}
+
+返回严格 JSON：
+{
+  "cards": [
+    {"key":"idle","title":"...","caption":"...","prompt":"...","style":"...","durationSeconds":8}
+  ]
+}`;
+}
+
+function buildInitialMotionVideoPrompt(profile: CreatureProfile, card: { title: string; prompt: string; style?: string }, hasReferenceImage: boolean) {
+  const identity = petVisualIdentity(profile);
+  return [
+    `Create a short looping animated video action card for ${profile.creatureName}, a ${identity.species}.`,
+    "Same style as the homepage motion avatar loops: premium semi-realistic plush 3D mobile companion mascot, warm off-white studio, soft natural light, full body centered, locked camera.",
+    `Character identity: ${identity.appearance}`,
+    `Personality/habits: ${identity.personality} ${identity.habits}`,
+    `Motion style: ${identity.motionStyle}`,
+    hasReferenceImage ? "Use the attached profile/reference image as strict grounding for character identity." : "Use the written profile as strict grounding for character identity.",
+    "No UI, no text, no watermark, no human, no extra animals. End near the starting pose so it loops.",
+    `Action card title: ${card.title}`,
+    `Action direction: ${card.prompt}`,
+    card.style ? `Extra style: ${card.style}` : ""
   ].filter(Boolean).join("\n\n");
 }
 
@@ -1283,8 +1588,26 @@ async function illustrationReferences(attachments?: MediaAttachment[]): Promise<
 async function actionCardReferences(profile: CreatureProfile, attachments?: MediaAttachment[]): Promise<ImageReference[]> {
   const uploaded = await illustrationReferences(attachments);
   if (uploaded.length) return uploaded;
+  const profileReferences = await petProfileVisualReferences(profile);
+  if (profileReferences.length) return profileReferences;
   const character = await generatedPetReference(profile);
   return character ? [character] : [];
+}
+
+async function petProfileReferences(referenceAttachment?: MediaAttachment): Promise<ImageReference[]> {
+  if (!referenceAttachment) return [];
+  const dataUrl = await imageAttachmentDataUrl(referenceAttachment);
+  return dataUrl ? [{ dataUrl, label: referenceAttachment.label }] : [];
+}
+
+async function petProfileVisualReferences(profile: CreatureProfile): Promise<ImageReference[]> {
+  const references: ImageReference[] = [];
+  for (const image of [profile.petProfile?.avatarImage, profile.petProfile?.referenceImage]) {
+    if (!image) continue;
+    const dataUrl = await imageAttachmentDataUrl(image);
+    if (dataUrl) references.push({ dataUrl, label: image.label });
+  }
+  return references;
 }
 
 async function generatedPetReference(profile: CreatureProfile): Promise<ImageReference | undefined> {

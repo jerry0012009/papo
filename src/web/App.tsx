@@ -31,6 +31,7 @@ import type {
   DogInteractionState,
   EpisodeMemory,
   FeedbackKind,
+  MediaAttachment,
   MessageCognitionTrace,
   SegmentKind,
   SensingTrace,
@@ -42,6 +43,7 @@ import {
   createProfile,
   curiousCapture,
   dreamMemories,
+  generateInitialActionCards,
   getProfile,
   loginProfile,
   makeSegment,
@@ -53,6 +55,7 @@ import {
   touchPet,
   updateLongTermMemory,
   updateActionCard,
+  updatePetProfile,
   updateProfileName,
   updateProfilePassword,
   wakeProfile
@@ -159,6 +162,7 @@ export function App() {
     [profile?.hermes?.tasks]
   );
   const pendingActionCards = useMemo(() => countPendingActionCards(profile), [profile?.conversation, profile?.emergenceHistory]);
+  const pendingPetMotions = profile ? petProfileFor(profile).initialMotion?.status === "pending" : false;
 
   useEffect(() => {
     void bootstrap();
@@ -193,7 +197,7 @@ export function App() {
 
   useEffect(() => {
     if (!profile?.userId) return;
-    const intervalMs = hasActiveHermesTask || pendingActionCards > 0 ? 3_000 : 60_000;
+    const intervalMs = hasActiveHermesTask || pendingActionCards > 0 || pendingPetMotions ? 3_000 : 60_000;
     const timer = window.setInterval(async () => {
       try {
         const next = await getProfile(profile.userId);
@@ -203,7 +207,7 @@ export function App() {
       }
     }, intervalMs);
     return () => window.clearInterval(timer);
-  }, [hasActiveHermesTask, pendingActionCards, profile?.userId]);
+  }, [hasActiveHermesTask, pendingActionCards, pendingPetMotions, profile?.userId]);
 
   async function bootstrap() {
     try {
@@ -303,6 +307,18 @@ export function App() {
       const next = await updateProfileName(profile.userId, cleanName);
       setProfile(next);
     });
+  }
+
+  async function changePetProfile(input: { guidance?: string; referenceSummary?: string; referenceAttachment?: MediaAttachment }) {
+    if (!profile) return;
+    const next = await updatePetProfile(profile.userId, input);
+    setProfile(next);
+  }
+
+  async function startInitialActionCards() {
+    if (!profile) return;
+    const next = await generateInitialActionCards(profile.userId);
+    setProfile(next);
   }
 
   async function changeActionCard(cardId: string, input: { disabled?: boolean; deleted?: boolean }) {
@@ -961,7 +977,7 @@ export function App() {
       <main className={`shell app-shell tab-${tab}`}>
         <aside className="app-sidebar" aria-label={`${profile.creatureName} 导航`}>
           <div className="sidebar-brand">
-            <AvatarPreview petKind={profile.petKind} state={profile.state} dogState={profile.dogState} />
+            <AvatarPreview petKind={profile.petKind} petProfile={petProfileFor(profile)} state={profile.state} dogState={profile.dogState} />
             <div>
               <strong>{profile.creatureName}</strong>
               <span>{papoMoodLabel(profile.state)}</span>
@@ -992,6 +1008,7 @@ export function App() {
           <section className="view-frame">
             {error ? <div className="notice">{error}</div> : null}
             {pendingActionCards ? <ActionCardPendingNotice profile={profile} count={pendingActionCards} /> : null}
+            {pendingPetMotions && !pendingActionCards ? <ActionCardPendingNotice profile={profile} count={petProfileFor(profile).initialMotion?.pendingCount ?? 4} /> : null}
 
             {tab === "home" ? (
               <HomeView
@@ -1034,6 +1051,8 @@ export function App() {
                 onLogout={logout}
                 onRename={renameCreature}
                 onChangePassword={changePassword}
+                onChangePetProfile={changePetProfile}
+                onGenerateInitialActionCards={startInitialActionCards}
               />
             ) : null}
           </section>
@@ -1238,7 +1257,7 @@ function HomeView(props: {
               if (nextMotion?.kind === "pet") props.onPetTouch(nextMotion.action);
             }}
           >
-            {activeCard ? <ActionCardAvatar card={activeCard} /> : <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} interactionAction={activeMotion?.kind === "pet" ? activeMotion.action : undefined} />}
+            {activeCard ? <ActionCardAvatar card={activeCard} /> : <AvatarPreview petKind={props.profile.petKind} petProfile={petProfileFor(props.profile)} state={props.profile.state} dogState={props.profile.dogState} interactionAction={activeMotion?.kind === "pet" ? activeMotion.action : undefined} />}
           </button>
         </div>
         <div className="home-speech">
@@ -1292,7 +1311,7 @@ function CompanionPanel(props: {
     <aside className="companion-panel" aria-label={`${props.profile.creatureName} 当前状态`}>
       <section className="companion-card companion-hero">
         <div className="companion-avatar">
-          <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} />
+          <AvatarPreview petKind={props.profile.petKind} petProfile={petProfileFor(props.profile)} state={props.profile.state} dogState={props.profile.dogState} />
         </div>
         <div>
           <span className="status-dot" />
@@ -1517,11 +1536,21 @@ type HomeMotion =
   | { kind: "pet"; action: PetInteractionAction; text: string }
   | { kind: "card"; cardId: string };
 
-function AvatarPreview({ petKind, state, dogState, idle = false, interactionAction }: { petKind?: string; state?: CreatureState; dogState?: DogInteractionState; idle?: boolean; interactionAction?: PetInteractionAction }) {
+function AvatarPreview({ petKind, petProfile, state, dogState, idle = false, interactionAction }: { petKind?: string; petProfile?: CreatureProfile["petProfile"]; state?: CreatureState; dogState?: DogInteractionState; idle?: boolean; interactionAction?: PetInteractionAction }) {
+  if (petProfile?.avatarImage) return <CustomPetAvatar petProfile={petProfile} idle={idle} />;
   const normalizedPetKind = normalizePetKind(petKind);
   if (normalizedPetKind === "shiba") return <ShibaAvatar state={state} dogState={dogState} idle={idle} />;
   if (normalizedPetKind === "british-shorthair") return <GeneratedPetAvatar petKind={normalizedPetKind} dogState={dogState} idle={idle} interactionAction={interactionAction} />;
   return <AgentPetSprite petKind={normalizedPetKind} dogState={dogState} idle={idle} />;
+}
+
+function CustomPetAvatar({ petProfile, idle = false }: { petProfile: CreatureProfile["petProfile"]; idle?: boolean }) {
+  if (!petProfile.avatarImage) return null;
+  return (
+    <div className={`custom-pet-avatar ${idle ? "idle" : ""}`} aria-label={petProfile.displaySpecies}>
+      <img src={resolveAssetUrl(petProfile.avatarImage.url)} alt={petProfile.avatarImage.label} loading="lazy" />
+    </div>
+  );
 }
 
 function GeneratedPetAvatar({ petKind, dogState, idle = false, interactionAction }: { petKind: string; dogState?: DogInteractionState; idle?: boolean; interactionAction?: PetInteractionAction }) {
@@ -1631,6 +1660,23 @@ function petSpeciesNoun(petKind?: string) {
   return "小动物";
 }
 
+function petProfileFor(profile: CreatureProfile): CreatureProfile["petProfile"] {
+  if (profile.petProfile) return profile.petProfile;
+  const label = petKindLabel(profile.petKind);
+  return {
+    updatedAt: profile.createdAt,
+    source: "registration",
+    displaySpecies: label,
+    appearance: `${label}，住在手机里的陪伴小动物。`,
+    personality: "亲近、好奇，会在合适的时候回应用户。",
+    habits: "喜欢待在用户旁边，听见重要的小事会靠近一点。",
+    visualStyle: "温暖、干净、可爱的移动端小动物形象。",
+    imagePrompt: `cute ${label} mobile companion mascot`,
+    motionStyle: "短循环动作，镜头稳定，全身居中，动作简单可爱。",
+    initialMotion: { status: "idle" }
+  };
+}
+
 function ShibaAvatar({ state, dogState, idle = false }: { state?: CreatureState; dogState?: DogInteractionState; idle?: boolean }) {
   const mood = state?.mood ?? "calm";
   const className = [
@@ -1728,6 +1774,7 @@ function HomeBrainPeek({ profile, compact = false, onUpdateActionCard }: { profi
 function StatePolicySnapshot({ profile, onUpdateActionCard }: { profile: CreatureProfile; onUpdateActionCard?: (cardId: string, input: { disabled?: boolean; deleted?: boolean }) => void }) {
   const state = profile.state;
   const policy = profile.policyProfile;
+  const petProfile = petProfileFor(profile);
   const recentRuns = (profile.semanticBrainHistory ?? []).slice(0, 3);
   const statusDiary = statusDiaryItems(profile).slice(0, 8);
   const actionCards = (profile.actionCards ?? []).filter((card) => !card.deleted).slice(0, 8);
@@ -1746,6 +1793,14 @@ function StatePolicySnapshot({ profile, onUpdateActionCard }: { profile: Creatur
         <StateMeter label="主动" value={policy.preferProactivity} />
         <StateMeter label="回想" value={policy.recallTendency} />
         <StateMeter label="安静" value={policy.quietTendency} />
+      </section>
+      <section>
+        <strong>形象档案</strong>
+        <small>{petProfile.displaySpecies}</small>
+        <small>{petProfile.appearance}</small>
+        <small>{petProfile.personality}</small>
+        <small>动作风格：{petProfile.motionStyle}</small>
+        <small>初始动作：{petProfile.initialMotion?.status ?? "idle"}</small>
       </section>
       {recentRuns.length ? (
         <section>
@@ -2049,7 +2104,7 @@ function ChatView(props: {
   return (
     <section className="chat-screen">
       <header className="chat-top">
-        <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} />
+        <AvatarPreview petKind={props.profile.petKind} petProfile={petProfileFor(props.profile)} state={props.profile.state} dogState={props.profile.dogState} />
         <div>
           <strong>{props.listening ? `${props.profile.creatureName} 正在听` : `${props.profile.creatureName} 在这里`}</strong>
           <span>{props.listening ? formatListeningTime(props.listeningElapsed) : papoMoodLabel(props.profile.state)}</span>
@@ -2684,6 +2739,19 @@ function ActionResultView({ result }: { result?: ActionResult }) {
       </div>
     );
   }
+  if (result.kind === "pet_profile_update") {
+    return (
+      <div className="trace-action-result">
+        <b>形象档案更新</b>
+        {result.text ? <p>{result.text}</p> : null}
+        {result.petProfile ? (
+          <ul className="trace-list">
+            {Object.entries(result.petProfile).map(([key, value]) => value ? <li key={key}>{key}: {String(value)}</li> : null)}
+          </ul>
+        ) : null}
+      </div>
+    );
+  }
   return null;
 }
 
@@ -2774,7 +2842,8 @@ function actionLabel(action: string) {
     draft_question_list: "问题清单",
     use_hermes: "问虾虾",
     generate_illustration: "生成插画",
-    generate_action_card: "生成动作卡"
+    generate_action_card: "生成动作卡",
+    update_pet_profile: "更新形象档案"
   };
   return labels[action] ?? action;
 }
@@ -3140,7 +3209,10 @@ function ProfileView(props: {
   onLogout: () => void;
   onRename: (creatureName: string) => Promise<void>;
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
+  onChangePetProfile: (input: { guidance?: string; referenceSummary?: string; referenceAttachment?: MediaAttachment }) => Promise<void>;
+  onGenerateInitialActionCards: () => Promise<void>;
 }) {
+  const petProfile = petProfileFor(props.profile);
   const [nameDraft, setNameDraft] = useState(props.profile.creatureName);
   const [nameBusy, setNameBusy] = useState(false);
   const [nameMessage, setNameMessage] = useState("");
@@ -3148,10 +3220,23 @@ function ProfileView(props: {
   const [newPassword, setNewPassword] = useState("");
   const [passwordBusy, setPasswordBusy] = useState(false);
   const [passwordMessage, setPasswordMessage] = useState("");
+  const [petGuidance, setPetGuidance] = useState("");
+  const [petReferenceSummary, setPetReferenceSummary] = useState("");
+  const [petReferenceAttachment, setPetReferenceAttachment] = useState<MediaAttachment | undefined>();
+  const [petReferencePreview, setPetReferencePreview] = useState("");
+  const [petBusy, setPetBusy] = useState(false);
+  const [petMessage, setPetMessage] = useState("");
+  const [motionBusy, setMotionBusy] = useState(false);
 
   useEffect(() => {
     setNameDraft(props.profile.creatureName);
   }, [props.profile.userId, props.profile.creatureName]);
+
+  useEffect(() => {
+    return () => {
+      if (petReferencePreview.startsWith("blob:")) URL.revokeObjectURL(petReferencePreview);
+    };
+  }, [petReferencePreview]);
 
   async function saveName() {
     setNameBusy(true);
@@ -3181,12 +3266,72 @@ function ProfileView(props: {
     }
   }
 
+  async function choosePetReference(file?: File) {
+    if (!file) return;
+    if (petReferencePreview.startsWith("blob:")) URL.revokeObjectURL(petReferencePreview);
+    const preview = URL.createObjectURL(file);
+    setPetReferencePreview(preview);
+    setPetReferenceAttachment(undefined);
+    setPetReferenceSummary("");
+    setPetMessage("正在看这张照片");
+    try {
+      const dataUrl = await readImageFileAsUploadDataUrl(file);
+      const result = await summarizeImage(dataUrl, file.name || "小动物参考图");
+      const observedAt = file.lastModified ? new Date(file.lastModified).toISOString() : new Date().toISOString();
+      if (result.asset) {
+        setPetReferenceAttachment({
+          ...result.asset,
+          label: file.name || result.asset.label,
+          observedAt
+        });
+      }
+      setPetReferenceSummary(result.summary);
+      setPetMessage("照片已准备好");
+    } catch (caught) {
+      setPetMessage(imageUploadErrorMessage(caught));
+    }
+  }
+
+  async function savePetProfile() {
+    if (!petGuidance.trim() && !petReferenceSummary && !petReferenceAttachment) {
+      setPetMessage("写一点想要的样子，或选一张参考图。");
+      return;
+    }
+    setPetBusy(true);
+    setPetMessage("");
+    try {
+      await props.onChangePetProfile({
+        guidance: petGuidance.trim() || undefined,
+        referenceSummary: petReferenceSummary || undefined,
+        referenceAttachment: petReferenceAttachment
+      });
+      setPetMessage("形象已更新");
+    } catch (caught) {
+      setPetMessage(errorMessage(caught));
+    } finally {
+      setPetBusy(false);
+    }
+  }
+
+  async function generateMotions() {
+    setMotionBusy(true);
+    setPetMessage("");
+    try {
+      await props.onGenerateInitialActionCards();
+      setPetMessage("开始生成动作了，完成后会自动出现在动作卡里。");
+    } catch (caught) {
+      setPetMessage(errorMessage(caught));
+    } finally {
+      setMotionBusy(false);
+    }
+  }
+
   return (
     <section className="stack">
       <div className="panel">
         <PanelTitle icon={UserRound} title="账号" />
         <div className="account-card">
-          <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} />
+          <AvatarPreview petKind={props.profile.petKind} petProfile={petProfile} state={props.profile.state} dogState={props.profile.dogState} />
           <div>
             <strong>{props.profile.creatureName}</strong>
             <span>User ID：{props.profile.userId}</span>
@@ -3212,6 +3357,74 @@ function ProfileView(props: {
             {nameBusy ? "保存中" : "保存名字"}
           </button>
           {nameMessage ? <small>{nameMessage}</small> : null}
+        </div>
+        <div className="pet-profile-settings">
+          <div className="pet-profile-head">
+            <strong>小动物形象</strong>
+            <span>{petProfile.displaySpecies}</span>
+          </div>
+          <div className="pet-profile-current">
+            {petProfile.avatarImage ? (
+              <img src={resolveAssetUrl(petProfile.avatarImage.url)} alt={petProfile.avatarImage.label} />
+            ) : (
+              <AvatarPreview petKind={props.profile.petKind} petProfile={petProfile} state={props.profile.state} dogState={props.profile.dogState} />
+            )}
+            <div>
+              <small>{petProfile.appearance}</small>
+              <small>{petProfile.personality}</small>
+              <small>更新：{formatPapoDateTime(petProfile.updatedAt)}</small>
+            </div>
+          </div>
+          <label className="field-label">
+            你想把它养成什么样
+            <textarea
+              value={petGuidance}
+              onChange={(event) => setPetGuidance(event.target.value)}
+              maxLength={1200}
+              rows={4}
+              placeholder="例如：更像一只圆脸灰白英短，动作慢一点，喜欢蹲在我旁边看我工作。"
+            />
+          </label>
+          <div className="pet-profile-reference">
+            {petReferencePreview ? (
+              <div className="profile-reference-thumb">
+                <img src={petReferencePreview} alt="参考图预览" />
+                <button type="button" onClick={() => {
+                  if (petReferencePreview.startsWith("blob:")) URL.revokeObjectURL(petReferencePreview);
+                  setPetReferencePreview("");
+                  setPetReferenceAttachment(undefined);
+                  setPetReferenceSummary("");
+                }}>
+                  <X size={14} />
+                  删除
+                </button>
+              </div>
+            ) : null}
+            <label className="upload-button compact-upload">
+              <ImagePlus size={16} />
+              选择参考图
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                onChange={(event) => {
+                  void choosePetReference(event.currentTarget.files?.[0]);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+          </div>
+          <div className="pet-profile-actions">
+            <button className="primary" onClick={() => void savePetProfile()} disabled={petBusy} type="button">
+              <Sparkles size={16} />
+              {petBusy ? "生成形象中" : "更换小动物形象"}
+            </button>
+            <button onClick={() => void generateMotions()} disabled={motionBusy || petProfile.initialMotion?.status === "pending"} type="button">
+              <Sparkles size={16} />
+              {petProfile.initialMotion?.status === "pending" ? "动作生成中" : motionBusy ? "启动中" : "生成初始动画"}
+            </button>
+          </div>
+          {petProfile.initialMotion?.status === "failed" ? <small>动作生成失败：{petProfile.initialMotion.error}</small> : null}
+          {petMessage ? <small>{petMessage}</small> : null}
         </div>
         <div className="password-settings">
           <strong>{props.profile.hasPassword ? "修改密码" : "创建密码"}</strong>
