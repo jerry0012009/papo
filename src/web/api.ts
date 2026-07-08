@@ -90,7 +90,7 @@ export async function observeAudio(dataUrl: string, label: string): Promise<{ ob
     method: "POST",
     headers: jsonHeaders,
     body: JSON.stringify({ dataUrl, label })
-  });
+  }, { retries: 2, retryDelayMs: 1200 });
 }
 
 export async function buttonCapture(userId: string, text: string): Promise<CaptureResult> {
@@ -164,13 +164,41 @@ export function resolveAssetUrl(url: string) {
   return resolveApiPath(url);
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(resolveApiPath(path), init);
+async function request<T>(path: string, init?: RequestInit, options: { retries?: number; retryDelayMs?: number } = {}): Promise<T> {
+  const retries = options.retries ?? 0;
+  const retryDelayMs = options.retryDelayMs ?? 800;
+  let lastError: unknown;
+  for (let attempt = 0; attempt <= retries; attempt += 1) {
+    try {
+      const response = await fetch(resolveApiPath(path), init);
+      if (isRetryableStatus(response.status) && attempt < retries) {
+        await wait(retryDelayMs * (attempt + 1));
+        continue;
+      }
+      return await parseResponse<T>(response);
+    } catch (error) {
+      lastError = error;
+      if (attempt >= retries) break;
+      await wait(retryDelayMs * (attempt + 1));
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Request failed");
+}
+
+async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.error ?? `Request failed: ${response.status}`);
   }
   return response.json() as Promise<T>;
+}
+
+function isRetryableStatus(status: number) {
+  return status === 502 || status === 503 || status === 504;
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => globalThis.setTimeout(resolve, ms));
 }
 
 function resolveApiPath(path: string) {

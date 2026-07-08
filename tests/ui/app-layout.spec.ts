@@ -44,6 +44,19 @@ test("home developer panel opens and closes without overflowing", async ({ page 
   await expectInViewport(page, gallery);
 });
 
+test("home guide poster explains Papo without overflowing", async ({ page }) => {
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "了解 Papo 怎么陪你" }).click();
+  const guide = page.getByRole("dialog", { name: /会陪伴、会记住/ });
+  await expect(guide).toBeVisible();
+  await expect(guide).toContainText("一只会陪伴、会记住、会自己行动的小动物");
+  await expect(guide).toContainText("持续陪伴，但不打扰");
+  await expect(guide).toContainText("虾虾是背后的好朋友");
+  await expect(guide).toContainText("最自然的用法");
+  await expectInViewport(page, guide);
+});
+
 test("chat opens at latest content and keeps the composer aligned with the thread", async ({ page }) => {
   await page.goto("/");
   await page.locator(".nav").getByRole("button", { name: /对话/ }).click();

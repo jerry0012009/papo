@@ -1,6 +1,7 @@
 import {
   Check,
   Eye,
+  HelpCircle,
   History,
   ImagePlus,
   Lightbulb,
@@ -1163,7 +1164,10 @@ function HomeView(props: {
       <section className="home-stage">
         <div className="home-stage-top">
           <span className="mood-pill">{papoMoodLabel(props.profile.state)}</span>
-          <HomeBrainPeek profile={props.profile} />
+          <div className="home-stage-tools">
+            <PapoGuidePoster />
+            <HomeBrainPeek profile={props.profile} />
+          </div>
         </div>
         <div className="home-avatar-wrap">
           <AvatarPreview petKind={props.profile.petKind} state={props.profile.state} dogState={props.profile.dogState} />
@@ -1300,6 +1304,96 @@ function HomeIllustrationsPeek({ profile, compact = false }: { profile: Creature
                 {item.caption ? <span>{item.caption}</span> : null}
               </a>
             ))}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function PapoGuidePoster() {
+  const guideItems = [
+    {
+      title: "持续陪伴，但不打扰",
+      text: "陪我会持续听一小段时间，按约 30 秒整理线索；Papo 会自己判断要不要回应。"
+    },
+    {
+      title: "它会主动找你",
+      text: "状态、动机和记忆会一起影响 Papo 是否主动说话；没必要时它也会安静。"
+    },
+    {
+      title: "它真的会记住",
+      text: "经历、候选记忆、长期记忆分层保存，你的反馈会改变它之后怎么记。"
+    },
+    {
+      title: "每晚观察日记漫画",
+      text: "Papo 可以把当天真实片段和照片整理成多格漫画，放进 Papo 画过。"
+    },
+    {
+      title: "虾虾是背后的好朋友",
+      text: "需要搜索、查资料或外部任务时，Papo 可以异步请 Hermes/虾虾帮忙。"
+    },
+    {
+      title: "你教它，它会变",
+      text: "重要、忘掉、反馈和改准会影响记忆权重、性格倾向和之后的回应方式。"
+    },
+    {
+      title: "多脑协同",
+      text: "注意、行动、记忆、动机、状态、性格各自负责一部分，让它更像一只小动物。"
+    },
+    {
+      title: "隐私优先",
+      text: "你可以给账号加密码；敏感内容进模型前会被遮蔽，记忆也能被放下或彻底忘掉。"
+    }
+  ];
+
+  return (
+    <Dialog.Root>
+      <Tooltip.Root>
+        <Tooltip.Trigger asChild>
+          <Dialog.Trigger asChild>
+            <button className="guide-trigger" type="button" aria-label="了解 Papo 怎么陪你">
+              <HelpCircle size={15} />
+            </button>
+          </Dialog.Trigger>
+        </Tooltip.Trigger>
+        <Tooltip.Portal>
+          <Tooltip.Content className="ui-tooltip" sideOffset={6}>
+            了解 Papo
+          </Tooltip.Content>
+        </Tooltip.Portal>
+      </Tooltip.Root>
+      <Dialog.Portal>
+        <Dialog.Overlay className="ui-overlay" />
+        <Dialog.Content className="guide-dialog" aria-label="Papo 使用说明">
+          <div className="guide-poster">
+            <div className="guide-poster-head">
+              <div>
+                <p className="eyebrow">Papo 是什么</p>
+                <Dialog.Title>一只会陪伴、会记住、会自己行动的小动物</Dialog.Title>
+              </div>
+              <Dialog.Close asChild>
+                <button className="icon-button small" type="button" aria-label="关闭说明">
+                  <X size={15} />
+                </button>
+              </Dialog.Close>
+            </div>
+            <p className="guide-lead">
+              你可以把文字、照片和声音交给它。Papo 会先理解发生了什么，再决定要不要回应、记住、画下来，或者请虾虾帮忙。
+            </p>
+            <div className="guide-grid">
+              {guideItems.map((item, index) => (
+                <article className="guide-item" key={item.title}>
+                  <span>{String(index + 1).padStart(2, "0")}</span>
+                  <strong>{item.title}</strong>
+                  <p>{item.text}</p>
+                </article>
+              ))}
+            </div>
+            <div className="guide-footer">
+              <b>最自然的用法</b>
+              <span>点“陪我一会儿”，让它听着你周围的生活；想到什么就继续发文字、照片或录音。</span>
+            </div>
           </div>
         </Dialog.Content>
       </Dialog.Portal>
@@ -3123,6 +3217,7 @@ function errorMessage(error: unknown) {
   const message = error instanceof Error ? error.message : "发生未知错误";
   if (message === "Password required") return "这个账号需要密码。";
   if (message === "Password is incorrect") return "密码不对。";
+  if (/Request failed: 50[234]|Bad Gateway|Gateway Timeout|Service Unavailable/i.test(message)) return "录音整理刚才断开了，请再试一次。";
   return message;
 }
 
