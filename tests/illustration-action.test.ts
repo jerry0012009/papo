@@ -7,6 +7,7 @@ const store = new MemoryProfileStore();
 await store.createProfile({ userId: "illustration-user", creatureName: "Papo" });
 
 let imagePrompt = "";
+let referenceCount = 0;
 const provider: ModelProvider = {
   kind: "generic",
   name: "Illustration provider",
@@ -35,7 +36,8 @@ const provider: ModelProvider = {
       };
     }
     if (prompt.includes("行动选择脑")) {
-      const eventId = [...prompt.matchAll(/"id":"([^"]+)"/g)].at(-1)?.[1];
+      const events = JSON.parse(prompt.match(/events:\n(\[[\s\S]*?\])\n/)?.[1] ?? "[]") as Array<{ id?: string }>;
+      const eventId = events[0]?.id;
       assert.ok(eventId);
       return {
         decisions: [
@@ -92,8 +94,9 @@ const provider: ModelProvider = {
   async observeAudio() {
     return "";
   },
-  async generateImage(prompt) {
+  async generateImage(prompt, input) {
     imagePrompt = prompt;
+    referenceCount = input?.references?.length ?? 0;
     return {
       dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
       mime: "image/png",
@@ -108,6 +111,17 @@ const address = server.address();
 if (!address || typeof address === "string") throw new Error("failed to bind test server");
 
 try {
+  const imageResponse = await fetch(`http://127.0.0.1:${address.port}/api/image-summary`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      label: "泳池小照片"
+    })
+  });
+  const imagePayload = await imageResponse.json();
+  assert.equal(imageResponse.status, 200, JSON.stringify(imagePayload));
+
   const response = await fetch(`http://127.0.0.1:${address.port}/api/profiles/illustration-user/curious`, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -119,7 +133,8 @@ try {
           label: "你刚说的话",
           content: "今天游泳人很多，但我还是很开心。你能把它画下来吗？",
           observedAt: "2026-07-08T12:00:00.000Z",
-          batchId: "illustration-batch"
+          batchId: "illustration-batch",
+          attachments: [imagePayload.asset]
         }
       ]
     })
@@ -129,6 +144,7 @@ try {
   assert.equal(payload.events[0].actionDecision.action, "generate_illustration");
   assert.equal(payload.events[0].actionResult.kind, "illustration");
   assert.match(imagePrompt, /手绘漫画小插画/);
+  assert.equal(referenceCount, 1, "original uploaded image should be passed as image generation reference");
 
   const current = await store.getProfile("illustration-user");
   const papoMessage = current?.conversation.find((message) => message.role === "papo");

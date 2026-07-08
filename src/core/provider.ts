@@ -18,7 +18,12 @@ export interface ModelProvider {
   generateJson<T>(prompt: string): Promise<T | undefined>;
   summarizeImage(dataUrl: string, prompt: string): Promise<string>;
   observeAudio(dataUrl: string, prompt: string): Promise<string>;
-  generateImage(prompt: string, input?: { size?: string; style?: string }): Promise<{ dataUrl: string; mime: "image/png"; model?: string }>;
+  generateImage(prompt: string, input?: { size?: string; style?: string; references?: ImageReference[] }): Promise<{ dataUrl: string; mime: "image/png" | "image/jpeg" | "image/webp"; model?: string }>;
+}
+
+export interface ImageReference {
+  dataUrl: string;
+  label?: string;
 }
 
 export interface ProviderDiagnostics {
@@ -29,6 +34,8 @@ export interface ProviderDiagnostics {
   visionModel?: string;
   audioModel?: string;
   imageModel?: string;
+  imageProvider?: ProviderKind;
+  imageRoute?: "openrouter_images" | "images_generations" | "chat_completions";
   audioRoute?: "chat_completions" | "audio_transcriptions";
 }
 
@@ -54,18 +61,19 @@ function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
   const textModel = merged.OPENROUTER_MODEL ?? "openai/gpt-5.5";
   const visionModel = merged.OPENROUTER_VISION_MODEL ?? "nex-agi/nex-n2-mini";
   const audioModel = merged.OPENROUTER_AUDIO_MODEL ?? "xiaomi/mimo-v2.5";
-  const imageModel = merged.OPENROUTER_IMAGE_MODEL ?? "google/gemini-2.5-flash-image";
+  const imageModel = merged.OPENROUTER_IMAGE_MODEL ?? "google/gemini-3.1-flash-lite-image";
   const baseUrl = "https://openrouter.ai/api/v1";
   return openAiCompatibleProvider({
     kind: "openrouter",
     name: "OpenRouter",
     endpoint: `${baseUrl}/chat/completions`,
-    imageEndpoint: `${baseUrl}/chat/completions`,
+    imageEndpoint: `${baseUrl}/images`,
     apiKey: merged.OPENROUTER_API_KEY,
     model: textModel,
     visionModel,
     audioModel,
     imageModel,
+    imageRoute: "openrouter_images",
     audioRoute: "chat_completions",
     chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
     visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
@@ -195,6 +203,7 @@ function openAiCompatibleProvider(input: {
   visionModel?: string;
   audioModel?: string;
   imageModel?: string;
+  imageRoute?: ProviderDiagnostics["imageRoute"];
   audioRoute?: ProviderDiagnostics["audioRoute"];
   chatTimeoutMs: number;
   visionTimeoutMs: number;
@@ -209,10 +218,12 @@ function openAiCompatibleProvider(input: {
       textProvider: input.kind,
       visionProvider: input.kind,
       audioProvider: input.kind,
+      imageProvider: input.kind,
       textModel: input.model,
       visionModel: input.visionModel ?? input.model,
       audioModel: input.audioModel ?? input.model,
       imageModel: input.imageModel ?? input.model,
+      imageRoute: input.imageRoute ?? (input.imageEndpoint?.endsWith("/images") ? "openrouter_images" : input.imageEndpoint?.endsWith("/chat/completions") ? "chat_completions" : "images_generations"),
       audioRoute: input.audioRoute ?? "chat_completions"
     },
     async generate(prompt: string) {
@@ -244,17 +255,27 @@ function openAiCompatibleProvider(input: {
 function withModalityOverrides(primary: ModelProvider, merged: NodeJS.ProcessEnv): ModelProvider {
   const vision = visionOverrideProvider(primary, merged);
   const audio = audioOverrideProvider(primary, merged);
-  if (!vision && !audio) return primary;
+  const image = imageOverrideProvider(primary, merged);
+  if (!vision && !audio && !image) return primary;
   return {
     ...primary,
     name: [
       primary.name,
       vision ? `${vision.name} vision` : "",
-      audio ? `${audio.name} audio` : ""
+      audio ? `${audio.name} audio` : "",
+      image ? `${image.name} image` : ""
     ].filter(Boolean).join(" + "),
     diagnostics: {
       ...primary.diagnostics,
-      imageModel: primary.diagnostics?.imageModel,
+      ...(image ? {
+        imageProvider: image.kind,
+        imageModel: image.diagnostics?.imageModel,
+        imageRoute: image.diagnostics?.imageRoute
+      } : {
+        imageProvider: primary.diagnostics?.imageProvider,
+        imageModel: primary.diagnostics?.imageModel,
+        imageRoute: primary.diagnostics?.imageRoute
+      }),
       ...(vision ? {
         visionProvider: vision.kind,
         visionModel: vision.diagnostics?.visionModel
@@ -266,8 +287,17 @@ function withModalityOverrides(primary: ModelProvider, merged: NodeJS.ProcessEnv
       } : {})
     },
     summarizeImage: vision ? (dataUrl, prompt) => vision.summarizeImage(dataUrl, prompt) : primary.summarizeImage,
-    observeAudio: audio ? (dataUrl, prompt) => audio.observeAudio(dataUrl, prompt) : primary.observeAudio
+    observeAudio: audio ? (dataUrl, prompt) => audio.observeAudio(dataUrl, prompt) : primary.observeAudio,
+    generateImage: image ? (prompt, input) => image.generateImage(prompt, input) : primary.generateImage
   };
+}
+
+function imageOverrideProvider(primary: ModelProvider, merged: NodeJS.ProcessEnv) {
+  const requested = merged.PAPO_IMAGE_PROVIDER;
+  if (!requested || requested === "primary") return undefined;
+  const provider = providerForKind(requested, merged);
+  if (provider.kind === primary.kind) return undefined;
+  return provider;
 }
 
 function audioOverrideProvider(primary: ModelProvider, merged: NodeJS.ProcessEnv) {
@@ -472,12 +502,13 @@ async function callAudioTranscriptionEndpoint(
 }
 
 async function callImageGeneration(
-  input: { imageEndpoint?: string; apiKey?: string; model: string; imageModel?: string; kind: ProviderKind; visionTimeoutMs: number },
+  input: { imageEndpoint?: string; apiKey?: string; model: string; imageModel?: string; kind: ProviderKind; visionTimeoutMs: number; imageRoute?: ProviderDiagnostics["imageRoute"] },
   prompt: string,
-  imageInput: { size?: string; style?: string }
+  imageInput: { size?: string; style?: string; references?: ImageReference[] }
 ) {
   if (!input.imageEndpoint) throw new Error("Image generation endpoint is not configured");
   if (/\/chat\/completions$/.test(input.imageEndpoint)) return callChatImageGeneration(input, prompt, imageInput);
+  if (input.imageRoute === "openrouter_images" || /\/images$/.test(input.imageEndpoint)) return callOpenRouterImageGeneration(input, prompt, imageInput);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), input.visionTimeoutMs);
   const model = input.imageModel ?? input.model;
@@ -510,15 +541,72 @@ async function callImageGeneration(
     const item = data.data?.[0] ?? data.images?.[0];
     const raw = item?.b64_json ?? item?.url;
     if (!raw) throw new Error("Image generation provider returned no image");
-    if (/^data:image\/png;base64,/.test(raw)) return { dataUrl: raw, mime: "image/png" as const, model };
-    if (/^data:image\/(?:jpe?g|webp);base64,/.test(raw)) return { dataUrl: raw, mime: "image/png" as const, model };
+    if (/^data:image\//.test(raw)) return dataUrlImageResult(raw, model);
     if (/^https?:\/\//.test(raw)) {
       const fetched = await fetch(raw, { signal: controller.signal });
       if (!fetched.ok) throw new Error(`Generated image download failed: ${fetched.status}`);
-      const bytes = Buffer.from(await fetched.arrayBuffer());
-      return { dataUrl: `data:image/png;base64,${bytes.toString("base64")}`, mime: "image/png" as const, model };
+      return downloadedImageResult(fetched, model);
     }
     return { dataUrl: `data:image/png;base64,${raw}`, mime: "image/png" as const, model };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function callOpenRouterImageGeneration(
+  input: { imageEndpoint?: string; apiKey?: string; model: string; imageModel?: string; kind: ProviderKind; visionTimeoutMs: number },
+  prompt: string,
+  imageInput: { size?: string; style?: string; references?: ImageReference[] }
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), input.visionTimeoutMs);
+  const model = input.imageModel ?? input.model;
+  try {
+    const payload: Record<string, unknown> = {
+      model,
+      prompt: `${prompt}${imageInput.style ? `\n\nStyle: ${imageInput.style}` : ""}`,
+      n: 1
+    };
+    const size = imageInput.size ?? "1024x1024";
+    if (/^\d+x\d+$/i.test(size)) {
+      payload.size = size;
+    } else {
+      payload.resolution = size;
+    }
+    if (!("size" in payload)) payload.resolution = payload.resolution ?? "1K";
+    if (!("aspect_ratio" in payload)) payload.aspect_ratio = "1:1";
+    const references = openRouterImageReferences(imageInput.references);
+    if (references.length) payload.input_references = references;
+    const response = await fetch(input.imageEndpoint!, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+        ...(input.apiKey ? { Authorization: `Bearer ${input.apiKey}` } : {}),
+        "HTTP-Referer": "http://localhost:5173",
+        "X-Title": "Papo"
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      throw new Error(`Image generation provider failed: ${response.status} ${await responseErrorSummary(response)}`);
+    }
+    const data = (await response.json()) as {
+      data?: Array<{ b64_json?: string; url?: string; media_type?: string }>;
+      images?: Array<{ b64_json?: string; url?: string; media_type?: string }>;
+    };
+    const item = data.data?.[0] ?? data.images?.[0];
+    const raw = item?.b64_json ?? item?.url;
+    if (!raw) throw new Error("Image generation provider returned no image");
+    const mime = rasterMime(item?.media_type);
+    if (/^data:image\//.test(raw)) return dataUrlImageResult(raw, model);
+    if (/^https?:\/\//.test(raw)) {
+      const fetched = await fetch(raw, { signal: controller.signal });
+      if (!fetched.ok) throw new Error(`Generated image download failed: ${fetched.status}`);
+      return downloadedImageResult(fetched, model);
+    }
+    return { dataUrl: `data:${mime};base64,${raw}`, mime, model };
   } finally {
     clearTimeout(timeout);
   }
@@ -527,7 +615,7 @@ async function callImageGeneration(
 async function callChatImageGeneration(
   input: { imageEndpoint?: string; apiKey?: string; model: string; imageModel?: string; kind: ProviderKind; visionTimeoutMs: number },
   prompt: string,
-  imageInput: { size?: string; style?: string }
+  imageInput: { size?: string; style?: string; references?: ImageReference[] }
 ) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), input.visionTimeoutMs);
@@ -573,17 +661,45 @@ async function callChatImageGeneration(
     const message = data.choices?.[0]?.message;
     const raw = extractGeneratedImage(message);
     if (!raw) throw new Error("Image generation provider returned no image");
-    if (/^data:image\//.test(raw)) return { dataUrl: raw, mime: "image/png" as const, model };
+    if (/^data:image\//.test(raw)) return dataUrlImageResult(raw, model);
     if (/^https?:\/\//.test(raw)) {
       const fetched = await fetch(raw, { signal: controller.signal });
       if (!fetched.ok) throw new Error(`Generated image download failed: ${fetched.status}`);
-      const bytes = Buffer.from(await fetched.arrayBuffer());
-      return { dataUrl: `data:image/png;base64,${bytes.toString("base64")}`, mime: "image/png" as const, model };
+      return downloadedImageResult(fetched, model);
     }
     return { dataUrl: `data:image/png;base64,${raw}`, mime: "image/png" as const, model };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function openRouterImageReferences(references?: ImageReference[]) {
+  return (references ?? []).slice(0, 4).map((reference) => ({
+    type: "image_url",
+    image_url: {
+      url: reference.dataUrl
+    }
+  }));
+}
+
+function dataUrlImageResult(dataUrl: string, model: string) {
+  const match = dataUrl.match(/^data:(image\/[^;]+);base64,/i);
+  const mime = rasterMime(match?.[1]);
+  return { dataUrl: dataUrl.replace(/^data:image\/jpg;/i, "data:image/jpeg;"), mime, model };
+}
+
+async function downloadedImageResult(response: Response, model: string) {
+  const mime = rasterMime(response.headers.get("content-type") ?? undefined);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return { dataUrl: `data:${mime};base64,${bytes.toString("base64")}`, mime, model };
+}
+
+function rasterMime(value?: string): "image/png" | "image/jpeg" | "image/webp" {
+  const clean = value?.split(";")[0]?.toLowerCase();
+  if (clean === "image/jpeg" || clean === "image/jpg") return "image/jpeg";
+  if (clean === "image/webp") return "image/webp";
+  if (!clean || clean === "image/png") return "image/png";
+  throw new Error(`Image generation provider returned unsupported image type: ${clean}`);
 }
 
 function extractGeneratedImage(message: { images?: Array<{ image_url?: { url?: string }; url?: string; b64_json?: string }>; content?: unknown } | undefined): string | undefined {

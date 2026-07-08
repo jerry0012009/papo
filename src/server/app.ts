@@ -1,7 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
@@ -11,7 +11,7 @@ import { isDreamingDue, recordDreamingFailure, semanticDreamMemories } from "../
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
-import { createModelProvider, type ModelProvider } from "../core/provider";
+import { createModelProvider, type ImageReference, type ModelProvider } from "../core/provider";
 import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
 import { wakeCreature } from "../core/rhythm";
 import type { ActionResult, CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationRecord, MediaAttachment, MessageCognitionTrace, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
@@ -656,7 +656,8 @@ async function executeIllustrationActions(
   for (const event of result.events) {
     const actionResult = event.actionResult;
     if (event.actionDecision.action !== "generate_illustration" || actionResult?.kind !== "illustration_draft" || !actionResult.prompt?.trim()) continue;
-    const generated = await provider.generateImage(illustrationPrompt(actionResult, event), { style: actionResult.style });
+    const references = await illustrationReferences(event.attachments);
+    const generated = await provider.generateImage(illustrationPrompt(actionResult, event, references), { style: actionResult.style, references });
     const sourceIds = [...new Set([event.id, event.triggerSegmentId, event.triggerBatchId, ...(event.relatedMemoryIds ?? []), ...(event.attachments ?? []).map((item) => item.id), ...(actionResult.sourceIds ?? [])].filter(Boolean) as string[])];
     const attachment = await saveGeneratedIllustration({
       dataUrl: generated.dataUrl,
@@ -684,8 +685,8 @@ async function executeIllustrationActions(
       attachment,
       sourceIds,
       actionEventId: event.id,
-      providerKind: provider.kind,
-      providerName: provider.name,
+      providerKind: provider.diagnostics?.imageProvider ?? provider.kind,
+      providerName: provider.diagnostics?.imageProvider ? `${provider.diagnostics.imageProvider} image` : provider.name,
       model: generated.model ?? provider.diagnostics?.imageModel
     });
     profile.illustrations = profile.illustrations.slice(0, 30);
@@ -702,7 +703,12 @@ async function executeEmergenceIllustration(
 ) {
   const actionResult = emergence.actionResult;
   if (actionResult?.kind !== "illustration_draft" || !actionResult.prompt?.trim()) return [];
-  const generated = await provider.generateImage(illustrationPromptForEmergence(actionResult, emergence, profile), { style: actionResult.style });
+  const references = await illustrationReferences(
+    profile.episodes
+      .filter((episode) => actionResult.sourceIds?.includes(episode.id) || emergence.relatedMemoryIds.includes(episode.id))
+      .flatMap((episode) => episode.attachments ?? [])
+  );
+  const generated = await provider.generateImage(illustrationPromptForEmergence(actionResult, emergence, profile, references), { style: actionResult.style, references });
   const sourceIds = [...new Set([emergence.id, emergence.memoryId, ...(emergence.relatedMemoryIds ?? []), ...(actionResult.sourceIds ?? [])].filter(Boolean) as string[])];
   const attachment = await saveGeneratedIllustration({
     dataUrl: generated.dataUrl,
@@ -728,15 +734,15 @@ async function executeEmergenceIllustration(
     attachment,
     sourceIds,
     emergenceId: emergence.id,
-    providerKind: provider.kind,
-    providerName: provider.name,
+    providerKind: provider.diagnostics?.imageProvider ?? provider.kind,
+    providerName: provider.diagnostics?.imageProvider ? `${provider.diagnostics.imageProvider} image` : provider.name,
     model: generated.model ?? provider.diagnostics?.imageModel
   });
   profile.illustrations = profile.illustrations.slice(0, 30);
   return [attachment];
 }
 
-function illustrationPrompt(actionResult: ActionResult, event: CaptureResult["events"][number]) {
+function illustrationPrompt(actionResult: ActionResult, event: CaptureResult["events"][number], references: ImageReference[] = []) {
   const sourceImages = (event.attachments ?? []).map((item) => `${item.label} ${item.url}`).join("\n");
   return [
     "Create one warm hand-drawn comic / postcard style illustration for Papo, a cute companion pet.",
@@ -745,12 +751,13 @@ function illustrationPrompt(actionResult: ActionResult, event: CaptureResult["ev
     actionResult.style ? `Requested style: ${actionResult.style}` : "",
     "Ground the image in the real moment below. Do not invent unrelated events.",
     `Moment: ${event.noticed || event.triggerContent}`,
-    sourceImages ? `Available source image references by asset URL/id:\n${sourceImages}` : "",
+    sourceImages ? `Available source image assets:\n${sourceImages}` : "",
+    references.length ? `${references.length} original uploaded image reference(s) are attached to the image generation request. Use them as visual grounding.` : "",
     `Image prompt from action model:\n${actionResult.prompt}`
   ].filter(Boolean).join("\n\n");
 }
 
-function illustrationPromptForEmergence(actionResult: ActionResult, emergence: EmergenceRecord, profile: CreatureProfile) {
+function illustrationPromptForEmergence(actionResult: ActionResult, emergence: EmergenceRecord, profile: CreatureProfile, references: ImageReference[] = []) {
   const sourceEpisodes = profile.episodes
     .filter((episode) => actionResult.sourceIds?.includes(episode.id) || emergence.relatedMemoryIds.includes(episode.id))
     .slice(0, 5)
@@ -764,8 +771,30 @@ function illustrationPromptForEmergence(actionResult: ActionResult, emergence: E
     "Ground the image in real memories and episodes. Do not invent unrelated events.",
     `Papo message: ${emergence.message}`,
     sourceEpisodes ? `Source episodes:\n${sourceEpisodes}` : "",
+    references.length ? `${references.length} original uploaded image reference(s) are attached to the image generation request. Use them as visual grounding.` : "",
     `Image prompt from emergence model:\n${actionResult.prompt}`
   ].filter(Boolean).join("\n\n");
+}
+
+async function illustrationReferences(attachments?: MediaAttachment[]): Promise<ImageReference[]> {
+  const images = (attachments ?? []).filter((attachment) => attachment.kind === "image" && attachment.generatedBy !== "papo_illustration").slice(0, 4);
+  const references: ImageReference[] = [];
+  for (const image of images) {
+    const dataUrl = await imageAttachmentDataUrl(image);
+    if (dataUrl) references.push({ dataUrl, label: image.label });
+  }
+  return references;
+}
+
+async function imageAttachmentDataUrl(image: MediaAttachment) {
+  const match = image.url.match(/^\/api\/assets\/(img_[a-f0-9]{24}\.(?:png|jpg|webp))$/);
+  if (!match) return undefined;
+  try {
+    const buffer = await readFile(path.join(imageAssetDir(), match[1]));
+    return `data:${image.mime};base64,${buffer.toString("base64")}`;
+  } catch {
+    return undefined;
+  }
 }
 
 function parseImageDataUrl(dataUrl: string): { mime: MediaAttachment["mime"]; extension: "png" | "jpg" | "webp"; buffer: Buffer } {

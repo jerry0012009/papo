@@ -68,7 +68,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Supported real providers: OpenRouter, Mimo, and generic OpenAI-compatible APIs.
 - Provider config comes from environment, `.env`, `papo.config.json`, or `.papo/provider.json`.
 - `PAPO_PROVIDER` may explicitly select `openrouter`, `mimo`, or `generic`.
-- `PAPO_VISION_PROVIDER` and `PAPO_AUDIO_PROVIDER` may route sensing to a different real provider than the semantic text brain when one provider is stronger for a modality.
+- `PAPO_VISION_PROVIDER`, `PAPO_AUDIO_PROVIDER`, and `PAPO_IMAGE_PROVIDER` may route sensing or generation to a different real provider than the semantic text brain when one provider is stronger for a modality.
 - Model ids are configurable per modality.
 - Default semantic models should prefer the strongest available configured model, currently `openai/gpt-5.5` for OpenRouter or `gpt-5.5` for generic.
 - Vision sensing currently uses the verified OpenRouter default `nex-agi/nex-n2-mini`.
@@ -76,7 +76,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Audio chat models that only accept mp3/wav receive browser-recorded chunks after server-side wav transcoding.
 - Mixed routing is allowed: for example, Mimo can be the semantic provider while OpenRouter handles image/audio sensing, or OpenRouter can be the semantic provider while generic audio uses a native audio chat model. Transcription endpoints are used only when explicitly configured with a transcription/whisper model id, not as the default listening path.
 - Provider errors are product errors. They should be visible through API errors and diagnostics instead of being hidden behind local wording.
-- Image generation is exposed through `ModelProvider.generateImage`. OpenRouter image-output models are routed through chat completions with `modalities:["image","text"]`; OpenAI-compatible image endpoints use `/images/generations`. If the configured provider rejects image generation or lacks balance, the action must fail loudly rather than substituting a fake picture.
+- Image generation is exposed through `ModelProvider.generateImage`. OpenRouter image-output models use the official `/api/v1/images` endpoint by default; OpenAI-compatible image endpoints use `/images/generations`; chat-completion image output remains a compatibility route only when explicitly configured. Current low-cost OpenRouter default is `google/gemini-3.1-flash-lite-image`, verified on 2026-07-08 with a real request returning a JPEG data URL. If the configured provider rejects image generation or lacks balance, the action must fail loudly rather than substituting a fake picture.
 - If a real model repeatedly returns empty or invalid structured output for core cognition, switch to another configured real provider/model and verify it with scenario smoke tests. Do not add local semantic fallback to mask the model failure.
 
 ## Code Map
