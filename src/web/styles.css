@@ -226,7 +226,7 @@ button.primary,
 .pet-option .generated-pet-avatar,
 .pet-option .action-card-avatar,
 .pet-option .custom-pet-avatar,
-.pet-option .template-pet-avatar {
+.pet-option .registration-pet-avatar {
   width: 86px;
   max-width: 86px;
   margin: 0;
@@ -535,7 +535,7 @@ button.primary,
 .sidebar-brand .generated-pet-avatar,
 .sidebar-brand .action-card-avatar,
 .sidebar-brand .custom-pet-avatar,
-.sidebar-brand .template-pet-avatar {
+.sidebar-brand .registration-pet-avatar {
     width: 44px;
   }
 
@@ -611,7 +611,7 @@ button.primary,
 .companion-avatar .generated-pet-avatar,
 .companion-avatar .action-card-avatar,
 .companion-avatar .custom-pet-avatar,
-.companion-avatar .template-pet-avatar {
+.companion-avatar .registration-pet-avatar {
     width: 128px;
   }
 
@@ -1120,7 +1120,7 @@ select {
 .home-avatar-wrap .generated-pet-avatar,
 .home-avatar-wrap .action-card-avatar,
 .home-avatar-wrap .custom-pet-avatar,
-.home-avatar-wrap .template-pet-avatar {
+.home-avatar-wrap .registration-pet-avatar {
   width: min(58vw, 230px);
 }
 
@@ -1527,108 +1527,34 @@ select {
   filter: drop-shadow(0 18px 24px rgba(31, 36, 33, 0.18));
 }
 
-.template-pet-avatar {
+.registration-pet-avatar {
   --pet-accent: #d9a64f;
   width: 230px;
   aspect-ratio: 1;
-  position: relative;
   display: grid;
   place-items: center;
   justify-self: center;
-  overflow: visible;
-  border-radius: 44%;
+  overflow: hidden;
+  border-radius: 42%;
   filter: drop-shadow(0 18px 24px rgba(31, 36, 33, 0.16));
-  animation: generated-pet-breathe 4.2s ease-in-out infinite;
-}
-
-.template-pet-avatar::before {
-  content: "";
-  position: absolute;
-  inset: 13%;
-  border-radius: 46% 46% 42% 42%;
+  animation: generated-pet-breathe 5.2s ease-in-out infinite;
   background:
-    radial-gradient(circle at 35% 42%, #2b2a27 0 3.5%, transparent 4%),
-    radial-gradient(circle at 65% 42%, #2b2a27 0 3.5%, transparent 4%),
-    radial-gradient(circle at 50% 55%, #2b2a27 0 3%, transparent 3.5%),
-    radial-gradient(circle at 50% 62%, rgba(255, 255, 255, 0.72) 0 18%, transparent 18.5%),
-    linear-gradient(135deg, color-mix(in srgb, var(--pet-accent) 80%, white), color-mix(in srgb, var(--pet-accent) 48%, white));
-  box-shadow: inset 0 -10px 18px rgba(78, 57, 33, 0.08);
+    radial-gradient(circle at 50% 54%, color-mix(in srgb, var(--pet-accent) 12%, white), transparent 58%),
+    #f7f3eb;
 }
 
-.template-pet-avatar::after {
-  content: "";
-  position: absolute;
-  inset: 22% 25% auto;
-  height: 28%;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.54);
-  transform: translateY(118%);
+.registration-pet-avatar.has-video {
+  animation: none;
 }
 
-.template-pet-avatar span::before,
-.template-pet-avatar span::after {
-  content: "";
-  position: absolute;
-  z-index: -1;
-  background: color-mix(in srgb, var(--pet-accent) 72%, white);
-}
-
-.template-pet-avatar span::before {
-  width: 25%;
-  height: 25%;
-  left: 17%;
-  top: 13%;
-  border-radius: 68% 32% 48% 52%;
-  transform: rotate(-28deg);
-}
-
-.template-pet-avatar span::after {
-  width: 25%;
-  height: 25%;
-  right: 17%;
-  top: 13%;
-  border-radius: 32% 68% 52% 48%;
-  transform: rotate(28deg);
-}
-
-.template-pet-avatar.pet-template-lop-rabbit span::before,
-.template-pet-avatar.pet-template-lop-rabbit span::after {
-  width: 18%;
-  height: 38%;
-  top: 4%;
-  border-radius: 999px;
-}
-
-.template-pet-avatar.pet-template-lop-rabbit span::before {
-  left: 24%;
-  transform: rotate(-18deg);
-}
-
-.template-pet-avatar.pet-template-lop-rabbit span::after {
-  right: 24%;
-  transform: rotate(18deg);
-}
-
-.template-pet-avatar.pet-template-cockatiel::before {
-  border-radius: 48% 48% 55% 55%;
-}
-
-.template-pet-avatar.pet-template-cockatiel span::before {
-  width: 12%;
-  height: 22%;
-  left: 43%;
-  top: 5%;
-  border-radius: 999px 999px 35% 35%;
-  transform: rotate(-10deg);
-}
-
-.template-pet-avatar.pet-template-cockatiel span::after {
-  width: 12%;
-  height: 22%;
-  right: 39%;
-  top: 6%;
-  border-radius: 999px 999px 35% 35%;
-  transform: rotate(16deg);
+.registration-pet-avatar img,
+.registration-pet-avatar video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  user-select: none;
+  pointer-events: none;
 }
 
 .action-card-avatar {
@@ -2419,7 +2345,7 @@ select {
 .chat-top .shiba,
 .chat-top .generated-pet-avatar,
 .chat-top .custom-pet-avatar,
-.chat-top .template-pet-avatar {
+.chat-top .registration-pet-avatar {
   width: 56px;
 }
 
@@ -3466,6 +3392,48 @@ select {
 }
 
 @media (max-width: 430px) {
+  .auth-shell {
+    padding: 12px;
+    align-items: start;
+  }
+
+  .auth-card {
+    gap: 14px;
+    padding: 16px;
+    border-radius: 18px;
+  }
+
+  .auth-hero {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    text-align: center;
+    gap: 10px;
+  }
+
+  .auth-hero .shiba,
+  .auth-hero .generated-pet-avatar,
+  .auth-hero .registration-pet-avatar,
+  .auth-hero .custom-pet-avatar {
+    width: min(52vw, 176px);
+  }
+
+  .auth-hero h1 {
+    max-width: 10em;
+    font-size: clamp(1.9rem, 9vw, 2.45rem);
+    line-height: 1.15;
+  }
+
+  .auth-hero p {
+    max-width: 18em;
+    line-height: 1.5;
+  }
+
+  .pet-picker {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    max-height: none;
+    overflow: visible;
+  }
+
   .shell {
     padding-inline: 10px;
   }
@@ -3502,7 +3470,7 @@ select {
   .home-avatar-wrap .generated-pet-avatar,
   .home-avatar-wrap .action-card-avatar,
   .home-avatar-wrap .custom-pet-avatar,
-  .home-avatar-wrap .template-pet-avatar {
+  .home-avatar-wrap .registration-pet-avatar {
     width: min(56vw, 176px);
   }
 
@@ -3654,7 +3622,7 @@ select {
   .home-avatar-wrap .generated-pet-avatar,
   .home-avatar-wrap .action-card-avatar,
   .home-avatar-wrap .custom-pet-avatar,
-  .home-avatar-wrap .template-pet-avatar {
+  .home-avatar-wrap .registration-pet-avatar {
     width: min(34vw, 280px);
   }
 
@@ -3822,7 +3790,7 @@ select {
   .sidebar-brand .shiba,
   .sidebar-brand .generated-pet-avatar,
   .sidebar-brand .custom-pet-avatar,
-  .sidebar-brand .template-pet-avatar {
+  .sidebar-brand .registration-pet-avatar {
     width: 44px;
   }
 
@@ -3901,7 +3869,7 @@ select {
   .home-avatar-wrap .generated-pet-avatar,
   .home-avatar-wrap .action-card-avatar,
   .home-avatar-wrap .custom-pet-avatar,
-  .home-avatar-wrap .template-pet-avatar {
+  .home-avatar-wrap .registration-pet-avatar {
     width: min(28vw, 300px);
   }
 
@@ -4282,7 +4250,7 @@ select {
   .companion-avatar .generated-pet-avatar,
   .companion-avatar .action-card-avatar,
   .companion-avatar .custom-pet-avatar,
-  .companion-avatar .template-pet-avatar {
+  .companion-avatar .registration-pet-avatar {
     width: 136px;
   }
 

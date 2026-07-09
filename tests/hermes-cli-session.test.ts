@@ -14,10 +14,21 @@ const task: HermesTaskRecord = {
   title: "查资料"
 };
 
-assert.deepEqual(buildHermesCliChatArgs(profile, task), ["chat", "-Q", "--source", "tool", "-q", "请查资料"]);
+const firstArgs = buildHermesCliChatArgs(profile, task);
+assert.deepEqual(firstArgs.slice(0, 7), ["chat", "-Q", "--source", "tool", "--accept-hooks", "--yolo", "--max-turns"]);
+assert.equal(firstArgs[7], "12");
+assert.equal(firstArgs[8], "-q");
+assert.match(firstArgs[9], /不能向用户提问/);
+assert.match(firstArgs[9], /请查资料/);
 
 profile.hermes.sessionId = "20260707_120000_test";
-assert.deepEqual(buildHermesCliChatArgs(profile, task), ["chat", "-Q", "--source", "tool", "--resume", "20260707_120000_test", "-q", "请查资料"]);
+const resumeArgs = buildHermesCliChatArgs(profile, task);
+assert.deepEqual(resumeArgs.slice(0, 7), ["chat", "-Q", "--source", "tool", "--accept-hooks", "--yolo", "--max-turns"]);
+assert.equal(resumeArgs[7], "12");
+assert.equal(resumeArgs[8], "--resume");
+assert.equal(resumeArgs[9], "20260707_120000_test");
+assert.equal(resumeArgs[10], "-q");
+assert.match(resumeArgs[11], /请查资料/);
 
 assert.deepEqual(parseHermesCliChatOutput("\nsession_id: 20260707_120000_test\n虾虾收到\n"), {
   sessionId: "20260707_120000_test",

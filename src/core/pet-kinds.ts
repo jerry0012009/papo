@@ -9,6 +9,7 @@ export const PET_KINDS = [
     speciesNoun: "小狗",
     appearance: "可爱的卡通柴犬，暖橙和奶白毛色，圆润脸颊，友好的表情，身体小巧结实。",
     imagePrompt: "premium semi-realistic 3D mobile companion mascot, cute Shiba Inu dog, warm orange and cream fur, rounded cheeks, friendly natural eyes, clean full-body character reference, warm off-white studio background",
+    registrationImage: "pets/register/shiba.jpg",
     accentColor: "#e89a42"
   },
   {
@@ -19,6 +20,8 @@ export const PET_KINDS = [
     speciesNoun: "小猫",
     appearance: "圆脸灰白英短小猫，蓝灰和白色毛色，琥珀色眼睛，小粉鼻，身体柔软微胖。",
     imagePrompt: "premium semi-realistic 3D mobile companion mascot, round-faced gray and white British Shorthair kitten, amber eyes, tiny pink nose, soft paws, clean full-body character reference, warm off-white studio background",
+    registrationImage: "pets/register/british-shorthair.webp",
+    registrationVideo: "pets/generated/british-shorthair-v1/idle.mp4",
     accentColor: "#8fa0a5"
   },
   {
@@ -29,6 +32,8 @@ export const PET_KINDS = [
     speciesNoun: "小狗",
     appearance: "幼年金毛寻回犬，金色柔顺毛发，黑亮鼻子，温和眼睛，耳朵自然垂下，表情开朗可信赖。",
     imagePrompt: "premium semi-realistic 3D mobile companion mascot, young Golden Retriever puppy, soft golden fur, warm brown eyes, black nose, floppy ears, clean full-body character reference, warm off-white studio background",
+    registrationImage: "pets/register/golden-retriever.jpg",
+    registrationVideo: "pets/register/golden-retriever.mp4",
     accentColor: "#d9a64f"
   },
   {
@@ -39,6 +44,8 @@ export const PET_KINDS = [
     speciesNoun: "小猫",
     appearance: "奶白色布偶小猫，柔软长毛，浅棕耳朵和尾巴，蓝色眼睛，脸颊圆润，姿态温顺。",
     imagePrompt: "premium semi-realistic 3D mobile companion mascot, fluffy Ragdoll kitten, cream white long fur, soft brown ears and tail, blue eyes, rounded cheeks, clean full-body character reference, warm off-white studio background",
+    registrationImage: "pets/register/ragdoll-cat.jpg",
+    registrationVideo: "pets/register/ragdoll-cat.mp4",
     accentColor: "#c8a88a"
   },
   {
@@ -49,6 +56,8 @@ export const PET_KINDS = [
     speciesNoun: "小兔",
     appearance: "奶白色垂耳小兔，耳朵柔软下垂，圆眼睛，短短尾巴，身体圆润，动作轻柔安静。",
     imagePrompt: "premium semi-realistic 3D mobile companion mascot, tiny cream white lop-eared rabbit, floppy ears, round gentle eyes, soft rounded body, clean full-body character reference, warm off-white studio background",
+    registrationImage: "pets/register/lop-rabbit.jpg",
+    registrationVideo: "pets/register/lop-rabbit.mp4",
     accentColor: "#d7b7c3"
   },
   {
@@ -59,6 +68,8 @@ export const PET_KINDS = [
     speciesNoun: "仓鼠",
     appearance: "金白色小仓鼠，圆滚滚身体，小耳朵，黑亮眼睛，粉色小爪，脸颊鼓鼓的。",
     imagePrompt: "premium semi-realistic 3D mobile companion mascot, tiny golden and white hamster, round chubby body, tiny ears, bright black eyes, pink paws, full-body character reference, warm off-white studio background",
+    registrationImage: "pets/register/hamster.jpg",
+    registrationVideo: "pets/register/hamster.mp4",
     accentColor: "#d5a65b"
   },
   {
@@ -69,6 +80,8 @@ export const PET_KINDS = [
     speciesNoun: "小鸟",
     appearance: "浅黄色玄凤鹦鹉，橙色脸颊，头顶小冠羽，灰白翅膀，眼神机灵，身体小巧。",
     imagePrompt: "premium semi-realistic 3D mobile companion mascot, small pale yellow cockatiel bird, orange cheek patches, cute crest feathers, gray-white wings, bright eyes, full-body character reference, warm off-white studio background",
+    registrationImage: "pets/register/cockatiel.jpg",
+    registrationVideo: "pets/register/cockatiel.mp4",
     accentColor: "#e7c95f"
   }
 ] as const;

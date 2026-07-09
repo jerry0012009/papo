@@ -16,7 +16,11 @@ await writeFile(
   cliPath,
   `#!/usr/bin/env bash
 set -euo pipefail
-printf '%s\\n' "$*" >> "$PAPO_FAKE_HERMES_LOG"
+python3 - "$PAPO_FAKE_HERMES_LOG" "$@" <<'PY'
+import json, sys
+with open(sys.argv[1], "a", encoding="utf-8") as f:
+    f.write(json.dumps(sys.argv[2:], ensure_ascii=False) + "\\n")
+PY
 if [ "$1" = "sessions" ]; then
   exit 0
 fi
@@ -34,13 +38,13 @@ if [ -n "$resume" ]; then
   echo "resumed $task"
   exit 0
 fi
-if [ "$task" = "user-a-first" ]; then
+if [[ "$task" == *"user-a-first"* ]]; then
   sleep 0.25
   echo "session_id: session-user-a" >&2
   echo "new a"
   exit 0
 fi
-if [ "$task" = "user-b-first" ]; then
+if [[ "$task" == *"user-b-first"* ]]; then
   echo "session_id: session-user-b" >&2
   echo "new b"
   exit 0
@@ -144,18 +148,20 @@ await waitFor(async () => {
 });
 
 const log = await readFile(logPath, "utf8");
-const chatLines = log.split(/\r?\n/).filter((line) => line.startsWith("chat "));
-const aChatLines = chatLines.filter((line) => line.includes("user-a-"));
-const bChatLine = chatLines.find((line) => line.includes("user-b-first"));
+const calls = log.split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line) as string[]);
+const chatCalls = calls.filter((call) => call[0] === "chat");
+const aChatCalls = chatCalls.filter((call) => call.join("\n").includes("user-a-"));
+const bChatCall = chatCalls.find((call) => call.join("\n").includes("user-b-first"));
 
-assert.equal(aChatLines.length, 2, log);
-assert.equal(aChatLines[0].includes("--resume"), false, log);
-assert.equal(aChatLines[0].includes("user-a-first"), true, log);
-assert.equal(aChatLines[1].includes("--resume session-user-a"), true, log);
-assert.equal(aChatLines[1].includes("user-a-second"), true, log);
-assert.ok(bChatLine, log);
-assert.equal(bChatLine.includes("session-user-a"), false, log);
-assert.equal(bChatLine.includes("--resume"), false, log);
+assert.equal(aChatCalls.length, 2, log);
+assert.equal(aChatCalls[0].includes("--resume"), false, log);
+assert.equal(aChatCalls[0].join("\n").includes("user-a-first"), true, log);
+assert.equal(aChatCalls[1].includes("--resume"), true, log);
+assert.equal(aChatCalls[1].includes("session-user-a"), true, log);
+assert.equal(aChatCalls[1].join("\n").includes("user-a-second"), true, log);
+assert.ok(bChatCall, log);
+assert.equal(bChatCall.includes("session-user-a"), false, log);
+assert.equal(bChatCall.includes("--resume"), false, log);
 
 const currentA = await store.getProfile("user-a");
 const currentB = await store.getProfile("user-b");

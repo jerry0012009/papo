@@ -977,6 +977,7 @@ export function App() {
           petProfile={loadingProfile?.petProfile}
           state={loadingProfile?.state}
           dogState={loadingProfile?.dogState}
+          preferRegistrationImage={!loadingProfile?.petProfile?.avatarImage}
           idle
         />
         <p>{busy ? `${loadingProfile?.creatureName ?? petKindLabel(loadingPetKind)} 正在醒来` : error ?? "无法载入小动物"}</p>
@@ -1139,6 +1140,7 @@ function AuthView(props: {
           <AvatarPreview
             petKind={petKind}
             state={{ mood: "bright", curiosity: 80, attachment: 74, energy: 78, confidence: 60, safety: 44, arousal: 60 }}
+            preferRegistrationImage
           />
           <div>
             <p className="eyebrow">Papo</p>
@@ -1172,7 +1174,7 @@ function AuthView(props: {
                 className={normalizePetKind(petKind) === pet.id ? "pet-option active" : "pet-option"}
                 onClick={() => setPetKind(pet.id)}
               >
-                <AvatarPreview petKind={pet.id} idle />
+                <AvatarPreview petKind={pet.id} idle preferRegistrationImage />
                 <span>{pet.label}</span>
               </button>
             ))}
@@ -1551,25 +1553,32 @@ type HomeMotion =
   | { kind: "pet"; action: PetInteractionAction; text: string }
   | { kind: "card"; cardId: string };
 
-function AvatarPreview({ petKind, petProfile, state, dogState, idle = false, interactionAction }: { petKind?: string; petProfile?: CreatureProfile["petProfile"]; state?: CreatureState; dogState?: DogInteractionState; idle?: boolean; interactionAction?: PetInteractionAction }) {
+function AvatarPreview({ petKind, petProfile, state, dogState, idle = false, interactionAction, preferRegistrationImage = false }: { petKind?: string; petProfile?: CreatureProfile["petProfile"]; state?: CreatureState; dogState?: DogInteractionState; idle?: boolean; interactionAction?: PetInteractionAction; preferRegistrationImage?: boolean }) {
   if (petProfile?.avatarImage) return <CustomPetAvatar petProfile={petProfile} idle={idle} />;
   const normalizedPetKind = normalizePetKind(petKind);
   const meta = petKindMeta(normalizedPetKind);
+  if (preferRegistrationImage && meta.registrationImage) return <RegistrationPetAvatar petKind={normalizedPetKind} idle={idle} />;
   if (normalizedPetKind === "shiba") return <ShibaAvatar state={state} dogState={dogState} idle={idle} />;
   if (normalizedPetKind === "british-shorthair") return <GeneratedPetAvatar petKind={normalizedPetKind} dogState={dogState} idle={idle} interactionAction={interactionAction} />;
-  if (meta.renderer === "template") return <TemplatePetAvatar petKind={normalizedPetKind} idle={idle} />;
+  if (meta.registrationImage) return <RegistrationPetAvatar petKind={normalizedPetKind} idle={idle} />;
   return <AgentPetSprite petKind={normalizedPetKind} dogState={dogState} idle={idle} />;
 }
 
-function TemplatePetAvatar({ petKind, idle = false }: { petKind: string; idle?: boolean }) {
+function RegistrationPetAvatar({ petKind, idle = false }: { petKind: string; idle?: boolean }) {
   const meta = petKindMeta(petKind);
+  if (!meta.registrationImage) return null;
+  const registrationVideo = "registrationVideo" in meta ? meta.registrationVideo : undefined;
   return (
     <div
-      className={`template-pet-avatar pet-template-${normalizePetKind(petKind)} ${idle ? "idle" : ""}`}
+      className={`registration-pet-avatar ${registrationVideo ? "has-video" : ""} ${idle ? "idle" : ""}`}
       style={{ "--pet-accent": meta.accentColor } as CSSProperties}
       aria-label={meta.label}
     >
-      <span aria-hidden="true" />
+      {registrationVideo ? (
+        <video src={publicAssetPath(registrationVideo)} poster={publicAssetPath(meta.registrationImage)} autoPlay loop muted playsInline preload="metadata" aria-hidden="true" />
+      ) : (
+        <img src={publicAssetPath(meta.registrationImage)} alt={meta.label} loading="lazy" />
+      )}
     </div>
   );
 }

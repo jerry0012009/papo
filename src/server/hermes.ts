@@ -18,6 +18,7 @@ export interface HermesBridge {
   start(): void;
   stop(): void;
   checkTimeouts(now?: string): Promise<number>;
+  recoverInterruptedTasks?(): Promise<number>;
 }
 
 export function createHermesBridge(input: { store: ProfileStore; provider: ModelProvider; env?: NodeJS.ProcessEnv }): HermesBridge {
@@ -150,6 +151,9 @@ export function createHermesBridge(input: { store: ProfileStore; provider: Model
     },
     async checkTimeouts(now = new Date().toISOString()) {
       return checkHermesTimeouts(input.store, now);
+    },
+    async recoverInterruptedTasks() {
+      return 0;
     }
   };
 }
@@ -157,13 +161,17 @@ export function createHermesBridge(input: { store: ProfileStore; provider: Model
 function createCliHermesBridge(input: { store: ProfileStore; provider: ModelProvider }, env: NodeJS.ProcessEnv): HermesBridge {
   const command = env.PAPO_HERMES_CLI_PATH ?? "hermes";
   const userQueues = new Map<string, Promise<void>>();
+  const queuedTaskIds = new Set<string>();
 
   function enqueueCliRun(userId: string, taskId: string) {
+    if (queuedTaskIds.has(taskId)) return;
+    queuedTaskIds.add(taskId);
     const previous = userQueues.get(userId) ?? Promise.resolve();
     const next = previous
       .catch(() => undefined)
       .then(() => runCliTask(userId, taskId))
       .finally(() => {
+        queuedTaskIds.delete(taskId);
         if (userQueues.get(userId) === next) userQueues.delete(userId);
       });
     userQueues.set(userId, next);
@@ -174,6 +182,7 @@ function createCliHermesBridge(input: { store: ProfileStore; provider: ModelProv
     const profile = await input.store.getProfile(userId);
     const task = profile?.hermes.tasks.find((item) => item.id === taskId);
     if (!profile || !task) return;
+    if (task.status !== "pending" && task.status !== "sent") return;
     try {
       const sessionName = profile.hermes.sessionName ?? hermesChannelName(profile.userId);
       const args = buildHermesCliChatArgs(profile, task);
@@ -215,6 +224,43 @@ function createCliHermesBridge(input: { store: ProfileStore; provider: ModelProv
     }
   }
 
+  async function recoverInterruptedTasks() {
+    const summaries = await input.store.listProfiles();
+    let recovered = 0;
+    for (const summary of summaries) {
+      const profile = await input.store.getProfile(summary.userId);
+      if (!profile) continue;
+      let changed = false;
+      for (const task of profile.hermes.tasks) {
+        if (task.status !== "pending" && task.status !== "sent") continue;
+        if (queuedTaskIds.has(task.id)) continue;
+        const sessionId = task.sessionId ?? profile.hermes.sessionId;
+        if (sessionId) {
+          task.sessionId = sessionId;
+          task.sessionName ??= profile.hermes.sessionName ?? hermesChannelName(profile.userId);
+          task.channelName ??= task.sessionName;
+          task.updatedAt = new Date().toISOString();
+          enqueueCliRun(profile.userId, task.id);
+          recovered += 1;
+          changed = true;
+          continue;
+        }
+        task.status = "failed";
+        task.error = "Papo restarted before Hermes returned a resumable session id.";
+        task.updatedAt = new Date().toISOString();
+        appendPapoMessage(profile, {
+          channel: "curious",
+          text: "刚才交给虾虾的任务被服务重启打断了，我没有拿到可靠结果。为了避免重复执行外部任务，请你再说一次，我会重新交给虾虾。",
+          sourceId: task.id,
+          at: task.updatedAt
+        });
+        changed = true;
+      }
+      if (changed) await input.store.saveProfile(profile);
+    }
+    return recovered;
+  }
+
   return {
     enabled: true,
     async enqueueTasks(profile, result) {
@@ -233,19 +279,43 @@ function createCliHermesBridge(input: { store: ProfileStore; provider: ModelProv
       for (const task of tasks) enqueueCliRun(profile.userId, task.id);
       return tasks;
     },
-    start() {},
+    start() {
+      void recoverInterruptedTasks().catch((error) => console.error("Hermes CLI recovery failed", error));
+    },
     stop() {},
     async checkTimeouts(now = new Date().toISOString()) {
+      await recoverInterruptedTasks();
       return checkHermesTimeouts(input.store, now);
-    }
+    },
+    recoverInterruptedTasks
   };
 }
 
 export function buildHermesCliChatArgs(profile: CreatureProfile, task: HermesTaskRecord) {
-  const args = ["chat", "-Q", "--source", "tool"];
+  const args = ["chat", "-Q", "--source", "tool", "--accept-hooks", "--yolo", "--max-turns", process.env.PAPO_HERMES_CLI_MAX_TURNS ?? "12"];
   if (profile.hermes.sessionId) args.push("--resume", profile.hermes.sessionId);
-  args.push("-q", task.task);
+  args.push("-q", formatHermesCliTask(profile, task));
   return args;
+}
+
+function formatHermesCliTask(profile: CreatureProfile, task: HermesTaskRecord) {
+  return [
+    "你正在作为 Papo 的后台外部执行器运行，不是在和最终用户实时聊天。",
+    `Papo 用户：${profile.userId}`,
+    `会话名：${profile.hermes.sessionName ?? hermesChannelName(profile.userId)}`,
+    task.title ? `任务标题：${task.title}` : undefined,
+    "",
+    "执行规则：",
+    "- 可以直接完成的事就完成，然后用简洁自然的中文返回执行结果。",
+    "- 不能向用户提问、不能调用 clarify、不能等待交互输入。",
+    "- 如果缺少凭据、工具、权限或外部系统能力，就不要假装完成，直接返回“无法完成”以及具体原因。",
+    "- 不要重复执行已经明确完成过的外部副作用任务；如果无法确认是否完成，说明无法确认。",
+    "",
+    "任务内容：",
+    task.task
+  ]
+    .filter((line): line is string => line !== undefined)
+    .join("\n");
 }
 
 export function parseHermesCliChatOutput(stdout: string, stderr = "") {

@@ -26,6 +26,12 @@ test("first visit shows login and registration instead of creating a public Papo
   await expect(page.getByRole("button", { name: /小仓鼠/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /玄凤鹦鹉/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /Claude|Codex|DataWhale|Dewey|Fireball|Mo Xia|Rocky|Seedy|Stacky/ })).toHaveCount(0);
+  await expect(page.locator(".pet-option img")).toHaveCount(1);
+  await expect(page.locator(".pet-option video")).toHaveCount(6);
+  await expect(page.locator(".pet-option img").first()).toHaveAttribute("src", /pets\/register\/shiba\.jpg/);
+  await expect(page.locator(".pet-option video").first()).toHaveAttribute("src", /british-shorthair-v1\/idle\.mp4|pets\/register\/golden-retriever\.mp4/);
+  await expect(page.locator(".pet-option .registration-pet-avatar")).toHaveCount(7);
+  await expect(page.locator(".pet-option .shiba")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "开始养 Papo" })).toBeDisabled();
 });
 
