@@ -4042,11 +4042,13 @@ select {
   padding: 6px 0;
 }
 
+.chat-bubble.papo,
 .chat-bubble.user,
 .chat-bubble.world {
   background: transparent;
   color: var(--foreground);
   border-color: transparent;
+  box-shadow: none;
 }
 
 .chat-bubble p {
@@ -4068,11 +4070,9 @@ select {
 }
 
 .chat-bubble.papo p {
-  padding: 2px 0;
-  border-color: transparent;
-  border-radius: 0;
-  background: transparent;
-  color: #263a32;
+  background: #fff8ec;
+  border-color: rgba(205, 133, 63, 0.26);
+  color: #352719;
 }
 
 .chat-bubble.world p {
@@ -4087,7 +4087,7 @@ select {
 }
 
 .chat-bubble.papo .chat-bubble-head strong {
-  color: #46524a;
+  color: #9a4f14;
 }
 
 .chat-bubble.world .chat-bubble-head strong {
@@ -4101,7 +4101,7 @@ select {
 
 .chat-bubble.papo .chat-bubble-head span,
 .chat-bubble.papo small {
-  color: var(--muted-foreground);
+  color: rgba(67, 45, 24, 0.62);
 }
 
 .chat-bubble.world .chat-bubble-head span,

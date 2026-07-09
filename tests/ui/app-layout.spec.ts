@@ -140,6 +140,17 @@ test("chat opens at latest content and keeps the composer aligned with the threa
   const userBubbleColor = await page.locator(".chat-bubble.user p").last().evaluate((node) => getComputedStyle(node).backgroundColor);
   const papoBubbleColor = await page.locator(".chat-bubble.papo p").last().evaluate((node) => getComputedStyle(node).backgroundColor);
   expect(userBubbleColor).not.toBe(papoBubbleColor);
+  const papoBubbleShell = await page.locator(".chat-bubble.papo").last().evaluate((node) => {
+    const style = getComputedStyle(node);
+    return {
+      borderColor: style.borderColor,
+      backgroundColor: style.backgroundColor,
+      boxShadow: style.boxShadow
+    };
+  });
+  expect(papoBubbleShell.borderColor).toBe("rgba(0, 0, 0, 0)");
+  expect(papoBubbleShell.backgroundColor).toBe("rgba(0, 0, 0, 0)");
+  expect(papoBubbleShell.boxShadow).toBe("none");
 
   const audioBubble = page.locator(".chat-bubble.world").filter({ hasText: "这段声音里" }).last();
   await expect(audioBubble).toBeVisible();
