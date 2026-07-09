@@ -70,12 +70,15 @@ export async function semanticDecideAttention(
     throw new Error(`invalid attention JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   }
   const applied = applySemanticAttention(profile, result, parsed.data, source);
-  if (!applied && parsed.data.shouldAttend !== false) throw new Error("attention model did not select any valid segment");
+  if (!applied && parsed.data.shouldAttend !== false) {
+    if (source !== "curious_stream") throw new Error("attention model did not select any valid segment");
+    clearCuriousAttentionResult(profile, result, parsed.data);
+  }
   recordAttentionSemanticRun(
     profile,
     provider,
     source,
-    applied ? "applied" : "applied",
+    applied ? "applied" : "empty",
     applied ? "llm attention decision applied" : "llm attention decision ignored all candidates"
   );
   return result;

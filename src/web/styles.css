@@ -986,6 +986,81 @@ select {
   background: transparent;
 }
 
+.duration-dialog {
+  position: fixed;
+  z-index: 96;
+  top: 50%;
+  left: 50%;
+  width: min(calc(100vw - 24px), 480px);
+  max-height: min(86dvh, 620px);
+  overflow: auto;
+  transform: translate(-50%, -50%);
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid rgba(70, 82, 72, 0.16);
+  border-radius: 20px;
+  background: rgba(255, 253, 247, 0.98);
+  box-shadow: var(--shadow-lift);
+}
+
+.duration-dialog-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.duration-dialog-head h2 {
+  margin: 0;
+  font-size: 1.18rem;
+  letter-spacing: 0;
+}
+
+.duration-dialog-head p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.duration-dialog-head button {
+  min-width: 34px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--surface-strong);
+  color: #46524a;
+}
+
+.duration-options {
+  display: grid;
+  gap: 10px;
+}
+
+.duration-options button {
+  justify-content: start;
+  min-height: 68px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(63, 127, 102, 0.16);
+  background: #f2f7ef;
+  color: #24372f;
+  text-align: left;
+}
+
+.duration-options button strong,
+.duration-options button span {
+  display: block;
+}
+
+.duration-options button span {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 700;
+}
+
 .guide-poster {
   display: grid;
   gap: 18px;
@@ -2698,6 +2773,37 @@ select {
 
 .chat-batch .chat-bubble {
   width: 100%;
+}
+
+.companion-session {
+  background: #f7fbf8;
+  border-color: rgba(63, 127, 102, 0.2);
+}
+
+.companion-session > p {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #eef8f2;
+  color: #244c3e;
+  overflow-wrap: anywhere;
+}
+
+.companion-session details {
+  min-width: 0;
+}
+
+.companion-session summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.companion-session-details {
+  display: grid;
+  gap: 8px;
+  margin-top: 8px;
+  min-width: 0;
 }
 
 .chat-bubble-head {

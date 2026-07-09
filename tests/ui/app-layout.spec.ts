@@ -213,7 +213,7 @@ test("photo upload stages a thumbnail that can be removed before submit", async 
 test("photo upload during companion mode waits for explicit submit", async ({ page }) => {
   await installMockMicrophone(page);
   await page.goto("/");
-  await page.getByRole("button", { name: /陪我/ }).first().click();
+  await startCompanionListening(page);
   await expect(page.locator(".listening-session-status")).toBeVisible();
 
   await page.getByLabel("添加素材").click();
@@ -229,7 +229,9 @@ test("photo upload during companion mode waits for explicit submit", async ({ pa
 
   await page.getByRole("button", { name: "发送给 Papo" }).click();
   await expect(page.locator(".staged-segment.image_summary")).toHaveCount(0);
-  await expect(page.locator(".chat-bubble.world", { hasText: "这张照片里" })).toBeVisible();
+  const session = page.locator(".companion-session").filter({ hasText: "这张照片里" });
+  await expect(session).toBeVisible();
+  await expect(session).toContainText("1 张照片");
 });
 
 test("photo submit shows a visible in-flight handoff state", async ({ page }) => {
@@ -299,10 +301,13 @@ test("companion listening starts from home and shows a countdown in chat", async
   await page.goto("/");
 
   await page.getByRole("button", { name: /陪我/ }).first().click();
+  await expect(page.getByRole("dialog", { name: "陪你多久" })).toBeVisible();
+  await page.getByRole("button", { name: /15 分钟/ }).click();
   await expect(page.getByPlaceholder("告诉 Papo...")).toBeVisible();
   const listeningStatus = page.locator(".listening-session-status");
   await expect(listeningStatus).toBeVisible();
   await expect(listeningStatus).toContainText("陪你听着");
+  await expect(listeningStatus).toContainText("15:00");
   await expect(listeningStatus).toContainText("剩余");
   await expect(listeningStatus.getByRole("button", { name: "停止陪我听" })).toBeVisible();
 });
@@ -314,7 +319,7 @@ test("companion listening skips a failed audio slice without showing technical a
   });
   await page.goto("/");
 
-  await page.getByRole("button", { name: /陪我/ }).first().click();
+  await startCompanionListening(page);
   await expect(page.locator(".listening-session-status")).toBeVisible();
   await page.evaluate(() => {
     (window as unknown as { papoRequestAudioSliceForTest?: (force: boolean) => void }).papoRequestAudioSliceForTest?.(true);
@@ -324,6 +329,55 @@ test("companion listening skips a failed audio slice without showing technical a
   await expect(page.getByText(/This operation was aborted/)).toHaveCount(0);
   await expect(page.getByText(/整理时断开/)).toHaveCount(0);
   await expect(page.locator(".listening-session-status")).toBeVisible();
+});
+
+test("companion stream groups live slices into one readable session card", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("papo:testProfileOverride", JSON.stringify({
+      conversation: [
+        {
+          id: "live-msg-2",
+          at: "2026-07-07T12:00:35.000Z",
+          observedAt: "2026-07-07T12:00:32.000Z",
+          role: "world",
+          channel: "curious",
+          text: "听到的声音 2：这 30 秒里没有听到需要继续处理的内容。",
+          displayText: "这 30 秒里没有听到需要继续处理的内容。",
+          relatedMemoryIds: [],
+          modality: "audio_observation",
+          batchId: "live-2026-07-07T12:00:00.000Z-02",
+          auditOnly: true,
+          sensingTrace: { at: "2026-07-07T12:00:00.000Z", modality: "audio", label: "听到的声音 2", status: "empty", route: "ignored" }
+        },
+        {
+          id: "live-msg-1",
+          at: "2026-07-07T12:00:04.000Z",
+          observedAt: "2026-07-07T12:00:02.000Z",
+          role: "world",
+          channel: "curious",
+          text: "听到的声音 1：你在开会，提到了心理中心的会议安排。",
+          displayText: "你在开会，提到了心理中心的会议安排。",
+          relatedMemoryIds: [],
+          modality: "audio_observation",
+          batchId: "live-2026-07-07T12:00:00.000Z-01",
+          auditOnly: false,
+          sensingTrace: { at: "2026-07-07T12:00:00.000Z", modality: "audio", label: "听到的声音 1", status: "content", route: "curious_candidate" }
+        }
+      ]
+    }));
+  });
+  await page.goto("/");
+  await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
+
+  const session = page.locator(".companion-session");
+  await expect(session).toBeVisible();
+  await expect(session).toContainText("Papo 听了一会儿");
+  await expect(session).toContainText("2 段声音");
+  await expect(session).toContainText("1 段有内容");
+  await expect(session).toContainText("你在开会，提到了心理中心的会议安排。");
+  await expect(session.locator(".chat-bubble.world").first()).toBeHidden();
+  await session.getByText("查看 2 条分段记录").click();
+  await expect(session.locator(".chat-bubble.world").first()).toBeVisible();
 });
 
 test("memory feedback shows a pending state while the request is in flight", async ({ page }) => {
@@ -522,7 +576,7 @@ async function installMockApi(page: Page) {
       if (await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:slowCuriousCapture") === "1")) {
         await new Promise((resolve) => setTimeout(resolve, 900));
       }
-      const requestBody = safePostJson(route) as { segments?: Array<{ id: string; label: string; content: string; kind: string; attachments?: unknown[] }> };
+      const requestBody = safePostJson(route) as { segments?: Array<{ id: string; label: string; content: string; kind: string; batchId?: string; auditOnly?: boolean; attachments?: unknown[] }> };
       const firstSegment = requestBody.segments?.[0];
       if (firstSegment) {
         profile = {
@@ -537,6 +591,8 @@ async function installMockApi(page: Page) {
               displayText: firstSegment.kind === "audio_observation" ? "这段声音里，你刚录了一段想交给 Papo 听的现场线索" : undefined,
               relatedMemoryIds: [],
               modality: firstSegment.kind,
+              batchId: firstSegment.batchId,
+              auditOnly: firstSegment.auditOnly,
               attachments: firstSegment.attachments as never
             },
             ...profile.conversation
@@ -578,8 +634,15 @@ async function installMockApi(page: Page) {
 
 async function profileWithTestOverrides(route: Route, profile: ReturnType<typeof makeProfile>) {
   const petKind = await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:testPetKind")).catch(() => null);
-  if (!petKind) return profile;
-  return { ...profile, petKind };
+  const rawProfileOverride = await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:testProfileOverride")).catch(() => null);
+  const overridden = rawProfileOverride ? { ...profile, ...JSON.parse(rawProfileOverride) } : profile;
+  if (!petKind) return overridden;
+  return { ...overridden, petKind };
+}
+
+async function startCompanionListening(page: Page, label = "3 分钟") {
+  await page.getByRole("button", { name: /陪我/ }).first().click();
+  await page.getByRole("button", { name: new RegExp(label) }).click();
 }
 
 async function installMockMicrophone(page: Page) {

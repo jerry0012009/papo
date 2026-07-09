@@ -46,6 +46,7 @@ export function appendInputMessage(
     role?: "user" | "world";
     text?: string;
     displayText?: string;
+    auditOnly?: boolean;
     sourceId?: string;
     modality?: SegmentKind | "button";
     batchId?: string;
@@ -73,6 +74,7 @@ export function appendInputMessage(
     channel: input.channel,
     text,
     displayText: input.displayText?.trim() || undefined,
+    auditOnly: input.auditOnly,
     sourceId: input.sourceId,
     relatedMemoryIds: input.relatedMemoryIds ?? [],
     modality: input.modality,

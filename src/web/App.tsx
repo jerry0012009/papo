@@ -68,6 +68,7 @@ import {
   LIVE_BATCH_AUDIO_GRACE_MS,
   LIVE_BATCH_MAX_WAIT_MS,
   LIVE_BATCH_MS,
+  LIVE_LISTENING_DURATION_OPTIONS,
   LIVE_LISTENING_MAX_MS,
   shouldSuppressForcedAudioSlice
 } from "./live-listening";
@@ -83,6 +84,7 @@ interface EmergenceSurface {
 
 type ConversationMessage = CreatureProfile["conversation"][number];
 type ConversationSection =
+  | { kind: "live"; id: string; sessionKey: string; messages: ConversationMessage[] }
   | { kind: "batch"; id: string; batchId: string; messages: ConversationMessage[] }
   | { kind: "single"; id: string; message: ConversationMessage };
 
@@ -127,6 +129,8 @@ export function App() {
   const [emergence, setEmergence] = useState<EmergenceSurface>();
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
+  const [listeningDurationMs, setListeningDurationMs] = useState(LIVE_LISTENING_MAX_MS);
+  const [listeningDurationPickerOpen, setListeningDurationPickerOpen] = useState(false);
   const [quickRecording, setQuickRecording] = useState(false);
   const [quickAudioProcessing, setQuickAudioProcessing] = useState(false);
   const [quickRecordingElapsed, setQuickRecordingElapsed] = useState(0);
@@ -149,6 +153,7 @@ export function App() {
   const segmentIndexRef = useRef(1);
   const lastAudioSliceRequestAtRef = useRef(0);
   const listeningStartedAtRef = useRef<number | undefined>(undefined);
+  const listeningDurationMsRef = useRef(LIVE_LISTENING_MAX_MS);
   const profileRef = useRef<CreatureProfile | undefined>(undefined);
   const tickTimerRef = useRef<number | undefined>(undefined);
   const segmentTimerRef = useRef<number | undefined>(undefined);
@@ -642,8 +647,15 @@ export function App() {
     }
   }
 
-  async function startListening() {
+  function openListeningDurationPicker() {
     setTab("chat");
+    if (listening) return;
+    setListeningDurationPickerOpen(true);
+  }
+
+  async function startListening(durationMs = LIVE_LISTENING_MAX_MS) {
+    setTab("chat");
+    setListeningDurationPickerOpen(false);
     if (listening) return;
     const Recorder = getMediaRecorder();
     if (!Recorder) {
@@ -672,6 +684,8 @@ export function App() {
     segmentIndexRef.current = 1;
     lastAudioSliceRequestAtRef.current = 0;
     listeningStartedAtRef.current = Date.now();
+    listeningDurationMsRef.current = durationMs;
+    setListeningDurationMs(durationMs);
     setListeningElapsed(0);
     setListening(true);
     setError(undefined);
@@ -691,12 +705,12 @@ export function App() {
 
     tickTimerRef.current = window.setInterval(() => {
       if (!listeningStartedAtRef.current) return;
-      setListeningElapsed(Math.min(LIVE_LISTENING_MAX_MS / 1000, Math.floor((Date.now() - listeningStartedAtRef.current) / 1000)));
+      setListeningElapsed(Math.min(listeningDurationMsRef.current / 1000, Math.floor((Date.now() - listeningStartedAtRef.current) / 1000)));
     }, 1000);
     segmentTimerRef.current = window.setInterval(() => {
       requestAudioSlice(false);
     }, LIVE_BATCH_MS);
-    stopTimerRef.current = window.setTimeout(() => stopListening(), LIVE_LISTENING_MAX_MS);
+    stopTimerRef.current = window.setTimeout(() => stopListening(), durationMs);
   }
 
   function startAudioRecorder(stream: MediaStream, Recorder: typeof MediaRecorder, mimeType: string) {
@@ -731,7 +745,7 @@ export function App() {
   function shouldStartNextAudioRecorder() {
     const startedAt = listeningStartedAtRef.current;
     const stream = mediaStreamRef.current;
-    return Boolean(startedAt && stream?.active && Date.now() - startedAt < LIVE_LISTENING_MAX_MS);
+    return Boolean(startedAt && stream?.active && Date.now() - startedAt < listeningDurationMsRef.current);
   }
 
   function stopListening() {
@@ -791,15 +805,16 @@ export function App() {
     const dataUrl = await blobToDataUrl(blob);
     const result = await observeAudio(dataUrl, `语音片段 ${meta.index}`);
     const content = chooseAudioObservation(result.observation);
-    if (!content.trim()) {
-      markLiveBatchAudioSettled(meta.batchId);
-      return;
-    }
+    const auditOnly = !content.trim() || result.sensingTrace?.status !== "content";
+    const segmentContent = auditOnly ? audioAuditSummary(result.sensingTrace?.status) : content.trim();
     submitLiveSegments([
-      makeSegment(`live-audio-${Date.now()}-${meta.index}`, "audio_observation", `听到的声音 ${meta.index}`, content.trim(), {
+      {
+        ...makeSegment(`live-audio-${Date.now()}-${meta.index}`, "audio_observation", `听到的声音 ${meta.index}`, segmentContent, {
         observedAt: meta.observedAt,
         batchId: meta.batchId
-      })
+        }),
+        auditOnly
+      }
     ].map((segment) => ({ ...segment, sensingTrace: result.sensingTrace })), { audioSettledBatchId: meta.batchId });
   }
 
@@ -1033,7 +1048,7 @@ export function App() {
                 unreadPapoCount={unreadPapoCount}
                 busy={busy}
                 onGoCapture={() => setTab("chat")}
-                onGoCurious={startListening}
+                onGoCurious={openListeningDurationPicker}
                 onGoChat={() => setTab("chat")}
                 onPetTouch={handlePetTouch}
                 onUpdateActionCard={changeActionCard}
@@ -1053,10 +1068,11 @@ export function App() {
                 onStopQuickRecording={stopQuickAudioObservation}
                 listening={listening}
                 listeningElapsed={listeningElapsed}
+                listeningDurationMs={listeningDurationMs}
                 quickRecording={quickRecording}
                 quickAudioProcessing={quickAudioProcessing}
                 quickRecordingElapsed={quickRecordingElapsed}
-                onStartListening={startListening}
+                onStartListening={openListeningDurationPicker}
                 onStopListening={stopListening}
               />
             ) : null}
@@ -1083,8 +1099,14 @@ export function App() {
           onGoChat={() => setTab("chat")}
           onGoProfile={() => setTab("profile")}
           onAskEmergence={askEmergence}
-          onToggleListening={listening ? stopListening : startListening}
+          onToggleListening={listening ? stopListening : openListeningDurationPicker}
           onUpdateActionCard={changeActionCard}
+        />
+        <ListeningDurationDialog
+          open={listeningDurationPickerOpen}
+          creatureName={profile.creatureName}
+          onOpenChange={setListeningDurationPickerOpen}
+          onSelect={(durationMs) => void startListening(durationMs)}
         />
       </main>
     </Tooltip.Provider>
@@ -1292,7 +1314,7 @@ function HomeView(props: {
         ) : null}
 
         <div className="home-actions">
-          <button className="primary home-listen-action" onClick={props.onGoCurious} title={`开启 3 分钟持续听，${props.profile.creatureName} 会按约 30 秒分段理解你周围发生的事。`}>
+          <button className="primary home-listen-action" onClick={props.onGoCurious} title={`选择一段时间，让 ${props.profile.creatureName} 陪你听着。`}>
             <Sparkles size={18} />
             陪我一会儿
           </button>
@@ -1301,7 +1323,7 @@ function HomeView(props: {
             跟 {props.profile.creatureName} 说
           </button>
         </div>
-        <p className="home-action-note">陪伴会持续听 3 分钟，并按约 30 秒分段交给 {props.profile.creatureName}。</p>
+        <p className="home-action-note">可以选 3、15 或 60 分钟。安静时它不打扰你，有事时再回应。</p>
         <HomeActionCardsPeek profile={props.profile} />
         <HomeIllustrationsPeek profile={props.profile} />
 
@@ -1450,6 +1472,40 @@ function HomeIllustrationsPeek({ profile, compact = false }: { profile: Creature
                 <strong>{item.title}</strong>
                 {item.caption ? <span>{item.caption}</span> : null}
               </a>
+            ))}
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
+function ListeningDurationDialog(props: {
+  open: boolean;
+  creatureName: string;
+  onOpenChange: (open: boolean) => void;
+  onSelect: (durationMs: number) => void;
+}) {
+  return (
+    <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content className="duration-dialog" aria-describedby={undefined}>
+          <div className="duration-dialog-head">
+            <div>
+              <Dialog.Title>陪你多久</Dialog.Title>
+              <p>{props.creatureName} 会一直听着，约每 30 秒整理一次。</p>
+            </div>
+            <Dialog.Close aria-label="关闭">
+              <X size={18} />
+            </Dialog.Close>
+          </div>
+          <div className="duration-options">
+            {LIVE_LISTENING_DURATION_OPTIONS.map((option) => (
+              <button type="button" key={option.value} onClick={() => props.onSelect(option.value)}>
+                <strong>{option.label}</strong>
+                <span>{option.description}</span>
+              </button>
             ))}
           </div>
         </Dialog.Content>
@@ -2059,6 +2115,7 @@ function ChatView(props: {
   onStopQuickRecording: () => void;
   listening: boolean;
   listeningElapsed: number;
+  listeningDurationMs: number;
   quickRecording: boolean;
   quickAudioProcessing: boolean;
   quickRecordingElapsed: number;
@@ -2080,7 +2137,7 @@ function ChatView(props: {
   const waitingForStagedSegments = props.stagedSegments.some((segment) => !stagedSegmentReady(segment));
   const canSubmit = !waitingForStagedSegments && Boolean(draft.trim() || props.stagedSegments.some((segment) => stagedSegmentReady(segment) && segment.content.trim()));
   const hasOlderMessages = allMessages.length > visibleCount;
-  const listeningTotalSeconds = Math.floor(LIVE_LISTENING_MAX_MS / 1000);
+  const listeningTotalSeconds = Math.floor(props.listeningDurationMs / 1000);
   const listeningRemainingSeconds = Math.max(0, listeningTotalSeconds - props.listeningElapsed);
 
   const loadOlderMessages = useCallback(() => {
@@ -2160,7 +2217,9 @@ function ChatView(props: {
               </button>
             ) : null}
             {sections.map((section) =>
-              section.kind === "batch" ? (
+              section.kind === "live" ? (
+                <CompanionSessionCard section={section} profile={props.profile} key={section.id} />
+              ) : section.kind === "batch" ? (
                 <section className="chat-batch" key={section.id}>
                   <div className="chat-batch-head">
                     <strong>同一次事件</strong>
@@ -2367,6 +2426,43 @@ function ChatBubble({ message, profile }: { message: ConversationMessage; profil
       ) : null}
     </article>
   );
+}
+
+function CompanionSessionCard({ section, profile }: { section: Extract<ConversationSection, { kind: "live" }>; profile: CreatureProfile }) {
+  const sorted = [...section.messages].sort((a, b) => Date.parse(a.observedAt ?? a.at) - Date.parse(b.observedAt ?? b.at));
+  const audioMessages = sorted.filter((message) => message.modality === "audio_observation");
+  const usefulAudio = audioMessages.filter((message) => !message.auditOnly && message.sensingTrace?.status === "content");
+  const textMessages = sorted.filter((message) => message.modality === "text");
+  const imageMessages = sorted.filter((message) => message.modality === "image_summary");
+  const firstUseful = [...usefulAudio, ...textMessages, ...imageMessages][0];
+  const summary = firstUseful ? chatBubbleText(firstUseful) : "我听了一会儿，这段没有需要打扰你的内容。";
+  return (
+    <section className="chat-batch companion-session">
+      <div className="chat-batch-head">
+        <strong>{profile.creatureName} 听了一会儿</strong>
+        <span>{companionSessionSummary(audioMessages.length, usefulAudio.length, textMessages.length, imageMessages.length)}</span>
+      </div>
+      <p>{summary}</p>
+      <details>
+        <summary>查看 {sorted.length} 条分段记录</summary>
+        <div className="companion-session-details">
+          {sorted.map((message) => (
+            <ChatBubble message={message} profile={profile} key={message.id} />
+          ))}
+        </div>
+      </details>
+    </section>
+  );
+}
+
+function companionSessionSummary(audioCount: number, usefulAudioCount: number, textCount: number, imageCount: number) {
+  const parts = [
+    audioCount ? `${audioCount} 段声音` : "",
+    usefulAudioCount ? `${usefulAudioCount} 段有内容` : "",
+    textCount ? `${textCount} 条文字` : "",
+    imageCount ? `${imageCount} 张照片` : ""
+  ].filter(Boolean);
+  return parts.join(" · ") || "已听过";
 }
 
 function AttachmentStrip({ attachments }: { attachments?: NonNullable<StreamSegment["attachments"]> }) {
@@ -2886,6 +2982,17 @@ function actionLabel(action: string) {
 
 function groupConversationSections(messages: ConversationMessage[]): ConversationSection[] {
   const sections = messages.reduce<ConversationSection[]>((sections, message) => {
+    const liveKey = liveSessionKey(message.batchId);
+    if (message.role !== "papo" && liveKey) {
+      const previous = sections[sections.length - 1];
+      if (previous?.kind === "live" && previous.sessionKey === liveKey) {
+        previous.messages.push(message);
+        return sections;
+      }
+      sections.push({ kind: "live", id: `live-${liveKey}-${message.id}`, sessionKey: liveKey, messages: [message] });
+      return sections;
+    }
+
     if (message.role !== "papo" && message.batchId) {
       const previous = sections[sections.length - 1];
       if (previous?.kind === "batch" && previous.batchId === message.batchId) {
@@ -2904,6 +3011,11 @@ function groupConversationSections(messages: ConversationMessage[]): Conversatio
       ? [{ kind: "single" as const, id: section.messages[0].id, message: section.messages[0] }]
       : [section]
   );
+}
+
+function liveSessionKey(batchId?: string) {
+  const match = batchId?.match(/^(live-.+)-\d{2}$/);
+  return match?.[1];
 }
 
 function batchMomentSummary(messages: ConversationMessage[]) {
@@ -3972,6 +4084,12 @@ function preferredAudioMimeType(Recorder: typeof MediaRecorder) {
 
 function chooseAudioObservation(modelObservation: string) {
   return modelObservation.trim();
+}
+
+function audioAuditSummary(status?: SensingTrace["status"]) {
+  if (status === "unreadable") return "这 30 秒的声音没有整理出可用内容。";
+  if (status === "empty") return "这 30 秒里没有听到需要继续处理的内容。";
+  return "这 30 秒里没有形成需要继续处理的声音线索。";
 }
 
 function sensingSegmentContent(text: string) {

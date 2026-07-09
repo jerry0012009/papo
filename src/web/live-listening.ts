@@ -1,5 +1,10 @@
 export const LIVE_BATCH_MS = 30_000;
 export const LIVE_LISTENING_MAX_MS = 180_000;
+export const LIVE_LISTENING_DURATION_OPTIONS = [
+  { label: "3 分钟", value: 180_000, description: "适合临时说一件事。" },
+  { label: "15 分钟", value: 900_000, description: "适合吃饭、通勤、开会前后。" },
+  { label: "60 分钟", value: 3_600_000, description: "适合一段较长的陪伴。" }
+] as const;
 export const LIVE_BATCH_AUDIO_GRACE_MS = 1_500;
 export const LIVE_BATCH_MAX_WAIT_MS = 12_000;
 export const FINAL_SLICE_SUPPRESS_MS = 1_000;

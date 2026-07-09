@@ -101,6 +101,7 @@ const curiousSchema = z.object({
         kind: z.enum(["text", "image_summary", "audio_observation"]),
         label: z.string().min(1).max(80),
         content: z.string().max(4000),
+        auditOnly: z.boolean().optional(),
         observedAt: z.string().datetime().optional(),
         batchId: z.string().min(1).max(80).optional(),
         location: locationSchema.optional(),
@@ -391,6 +392,7 @@ export function createApp(input: {
           role: segment.kind === "text" ? "user" : "world",
           text,
           displayText: segmentDisplayText(segment.kind, text),
+          auditOnly: segment.auditOnly,
           sourceId: segment.id,
           modality: segment.kind,
           batchId: segment.batchId,
@@ -2088,7 +2090,26 @@ function normalizeAudioObservation(text: string) {
   if (normalized === "ERROR_AUDIO_UNREADABLE" || /无法(获取|读取|处理|访问).{0,12}音频/.test(normalized)) {
     return { text: "", unreadable: true };
   }
+  if (isEmptyAudioObservation(normalized)) {
+    return { text: "", unreadable: false };
+  }
   return { text: normalized, unreadable: false };
+}
+
+function isEmptyAudioObservation(text: string) {
+  const normalized = text.replace(/\s+/g, "");
+  return [
+    /没有可用生活信息/,
+    /没有可识别的说话内容/,
+    /没有可识别.*生活事件/,
+    /无可用生活信息/,
+    /无声音内容/,
+    /只有持续的噪音/,
+    /只有噪音/,
+    /没有明显.*内容/,
+    /未听到.*内容/,
+    /听不清.*内容/
+  ].some((pattern) => pattern.test(normalized));
 }
 
 function audioSensingTrace(

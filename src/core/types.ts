@@ -110,6 +110,7 @@ export interface StreamSegment {
   kind: SegmentKind;
   label: string;
   content: string;
+  auditOnly?: boolean;
   position?: number;
   observedAt?: string;
   batchId?: string;
@@ -539,6 +540,7 @@ export interface CreatureMessage {
   channel: ConversationChannel;
   text: string;
   displayText?: string;
+  auditOnly?: boolean;
   sourceId?: string;
   relatedMemoryIds: string[];
   modality?: SegmentKind | "button";

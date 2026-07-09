@@ -52,12 +52,13 @@ export function handleCuriousStream(
       ...segment,
       position: segment.position ?? index + 1,
       observedAt: segment.observedAt ?? now,
-      content: contentWithObservationContext({ ...segment, observedAt: segment.observedAt ?? now })
+      content: segment.auditOnly ? segment.content : contentWithObservationContext({ ...segment, observedAt: segment.observedAt ?? now })
     }))
     .filter((segment) => segment.content.trim().length > 0);
 
   const attentionBudget = deriveAttentionBudget(profile);
-  const intervalSegments = mergeSegmentsByInterval(prepared, now);
+  const attentionSegments = prepared.filter((segment) => !segment.auditOnly);
+  const intervalSegments = mergeSegmentsByInterval(attentionSegments, now);
   const candidates = intervalSegments.map((segment) => ({
     segment,
     score: scoreSegment(profile, segment, { position: segment.position })
