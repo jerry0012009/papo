@@ -4068,9 +4068,11 @@ select {
 }
 
 .chat-bubble.papo p {
-  background: #fff8ec;
-  border-color: rgba(205, 133, 63, 0.26);
-  color: #352719;
+  padding: 2px 0;
+  border-color: transparent;
+  border-radius: 0;
+  background: transparent;
+  color: #263a32;
 }
 
 .chat-bubble.world p {
@@ -4085,7 +4087,7 @@ select {
 }
 
 .chat-bubble.papo .chat-bubble-head strong {
-  color: #9a4f14;
+  color: #46524a;
 }
 
 .chat-bubble.world .chat-bubble-head strong {
@@ -4099,7 +4101,7 @@ select {
 
 .chat-bubble.papo .chat-bubble-head span,
 .chat-bubble.papo small {
-  color: rgba(67, 45, 24, 0.62);
+  color: var(--muted-foreground);
 }
 
 .chat-bubble.world .chat-bubble-head span,
