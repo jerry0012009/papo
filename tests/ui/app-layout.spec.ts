@@ -17,6 +17,15 @@ test("first visit shows login and registration instead of creating a public Papo
   await expect(page.getByRole("heading", { name: "养一只自己的小动物" })).toBeVisible();
   await expect(page.getByRole("button", { name: "注册" })).toBeVisible();
   await expect(page.getByRole("button", { name: "登录" })).toBeVisible();
+  await expect(page.locator(".pet-option")).toHaveCount(7);
+  await expect(page.getByRole("button", { name: /柴犬 Papo/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /英短短/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /金毛犬/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /布偶猫/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /垂耳兔/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /小仓鼠/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /玄凤鹦鹉/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Claude|Codex|DataWhale|Dewey|Fireball|Mo Xia|Rocky|Seedy|Stacky/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "开始养 Papo" })).toBeDisabled();
 });
 

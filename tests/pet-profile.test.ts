@@ -21,6 +21,8 @@ const provider: ModelProvider = {
   async generateJson(prompt) {
     if (prompt.includes("动作卡导演")) {
       assert.match(prompt, /轻轻探头/);
+      assert.match(prompt, /主目标/);
+      assert.match(prompt, /动作内容优先来自用户/);
       return {
         card: {
           key: "curious",
@@ -52,12 +54,14 @@ const provider: ModelProvider = {
   async generateImage(prompt) {
     assert.match(prompt, /British Shorthair|英短|灰白/);
     assert.match(prompt, /stuffed animal|plush toy/i);
+    if (prompt.includes("action video")) assert.match(prompt, /user's requested action|用户/);
     return { dataUrl: imageDataUrl, mime: "image/png", model: "fake-image" };
   },
   async generateVideo(prompt) {
     assert.match(prompt, /圆脸灰白英短|British Shorthair/);
     assert.match(prompt, /first frame and final frame should match/i);
     assert.match(prompt, /not a plush toy or figurine/i);
+    assert.match(prompt, /Do not replace a user-requested action/);
     return { dataUrl: videoDataUrl, mime: "video/mp4", model: "fake-video" };
   }
 };

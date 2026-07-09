@@ -1301,6 +1301,7 @@ function actionCardVideoPrompt(profile: CreatureProfile, actionResult: ActionRes
     `Visual style: ${identity.visualStyle}`,
     `Motion style: ${identity.motionStyle}`,
     hasReferenceImage ? "Use the attached profile/reference image as strict visual grounding. Preserve coat colors, markings, face shape, body proportions, expression, and overall identity from the image." : "Keep the character design consistent with the pet kind and current profile.",
+    "Action priority: preserve the action, object, mood, and scene requested by the action model and user moment. Do not replace a specific requested action with a generic idle, wave, ball, or nap action.",
     "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
     "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
     "No UI, no text labels, no subtitles, no watermark, no extra animals, no human, no props that hide the body. Keep the action readable and cute, with simple loopable motion.",
@@ -1325,6 +1326,7 @@ function actionCardVideoPromptForEmergence(profile: CreatureProfile, actionResul
     `Personality and habits to express through motion: ${identity.personality} ${identity.habits}`,
     `Visual and motion style: ${identity.visualStyle} ${identity.motionStyle}`,
     hasReferenceImage ? "Use the attached profile/reference image as strict visual grounding. Preserve coat colors, markings, face shape, body proportions, expression, and overall identity from the image." : "",
+    "Action priority: preserve the action, object, mood, and scene requested by the emergence/action model. Do not replace a specific requested action with a generic idle, wave, ball, or nap action.",
     "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
     "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
     "No UI, no text labels, no subtitles, no watermark, no extra animals, no human, no props that hide the body.",
@@ -1440,14 +1442,16 @@ function buildInitialPetMotionPlanPrompt(profile: CreatureProfile, guidance?: st
     title: card.title,
     sourceIds: card.sourceIds
   }));
+  const userMotionGuidance = guidance?.trim() || "";
   return `你是 Papo 的动作卡导演。请基于当前小动物 profile，为首页准备 1 张初始动作视频卡。
 
 目标：
 - 这次只规划一张动作卡，不要一次返回多张。用户可以重复点击，最多补到 4 张初始动作。
 - 动作应该像首页状态视频一样自然，可循环，可被用户点击切换。
-- 优先补齐陪伴产品最常用的状态：待着、回应用户、玩耍/好奇、休息；不要重复已有动作。
+- 如果 userMotionGuidance 有内容，它就是这次动作卡的主目标。必须优先保留用户指定的动作、物体、情绪和场景，不要把它改写成默认按钮动作。
+- 默认动作库只在用户没有提供明确动作时使用，用于补齐陪伴产品最常用的状态：待着、回应用户、玩耍/好奇、休息；不要重复已有动作。
 - prompt 只描述画面和动作，不写内部流程。
-- 如果用户这次给了动作提示，结合默认约束和用户提示来规划；用户提示不够具体时，选择最适合当前 profile 的基础动作。
+- LLM 的职责是整合：把当前 profile 的外观/画风/镜头/循环约束，与用户提示里的动作内容合成一个可生成的视频提示词。动作内容优先来自用户，画风和身份优先来自 profile/reference image。
 - 必须保持同一个角色外观，不要创造新角色。
 - 必须明确这是“真实动物/当前数字形象的动作视频”，不是玩具、毛绒公仔、摆件或产品模型。
 - 要求动作用固定镜头、全身可见、首尾姿态尽量一致，适合无缝循环。
@@ -1459,12 +1463,19 @@ ${JSON.stringify({
   petProfile: profile.petProfile,
   dogState: profile.dogState,
   existingInitialMotions: existing,
-  userMotionGuidance: guidance?.trim() || "未提供"
+  userMotionGuidance: userMotionGuidance || "未提供"
 })}
 
 返回严格 JSON：
 {
-  "card": {"key":"idle","title":"...","caption":"...","prompt":"...","style":"...","durationSeconds":8}
+  "card": {
+    "key":"简短动作键名。如果用户给了动作，key 应贴近用户动作",
+    "title":"面向用户的动作卡标题",
+    "caption":"这张动作卡发生了什么，一句话",
+    "prompt":"视频画面提示词。必须先写用户指定动作；再写同一只小动物的 profile 外观和画风；最后写镜头、循环、禁止玩具感等约束",
+    "style":"视觉风格。优先对齐 petProfile.visualStyle 和 reference/avatar photo，不要另起风格",
+    "durationSeconds":8
+  }
 }`;
 }
 
@@ -1478,6 +1489,7 @@ function buildInitialMotionVideoPrompt(profile: CreatureProfile, card: { title: 
     `Personality/habits: ${identity.personality} ${identity.habits}`,
     `Motion style: ${identity.motionStyle}`,
     hasReferenceImage ? "The attached image is the generated first-frame/keyframe for this exact action. Animate from it while preserving the same identity, pose family, coat colors, markings, face shape, body proportions, expression, and background." : "Use the written profile as strict grounding for character identity.",
+    "Action priority: preserve the action, object, mood, and scene requested in the action direction. Do not replace a user-requested action with a generic idle, wave, ball, or nap action.",
     "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
     "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
     "No UI, no text, no watermark, no human, no extra animals, no props that hide the body.",
@@ -1495,6 +1507,7 @@ function buildInitialMotionKeyframePrompt(profile: CreatureProfile, card: { titl
     "Visual goal: a living digital pet based on the current profile image/photo, lightly stylized for a polished companion app. It must look like the same animal/creature from the profile, not a plush toy or figurine.",
     hasReferenceImage ? "Use the attached user/profile reference image as the primary identity source. Preserve coat colors, markings, face shape, body proportions, recognizable expression, and species." : "Use the written profile as the identity source.",
     "Composition: warm clean app background, soft natural light, full body centered, stable scale, clear silhouette. The pose should be the starting pose and also suitable as the ending pose for a loop.",
+    "Action priority: the still keyframe must visibly set up the user's requested action. Do not fall back to a generic default pose if the action direction names a specific action.",
     `Character identity: ${identity.appearance}`,
     `Personality/habits: ${identity.personality} ${identity.habits}`,
     `Action title: ${card.title}`,

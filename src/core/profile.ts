@@ -1,6 +1,6 @@
 import { makeId } from "./ids";
 import { normalizeDogState, seedDogState } from "./dog-states";
-import { normalizePetKind, petKindLabel } from "./pet-kinds";
+import { normalizePetKind, petKindMeta } from "./pet-kinds";
 import { initialState } from "./state";
 import type { CreatureProfile, FeedbackPolicyProfile, PetIdentityProfile } from "./types";
 
@@ -106,26 +106,16 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
 }
 
 export function initialPetProfile(petKind: string, now = new Date().toISOString()): PetIdentityProfile {
-  const label = petKindLabel(petKind);
-  const isBritishShorthair = normalizePetKind(petKind) === "british-shorthair";
-  const isShiba = normalizePetKind(petKind) === "shiba";
+  const meta = petKindMeta(normalizePetKind(petKind));
   return {
     updatedAt: now,
     source: "registration",
-    displaySpecies: label,
-    appearance: isBritishShorthair
-      ? "圆脸灰白英短小猫，蓝灰和白色毛色，琥珀色眼睛，小粉鼻，身体柔软微胖。"
-      : isShiba
-        ? "可爱的卡通柴犬，暖橙和奶白毛色，圆润脸颊，表情亲近。"
-        : `可爱的 ${label} 小动物，适合住在手机里的陪伴感形象。`,
+    displaySpecies: meta.label,
+    appearance: meta.appearance,
     personality: "亲近、好奇、会安静陪着用户，也会在合适的时候轻轻回应。",
     habits: "喜欢在用户身边待着，听见重要的小事会靠近一点。",
-    visualStyle: "商业化移动应用里的温暖可爱小动物形象，干净、柔软、有宠物感。",
-    imagePrompt: isBritishShorthair
-      ? "premium semi-realistic plush 3D mobile companion mascot, round-faced gray and white British Shorthair kitten, amber eyes, tiny pink nose, soft paws, warm off-white studio background"
-      : isShiba
-        ? "cute cartoon Shiba Inu companion mascot, warm orange and cream fur, rounded cheeks, soft friendly expression, warm off-white studio background"
-        : `cute small ${label} companion mascot for a mobile AI pet app, warm off-white studio background`,
+    visualStyle: "商业化移动应用里的温暖可爱小动物形象，干净、柔软、有宠物感；画风接近高质感 3D app mascot，不是玩具或摆件。",
+    imagePrompt: meta.imagePrompt,
     motionStyle: "短循环动作，镜头稳定，全身居中，温暖米白背景，动作简单可爱，结尾回到接近起始姿势。",
     initialMotion: { status: "idle" }
   };

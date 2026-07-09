@@ -1,26 +1,89 @@
 export const DEFAULT_PET_KIND = "shiba";
 
 export const PET_KINDS = [
-  { id: "shiba", label: "柴犬 Papo", description: "默认的小狗形象，适合温暖陪伴。", renderer: "shiba" },
-  { id: "claude", label: "Claude", description: "小小的橙色方块宠物，表情丰富。", renderer: "agent-pet" },
-  { id: "codex", label: "Codex", description: "经典桌面小伙伴，适合专注工作。", renderer: "agent-pet" },
-  { id: "datawhale", label: "DataWhale", description: "圆滚滚的小鲸鱼，安静柔和。", renderer: "agent-pet" },
-  { id: "dewey", label: "Dewey", description: "整洁的小鸭子，适合平稳陪伴。", renderer: "agent-pet" },
-  { id: "fireball", label: "Fireball", description: "活跃的小火球，反应更有能量。", renderer: "agent-pet" },
-  { id: "mo-xia", label: "Mo Xia", description: "戴斗笠的小侠客，安静但有存在感。", renderer: "agent-pet" },
-  { id: "rocky", label: "Rocky", description: "稳稳的小石头，适合慢慢陪着。", renderer: "agent-pet" },
-  { id: "seedy", label: "Seedy", description: "冒芽的小植物，适合记录新想法。", renderer: "agent-pet" },
-  { id: "stacky", label: "Stacky", description: "叠叠的小伙伴，适合整理和复盘。", renderer: "agent-pet" },
-  { id: "british-shorthair", label: "英短短", description: "灰白英短小猫咪，圆脸大眼，安静温柔。", renderer: "generated" }
+  {
+    id: "shiba",
+    label: "柴犬 Papo",
+    description: "暖橙色柴犬，亲近、活泼，适合默认陪伴。",
+    renderer: "shiba",
+    speciesNoun: "小狗",
+    appearance: "可爱的卡通柴犬，暖橙和奶白毛色，圆润脸颊，友好的表情，身体小巧结实。",
+    imagePrompt: "premium semi-realistic 3D mobile companion mascot, cute Shiba Inu dog, warm orange and cream fur, rounded cheeks, friendly natural eyes, clean full-body character reference, warm off-white studio background",
+    accentColor: "#e89a42"
+  },
+  {
+    id: "british-shorthair",
+    label: "英短短",
+    description: "灰白英短小猫，圆脸大眼，安静温柔。",
+    renderer: "generated",
+    speciesNoun: "小猫",
+    appearance: "圆脸灰白英短小猫，蓝灰和白色毛色，琥珀色眼睛，小粉鼻，身体柔软微胖。",
+    imagePrompt: "premium semi-realistic 3D mobile companion mascot, round-faced gray and white British Shorthair kitten, amber eyes, tiny pink nose, soft paws, clean full-body character reference, warm off-white studio background",
+    accentColor: "#8fa0a5"
+  },
+  {
+    id: "golden-retriever",
+    label: "金毛犬",
+    description: "金色小狗，热情可靠，像会一直陪你散步。",
+    renderer: "template",
+    speciesNoun: "小狗",
+    appearance: "幼年金毛寻回犬，金色柔顺毛发，黑亮鼻子，温和眼睛，耳朵自然垂下，表情开朗可信赖。",
+    imagePrompt: "premium semi-realistic 3D mobile companion mascot, young Golden Retriever puppy, soft golden fur, warm brown eyes, black nose, floppy ears, clean full-body character reference, warm off-white studio background",
+    accentColor: "#d9a64f"
+  },
+  {
+    id: "ragdoll-cat",
+    label: "布偶猫",
+    description: "奶白长毛小猫，蓝眼睛，柔软黏人。",
+    renderer: "template",
+    speciesNoun: "小猫",
+    appearance: "奶白色布偶小猫，柔软长毛，浅棕耳朵和尾巴，蓝色眼睛，脸颊圆润，姿态温顺。",
+    imagePrompt: "premium semi-realistic 3D mobile companion mascot, fluffy Ragdoll kitten, cream white long fur, soft brown ears and tail, blue eyes, rounded cheeks, clean full-body character reference, warm off-white studio background",
+    accentColor: "#c8a88a"
+  },
+  {
+    id: "lop-rabbit",
+    label: "垂耳兔",
+    description: "奶白小兔，动作轻，适合安静陪伴。",
+    renderer: "template",
+    speciesNoun: "小兔",
+    appearance: "奶白色垂耳小兔，耳朵柔软下垂，圆眼睛，短短尾巴，身体圆润，动作轻柔安静。",
+    imagePrompt: "premium semi-realistic 3D mobile companion mascot, tiny cream white lop-eared rabbit, floppy ears, round gentle eyes, soft rounded body, clean full-body character reference, warm off-white studio background",
+    accentColor: "#d7b7c3"
+  },
+  {
+    id: "hamster",
+    label: "小仓鼠",
+    description: "圆滚滚的小仓鼠，好奇、可爱，适合记录小事。",
+    renderer: "template",
+    speciesNoun: "仓鼠",
+    appearance: "金白色小仓鼠，圆滚滚身体，小耳朵，黑亮眼睛，粉色小爪，脸颊鼓鼓的。",
+    imagePrompt: "premium semi-realistic 3D mobile companion mascot, tiny golden and white hamster, round chubby body, tiny ears, bright black eyes, pink paws, full-body character reference, warm off-white studio background",
+    accentColor: "#d5a65b"
+  },
+  {
+    id: "cockatiel",
+    label: "玄凤鹦鹉",
+    description: "浅黄小鸟，精神、机灵，会轻轻回应你。",
+    renderer: "template",
+    speciesNoun: "小鸟",
+    appearance: "浅黄色玄凤鹦鹉，橙色脸颊，头顶小冠羽，灰白翅膀，眼神机灵，身体小巧。",
+    imagePrompt: "premium semi-realistic 3D mobile companion mascot, small pale yellow cockatiel bird, orange cheek patches, cute crest feathers, gray-white wings, bright eyes, full-body character reference, warm off-white studio background",
+    accentColor: "#e7c95f"
+  }
 ] as const;
 
 export type PetKindId = (typeof PET_KINDS)[number]["id"];
+export type PetKindRenderer = (typeof PET_KINDS)[number]["renderer"];
 
 export function normalizePetKind(value?: string): PetKindId {
   return PET_KINDS.some((pet) => pet.id === value) ? (value as PetKindId) : DEFAULT_PET_KIND;
 }
 
+export function petKindMeta(value?: string) {
+  return PET_KINDS.find((item) => item.id === normalizePetKind(value)) ?? PET_KINDS[0];
+}
+
 export function petKindLabel(value?: string) {
-  const pet = PET_KINDS.find((item) => item.id === normalizePetKind(value));
-  return pet?.label ?? "Papo";
+  return petKindMeta(value).label;
 }

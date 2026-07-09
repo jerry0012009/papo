@@ -23,7 +23,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { audioObservationPreview, imageSummaryPreview } from "../core/display-text";
 import { toCreatureMemoryVoice } from "../core/memory";
-import { PET_KINDS, normalizePetKind, petKindLabel } from "../core/pet-kinds";
+import { PET_KINDS, normalizePetKind, petKindLabel, petKindMeta } from "../core/pet-kinds";
 import type {
   ActionResult,
   CreatureProfile,
@@ -90,6 +90,7 @@ const CHAT_PAGE_SIZE = 24;
 const INITIAL_CHAT_VISIBLE_COUNT = CHAT_PAGE_SIZE * 2;
 const LOCAL_USER_ID_KEY = "papo:userId";
 const LOCAL_PASSWORD_PREFIX = "papo:password:";
+const LOCAL_PROFILE_SNAPSHOT_KEY = "papo:profileSnapshot";
 const PUBLIC_BASE_URL = import.meta.env.BASE_URL ?? "/";
 const IMAGE_UPLOAD_TARGET_BYTES = 3_500_000;
 const IMAGE_UPLOAD_HARD_LIMIT_BYTES = 11_500_000;
@@ -119,6 +120,8 @@ type StagedChatSegment = StreamSegment & {
 export function App() {
   const [tab, setTab] = useState<Tab>("home");
   const [profile, setProfile] = useState<CreatureProfile>();
+  const [loadingPetKind] = useState(() => randomRegistrationPetKind());
+  const [loadingProfileSnapshot, setLoadingProfileSnapshot] = useState<Partial<CreatureProfile> | undefined>(() => readProfileSnapshot());
   const [needsAuth, setNeedsAuth] = useState(false);
   const [chatSegments, setChatSegments] = useState<StagedChatSegment[]>([]);
   const [emergence, setEmergence] = useState<EmergenceSurface>();
@@ -184,6 +187,10 @@ export function App() {
 
   useEffect(() => {
     profileRef.current = profile;
+    if (profile) {
+      saveProfileSnapshot(profile);
+      setLoadingProfileSnapshot(profile);
+    }
   }, [profile]);
 
   useEffect(() => {
@@ -961,10 +968,18 @@ export function App() {
   }
 
   if (!profile) {
+    const savedUserId = readSavedUserId();
+    const loadingProfile = savedUserId && loadingProfileSnapshot?.userId === savedUserId ? loadingProfileSnapshot : undefined;
     return (
       <main className="shell loading">
-        <ShibaAvatar idle />
-        <p>{busy ? "Papo 正在醒来" : error ?? "无法载入小动物"}</p>
+        <AvatarPreview
+          petKind={loadingProfile?.petKind ?? loadingPetKind}
+          petProfile={loadingProfile?.petProfile}
+          state={loadingProfile?.state}
+          dogState={loadingProfile?.dogState}
+          idle
+        />
+        <p>{busy ? `${loadingProfile?.creatureName ?? petKindLabel(loadingPetKind)} 正在醒来` : error ?? "无法载入小动物"}</p>
       </main>
     );
   }
@@ -1157,7 +1172,7 @@ function AuthView(props: {
                 className={normalizePetKind(petKind) === pet.id ? "pet-option active" : "pet-option"}
                 onClick={() => setPetKind(pet.id)}
               >
-                <AvatarPreview petKind={pet.id} />
+                <AvatarPreview petKind={pet.id} idle />
                 <span>{pet.label}</span>
               </button>
             ))}
@@ -1539,9 +1554,24 @@ type HomeMotion =
 function AvatarPreview({ petKind, petProfile, state, dogState, idle = false, interactionAction }: { petKind?: string; petProfile?: CreatureProfile["petProfile"]; state?: CreatureState; dogState?: DogInteractionState; idle?: boolean; interactionAction?: PetInteractionAction }) {
   if (petProfile?.avatarImage) return <CustomPetAvatar petProfile={petProfile} idle={idle} />;
   const normalizedPetKind = normalizePetKind(petKind);
+  const meta = petKindMeta(normalizedPetKind);
   if (normalizedPetKind === "shiba") return <ShibaAvatar state={state} dogState={dogState} idle={idle} />;
   if (normalizedPetKind === "british-shorthair") return <GeneratedPetAvatar petKind={normalizedPetKind} dogState={dogState} idle={idle} interactionAction={interactionAction} />;
+  if (meta.renderer === "template") return <TemplatePetAvatar petKind={normalizedPetKind} idle={idle} />;
   return <AgentPetSprite petKind={normalizedPetKind} dogState={dogState} idle={idle} />;
+}
+
+function TemplatePetAvatar({ petKind, idle = false }: { petKind: string; idle?: boolean }) {
+  const meta = petKindMeta(petKind);
+  return (
+    <div
+      className={`template-pet-avatar pet-template-${normalizePetKind(petKind)} ${idle ? "idle" : ""}`}
+      style={{ "--pet-accent": meta.accentColor } as CSSProperties}
+      aria-label={meta.label}
+    >
+      <span aria-hidden="true" />
+    </div>
+  );
 }
 
 function CustomPetAvatar({ petProfile, idle = false }: { petProfile: CreatureProfile["petProfile"]; idle?: boolean }) {
@@ -1654,24 +1684,21 @@ function petTouchActions(profile: CreatureProfile): Array<{ action: PetInteracti
 }
 
 function petSpeciesNoun(petKind?: string) {
-  const normalized = normalizePetKind(petKind);
-  if (normalized === "british-shorthair") return "小猫";
-  if (normalized === "shiba") return "小狗";
-  return "小动物";
+  return petKindMeta(petKind).speciesNoun;
 }
 
 function petProfileFor(profile: CreatureProfile): CreatureProfile["petProfile"] {
   if (profile.petProfile) return profile.petProfile;
-  const label = petKindLabel(profile.petKind);
+  const meta = petKindMeta(profile.petKind);
   return {
     updatedAt: profile.createdAt,
     source: "registration",
-    displaySpecies: label,
-    appearance: `${label}，住在手机里的陪伴小动物。`,
+    displaySpecies: meta.label,
+    appearance: meta.appearance,
     personality: "亲近、好奇，会在合适的时候回应用户。",
     habits: "喜欢待在用户旁边，听见重要的小事会靠近一点。",
     visualStyle: "温暖、干净、可爱的移动端小动物形象。",
-    imagePrompt: `cute ${label} mobile companion mascot`,
+    imagePrompt: meta.imagePrompt,
     motionStyle: "短循环动作，镜头稳定，全身居中，动作简单可爱。",
     initialMotion: { status: "idle" }
   };
@@ -3717,6 +3744,32 @@ function saveUserId(userId: string) {
 
 function forgetSavedUserId() {
   safeLocalStorageRemove(LOCAL_USER_ID_KEY);
+}
+
+function randomRegistrationPetKind() {
+  return PET_KINDS[Math.floor(Math.random() * PET_KINDS.length)]?.id ?? "shiba";
+}
+
+function readProfileSnapshot(): Partial<CreatureProfile> | undefined {
+  try {
+    const raw = safeLocalStorageGet(LOCAL_PROFILE_SNAPSHOT_KEY);
+    if (!raw) return undefined;
+    return JSON.parse(raw) as Partial<CreatureProfile>;
+  } catch {
+    return undefined;
+  }
+}
+
+function saveProfileSnapshot(profile: CreatureProfile) {
+  const snapshot: Partial<CreatureProfile> = {
+    userId: profile.userId,
+    creatureName: profile.creatureName,
+    petKind: profile.petKind,
+    state: profile.state,
+    dogState: profile.dogState,
+    petProfile: profile.petProfile
+  };
+  safeLocalStorageSet(LOCAL_PROFILE_SNAPSHOT_KEY, JSON.stringify(snapshot));
 }
 
 function saveProfilePassword(userId: string, password?: string) {
