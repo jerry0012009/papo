@@ -1440,30 +1440,36 @@ select {
 .papo-lightbox {
   --yarl__color_backdrop: #0b0c0b;
   --yarl__container_background_color: #0b0c0b;
-  --yarl__toolbar_padding: 10px max(14px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px));
   --yarl__button_filter: none;
   z-index: 140;
 }
 
 .papo-lightbox .yarl__toolbar {
-  top: auto;
-  bottom: 0;
-  justify-content: center;
-  gap: 12px;
-  background: #0b0c0b;
+  inset: 0;
+  padding: 0;
+  pointer-events: none;
 }
 
 .papo-lightbox .yarl__button {
+  position: absolute;
   width: 44px;
   height: 44px;
   padding: 10px;
   border-radius: 50%;
   color: #fff;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(11, 12, 11, 0.62);
+  pointer-events: auto;
+  backdrop-filter: blur(6px);
 }
 
-.papo-lightbox .yarl__carousel {
-  padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+.papo-lightbox .yarl__toolbar .yarl__button[aria-label="关闭图片"] {
+  top: max(12px, env(safe-area-inset-top, 0px));
+  right: max(12px, env(safe-area-inset-right, 0px));
+}
+
+.papo-lightbox .yarl__toolbar .yarl__button[aria-label="下载原图"] {
+  right: max(12px, env(safe-area-inset-right, 0px));
+  bottom: max(12px, env(safe-area-inset-bottom, 0px));
 }
 
 .papo-lightbox .yarl__slide_image {

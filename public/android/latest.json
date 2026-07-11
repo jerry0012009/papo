@@ -1,14 +1,14 @@
 {
-  "versionName": "0.4.1",
-  "versionCode": 7,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.1.apk",
-  "publishedAt": "2026-07-11T18:42:00.000Z",
+  "versionName": "0.4.2",
+  "versionCode": 8,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.2.apk",
+  "publishedAt": "2026-07-11T19:18:00.000Z",
   "notes": [
-    "大图查看改用成熟 lightbox 组件，双指、双击缩放和拖动更稳定",
-    "图片不再被标题或工具蒙层遮挡，操作按钮统一放在底部",
-    "支持点击背景、底部关闭和全面屏返回手势退出大图",
-    "保留一键下载图片和图库左右滑动浏览"
+    "大图默认完整适配屏幕，不裁切也不自动过度放大",
+    "支持双指捏合放大缩小，放大后可拖动查看原图细节",
+    "右上角关闭、右下角下载原图，不再使用遮挡画面的工具栏",
+    "全面屏返回手势只退出大图并恢复打开前页面，不会直接退出 App"
   ],
-  "sha256": "ffe675c43017126c76fd8260ed55d0fba341625509015fd127f950ae56e94490",
-  "size": 22796842
+  "sha256": "8d7fffd9d6e6c181cdb38c2a384f20b29f6e53781f09e06c462439703cfd67a5",
+  "size": 22799488
 }

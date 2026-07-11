@@ -44,7 +44,7 @@ test("first visit shows login and registration instead of creating a public Papo
   await expect(page.getByRole("button", { name: "开始养 Papo" })).toBeDisabled();
 });
 
-test("home developer panel opens and closes without overflowing", async ({ page }) => {
+test("home developer panel opens and closes without overflowing", async ({ page }, testInfo) => {
   await page.goto("/");
 
   await expect(page.getByRole("heading", { level: 1, name: "Papo" })).toBeVisible();
@@ -82,18 +82,36 @@ test("home developer panel opens and closes without overflowing", async ({ page 
   await gallery.getByRole("button", { name: /今天的泳池小画/ }).click();
   const imageViewer = page.locator(".papo-lightbox");
   await expect(imageViewer).toBeVisible();
-  await expect(imageViewer.getByRole("button", { name: "放大图片" })).toBeVisible();
-  await expect(imageViewer.getByRole("button", { name: "下载图片" })).toBeVisible();
-  await expect(imageViewer.getByRole("button", { name: "关闭图片" })).toBeVisible();
+  await expect(imageViewer.getByRole("button", { name: "放大图片" })).toHaveCount(0);
+  const downloadButton = imageViewer.getByRole("button", { name: "下载原图" });
+  const closeButton = imageViewer.getByRole("button", { name: "关闭图片" });
+  await expect(downloadButton).toBeVisible();
+  await expect(closeButton).toBeVisible();
   const imageBox = await imageViewer.locator(".yarl__slide_image").boundingBox();
-  const toolbarBox = await imageViewer.locator(".yarl__toolbar").boundingBox();
+  const downloadBox = await downloadButton.boundingBox();
+  const closeBox = await closeButton.boundingBox();
+  const viewport = page.viewportSize();
+  if (!viewport) throw new Error("viewport is unavailable");
   expect(imageBox).not.toBeNull();
-  expect(toolbarBox).not.toBeNull();
-  expect(toolbarBox!.y).toBeGreaterThanOrEqual(imageBox!.y + imageBox!.height);
-  await imageViewer.getByRole("button", { name: "放大图片" }).click();
+  expect(downloadBox).not.toBeNull();
+  expect(closeBox).not.toBeNull();
+  expect(Math.min(Math.abs(imageBox!.width - viewport.width), Math.abs(imageBox!.height - viewport.height))).toBeLessThan(40);
+  expect(closeBox!.x).toBeGreaterThan(viewport.width / 2);
+  expect(closeBox!.y).toBeLessThan(viewport.height / 3);
+  expect(downloadBox!.x).toBeGreaterThan(viewport.width / 2);
+  expect(downloadBox!.y).toBeGreaterThan(viewport.height * 2 / 3);
+  expect(await imageViewer.locator(".yarl__toolbar").evaluate((node) => getComputedStyle(node).backgroundColor)).toBe("rgba(0, 0, 0, 0)");
+
+  if (testInfo.project.name === "mobile") await pinchImage(page, imageViewer, 45, 140);
+  else await imageViewer.locator(".yarl__slide_image").dblclick();
   await expect.poll(async () => {
     return Number(await imageViewer.evaluate((node) => node.style.getPropertyValue("--yarl__papo_zoom") || 1));
   }).toBeGreaterThan(1.5);
+
+  if (testInfo.project.name === "mobile") {
+    await pinchImage(page, imageViewer, 140, 45);
+    await expect.poll(async () => Number(await imageViewer.evaluate((node) => node.style.getPropertyValue("--yarl__papo_zoom") || 1))).toBeLessThan(1.15);
+  }
 
   await page.goBack();
   await expect(imageViewer).toBeHidden();
@@ -114,6 +132,24 @@ test("home developer panel opens and closes without overflowing", async ({ page 
   await page.goBack();
   await expect(gallery).toBeHidden();
 });
+
+async function pinchImage(page: Page, viewer: ReturnType<Page["locator"]>, fromDistance: number, toDistance: number) {
+  const box = await viewer.locator(".yarl__slide_current").boundingBox();
+  if (!box) throw new Error("lightbox slide is not visible");
+  const centerX = box.x + box.width / 2;
+  const centerY = box.y + box.height / 2;
+  const session = await page.context().newCDPSession(page);
+  const points = (distance: number) => [
+    { x: centerX - distance, y: centerY, radiusX: 4, radiusY: 4, force: 1, id: 0 },
+    { x: centerX + distance, y: centerY, radiusX: 4, radiusY: 4, force: 1, id: 1 }
+  ];
+  await session.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: points(fromDistance) });
+  for (let step = 1; step <= 6; step += 1) {
+    const distance = fromDistance + (toDistance - fromDistance) * step / 6;
+    await session.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: points(distance) });
+  }
+  await session.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+}
 
 test("profile can rename the creature and logged-in UI follows the new name", async ({ page }) => {
   await page.goto("/");
@@ -184,6 +220,38 @@ test("my tab organizes content, companion settings, and account settings", async
   await expect(hub.getByRole("button", { name: "Papo 设置" })).toBeVisible();
   await hub.locator(".memory-cover").first().click();
   await expect(page.getByRole("heading", { level: 1, name: "Papo 记得的生活" })).toBeVisible();
+});
+
+test("native Android back closes the image viewer without leaving the app", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "Android bridge behavior is covered on the mobile project");
+  await page.addInitScript(() => {
+    const nativeState = { callback: undefined as (() => void) | undefined, removed: false };
+    Object.assign(window as unknown as Record<string, unknown>, {
+      androidBridge: {},
+      __papoNativeBack: nativeState,
+      Capacitor: {
+        PluginHeaders: [{ name: "App", methods: [{ name: "addListener", rtype: "callback" }, { name: "removeListener", rtype: "callback" }] }],
+        nativeCallback(_plugin: string, method: string, _options: unknown, callback?: () => void) {
+          if (method === "addListener") nativeState.callback = callback;
+          if (method === "removeListener") nativeState.removed = true;
+          return method === "addListener" ? "native-back-listener" : undefined;
+        }
+      }
+    });
+  });
+  await page.goto("/");
+  const nav = page.locator(".nav");
+  await nav.getByRole("button", { name: "我的" }).click();
+  const hub = page.locator(".profile-hub");
+  await hub.getByRole("button", { name: /查看图片：今天的泳池小画/ }).click();
+  const viewer = page.locator(".papo-lightbox");
+  await expect(viewer).toBeVisible();
+  await expect.poll(() => page.evaluate(() => Boolean((window as unknown as { __papoNativeBack?: { callback?: () => void } }).__papoNativeBack?.callback))).toBe(true);
+  await page.evaluate(() => (window as unknown as { __papoNativeBack: { callback?: () => void } }).__papoNativeBack.callback?.());
+  await expect(viewer).toBeHidden();
+  await expect(hub).toBeVisible();
+  await expect(nav.getByRole("button", { name: "我的" })).toHaveClass(/active/);
+  await expect.poll(() => page.evaluate(() => (window as unknown as { __papoNativeBack: { removed: boolean } }).__papoNativeBack.removed)).toBe(true);
 });
 
 test("four initial motions guide the user to chat for more action cards", async ({ page }) => {
