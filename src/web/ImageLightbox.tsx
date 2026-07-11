@@ -1,17 +1,8 @@
 import { Download, X } from "lucide-react";
-import { App as CapacitorApp } from "@capacitor/app";
-import { Capacitor } from "@capacitor/core";
 import { useEffect, useMemo, useState, type ComponentProps, type CSSProperties, type ImgHTMLAttributes } from "react";
 import { PhotoSlider } from "react-photo-view";
 import "react-photo-view/dist/react-photo-view.css";
-import { downloadImage } from "./image-download";
-
-export interface ImageLightboxItem {
-  id: string;
-  src: string;
-  title: string;
-  mime: string;
-}
+import type { MediaViewerItem } from "./media-viewer-types";
 
 interface ImageSize {
   width: number;
@@ -21,17 +12,9 @@ interface ImageSize {
 const imageSizeCache = new Map<string, ImageSize>();
 type PhotoSliderImage = ComponentProps<typeof PhotoSlider>["images"][number];
 
-export function ImageLightbox(props: { items: ImageLightboxItem[]; index?: number; onClose: () => void; onIndexChange?: (index: number) => void }) {
+export function ImageLightbox(props: { items: MediaViewerItem[]; index?: number; onClose: () => void; onIndexChange?: (index: number) => void; onDownload: (item: MediaViewerItem) => void }) {
   const viewport = useViewportSize();
   const [imageSizes, setImageSizes] = useState<Record<string, ImageSize>>(() => Object.fromEntries(imageSizeCache));
-
-  useEffect(() => {
-    if (props.index === undefined || !Capacitor.isNativePlatform()) return;
-    const listener = CapacitorApp.addListener("backButton", () => props.onClose());
-    return () => {
-      void listener.then((handle) => handle.remove()).catch(() => undefined);
-    };
-  }, [props.index, props.onClose]);
 
   useEffect(() => {
     let cancelled = false;
@@ -95,7 +78,7 @@ export function ImageLightbox(props: { items: ImageLightboxItem[]; index?: numbe
               type="button"
               className="papo-photo-view-download"
               aria-label="下载原图"
-              onClick={() => item && void downloadImage(item.src, item.title, item.mime)}
+              onClick={() => item && props.onDownload(item)}
             >
               <Download className="papo-photo-view-icon" />
             </button>

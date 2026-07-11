@@ -105,7 +105,8 @@ import {
   type PushNotificationState
 } from "./push-notifications";
 import { inspectAppUpdate, openAppUpdateDownload, type AppUpdateState } from "./app-update";
-import { ImageLightbox } from "./ImageLightbox";
+import { MediaThumbnail } from "./MediaViewer";
+import type { MediaViewerItem } from "./media-viewer-types";
 import { formatPapoDateTime, papoTimeZone } from "./time";
 
 type Tab = "home" | "chat" | "memory" | "profile";
@@ -1518,7 +1519,7 @@ function HomeView(props: {
           </div>
         </div>
         <div className="home-avatar-wrap">
-          <button
+          {activeCard ? <MediaThumbnail item={actionCardMediaItem(activeCard)} className="pet-touch-button home-action-card-viewer"><ActionCardAvatar card={activeCard} /></MediaThumbnail> : <button
             className="pet-touch-button"
             type="button"
             aria-label={`戳戳 ${props.profile.creatureName}`}
@@ -1534,8 +1535,8 @@ function HomeView(props: {
               if (nextMotion?.kind === "pet") props.onPetTouch(nextMotion.action);
             }}
           >
-            {activeCard ? <ActionCardAvatar card={activeCard} /> : <AvatarPreview petKind={props.profile.petKind} petProfile={petProfileFor(props.profile)} state={props.profile.state} dogState={props.profile.dogState} interactionAction={activeMotion?.kind === "pet" ? activeMotion.action : undefined} />}
-          </button>
+            <AvatarPreview petKind={props.profile.petKind} petProfile={petProfileFor(props.profile)} state={props.profile.state} dogState={props.profile.dogState} interactionAction={activeMotion?.kind === "pet" ? activeMotion.action : undefined} />
+          </button>}
         </div>
         <div className="home-speech">
           <h2>{props.profile.creatureName}</h2>
@@ -1667,7 +1668,7 @@ function HomeActionCardsPeek({ profile, compact = false }: { profile: CreaturePr
           <div className="action-card-gallery">
             {cards.map((card) => (
               <article className="action-card-preview" key={card.id}>
-                <video src={resolveAssetUrl(card.video.url)} poster={card.cover ? resolveAssetUrl(card.cover.url) : undefined} controls muted playsInline preload="none" />
+                <MediaThumbnail item={actionCardMediaItem(card)} className="action-card-media" />
                 <strong>{namedCreatureText(card.title, profile.creatureName) || card.title}</strong>
                 {card.caption ? <span>{namedCreatureText(card.caption, profile.creatureName) || card.caption}</span> : null}
               </article>
@@ -1682,16 +1683,12 @@ function HomeActionCardsPeek({ profile, compact = false }: { profile: CreaturePr
 function HomeIllustrationsPeek({ profile, compact = false }: { profile: CreatureProfile; compact?: boolean }) {
   const illustrations = (profile.illustrations ?? []).slice(0, 6);
   const [galleryOpen, setGalleryOpen] = useState(false);
-  const [viewerIndex, setViewerIndex] = useState<number>();
   const galleryOpenRef = useRef(galleryOpen);
-  const viewerIndexRef = useRef(viewerIndex);
   galleryOpenRef.current = galleryOpen;
-  viewerIndexRef.current = viewerIndex;
 
   useEffect(() => {
-    const handlePopState = () => {
-      if (viewerIndexRef.current !== undefined) setViewerIndex(undefined);
-      else if (galleryOpenRef.current) setGalleryOpen(false);
+    const handlePopState = (event: PopStateEvent) => {
+      if (galleryOpenRef.current && event.state?.papoOverlay !== "illustrations") setGalleryOpen(false);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -1710,19 +1707,11 @@ function HomeIllustrationsPeek({ profile, compact = false }: { profile: Creature
     else setGalleryOpen(false);
   }
 
-  function openViewer(index: number) {
-    window.history.pushState({ ...(window.history.state ?? {}), papoOverlay: "image-viewer" }, "");
-    setViewerIndex(index);
-  }
-
-  function closeViewer() {
-    if (window.history.state?.papoOverlay === "image-viewer") window.history.back();
-    else setViewerIndex(undefined);
-  }
+  const mediaItems = illustrations.map(illustrationMediaItem);
 
   return (
     <>
-      <Dialog.Root open={galleryOpen} modal={false} onOpenChange={(open) => { if (!open && viewerIndexRef.current === undefined) closeGallery(); }}>
+      <Dialog.Root open={galleryOpen} modal={false}>
         <Dialog.Trigger asChild>
           <button className={compact ? "illustration-peek compact" : "illustration-peek"} type="button" onClick={openGallery}>
             <ImagePlus size={16} />
@@ -1741,25 +1730,18 @@ function HomeIllustrationsPeek({ profile, compact = false }: { profile: Creature
             </div>
             <div className="illustration-grid">
               {illustrations.map((item, index) => (
-                <button type="button" className="illustration-card" key={item.id} onClick={() => openViewer(index)}>
+                <MediaThumbnail item={mediaItems[index]} items={mediaItems} index={index} className="illustration-card" key={item.id}>
                   <img src={resolveAssetUrl(item.attachment.url)} alt={item.title} loading="lazy" />
                   <strong>{item.title}</strong>
                   {item.caption ? <span>{item.caption}</span> : null}
-                </button>
+                </MediaThumbnail>
               ))}
             </div>
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-      <IllustrationLightbox items={illustrations} index={viewerIndex} onClose={closeViewer} onIndexChange={setViewerIndex} />
     </>
   );
-}
-
-type IllustrationLightboxItem = NonNullable<CreatureProfile["illustrations"]>[number];
-
-function IllustrationLightbox(props: { items: IllustrationLightboxItem[]; index?: number; onClose: () => void; onIndexChange?: (index: number) => void }) {
-  return <ImageLightbox items={props.items.map((item) => ({ id: item.id, src: resolveAssetUrl(item.attachment.url), title: item.title, mime: item.attachment.mime }))} index={props.index} onClose={props.onClose} onIndexChange={props.onIndexChange} />;
 }
 
 function ListeningDurationDialog(props: {
@@ -2234,7 +2216,7 @@ function StatePolicySnapshot({ profile, onUpdateActionCard }: { profile: Creatur
           <div className="action-card-admin-list">
             {actionCards.map((card) => (
               <article className={card.disabled ? "action-card-admin disabled" : "action-card-admin"} key={card.id}>
-                <video src={resolveAssetUrl(card.video.url)} poster={card.cover ? resolveAssetUrl(card.cover.url) : undefined} controls muted playsInline preload="none" />
+                <MediaThumbnail item={actionCardMediaItem(card)} className="action-card-admin-media" />
                 <div>
                   <b>{namedCreatureText(card.title, profile.creatureName) || card.title}</b>
                   {card.caption ? <small>{namedCreatureText(card.caption, profile.creatureName) || card.caption}</small> : null}
@@ -2674,34 +2656,20 @@ function ChatView(props: {
 
 function StagedImagePreview({ segment }: { segment: StagedChatSegment }) {
   const image = segment.attachments?.find((attachment) => attachment.kind === "image");
-  const src = image ? resolveAssetUrl(image.url) : undefined;
+  const src = segment.previewUrl ?? (image ? resolveAssetUrl(image.url) : undefined);
+  const previewItem = image && src ? { ...attachmentMediaItem(image, "待发送照片"), src } : undefined;
   return (
-    <Dialog.Root>
-      <Dialog.Trigger asChild disabled={!src}>
-        <button className="staged-image-preview" type="button" aria-label="查看待发送照片">
-          {src ? <img src={src} alt="待发送照片" /> : <ImagePlus size={20} />}
-        </button>
-      </Dialog.Trigger>
+    <div className="staged-image-preview-wrap">
+      {src && previewItem ? (
+        <MediaThumbnail item={previewItem} className="staged-image-preview"><img src={src} alt="待发送照片" /></MediaThumbnail>
+      ) : <button className="staged-image-preview" type="button" disabled><ImagePlus size={20} /></button>}
       {segment.status === "processing" ? (
         <span className="staged-image-overlay" aria-label="正在处理图片">
           <Loader2 size={18} className="spin-icon" />
         </span>
       ) : null}
       {segment.status === "failed" ? <span className="staged-image-error">{segment.statusText ?? "没传上去"}</span> : null}
-      {src ? (
-        <Dialog.Portal>
-          <Dialog.Overlay className="ui-overlay" />
-          <Dialog.Content className="photo-preview-dialog">
-            <Dialog.Close asChild>
-              <button className="dialog-close" aria-label="关闭">
-                <X size={16} />
-              </button>
-            </Dialog.Close>
-            <img src={src} alt="待发送照片预览" />
-          </Dialog.Content>
-        </Dialog.Portal>
-      ) : null}
-    </Dialog.Root>
+    </div>
   );
 }
 
@@ -2779,21 +2747,35 @@ function companionSessionSummary(audioCount: number, usefulAudioCount: number, t
 }
 
 function AttachmentStrip({ attachments }: { attachments?: NonNullable<StreamSegment["attachments"]> }) {
-  const images = (attachments ?? []).filter((attachment) => attachment.kind === "image");
-  const videos = (attachments ?? []).filter((attachment) => attachment.kind === "video");
-  if (!images.length && !videos.length) return null;
+  const mediaItems = (attachments ?? []).filter((attachment) => attachment.kind === "image" || attachment.kind === "video").map((attachment) => attachmentMediaItem(attachment));
+  if (!mediaItems.length) return null;
   return (
     <div className="attachment-strip">
-      {images.map((image) => (
-        <a href={resolveAssetUrl(image.url)} target="_blank" rel="noreferrer" className="attachment-thumb" key={image.id}>
-          <img src={resolveAssetUrl(image.url)} alt={image.label} loading="lazy" />
-        </a>
-      ))}
-      {videos.map((video) => (
-        <video className="attachment-video" src={resolveAssetUrl(video.url)} controls muted playsInline preload="metadata" key={video.id} />
-      ))}
+      {mediaItems.map((item, index) => <MediaThumbnail item={item} items={mediaItems} index={index} className={item.kind === "image" ? "attachment-thumb" : "attachment-video"} key={item.id} />)}
     </div>
   );
+}
+
+function attachmentMediaItem(attachment: MediaAttachment, title = attachment.label): MediaViewerItem {
+  return {
+    id: attachment.id,
+    kind: attachment.kind === "video" ? "video" : "image",
+    src: resolveAssetUrl(attachment.url),
+    title,
+    mime: attachment.mime
+  };
+}
+
+function illustrationMediaItem(item: NonNullable<CreatureProfile["illustrations"]>[number]): MediaViewerItem {
+  return attachmentMediaItem(item.attachment, item.title);
+}
+
+function actionCardMediaItem(card: NonNullable<CreatureProfile["actionCards"]>[number]): MediaViewerItem {
+  return {
+    ...attachmentMediaItem(card.video, card.title),
+    kind: "video",
+    poster: card.cover ? resolveAssetUrl(card.cover.url) : undefined
+  };
 }
 
 function DeveloperTrace({ trace, sensingTrace, profile }: { trace?: ConversationMessage["cognitionTrace"]; sensingTrace?: SensingTrace; profile: CreatureProfile }) {
@@ -3530,7 +3512,7 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
 
   return (
     <div className="memory-main">
-      {memory.visual ? <img className="memory-visual" src={resolveAssetUrl(memory.visual.url)} alt={memory.shortTitle ?? "共同回忆"} loading="lazy" /> : null}
+      {memory.visual ? <MediaThumbnail item={attachmentMediaItem(memory.visual, memory.shortTitle ?? "共同回忆")} className="memory-visual" /> : null}
       <div>
         <span>{formatPapoDateTime(memory.createdAt)}</span>
         <strong className="memory-text-preview">{displayText}</strong>
@@ -3684,14 +3666,12 @@ function ProfileView(props: {
   const illustrations = allIllustrations.slice(0, 8);
   const allActionCards = (props.profile.actionCards ?? []).filter((card) => !card.deleted);
   const actionCards = allActionCards.slice(0, 8);
+  const illustrationMediaItems = illustrations.map(illustrationMediaItem);
   const memories = (props.profile.longTermMemories ?? []).filter((memory) => memory.kind !== "creature_self_memory");
   const candidates = (props.profile.memoryCandidates ?? []).filter((candidate) => candidate.status === "candidate");
-  const [viewerIndex, setViewerIndex] = useState<number>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const settingsOpenRef = useRef(settingsOpen);
   settingsOpenRef.current = settingsOpen;
-  const viewerIndexRef = useRef(viewerIndex);
-  viewerIndexRef.current = viewerIndex;
   const [nameDraft, setNameDraft] = useState(props.profile.creatureName);
   const [nameBusy, setNameBusy] = useState(false);
   const [nameMessage, setNameMessage] = useState("");
@@ -3720,23 +3700,12 @@ function ProfileView(props: {
   }, [petReferencePreview]);
 
   useEffect(() => {
-    const handlePopState = () => {
-      if (viewerIndexRef.current !== undefined) setViewerIndex(undefined);
-      else if (settingsOpenRef.current) setSettingsOpen(false);
+    const handlePopState = (event: PopStateEvent) => {
+      if (settingsOpenRef.current && event.state?.papoOverlay !== "profile-settings") setSettingsOpen(false);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, []);
-
-  function openIllustration(index: number) {
-    window.history.pushState({ ...(window.history.state ?? {}), papoOverlay: "profile-image-viewer" }, "");
-    setViewerIndex(index);
-  }
-
-  function closeIllustration() {
-    if (window.history.state?.papoOverlay === "profile-image-viewer") window.history.back();
-    else setViewerIndex(undefined);
-  }
 
   function openSettings() {
     window.history.pushState({ ...(window.history.state ?? {}), papoOverlay: "profile-settings" }, "");
@@ -3875,10 +3844,10 @@ function ProfileView(props: {
         {illustrations.length ? (
           <div className="profile-illustration-rail">
             {illustrations.map((item, index) => (
-              <button type="button" key={item.id} onClick={() => openIllustration(index)} aria-label={`查看图片：${item.title}`}>
+              <MediaThumbnail item={illustrationMediaItems[index]} items={illustrationMediaItems} index={index} key={item.id}>
                 <img src={resolveAssetUrl(item.attachment.url)} alt="" loading="lazy" />
                 <span>{item.title}</span>
-              </button>
+              </MediaThumbnail>
             ))}
           </div>
         ) : <ProfileEmptyState icon={Images} text={`${props.profile.creatureName} 画出的图片会收在这里`} />}
@@ -4109,7 +4078,6 @@ function ProfileView(props: {
       </section>
       </>}
 
-      <IllustrationLightbox items={illustrations} index={viewerIndex} onClose={closeIllustration} onIndexChange={setViewerIndex} />
     </section>
   );
 }
@@ -4128,23 +4096,20 @@ function ProfileEmptyState({ icon: Icon, text }: { icon: typeof Check; text: str
 }
 
 function ActionCardCover({ card, profile }: { card: NonNullable<CreatureProfile["actionCards"]>[number]; profile: CreatureProfile }) {
-  const [playing, setPlaying] = useState(false);
   const coverUrl = card.cover
     ? resolveAssetUrl(card.cover.url)
     : profile.petProfile?.avatarImage
       ? resolveAssetUrl(profile.petProfile.avatarImage.url)
       : undefined;
   return (
-    <button className="action-card-cover" type="button" onClick={() => setPlaying(true)} aria-label={`播放动作：${card.title}`}>
-      {playing ? (
-        <video src={resolveAssetUrl(card.video.url)} poster={coverUrl} muted playsInline loop autoPlay preload="auto" />
-      ) : coverUrl ? (
+    <MediaThumbnail item={actionCardMediaItem(card)} className="action-card-cover">
+      {coverUrl ? (
         <img src={coverUrl} alt="" loading="lazy" />
       ) : (
         <AvatarPreview petKind={profile.petKind} petProfile={petProfileFor(profile)} state={profile.state} dogState={profile.dogState} />
       )}
-      {!playing ? <span className="action-card-play"><Play size={18} fill="currentColor" /></span> : null}
-    </button>
+      <span className="action-card-play"><Play size={18} fill="currentColor" /></span>
+    </MediaThumbnail>
   );
 }
 
@@ -4152,13 +4117,17 @@ function MemoryCover({ memory, onClick }: { memory: CreatureProfile["longTermMem
   const image = memory.visual ?? memory.attachments?.find((attachment) => attachment.kind === "image");
   const title = memory.shortTitle ?? memoryShortTitle(memory.narrative ?? memory.text);
   return (
-    <button className={image ? "memory-cover has-image" : "memory-cover text-only"} type="button" onClick={onClick}>
-      <span className="memory-cover-art">
-        {image ? <img src={resolveAssetUrl(image.url)} alt="" loading="lazy" /> : <strong>{title}</strong>}
-      </span>
-      <strong>{title}</strong>
-      <small>{formatPapoDateTime(memory.createdAt)}</small>
-    </button>
+    <article className={image ? "memory-cover has-image" : "memory-cover text-only"}>
+      {image ? (
+        <MediaThumbnail item={attachmentMediaItem(image, title)} className="memory-cover-art" />
+      ) : (
+        <button className="memory-cover-art" type="button" onClick={onClick}><strong>{title}</strong></button>
+      )}
+      <button className="memory-cover-details" type="button" onClick={onClick}>
+        <strong>{title}</strong>
+        <small>{formatPapoDateTime(memory.createdAt)}</small>
+      </button>
+    </article>
   );
 }
 

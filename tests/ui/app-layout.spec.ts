@@ -185,6 +185,80 @@ test("profile can rename the creature and logged-in UI follows the new name", as
   await expect(page.getByRole("button", { name: "发送给 吉祥" })).toBeVisible();
 });
 
+test("chat, memory, illustrations, and action cards share the media viewer", async ({ page }) => {
+  await page.goto("/");
+  const nav = page.getByLabel("Papo 导航");
+
+  await nav.getByRole("button", { name: "对话" }).click();
+  await page.getByRole("button", { name: "查看图片：对话里的照片" }).click();
+  await expect(page.locator(".papo-photo-view")).toBeVisible();
+  await page.getByRole("button", { name: "关闭图片" }).click();
+  await expect(page.getByRole("heading", { name: "和 Papo 说话" })).toBeVisible();
+
+  await page.getByRole("button", { name: "播放视频：对话里的动作视频" }).click();
+  const videoViewer = page.getByRole("dialog", { name: "播放视频：对话里的动作视频" });
+  await expect(videoViewer).toBeVisible();
+  await expect(videoViewer.locator("video")).toHaveAttribute("controls", "");
+  await expect(videoViewer.getByRole("button", { name: "下载原文件" })).toBeVisible();
+  await videoViewer.getByRole("button", { name: "关闭媒体" }).click();
+  await expect(page.getByRole("heading", { name: "和 Papo 说话" })).toBeVisible();
+
+  await nav.getByRole("button", { name: "记忆" }).click();
+  await page.getByRole("button", { name: "查看图片：共同回忆" }).click();
+  await expect(page.locator(".papo-photo-view")).toBeVisible();
+  await page.getByRole("button", { name: "关闭图片" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Papo 记得的生活" })).toBeVisible();
+
+  await nav.getByRole("button", { name: "我的" }).click();
+  await page.getByRole("button", { name: "播放视频：Papo 抓蝴蝶" }).click();
+  await expect(page.getByRole("dialog", { name: "播放视频：Papo 抓蝴蝶" })).toBeVisible();
+});
+
+test("native media download resolves API assets and waits for Android save completion", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "mobile", "Native bridge behavior runs once in the mobile project");
+  await page.addInitScript(() => {
+    const state = { options: undefined as unknown, resolved: false, complete: undefined as (() => void) | undefined };
+    Object.assign(window as unknown as Record<string, unknown>, {
+      androidBridge: {},
+      __papoMediaDownload: state,
+      Capacitor: {
+        PluginHeaders: [{ name: "PapoMedia", methods: [{ name: "downloadMedia", rtype: "promise" }] }],
+        nativePromise(_plugin: string, method: string, options: unknown) {
+          if (method !== "downloadMedia") return Promise.reject(new Error("unexpected native method"));
+          state.options = options;
+          return new Promise((resolve) => { state.complete = () => { state.resolved = true; resolve({ uri: "content://downloads/papo" }); }; });
+        }
+      }
+    });
+  });
+  await page.addInitScript(() => localStorage.setItem("papo:nativeDownloadTest", "1"));
+  await page.goto("/");
+  await page.getByLabel("Papo 导航").getByRole("button", { name: "对话" }).click();
+  await page.getByRole("button", { name: "查看图片：安卓下载测试图" }).click();
+  await page.getByRole("button", { name: "下载原图" }).click();
+  await expect(page.getByRole("status")).toContainText("正在保存原文件");
+  await page.evaluate(() => (window as unknown as { __papoMediaDownload: { complete?: () => void } }).__papoMediaDownload.complete?.());
+  await expect(page.getByRole("status")).toContainText("已保存到系统下载/Papo");
+  const state = await page.evaluate(() => (window as unknown as { __papoMediaDownload: { options: { url: string; mime: string }; resolved: boolean } }).__papoMediaDownload);
+  expect(state.resolved).toBe(true);
+  expect(state.options.url).toBe("https://eu.jerrypsy.top/papo-api/assets/android-download-test.jpg");
+  expect(state.options.mime).toBe("image/jpeg");
+
+  await page.getByRole("button", { name: "关闭图片" }).click();
+  await page.getByRole("button", { name: "播放视频：对话里的动作视频" }).click();
+  await page.getByRole("button", { name: "下载原文件" }).click();
+  await expect(page.getByRole("status")).toContainText("正在保存原文件");
+  const videoOptions = await page.evaluate(() => {
+    const mediaState = (window as unknown as { __papoMediaDownload: { options: { url: string; mime: string; filename: string }; resolved: boolean; complete?: () => void } }).__papoMediaDownload;
+    const options = mediaState.options;
+    mediaState.complete?.();
+    return options;
+  });
+  await expect(page.getByRole("status")).toContainText("已保存到系统下载/Papo");
+  expect(videoOptions.mime).toBe("video/mp4");
+  expect(videoOptions.filename).toMatch(/\.mp4$/);
+});
+
 test("my tab organizes content, companion settings, and account settings", async ({ page }, testInfo) => {
   await page.goto("/");
 
@@ -213,8 +287,9 @@ test("my tab organizes content, companion settings, and account settings", async
   await expect(viewer).toBeHidden();
   await expect(hub).toBeVisible();
 
-  await actionItem.getByRole("button", { name: /播放动作/ }).click();
-  await expect(actionItem.locator("video")).toBeVisible();
+  await actionItem.getByRole("button", { name: /播放视频/ }).click();
+  await expect(page.getByRole("dialog", { name: /播放视频/ })).toBeVisible();
+  await page.getByRole("button", { name: "关闭媒体" }).click();
   await actionItem.getByRole("button", { name: "停用" }).click();
   await expect(actionItem).toHaveClass(/disabled/);
   await actionItem.getByRole("button", { name: "启用" }).click();
@@ -229,7 +304,7 @@ test("my tab organizes content, companion settings, and account settings", async
   await expect(hub.getByText("你想把它养成什么样")).toBeVisible();
   await page.goBack();
   await expect(hub.getByRole("button", { name: "Papo 设置" })).toBeVisible();
-  await hub.locator(".memory-cover").first().click();
+  await hub.locator(".memory-cover-details").first().click();
   await expect(page.getByRole("heading", { level: 1, name: "Papo 记得的生活" })).toBeVisible();
 });
 
@@ -447,12 +522,12 @@ test("photo upload stages a thumbnail that can be removed before submit", async 
   await expect(stagedPhoto).not.toContainText("pool.jpg");
   await expect(stagedPhoto.locator(".staged-image-overlay")).toHaveCount(0, { timeout: 3_000 });
 
-  await stagedPhoto.getByRole("button", { name: "查看待发送照片" }).click();
-  const preview = page.getByRole("dialog");
-  await expect(preview.locator("img")).toBeVisible();
+  await stagedPhoto.getByRole("button", { name: "查看图片：待发送照片" }).click();
+  const preview = page.locator(".papo-photo-view");
+  await expect(preview.locator(".papo-photo-view-image")).toBeVisible();
   await expectInViewport(page, preview);
-  await preview.getByRole("button", { name: "关闭" }).click();
-  await expect(preview).toHaveCount(0);
+  await preview.getByRole("button", { name: "关闭图片" }).click();
+  await expect(preview).toBeHidden();
 
   await stagedPhoto.getByRole("button", { name: "移除这项素材" }).click();
   await expect(stagedPhoto).toHaveCount(0);
@@ -905,7 +980,18 @@ async function installMockApi(page: Page) {
 async function profileWithTestOverrides(route: Route, profile: ReturnType<typeof makeProfile>) {
   const petKind = await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:testPetKind")).catch(() => null);
   const rawProfileOverride = await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:testProfileOverride")).catch(() => null);
-  const overridden = rawProfileOverride ? { ...profile, ...JSON.parse(rawProfileOverride) } : profile;
+  let overridden = rawProfileOverride ? { ...profile, ...JSON.parse(rawProfileOverride) } : profile;
+  const nativeDownloadTest = await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:nativeDownloadTest")).catch(() => null);
+  if (nativeDownloadTest) overridden = {
+    ...overridden,
+    conversation: overridden.conversation.map((message, index) => index === 0 ? {
+      ...message,
+      attachments: [
+        { id: "img_native_download", kind: "image" as const, label: "安卓下载测试图", mime: "image/jpeg", url: "https://eu.jerrypsy.top/papo-api/assets/android-download-test.jpg", createdAt: now },
+        { id: "vid_native_download", kind: "video" as const, label: "对话里的动作视频", mime: "video/mp4", url: "https://eu.jerrypsy.top/papo-api/assets/android-download-test.mp4", createdAt: now }
+      ]
+    } : message)
+  };
   if (!petKind) return overridden;
   return { ...overridden, petKind };
 }
@@ -1114,7 +1200,15 @@ function makeProfile() {
         text: "你喜欢旺旺仙贝。",
         sourceEpisodeId: "episode-1",
         weight: 70,
-        tags: ["snack"]
+        tags: ["snack"],
+        visual: {
+          id: "img_memory_visual",
+          kind: "image",
+          label: "旺旺仙贝的共同回忆",
+          mime: "image/jpeg",
+          url: "/pets/register/shiba.jpg",
+          createdAt: now
+        }
       }
     ],
     memoryCandidates: [
@@ -1155,7 +1249,25 @@ function makeProfile() {
         sourceId: "episode-1",
         relatedMemoryIds: ["mem-1"],
         modality: "button",
-        cognitionTrace: makeTrace()
+        cognitionTrace: makeTrace(),
+        attachments: [
+          {
+            id: "img_chat_attachment",
+            kind: "image",
+            label: "对话里的照片",
+            mime: "image/jpeg",
+            url: "/pets/register/shiba.jpg",
+            createdAt: now
+          },
+          {
+            id: "vid_chat_attachment",
+            kind: "video",
+            label: "对话里的动作视频",
+            mime: "video/mp4",
+            url: "/pets/register/golden-retriever.mp4",
+            createdAt: now
+          }
+        ]
       },
       {
         id: "msg-user-1",
