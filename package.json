@@ -1,6 +1,6 @@
 {
   "name": "papo",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -33,6 +33,7 @@
     "express": "^4.21.2",
     "lucide-react": "^0.468.0",
     "nanoid": "^5.0.9",
+    "react-zoom-pan-pinch": "^3.7.0",
     "tsx": "^4.19.2",
     "vite": "^6.0.7",
     "web-push": "^3.6.7",

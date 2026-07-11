@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(PapoListeningPlugin.class);
         registerPlugin(PapoUpdaterPlugin.class);
+        registerPlugin(PapoMediaPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

@@ -6,9 +6,9 @@ test.beforeEach(async ({ page }, testInfo) => {
   await installMockApi(page);
   await page.route("**/papo/android/latest.json", async (route) => {
     await json(route, {
-      versionName: "0.3.0",
-      versionCode: 4,
-      downloadUrl: "https://eu.jerrypsy.top/papo/android/papo-0.3.0.apk",
+      versionName: "0.3.1",
+      versionCode: 5,
+      downloadUrl: "https://eu.jerrypsy.top/papo/android/papo-0.3.1.apk",
       publishedAt: "2026-07-10T22:00:00.000Z",
       notes: ["陪看模式调整为每 5 分钟拍摄一帧"]
     });
@@ -78,6 +78,23 @@ test("home developer panel opens and closes without overflowing", async ({ page 
   await expect(gallery).toContainText("今天的泳池小画");
   await expect(gallery.locator("img")).toBeVisible();
   await expectInViewport(page, gallery);
+
+  await gallery.getByRole("button", { name: /今天的泳池小画/ }).click();
+  const imageViewer = page.getByRole("dialog", { name: "查看图片：今天的泳池小画" });
+  await expect(imageViewer).toBeVisible();
+  await expect(imageViewer.getByRole("button", { name: "放大" })).toBeVisible();
+  await expect(imageViewer.getByRole("button", { name: "下载图片" })).toBeVisible();
+  await imageViewer.getByRole("button", { name: "放大" }).click();
+  await expect.poll(async () => {
+    const transform = await imageViewer.locator(".image-viewer-image-wrap").evaluate((node) => getComputedStyle(node).transform);
+    return Number(transform.match(/^matrix\(([^,]+)/)?.[1] ?? 1);
+  }).toBeGreaterThan(1.5);
+
+  await page.goBack();
+  await expect(imageViewer).toBeHidden();
+  await expect(gallery).toBeVisible();
+  await page.goBack();
+  await expect(gallery).toBeHidden();
 });
 
 test("profile can rename the creature and logged-in UI follows the new name", async ({ page }) => {
@@ -106,9 +123,9 @@ test("profile checks and exposes the latest Android APK", async ({ page }) => {
   await page.getByRole("button", { name: "看看哪只 Papo 在身边" }).click();
 
   const updater = page.locator(".app-update-settings");
-  await expect(updater).toContainText("Android 最新版 0.3.0");
+  await expect(updater).toContainText("Android 最新版 0.3.1");
   await expect(updater.getByRole("button", { name: "检查更新" })).toBeVisible();
-  await expect(updater.getByRole("button", { name: "下载 0.3.0" })).toBeVisible();
+  await expect(updater.getByRole("button", { name: "下载 0.3.1" })).toBeVisible();
 });
 
 test("installed Android detects and opens the latest update", async ({ page }) => {
@@ -117,10 +134,10 @@ test("installed Android detects and opens the latest update", async ({ page }) =
   await page.getByRole("button", { name: "看看哪只 Papo 在身边" }).click();
 
   const updater = page.locator(".app-update-settings");
-  await expect(updater).toContainText("当前 0.2.1，可更新到 0.3.0");
-  await updater.getByRole("button", { name: "下载 0.3.0" }).click();
+  await expect(updater).toContainText("当前 0.2.1，可更新到 0.3.1");
+  await updater.getByRole("button", { name: "下载 0.3.1" }).click();
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("papo:testOpenedUpdate"))).toBe(
-    "https://eu.jerrypsy.top/papo/android/papo-0.3.0.apk"
+    "https://eu.jerrypsy.top/papo/android/papo-0.3.1.apk"
   );
 });
 

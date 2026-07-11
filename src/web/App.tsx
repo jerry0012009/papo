@@ -15,17 +15,21 @@ import {
   Mic,
   Plus,
   RefreshCcw,
+  RotateCcw,
   Save,
   Send,
   Sparkles,
   Smartphone,
   Square,
   UserRound,
+  ZoomIn,
+  ZoomOut,
   X
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
 import { audioObservationPreview, imageSummaryPreview } from "../core/display-text";
 import { toCreatureMemoryVoice } from "../core/memory";
 import { PET_KINDS, normalizePetKind, petKindLabel, petKindMeta } from "../core/pet-kinds";
@@ -99,6 +103,7 @@ import {
   type PushNotificationState
 } from "./push-notifications";
 import { inspectAppUpdate, openAppUpdateDownload, type AppUpdateState } from "./app-update";
+import { downloadImage } from "./image-download";
 import { formatPapoDateTime, papoTimeZone } from "./time";
 
 type Tab = "home" | "chat" | "memory" | "profile";
@@ -1670,40 +1675,136 @@ function HomeActionCardsPeek({ profile, compact = false }: { profile: CreaturePr
 
 function HomeIllustrationsPeek({ profile, compact = false }: { profile: CreatureProfile; compact?: boolean }) {
   const illustrations = (profile.illustrations ?? []).slice(0, 6);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState<number>();
+  const galleryOpenRef = useRef(galleryOpen);
+  const viewerIndexRef = useRef(viewerIndex);
+  galleryOpenRef.current = galleryOpen;
+  viewerIndexRef.current = viewerIndex;
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (viewerIndexRef.current !== undefined) setViewerIndex(undefined);
+      else if (galleryOpenRef.current) setGalleryOpen(false);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
   if (!illustrations.length) return null;
   const latest = illustrations[0];
+  const selected = viewerIndex === undefined ? undefined : illustrations[viewerIndex];
+
+  function openGallery() {
+    window.history.pushState({ ...(window.history.state ?? {}), papoOverlay: "illustrations" }, "");
+    setGalleryOpen(true);
+  }
+
+  function closeGallery() {
+    if (window.history.state?.papoOverlay === "illustrations") window.history.back();
+    else setGalleryOpen(false);
+  }
+
+  function openViewer(index: number) {
+    window.history.pushState({ ...(window.history.state ?? {}), papoOverlay: "image-viewer" }, "");
+    setViewerIndex(index);
+  }
+
+  function closeViewer() {
+    if (window.history.state?.papoOverlay === "image-viewer") window.history.back();
+    else setViewerIndex(undefined);
+  }
+
   return (
-    <Dialog.Root>
-      <Dialog.Trigger asChild>
-        <button className={compact ? "illustration-peek compact" : "illustration-peek"} type="button">
-          <ImagePlus size={16} />
-          {profile.creatureName} 画过
-        </button>
-      </Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Overlay className="ui-overlay" />
-        <Dialog.Content className="illustration-dialog" aria-label={`${profile.creatureName} 画过的小画`}>
-          <div className="illustration-dialog-head">
-            <div>
-              <strong>{profile.creatureName} 画过的小画</strong>
-              <span>{latest.title}</span>
+    <>
+      <Dialog.Root open={galleryOpen} modal={false} onOpenChange={(open) => { if (!open && viewerIndexRef.current === undefined) closeGallery(); }}>
+        <Dialog.Trigger asChild>
+          <button className={compact ? "illustration-peek compact" : "illustration-peek"} type="button" onClick={openGallery}>
+            <ImagePlus size={16} />
+            {profile.creatureName} 画过
+          </button>
+        </Dialog.Trigger>
+        <Dialog.Portal>
+          <Dialog.Overlay className="ui-overlay" />
+          <Dialog.Content className="illustration-dialog" aria-label={`${profile.creatureName} 画过的小画`}>
+            <div className="illustration-dialog-head">
+              <div>
+                <strong>{profile.creatureName} 画过的小画</strong>
+                <span>{latest.title}</span>
+              </div>
+              <button type="button" onClick={closeGallery}>收起</button>
             </div>
-            <Dialog.Close asChild>
-              <button type="button">收起</button>
-            </Dialog.Close>
-          </div>
-          <div className="illustration-grid">
-            {illustrations.map((item) => (
-              <a href={resolveAssetUrl(item.attachment.url)} target="_blank" rel="noreferrer" className="illustration-card" key={item.id}>
-                <img src={resolveAssetUrl(item.attachment.url)} alt={item.title} loading="lazy" />
-                <strong>{item.title}</strong>
-                {item.caption ? <span>{item.caption}</span> : null}
-              </a>
-            ))}
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+            <div className="illustration-grid">
+              {illustrations.map((item, index) => (
+                <button type="button" className="illustration-card" key={item.id} onClick={() => openViewer(index)}>
+                  <img src={resolveAssetUrl(item.attachment.url)} alt={item.title} loading="lazy" />
+                  <strong>{item.title}</strong>
+                  {item.caption ? <span>{item.caption}</span> : null}
+                </button>
+              ))}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+      {selected ? <IllustrationViewer item={selected} onClose={closeViewer} /> : null}
+    </>
+  );
+}
+
+function IllustrationViewer({ item, onClose }: { item: NonNullable<CreatureProfile["illustrations"]>[number]; onClose: () => void }) {
+  const [downloadState, setDownloadState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
+  const src = resolveAssetUrl(item.attachment.url);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeRef.current();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  async function saveImage() {
+    setDownloadState("saving");
+    try {
+      await downloadImage(src, item.title, item.attachment.mime);
+      setDownloadState("saved");
+    } catch {
+      setDownloadState("failed");
+    }
+  }
+
+  return (
+    <div className="image-viewer" role="dialog" aria-modal="true" aria-label={`查看图片：${item.title}`}>
+          <h2 className="sr-only">{item.title}</h2>
+          <TransformWrapper initialScale={1} minScale={1} maxScale={5} centerOnInit doubleClick={{ mode: "toggle", step: 2 }}>
+            {({ zoomIn, zoomOut, resetTransform }) => (
+              <>
+                <div className="image-viewer-toolbar">
+                  <button type="button" onClick={onClose} aria-label="关闭图片"><X size={21} /></button>
+                  <div className="image-viewer-tools">
+                    <button type="button" onClick={() => zoomOut()} aria-label="缩小"><ZoomOut size={20} /></button>
+                    <button type="button" onClick={() => resetTransform()} aria-label="恢复原始大小"><RotateCcw size={19} /></button>
+                    <button type="button" onClick={() => zoomIn()} aria-label="放大"><ZoomIn size={20} /></button>
+                    <button type="button" onClick={() => void saveImage()} disabled={downloadState === "saving"} aria-label="下载图片">
+                      {downloadState === "saving" ? <Loader2 className="spin" size={20} /> : <Download size={20} />}
+                    </button>
+                  </div>
+                </div>
+                <TransformComponent wrapperClass="image-viewer-canvas" contentClass="image-viewer-image-wrap">
+                  <img src={src} alt={item.title} draggable={false} />
+                </TransformComponent>
+                <div className="image-viewer-caption">
+                  <strong>{item.title}</strong>
+                  {item.caption ? <span>{item.caption}</span> : null}
+                  {downloadState === "saved" ? <small>已保存到下载目录</small> : null}
+                  {downloadState === "failed" ? <small className="error-text">保存失败，请稍后重试</small> : null}
+                </div>
+              </>
+            )}
+          </TransformWrapper>
+    </div>
   );
 }
 
