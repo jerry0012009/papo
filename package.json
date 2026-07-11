@@ -1,6 +1,6 @@
 {
   "name": "papo",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,6 +20,7 @@
     "test:unit": "node --test --import tsx tests/*.test.ts",
     "test:ui": "playwright test",
     "smoke:real-cognition": "RUN_REAL_MODEL_SMOKE=1 tsx tests/real-cognition-smoke.ts",
+    "migrate:papo-memories": "tsx scripts/migrate-papo-memory-experience.ts papo",
     "start": "node dist/server/index.js"
   },
   "dependencies": {

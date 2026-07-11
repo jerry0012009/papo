@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext, modelPetContext } from "./model-context";
+import { clientContextFor } from "./client-document";
 import { memoryShortTitle, normalizeSharedMemoryText, toCreatureMemoryVoice } from "./memory";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
@@ -168,6 +169,7 @@ JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 - candidateId 必须来自候选列表。
 - shouldKeepCandidate=true 时必须给出 candidateText；这是 Papo 真正会留下的记忆候选文本，不能依赖系统预填文本。
 - shouldKeepCandidate=true 时必须给 shortTitle：2-8 个中文字符，根据文字和图片内容提炼，例如“泳池下午”“可乐闲聊”“Jojo 护食”；它只用于内容缩略卡，不替代完整记忆。
+- candidateText 是 Papo 留给自己、也会给对方看的生活记忆：使用 Papo 小动物观察者的第一人称视角，对对方使用 relevant_client_context 中的 preferredName（没有时用“你”）。禁止写“用户”“该用户”“说话者”等系统口吻。
 - shouldKeepCandidate=false 时必须给出 whyConsolidate 说明为什么不留下。
 - shouldKeepCandidate=false 时不要填写 candidateText、memoryKind、writePolicy、decayPolicy；不要用空字符串占位。
 - memoryKind 必须只使用：user_preference, long_theme, creature_self_memory, safety_rule, future_review, relationship, habit, open_question。
@@ -208,6 +210,9 @@ ${JSON.stringify(profile.state)}
 
 current_policy:
 ${JSON.stringify(profile.policyProfile)}
+
+relevant_client_context:
+${JSON.stringify(clientContextFor(profile, candidates.map((candidate) => candidate.candidateText).join(" ")))}
 
 recent_memories:
 ${JSON.stringify(modelMemoryContext(profile.longTermMemories, { creatureVoice: true }))}

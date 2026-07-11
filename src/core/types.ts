@@ -134,7 +134,7 @@ export interface MediaAttachment {
   observedAt?: string;
   location?: StreamSegment["location"];
   sizeBytes?: number;
-  generatedBy?: "user_upload" | "papo_illustration" | "papo_action_card" | "papo_profile";
+  generatedBy?: "user_upload" | "papo_illustration" | "papo_action_card" | "papo_profile" | "papo_memory";
   prompt?: string;
   sourceIds?: string[];
 }
@@ -298,6 +298,12 @@ export interface LongTermMemory {
     | "open_question";
   text: string;
   shortTitle?: string;
+  narrative?: string;
+  visual?: MediaAttachment;
+  visualPrompt?: string;
+  visualUpdatedAt?: string;
+  visualStatus?: "pending" | "ready" | "failed";
+  visualError?: string;
   sourceEpisodeId?: string;
   consolidatedBecause?: string;
   weight: number;
@@ -404,6 +410,39 @@ export interface ActionCardRecord {
   model?: string;
   disabled?: boolean;
   deleted?: boolean;
+}
+
+export type ClientDimension =
+  | "identity"
+  | "personality"
+  | "family"
+  | "growth"
+  | "leisure"
+  | "values"
+  | "health"
+  | "work"
+  | "environment"
+  | "community"
+  | "family_relationships"
+  | "intimate_relationships"
+  | "social_relationships";
+
+export interface ClientFact {
+  id: string;
+  dimension: ClientDimension;
+  text: string;
+  confidence: number;
+  sourceIds: string[];
+  updatedAt: string;
+}
+
+export interface ClientDocument {
+  preferredName?: string;
+  preferredNameSourceIds?: string[];
+  facts: ClientFact[];
+  markdown: string;
+  updatedAt: string;
+  revision: number;
 }
 
 export interface FeedbackRecord {
@@ -579,6 +618,7 @@ export interface CreatureProfile {
   hermes: HermesProfileState;
   illustrations?: IllustrationRecord[];
   actionCards?: ActionCardRecord[];
+  clientDocument?: ClientDocument;
   petProfile: PetIdentityProfile;
   dogState: DogInteractionState;
   dogStateHistory: DogInteractionState[];

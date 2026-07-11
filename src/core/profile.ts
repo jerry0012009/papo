@@ -36,6 +36,7 @@ export function createCreatureProfile(input: {
     hermes: { sessionName: hermesSessionName(userId), tasks: [] },
     illustrations: [],
     actionCards: [],
+    clientDocument: emptyClientDocument(now),
     petProfile: initialPetProfile(normalizePetKind(input.petKind), now),
     dogState: seedDogState(now),
     dogStateHistory: []
@@ -76,6 +77,7 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.actionCards ??= [];
   profile.actionCards = profile.actionCards.slice(0, 30);
   profile.petProfile = normalizePetProfile(profile.petProfile, profile.petKind);
+  profile.clientDocument = normalizeClientDocument(profile.clientDocument, profile.createdAt);
   for (const card of profile.actionCards) card.cover ??= profile.petProfile.avatarImage;
   profile.dogState = normalizeDogState(profile.dogState, new Date().toISOString());
   profile.dogStateHistory ??= [];
@@ -93,7 +95,7 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   }
   for (const memory of profile.longTermMemories) {
     memory.attachments ??= [];
-    memory.shortTitle = memoryShortTitle(memory.text, memory.shortTitle);
+    memory.shortTitle = memoryShortTitle(memory.narrative ?? memory.text, memory.shortTitle);
   }
   for (const candidate of profile.memoryCandidates) {
     candidate.attachments ??= [];
@@ -107,6 +109,22 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   }
 
   return profile;
+}
+
+function emptyClientDocument(now: string) {
+  return { facts: [], markdown: "# Client\n\n还在慢慢认识你。", updatedAt: now, revision: 0 };
+}
+
+function normalizeClientDocument(document: CreatureProfile["clientDocument"], fallbackAt: string) {
+  if (!document) return emptyClientDocument(fallbackAt);
+  document.preferredNameSourceIds ??= [];
+  document.preferredNameSourceIds = [...new Set(document.preferredNameSourceIds)].slice(0, 8);
+  document.facts ??= [];
+  document.facts = document.facts.filter((fact) => fact.text?.trim() && fact.sourceIds?.length).slice(0, 80);
+  document.markdown ||= "# Client\n\n还在慢慢认识你。";
+  document.updatedAt ||= fallbackAt;
+  document.revision = Math.max(0, Math.round(document.revision ?? 0));
+  return document;
 }
 
 export function initialPetProfile(petKind: string, now = new Date().toISOString()): PetIdentityProfile {

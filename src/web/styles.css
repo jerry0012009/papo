@@ -1596,6 +1596,15 @@ select {
   line-height: 1.4;
 }
 
+.client-document-snapshot pre {
+  margin: 0;
+  max-height: 18rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  color: var(--ink-soft);
+  font: 12px/1.65 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
 .action-card-admin-list {
   display: grid;
   gap: 9px;
@@ -2337,6 +2346,14 @@ select {
 .memory-main {
   display: grid;
   gap: 8px;
+}
+
+.memory-visual {
+  display: block;
+  width: min(100%, 32rem);
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 6px;
 }
 
 .memory-section {

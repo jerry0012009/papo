@@ -3,6 +3,7 @@ import { guardActionDecision } from "./action";
 import { isHighPrivacySegmentContent } from "./attention";
 import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext, modelPetContext } from "./model-context";
+import { clientContextFor } from "./client-document";
 import { normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
 import { applyStateDelta } from "./state";
@@ -563,6 +564,9 @@ ${JSON.stringify(profile.state)}
 
 current_policy:
 ${JSON.stringify(profile.policyProfile)}
+
+relevant_client_context:
+${JSON.stringify(clientContextFor(profile, result.events.map((event) => `${event.triggerContent} ${event.noticed}`).join(" ")))}
 
 recent_memories:
 ${JSON.stringify(modelMemoryContext(profile.longTermMemories))}

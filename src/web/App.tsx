@@ -2254,6 +2254,13 @@ function StatePolicySnapshot({ profile, onUpdateActionCard }: { profile: Creatur
         <small>动作风格：{petProfile.motionStyle}</small>
         <small>初始动作：{petProfile.initialMotion?.status ?? "idle"}</small>
       </section>
+      {profile.clientDocument ? (
+        <section className="client-document-snapshot">
+          <strong>Client.md</strong>
+          <pre>{profile.clientDocument.markdown}</pre>
+          <small>第 {profile.clientDocument.revision} 版 · {formatPapoDateTime(profile.clientDocument.updatedAt)}</small>
+        </section>
+      ) : null}
       {recentRuns.length ? (
         <section>
           <strong>最近模型阶段</strong>
@@ -3574,17 +3581,19 @@ function MemoryCandidateCard(props: {
 
 function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTermMemories"][number]; profile: CreatureProfile }) {
   const sourceEpisode = memorySourceEpisode(memory, profile);
+  const displayText = memory.narrative ?? memoryResultLine(memory);
 
   return (
     <div className="memory-main">
+      {memory.visual ? <img className="memory-visual" src={resolveAssetUrl(memory.visual.url)} alt={memory.shortTitle ?? "共同回忆"} loading="lazy" /> : null}
       <div>
         <span>{formatPapoDateTime(memory.createdAt)}</span>
-        <strong className="memory-text-preview">{memoryResultLine(memory)}</strong>
+        <strong className="memory-text-preview">{displayText}</strong>
       </div>
-      {shouldShowFullMemoryText(memoryResultLine(memory)) ? (
+      {shouldShowFullMemoryText(displayText) ? (
         <details className="memory-details memory-full-text">
           <summary>完整记忆</summary>
-          <p>{memoryResultLine(memory)}</p>
+          <p>{displayText}</p>
         </details>
       ) : null}
       <AttachmentStrip attachments={memory.attachments} />
@@ -3684,7 +3693,7 @@ function MemoryFeedbackBox(props: {
             setFeedbackModality("text");
           }}
           rows={2}
-          placeholder={`告诉 ${props.creatureName}：哪里要记准、放轻，或下次怎么回应`}
+          placeholder={`告诉 ${props.creatureName}：标题、内容或画面想怎么改`}
         />
         <label className="upload-button compact-upload">
           <Mic size={16} />
@@ -4197,15 +4206,15 @@ function ActionCardCover({ card, profile }: { card: NonNullable<CreatureProfile[
 }
 
 function MemoryCover({ memory, onClick }: { memory: CreatureProfile["longTermMemories"][number]; onClick: () => void }) {
-  const image = memory.attachments?.find((attachment) => attachment.kind === "image");
-  const title = memory.shortTitle ?? memoryShortTitle(memory.text);
+  const image = memory.visual ?? memory.attachments?.find((attachment) => attachment.kind === "image");
+  const title = memory.shortTitle ?? memoryShortTitle(memory.narrative ?? memory.text);
   return (
     <button className={image ? "memory-cover has-image" : "memory-cover text-only"} type="button" onClick={onClick}>
       <span className="memory-cover-art">
         {image ? <img src={resolveAssetUrl(image.url)} alt="" loading="lazy" /> : <strong>{title}</strong>}
       </span>
       <strong>{title}</strong>
-      <small>{memoryResultLine(memory)}</small>
+      <small>{formatPapoDateTime(memory.createdAt)}</small>
     </button>
   );
 }

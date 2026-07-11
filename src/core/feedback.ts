@@ -3,6 +3,7 @@ import { clampPolicy } from "./drive";
 import { makeId } from "./ids";
 import { adjustMemoryWeight, forgetMemory, memoryShortTitle, mergeAttachments, normalizeSharedMemoryText, promoteMemoryCandidate } from "./memory";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
+import { clientContextFor } from "./client-document";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
 import { applyStateDelta } from "./state";
@@ -665,6 +666,9 @@ ${JSON.stringify(profile.state)}
 
 current_policy:
 ${JSON.stringify(profile.policyProfile)}
+
+relevant_client_context:
+${JSON.stringify(clientContextFor(profile, `${feedback.inputText ?? ""} ${targetLongTerm?.text ?? ""}`))}
 
 recent_feedback:
 ${JSON.stringify(modelFeedbackContext(previousFeedback))}

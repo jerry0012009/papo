@@ -45,7 +45,6 @@ candidate.memoryKind = "habit";
 candidate.confidence = 72;
 await store.saveProfile(profile);
 
-let jsonCall = 0;
 const provider: ModelProvider = {
   kind: "mimo",
   name: "Candidate feedback provider",
@@ -55,9 +54,8 @@ const provider: ModelProvider = {
   async generate() {
     return "";
   },
-  async generateJson() {
-    jsonCall += 1;
-    if (jsonCall === 1) {
+  async generateJson(prompt) {
+    if (prompt.includes("反馈反思脑")) {
       return {
         responseAction: "acknowledge",
         learningNote: "用户希望候选记忆长期留下。",
@@ -73,6 +71,13 @@ const provider: ModelProvider = {
         }
       };
     }
+    if (prompt.includes("共同回忆编辑和视觉导演")) return {
+      shortTitle: "晚间游泳",
+      narrative: "我记得你最近每天晚上游泳，只是不喜欢泳池里人太多。",
+      imagePrompt: "Square hand-drawn memory of Papo waiting beside a quiet evening swimming pool, no text.",
+      relatedMemoryIds: [], needsPapoReference: false, needsClientReferences: false
+    };
+    if (prompt.includes("Client.md 维护脑")) return { facts: [] };
     return {
       shouldDream: true,
       summary: "把重复的运动记忆整理得更稳，放下不需要的候选。",
@@ -121,6 +126,7 @@ try {
   const afterFeedback = await store.getProfile("candidate-feedback-user");
   assert.equal(afterFeedback?.memoryCandidates.find((item) => item.id === candidate.id)?.status, "promoted");
   assert.equal(afterFeedback?.longTermMemories.some((memory) => memory.sourceEpisodeId === episode.id && /游泳/.test(memory.text)), true);
+  await waitFor(async () => (await store.getProfile("candidate-feedback-user"))?.longTermMemories.find((memory) => memory.visualStatus === "ready"));
 
   const beforeConfidence = afterFeedback!.state.confidence;
   const dream = await semanticDreamMemories(afterFeedback!, provider, { force: true, now: "2026-07-07T10:10:00.000Z" });
@@ -130,4 +136,14 @@ try {
   console.log(JSON.stringify({ ok: true }, null, 2));
 } finally {
   server.close();
+}
+
+async function waitFor<T>(read: () => Promise<T | undefined>, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const value = await read();
+    if (value) return value;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error("timed out waiting for memory enrichment");
 }

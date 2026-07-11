@@ -107,6 +107,7 @@ function mergeCreatureProfiles(current: CreatureProfile, incoming: CreatureProfi
     conversation: mergeById(current.conversation, incoming.conversation, "at").slice(0, 80),
     illustrations: mergeById(current.illustrations ?? [], incoming.illustrations ?? [], "createdAt").slice(0, 30),
     actionCards: mergeById(current.actionCards ?? [], incoming.actionCards ?? [], "createdAt").slice(0, 30),
+    clientDocument: chooseLatestClientDocument(current, incoming),
     proactive: chooseLatestProactive(current, incoming),
     readState: chooseLatestReadState(current, incoming),
     dogState: chooseLatestDogState(current, incoming),
@@ -120,6 +121,15 @@ function mergeCreatureProfiles(current: CreatureProfile, incoming: CreatureProfi
     }
   });
   return merged;
+}
+
+function chooseLatestClientDocument(current: CreatureProfile, incoming: CreatureProfile) {
+  const left = current.clientDocument;
+  const right = incoming.clientDocument;
+  if (!left) return right;
+  if (!right) return left;
+  if (right.revision !== left.revision) return right.revision > left.revision ? right : left;
+  return timestamp(right.updatedAt) >= timestamp(left.updatedAt) ? right : left;
 }
 
 function mergeById<T extends { id: string }>(left: T[], right: T[], timeKey: keyof T, mergeSame?: (left: T, right: T) => T) {

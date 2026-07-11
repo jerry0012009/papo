@@ -1,14 +1,14 @@
 {
-  "versionName": "0.3.1",
-  "versionCode": 5,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.3.1.apk",
-  "publishedAt": "2026-07-11T14:44:10.000Z",
+  "versionName": "0.4.0",
+  "versionCode": 6,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.0.apk",
+  "publishedAt": "2026-07-11T16:56:00.000Z",
   "notes": [
-    "画过的图片支持双指缩放、双击缩放、拖动和一键复位",
-    "全面屏返回手势会先退出图片查看，再退出画过图库，不再直接退出应用",
-    "新增图片下载按钮，Android 可保存到系统下载目录",
-    "网页端和旧版 APK 同样支持图片查看、缩放和下载"
+    "长期记忆新增共同回忆封面、短标题和时间展示",
+    "Papo 会用第一人称整理共同回忆，不再以系统口吻称呼用户",
+    "记忆文字反馈可同步修订标题、叙事与回忆画面",
+    "新增每用户私有 Client.md，并仅在小眼睛中展示"
   ],
-  "sha256": "9c4e9a9697cfa8d6f134443eebebb019e0d85976b49bb69de09dd150300e7044",
-  "size": 22784818
+  "sha256": "b9647207a42edd93ed85d517a96e903f29c50a9fe6767479a2c0fd3dd977f125",
+  "size": 22788802
 }

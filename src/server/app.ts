@@ -18,6 +18,7 @@ import type { ActionCardRecord, ActionResult, CaptureResult, CreatureProfile, Em
 import { createHermesBridge, type HermesBridge } from "./hermes";
 import { JsonDeviceAuthService, type DeviceAuthService } from "./device-auth";
 import { NativeIngestQueue, type NativeIngestPayload } from "./native-ingest-queue";
+import { markMemoriesPending, queueMemoryEnrichment } from "./memory-enrichment";
 import { createWebPushService, PushNotifyingProfileStore, type WebPushService } from "./push";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
@@ -183,6 +184,7 @@ export function createApp(input: {
 
   async function persistCuriousCapture(profile: CreatureProfile, segments: StreamSegment[]) {
     markProactiveUserResponse(profile);
+    const beforeMemoryIds = activeMemorySignatures(profile);
     const beforeSemanticIds = semanticRecordIds(profile);
     const result = await runCuriousHarness(profile, segments, provider);
     await hermesBridge?.enqueueTasks(profile, result);
@@ -217,8 +219,11 @@ export function createApp(input: {
       attachments: illustrationAttachments,
       cognitionTrace
     });
+    const enrichedMemoryIds = newActiveMemoryIds(profile, beforeMemoryIds);
+    markMemoriesPending(profile, enrichedMemoryIds);
     await store.saveProfile(profile);
     queueActionCardGeneration({ store, userId: profile.userId, result, provider });
+    queueMemoryEnrichment({ store, userId: profile.userId, memoryIds: enrichedMemoryIds, provider });
     return result;
   }
 
@@ -537,6 +542,7 @@ export function createApp(input: {
       const body = buttonSchema.parse(req.body);
       const inputSourceId = `button-${Date.now()}`;
       markProactiveUserResponse(profile);
+      const beforeMemoryIds = activeMemorySignatures(profile);
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runButtonHarness(profile, body.text, provider);
       await hermesBridge?.enqueueTasks(profile, result);
@@ -560,8 +566,11 @@ export function createApp(input: {
         attachments: illustrationAttachments,
         cognitionTrace
       });
+      const enrichedMemoryIds = newActiveMemoryIds(profile, beforeMemoryIds);
+      markMemoriesPending(profile, enrichedMemoryIds);
       await store.saveProfile(profile);
       queueActionCardGeneration({ store, userId: profile.userId, result, provider });
+      queueMemoryEnrichment({ store, userId: profile.userId, memoryIds: enrichedMemoryIds, provider });
       res.json(publicCaptureResult(result, provider.kind));
     } catch (error) {
       next(error);
@@ -601,6 +610,7 @@ export function createApp(input: {
       const profile = await requireProfile(store, req.params.userId, req);
       const body = feedbackSchema.parse(req.body);
       markProactiveUserResponse(profile, new Date().toISOString());
+      const beforeMemoryIds = activeMemorySignatures(profile);
       const targetBefore = feedbackTargetSnapshot(profile, body.targetId);
       const feedback = applyFeedback(profile, body);
       const beforeSemanticIds = semanticRecordIds(profile);
@@ -626,7 +636,10 @@ export function createApp(input: {
         relatedMemoryIds,
         cognitionTrace
       });
+      const enrichedMemoryIds = feedbackMemoryEnrichmentIds(profile, beforeMemoryIds, body.targetId, body.content);
+      markMemoriesPending(profile, enrichedMemoryIds);
       await store.saveProfile(profile);
+      queueMemoryEnrichment({ store, userId: profile.userId, memoryIds: enrichedMemoryIds, provider });
       res.json({ profile: publicProfile(profile), feedback });
     } catch (error) {
       next(error);
@@ -657,6 +670,7 @@ export function createApp(input: {
     try {
       const profile = await requireProfile(store, req.params.userId, req);
       const body = updateMemorySchema.parse(req.body);
+      const beforeMemoryIds = activeMemorySignatures(profile);
       const previousMemory = profile.longTermMemories.find((item) => item.id === req.params.memoryId);
       if (!previousMemory) throw new HttpError(404, "Memory not found");
       markProactiveUserResponse(profile, new Date().toISOString());
@@ -694,7 +708,10 @@ export function createApp(input: {
         cognitionTrace,
         at
       });
+      const enrichedMemoryIds = feedbackMemoryEnrichmentIds(profile, beforeMemoryIds, memory.id, body.text);
+      markMemoriesPending(profile, enrichedMemoryIds);
       await store.saveProfile(profile);
+      queueMemoryEnrichment({ store, userId: profile.userId, memoryIds: enrichedMemoryIds, provider });
       res.json({ profile: publicProfile(profile), memory });
     } catch (error) {
       next(error);
@@ -2058,6 +2075,24 @@ function feedbackInputText(kind: string, content?: string) {
 
 function semanticRecordIds(profile: CreatureProfile) {
   return new Set((profile.semanticBrainHistory ?? []).map((record) => record.id));
+}
+
+function activeMemorySignatures(profile: CreatureProfile) {
+  return new Map(profile.longTermMemories.filter((memory) => memory.weight > 0).map((memory) => [memory.id, memoryEnrichmentSignature(memory)]));
+}
+
+function newActiveMemoryIds(profile: CreatureProfile, before: Map<string, string>) {
+  return profile.longTermMemories.filter((memory) => memory.weight > 0 && before.get(memory.id) !== memoryEnrichmentSignature(memory)).map((memory) => memory.id);
+}
+
+function feedbackMemoryEnrichmentIds(profile: CreatureProfile, before: Map<string, string>, targetId?: string, content?: string) {
+  const ids = new Set(newActiveMemoryIds(profile, before));
+  if (content?.trim() && targetId && profile.longTermMemories.some((memory) => memory.id === targetId && memory.weight > 0)) ids.add(targetId);
+  return [...ids];
+}
+
+function memoryEnrichmentSignature(memory: CreatureProfile["longTermMemories"][number]) {
+  return JSON.stringify([memory.text, memory.shortTitle, memory.attachments?.map((attachment) => attachment.id).sort() ?? []]);
 }
 
 function segmentDisplayText(kind: StreamSegment["kind"], text: string) {
