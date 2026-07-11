@@ -1,5 +1,6 @@
 import { Capacitor, registerPlugin, type PluginListenerHandle } from "@capacitor/core";
 import { createDeviceSession } from "./api";
+import { resolveNativeApiBase } from "./native-api-base";
 
 export type ListeningMode = "listen" | "watch";
 export type CameraFacing = "front" | "back";
@@ -36,7 +37,7 @@ interface PapoListeningPlugin {
 }
 
 const PapoListening = registerPlugin<PapoListeningPlugin>("PapoListening");
-const apiBase = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, "");
+const configuredApiBase = import.meta.env.VITE_API_BASE as string | undefined;
 
 export function supportsNativeListening() {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
@@ -50,7 +51,8 @@ export async function startNativeListening(input: {
   cameraFacing: CameraFacing;
 }) {
   if (!supportsNativeListening()) throw new Error("Android background listening is unavailable");
-  if (!apiBase || !/^https:\/\//.test(apiBase)) throw new Error("Android API address is not configured");
+  const apiBase = resolveNativeApiBase(configuredApiBase, window.location.origin);
+  if (!apiBase) throw new Error("Papo 服务地址暂不可用，请重新打开应用后再试");
   const session = await createDeviceSession(input.userId);
   return PapoListening.start({
     ...input,
