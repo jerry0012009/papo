@@ -5,14 +5,14 @@ import {
   currentLiveBatchId,
   imageSegmentContent,
   LIVE_BATCH_MS,
-  LIVE_LISTENING_MAX_MS,
+  LIVE_LISTENING_DEFAULT_MS,
   liveBatchBoundaryMs,
   plannedLiveAudioSliceBatchIds,
   shouldSuppressForcedAudioSlice
 } from "../src/web/live-listening";
 
 const startedAt = Date.UTC(2026, 6, 7, 12, 0, 0);
-const planned = plannedLiveAudioSliceBatchIds(startedAt, LIVE_LISTENING_MAX_MS);
+const planned = plannedLiveAudioSliceBatchIds(startedAt, LIVE_LISTENING_DEFAULT_MS);
 
 assert.equal(planned.length, 6);
 assert.deepEqual(
@@ -31,8 +31,8 @@ assert.equal(currentLiveBatchId(startedAt, startedAt + LIVE_BATCH_MS - 1), plann
 assert.equal(currentLiveBatchId(startedAt, startedAt + LIVE_BATCH_MS), planned[1]);
 assert.equal(currentLiveBatchId(startedAt, startedAt + 5 * LIVE_BATCH_MS), planned[5]);
 
-assert.equal(shouldSuppressForcedAudioSlice(startedAt + LIVE_LISTENING_MAX_MS, startedAt + LIVE_LISTENING_MAX_MS - 500), true);
-assert.equal(shouldSuppressForcedAudioSlice(startedAt + LIVE_LISTENING_MAX_MS, startedAt + LIVE_LISTENING_MAX_MS - 1500), false);
+assert.equal(shouldSuppressForcedAudioSlice(startedAt + LIVE_LISTENING_DEFAULT_MS, startedAt + LIVE_LISTENING_DEFAULT_MS - 500), true);
+assert.equal(shouldSuppressForcedAudioSlice(startedAt + LIVE_LISTENING_DEFAULT_MS, startedAt + LIVE_LISTENING_DEFAULT_MS - 1500), false);
 assert.equal(imageSegmentContent("一只柴犬趴在地板上", "papo.jpg"), "一只柴犬趴在地板上");
 assert.equal(imageSegmentContent("   ", "papo.jpg").includes("papo.jpg"), false);
 assert.match(imageSegmentContent("   ", "papo.jpg"), /你给 Papo 看了一张照片/);

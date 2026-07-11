@@ -6,9 +6,9 @@ test.beforeEach(async ({ page }, testInfo) => {
   await installMockApi(page);
   await page.route("**/papo/android/latest.json", async (route) => {
     await json(route, {
-      versionName: "0.2.0",
-      versionCode: 2,
-      downloadUrl: "https://eu.jerrypsy.top/papo/android/papo-0.2.0.apk",
+      versionName: "0.2.1",
+      versionCode: 3,
+      downloadUrl: "https://eu.jerrypsy.top/papo/android/papo-0.2.1.apk",
       publishedAt: "2026-07-10T22:00:00.000Z",
       notes: ["陪看模式调整为每 5 分钟拍摄一帧"]
     });
@@ -106,9 +106,22 @@ test("profile checks and exposes the latest Android APK", async ({ page }) => {
   await page.getByRole("button", { name: "看看哪只 Papo 在身边" }).click();
 
   const updater = page.locator(".app-update-settings");
-  await expect(updater).toContainText("Android 最新版 0.2.0");
+  await expect(updater).toContainText("Android 最新版 0.2.1");
   await expect(updater.getByRole("button", { name: "检查更新" })).toBeVisible();
-  await expect(updater.getByRole("button", { name: "下载 0.2.0" })).toBeVisible();
+  await expect(updater.getByRole("button", { name: "下载 0.2.1" })).toBeVisible();
+});
+
+test("installed Android 0.2.0 detects and opens the 0.2.1 update", async ({ page }) => {
+  await installMockAndroidBridge(page, { versionName: "0.2.0", versionCode: 2 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "看看哪只 Papo 在身边" }).click();
+
+  const updater = page.locator(".app-update-settings");
+  await expect(updater).toContainText("当前 0.2.0，可更新到 0.2.1");
+  await updater.getByRole("button", { name: "下载 0.2.1" }).click();
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("papo:testOpenedUpdate"))).toBe(
+    "https://eu.jerrypsy.top/papo/android/papo-0.2.1.apk"
+  );
 });
 
 test("home guide poster explains Papo without overflowing", async ({ page }) => {
@@ -740,6 +753,51 @@ async function installMockMicrophone(page: Page) {
       }
     });
   });
+}
+
+async function installMockAndroidBridge(page: Page, version: { versionName: string; versionCode: number }) {
+  await page.addInitScript((appVersion) => {
+    const nativeWindow = window as typeof window & {
+      androidBridge?: object;
+      Capacitor?: {
+        PluginHeaders: Array<{ name: string; methods: Array<{ name: string; rtype: string }> }>;
+        nativePromise: (plugin: string, method: string, options?: Record<string, unknown>) => Promise<unknown>;
+        nativeCallback: () => Promise<string>;
+      };
+    };
+    nativeWindow.androidBridge = {};
+    nativeWindow.Capacitor = {
+      PluginHeaders: [
+        {
+          name: "PapoUpdater",
+          methods: [
+            { name: "getVersion", rtype: "promise" },
+            { name: "openDownload", rtype: "promise" }
+          ]
+        },
+        {
+          name: "PapoListening",
+          methods: [
+            { name: "getStatus", rtype: "promise" },
+            { name: "addListener", rtype: "callback" },
+            { name: "removeListener", rtype: "promise" }
+          ]
+        }
+      ],
+      nativePromise: async (plugin, method, options) => {
+        if (plugin === "PapoUpdater" && method === "getVersion") return appVersion;
+        if (plugin === "PapoUpdater" && method === "openDownload") {
+          window.localStorage.setItem("papo:testOpenedUpdate", String(options?.url ?? ""));
+          return {};
+        }
+        if (plugin === "PapoListening" && method === "getStatus") {
+          return { active: false, startedAt: 0, endAt: 0, mode: "listen", cameraFacing: "front" };
+        }
+        return {};
+      },
+      nativeCallback: async () => "mock-listener"
+    };
+  }, version);
 }
 
 async function json(route: Route, body: unknown, status = 200) {

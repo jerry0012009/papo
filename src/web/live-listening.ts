@@ -1,5 +1,5 @@
 export const LIVE_BATCH_MS = 30_000;
-export const LIVE_LISTENING_MAX_MS = 180_000;
+export const LIVE_LISTENING_DEFAULT_MS = 180_000;
 export const LIVE_LISTENING_DURATION_OPTIONS = [
   { label: "3 分钟", value: 180_000, description: "适合临时说一件事。" },
   { label: "15 分钟", value: 900_000, description: "适合吃饭、通勤、开会前后。" },
@@ -37,7 +37,7 @@ export function shouldSuppressForcedAudioSlice(nowMs: number, lastRequestAt: num
   return nowMs - lastRequestAt < FINAL_SLICE_SUPPRESS_MS;
 }
 
-export function plannedLiveAudioSliceBatchIds(startedAt: number, totalMs = LIVE_LISTENING_MAX_MS) {
+export function plannedLiveAudioSliceBatchIds(startedAt: number, totalMs = LIVE_LISTENING_DEFAULT_MS) {
   const count = Math.ceil(totalMs / LIVE_BATCH_MS);
   return Array.from({ length: count }, (_item, index) => liveBatchId(startedAt, index + 1));
 }

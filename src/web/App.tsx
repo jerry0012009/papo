@@ -76,7 +76,7 @@ import {
   LIVE_BATCH_MAX_WAIT_MS,
   LIVE_BATCH_MS,
   LIVE_LISTENING_DURATION_OPTIONS,
-  LIVE_LISTENING_MAX_MS,
+  LIVE_LISTENING_DEFAULT_MS,
   shouldSuppressForcedAudioSlice
 } from "./live-listening";
 import {
@@ -156,7 +156,7 @@ export function App() {
   const [emergence, setEmergence] = useState<EmergenceSurface>();
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
-  const [listeningDurationMs, setListeningDurationMs] = useState(LIVE_LISTENING_MAX_MS);
+  const [listeningDurationMs, setListeningDurationMs] = useState(LIVE_LISTENING_DEFAULT_MS);
   const [listeningMode, setListeningMode] = useState<ListeningMode>("listen");
   const [listeningDurationPickerOpen, setListeningDurationPickerOpen] = useState(false);
   const [quickRecording, setQuickRecording] = useState(false);
@@ -185,7 +185,7 @@ export function App() {
   const lastAudioSliceRequestAtRef = useRef(0);
   const lastCameraCaptureAtRef = useRef(0);
   const listeningStartedAtRef = useRef<number | undefined>(undefined);
-  const listeningDurationMsRef = useRef(LIVE_LISTENING_MAX_MS);
+  const listeningDurationMsRef = useRef(LIVE_LISTENING_DEFAULT_MS);
   const listeningModeRef = useRef<ListeningMode>("listen");
   const nativeListeningActiveRef = useRef(false);
   const profileRef = useRef<CreatureProfile | undefined>(undefined);
@@ -743,7 +743,7 @@ export function App() {
     setListeningDurationPickerOpen(true);
   }
 
-  async function startListening(durationMs = LIVE_LISTENING_MAX_MS, mode: ListeningMode = "listen", cameraFacing: CameraFacing = "front") {
+  async function startListening(durationMs = LIVE_LISTENING_DEFAULT_MS, mode: ListeningMode = "listen", cameraFacing: CameraFacing = "front") {
     setTab("chat");
     setListeningDurationPickerOpen(false);
     if (listening) return;
@@ -1714,7 +1714,7 @@ function ListeningDurationDialog(props: {
   onSelect: (durationMs: number, mode: ListeningMode, cameraFacing: CameraFacing) => void;
 }) {
   const [mode, setMode] = useState<ListeningMode>("listen");
-  const [durationMs, setDurationMs] = useState<number>(LIVE_LISTENING_MAX_MS);
+  const [durationMs, setDurationMs] = useState<number>(LIVE_LISTENING_DEFAULT_MS);
   const [cameraFacing, setCameraFacing] = useState<CameraFacing>("front");
   return (
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>

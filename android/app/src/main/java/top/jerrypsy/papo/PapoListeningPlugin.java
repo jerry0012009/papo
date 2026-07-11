@@ -123,7 +123,7 @@ public class PapoListeningPlugin extends Plugin {
         String creatureName = call.getString("creatureName", "Papo");
         String mode = "watch".equals(call.getString("mode")) ? "watch" : "listen";
         String facing = "back".equals(call.getString("cameraFacing")) ? "back" : "front";
-        long durationMs = call.getLong("durationMs", 180_000L);
+        long durationMs = requestedDurationMs(call);
         if (userId.isEmpty()) {
             call.reject("User ID is required");
             return;
@@ -160,6 +160,14 @@ public class PapoListeningPlugin extends Plugin {
         response.put("mode", mode);
         response.put("cameraFacing", facing);
         call.resolve(response);
+    }
+
+    static long requestedDurationMs(PluginCall call) {
+        return requestedDurationMs(call.getData().opt("durationMs"));
+    }
+
+    static long requestedDurationMs(Object value) {
+        return value instanceof Number ? ((Number) value).longValue() : 180_000L;
     }
 
     private JSObject status() {
