@@ -1,14 +1,14 @@
 {
-  "versionName": "0.4.2",
-  "versionCode": 8,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.2.apk",
-  "publishedAt": "2026-07-11T19:18:00.000Z",
+  "versionName": "0.4.3",
+  "versionCode": 9,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.3.apk",
+  "publishedAt": "2026-07-11T19:18:20.000Z",
   "notes": [
-    "大图默认完整适配屏幕，不裁切也不自动过度放大",
-    "支持双指捏合放大缩小，放大后可拖动查看原图细节",
-    "右上角关闭、右下角下载原图，不再使用遮挡画面的工具栏",
+    "大图改用 react-photo-view 成熟移动组件，真双指捏合、拖动与双击由组件处理",
+    "手机竖屏初始最长边约占 86%，横屏和平板约占 80%，图片完整居中且不裁切",
+    "右上角关闭、右下角下载原图，并适配小屏、折叠屏、平板和安全区域",
     "全面屏返回手势只退出大图并恢复打开前页面，不会直接退出 App"
   ],
-  "sha256": "8d7fffd9d6e6c181cdb38c2a384f20b29f6e53781f09e06c462439703cfd67a5",
-  "size": 22799488
+  "sha256": "30f1e4850bad76477570a8565a3182cdf03bad37842669e7648a2437d2250d02",
+  "size": 22790408
 }

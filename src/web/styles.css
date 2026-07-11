@@ -1437,24 +1437,43 @@ select {
   font-size: 0.8rem;
 }
 
-.papo-lightbox {
-  --yarl__color_backdrop: #0b0c0b;
-  --yarl__container_background_color: #0b0c0b;
-  --yarl__button_filter: none;
+.papo-photo-view {
+  --papo-photo-view-control-size: clamp(40px, 10vmin, 48px);
+  --papo-photo-view-control-inset: clamp(8px, 2.5vmin, 20px);
+  --papo-photo-view-icon-size: clamp(19px, 4.8vmin, 24px);
   z-index: 140;
 }
 
-.papo-lightbox .yarl__toolbar {
+.papo-photo-view .PhotoView-Slider__Backdrop {
+  background: #0b0c0b !important;
+}
+
+.papo-photo-view .PhotoView-Slider__BannerWrap {
   inset: 0;
-  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: transparent;
   pointer-events: none;
 }
 
-.papo-lightbox .yarl__button {
+.papo-photo-view .PhotoView-Slider__Counter,
+.papo-photo-view .PhotoView-Slider__toolbarIcon,
+.papo-photo-view .PhotoView-Slider__ArrowLeft,
+.papo-photo-view .PhotoView-Slider__ArrowRight {
+  display: none;
+}
+
+.papo-photo-view-toolbar {
   position: absolute;
-  width: 44px;
-  height: 44px;
-  padding: 10px;
+  inset: 0;
+}
+
+.papo-photo-view-toolbar button {
+  position: fixed;
+  width: var(--papo-photo-view-control-size);
+  height: var(--papo-photo-view-control-size);
+  padding: calc((var(--papo-photo-view-control-size) - var(--papo-photo-view-icon-size)) / 2);
+  border: 0;
   border-radius: 50%;
   color: #fff;
   background: rgba(11, 12, 11, 0.62);
@@ -1462,24 +1481,24 @@ select {
   backdrop-filter: blur(6px);
 }
 
-.papo-lightbox .yarl__toolbar .yarl__button[aria-label="关闭图片"] {
-  top: max(12px, env(safe-area-inset-top, 0px));
-  right: max(12px, env(safe-area-inset-right, 0px));
+.papo-photo-view-icon {
+  width: var(--papo-photo-view-icon-size);
+  height: var(--papo-photo-view-icon-size);
 }
 
-.papo-lightbox .yarl__toolbar .yarl__button[aria-label="下载原图"] {
-  right: max(12px, env(safe-area-inset-right, 0px));
-  bottom: max(12px, env(safe-area-inset-bottom, 0px));
+.papo-photo-view-close {
+  top: max(var(--papo-photo-view-control-inset), env(safe-area-inset-top, 0px));
+  right: max(var(--papo-photo-view-control-inset), env(safe-area-inset-right, 0px));
 }
 
-.papo-lightbox .yarl__slide_image {
-  max-width: 100%;
-  max-height: 100%;
+.papo-photo-view-download {
+  right: max(var(--papo-photo-view-control-inset), env(safe-area-inset-right, 0px));
+  bottom: max(var(--papo-photo-view-control-inset), env(safe-area-inset-bottom, 0px));
 }
 
-.papo-lightbox .yarl__navigation_prev,
-.papo-lightbox .yarl__navigation_next {
-  display: none;
+.papo-photo-view-image {
+  max-width: none;
+  max-height: none;
 }
 
 .action-card-gallery {

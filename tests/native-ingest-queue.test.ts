@@ -18,8 +18,11 @@ const queue = new NativeIngestQueue(async (_userId, payload) => {
 try {
   await queue.enqueue("user", { batchId: "batch-001", observedAt: new Date().toISOString(), audioDataUrl: "data:audio/mp4;base64,QQ==" });
   await queue.enqueue("user", { batchId: "batch-002", observedAt: new Date().toISOString(), audioDataUrl: "data:audio/mp4;base64,Qg==" });
-  await new Promise((resolve) => setTimeout(resolve, 10));
-  await queue.tick();
+  const deadline = Date.now() + 1_000;
+  while (processed.length === 0 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await queue.tick();
+  }
 
   assert.equal(firstAttempts, 1);
   assert.deepEqual(processed, ["batch-002"], "a failed job must not block the next eligible job");
