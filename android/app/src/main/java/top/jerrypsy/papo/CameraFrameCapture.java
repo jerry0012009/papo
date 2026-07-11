@@ -26,6 +26,11 @@ final class CameraFrameCapture {
         void complete(File imageFile, String error);
     }
 
+    interface StateCallback {
+        void ready();
+        void failed(String error);
+    }
+
     private final Context context;
     private final HandlerThread cameraThread = new HandlerThread("PapoCamera");
     private Handler handler;
@@ -44,7 +49,7 @@ final class CameraFrameCapture {
     }
 
     @SuppressLint("MissingPermission")
-    void start(String facing) throws CameraAccessException {
+    void start(String facing, StateCallback stateCallback) throws CameraAccessException {
         cameraThread.start();
         handler = new Handler(cameraThread.getLooper());
         CameraManager manager = (CameraManager) context.getSystemService(Context.CAMERA_SERVICE);
@@ -71,7 +76,7 @@ final class CameraFrameCapture {
             @Override
             public void onOpened(CameraDevice opened) {
                 camera = opened;
-                createSession();
+                createSession(stateCallback);
             }
 
             @Override
@@ -79,6 +84,7 @@ final class CameraFrameCapture {
                 disconnected.close();
                 camera = null;
                 failPending("camera-disconnected");
+                stateCallback.failed("camera-disconnected");
             }
 
             @Override
@@ -86,6 +92,7 @@ final class CameraFrameCapture {
                 failed.close();
                 camera = null;
                 failPending("camera-error-" + error);
+                stateCallback.failed("camera-error-" + error);
             }
         }, handler);
     }
@@ -135,22 +142,25 @@ final class CameraFrameCapture {
         cameraThread.quitSafely();
     }
 
-    private void createSession() {
+    private void createSession(StateCallback stateCallback) {
         if (camera == null || imageReader == null) return;
         try {
             camera.createCaptureSession(Collections.singletonList(imageReader.getSurface()), new CameraCaptureSession.StateCallback() {
                 @Override
                 public void onConfigured(CameraCaptureSession configured) {
                     session = configured;
+                    stateCallback.ready();
                 }
 
                 @Override
                 public void onConfigureFailed(CameraCaptureSession failed) {
                     failPending("camera-session-failed");
+                    stateCallback.failed("camera-session-failed");
                 }
             }, handler);
         } catch (CameraAccessException error) {
             failPending("camera-session-error");
+            stateCallback.failed("camera-session-error");
         }
     }
 

@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
-def papoVersionCode = (System.getenv('PAPO_ANDROID_VERSION_CODE') ?: '3') as Integer
-def papoVersionName = System.getenv('PAPO_ANDROID_VERSION_NAME') ?: '0.2.1'
+def papoVersionCode = (System.getenv('PAPO_ANDROID_VERSION_CODE') ?: '4') as Integer
+def papoVersionName = System.getenv('PAPO_ANDROID_VERSION_NAME') ?: '0.3.0'
 def signingProperties = new Properties()
 def signingPropertiesFile = rootProject.file('../.papo/android-signing.properties')
 if (signingPropertiesFile.exists()) {

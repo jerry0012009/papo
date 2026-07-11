@@ -1724,7 +1724,7 @@ function ListeningDurationDialog(props: {
           <div className="duration-dialog-head">
             <div>
               <Dialog.Title>怎么陪你</Dialog.Title>
-              <p>{props.creatureName} 约每 30 秒整理一次。</p>
+              <p>{props.creatureName} {supportsNativeListening() ? "后台约每 2 分钟整理一次。" : "约每 30 秒整理一次。"}</p>
             </div>
             <Dialog.Close aria-label="关闭">
               <X size={18} />

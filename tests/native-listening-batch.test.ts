@@ -11,8 +11,13 @@ const store = new MemoryProfileStore();
 const nativeProfile = await store.createProfile({ userId: "native-listening-user", creatureName: "Papo" });
 nativeProfile.password = "native-secret";
 await store.saveProfile(nativeProfile);
+await store.createProfile({ userId: "passwordless-native-user", creatureName: "Papo" });
 let audioCalls = 0;
 let imageCalls = 0;
+let releaseAudio!: () => void;
+const audioGate = new Promise<void>((resolve) => {
+  releaseAudio = resolve;
+});
 
 const provider: ModelProvider = {
   kind: "openrouter",
@@ -40,7 +45,7 @@ const provider: ModelProvider = {
   },
   async observeAudio() {
     audioCalls += 1;
-    await new Promise((resolve) => setTimeout(resolve, 25));
+    await audioGate;
     return "能听见有人说今天工作已经结束。";
   },
   async generateImage() {
@@ -54,7 +59,14 @@ const provider: ModelProvider = {
 
 const tempDir = await mkdtemp(path.join(tmpdir(), "papo-native-listening-"));
 const deviceAuth = new JsonDeviceAuthService(path.join(tempDir, "device-sessions.json"));
-const app = createApp({ store, provider, deviceAuth, proactive: { enabled: false }, hermes: { enabled: false } });
+const app = createApp({
+  store,
+  provider,
+  deviceAuth,
+  nativeIngest: { directory: path.join(tempDir, "native-ingest"), intervalMs: 10, autoStart: false },
+  proactive: { enabled: false },
+  hermes: { enabled: false }
+});
 const server = app.listen(0);
 const address = server.address();
 if (!address || typeof address === "string") throw new Error("failed to bind test server");
@@ -81,14 +93,20 @@ try {
     headers: { "content-type": "application/json", authorization: `Bearer ${session.token}` },
     body: JSON.stringify(body)
   });
-  const [first, concurrentRetry] = await Promise.all([requestBatch(), requestBatch()]);
+  const [first, concurrentRetry] = await Promise.race([
+    Promise.all([requestBatch(), requestBatch()]),
+    new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error("ingest waited for model processing")), 1_000))
+  ]);
   const [firstPayload, concurrentRetryPayload] = await Promise.all([first.json(), concurrentRetry.json()]);
-  assert.equal(first.status, 200, JSON.stringify(firstPayload));
-  assert.equal(concurrentRetry.status, 200, JSON.stringify(concurrentRetryPayload));
+  assert.equal(first.status, 202, JSON.stringify(firstPayload));
+  assert.equal(concurrentRetry.status, 202, JSON.stringify(concurrentRetryPayload));
   assert.equal([firstPayload, concurrentRetryPayload].filter((payload) => payload.duplicate === true).length, 1);
-  const processedPayload = [firstPayload, concurrentRetryPayload].find((payload) => payload.duplicate !== true);
-  assert.ok(processedPayload);
-  assert.deepEqual(processedPayload.sensing.map((item: { status: string }) => item.status), ["content", "content"]);
+  releaseAudio();
+
+  await waitFor(async () => {
+    const current = await store.getProfile("native-listening-user");
+    return current?.conversation.filter((message) => message.batchId === body.batchId).length === 2;
+  });
 
   const current = await store.getProfile("native-listening-user");
   assert.ok(current);
@@ -114,8 +132,22 @@ try {
     body: JSON.stringify({ ...body, batchId: "native-1783700000000-002" })
   });
   assert.equal(unauthorized.status, 401);
+  const passwordlessUnauthorized = await fetch(`${baseUrl}/api/profiles/passwordless-native-user/listening/native-batch`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: "Bearer invalid" },
+    body: JSON.stringify({ ...body, batchId: "native-1783700000000-003" })
+  });
+  assert.equal(passwordlessUnauthorized.status, 401, "native ingest must never fall back to passwordless profile access");
   console.log(JSON.stringify({ ok: true, batchId: body.batchId }, null, 2));
 } finally {
   server.close();
   await rm(tempDir, { recursive: true, force: true });
+}
+
+async function waitFor(predicate: () => Promise<boolean>, timeoutMs = 2_000) {
+  const startedAt = Date.now();
+  while (!await predicate()) {
+    if (Date.now() - startedAt >= timeoutMs) throw new Error("timed out waiting for native ingest processing");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
 }

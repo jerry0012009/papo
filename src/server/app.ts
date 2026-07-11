@@ -17,6 +17,7 @@ import { wakeCreature } from "../core/rhythm";
 import type { ActionCardRecord, ActionResult, CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationPlan, IllustrationRecord, MediaAttachment, MessageCognitionTrace, PetIdentityProfile, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
 import { createHermesBridge, type HermesBridge } from "./hermes";
 import { JsonDeviceAuthService, type DeviceAuthService } from "./device-auth";
+import { NativeIngestQueue, type NativeIngestPayload } from "./native-ingest-queue";
 import { createWebPushService, PushNotifyingProfileStore, type WebPushService } from "./push";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
@@ -167,6 +168,7 @@ export function createApp(input: {
   provider?: ModelProvider;
   push?: WebPushService;
   deviceAuth?: DeviceAuthService;
+  nativeIngest?: { directory?: string; intervalMs?: number; autoStart?: boolean };
   proactive?: { enabled?: boolean; intervalMs?: number };
   hermes?: { enabled?: boolean; bridge?: HermesBridge };
 } = {}) {
@@ -219,6 +221,67 @@ export function createApp(input: {
     queueActionCardGeneration({ store, userId: profile.userId, result, provider });
     return result;
   }
+
+  async function processNativeBatch(userId: string, body: NativeIngestPayload) {
+    const lockKey = `${userId}\u0000${body.batchId}`;
+    const previous = nativeBatchLocks.get(lockKey) ?? Promise.resolve();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const tail = previous.then(() => gate);
+    nativeBatchLocks.set(lockKey, tail);
+    await previous;
+    try {
+      const profile = await requireExistingProfile(store, userId);
+      const sourceIds = [`${body.batchId}:audio`, `${body.batchId}:image`];
+      if (profile.conversation.some((message) => message.sourceId && sourceIds.includes(message.sourceId))) return;
+
+      const segments: StreamSegment[] = [];
+      if (body.audioDataUrl) {
+        const prompt = `请直接理解这段音频，写成一段给 Papo 后续注意机制使用的中文生活观察。只描述能直接听见的事实、明确听清的说话内容、环境声类型或正在发生的事；不能猜测人声、文字、看不见的物体、身份或原因，不能把非语音声音当成说话；不确定就写“不确定的声音”。最多 400 字；如果没有可用生活信息，返回空文本。如果你无法读取或处理这段音频，只返回 ERROR_AUDIO_UNREADABLE。标签：Android 后台倾听`;
+        const observation = normalizeAudioObservation((await observeAudioForSensing(provider, body.audioDataUrl, prompt)).slice(0, 1200));
+        const sensingTrace = audioSensingTrace(provider, "Android 后台倾听", observation);
+        segments.push({
+          id: `${body.batchId}:audio`,
+          kind: "audio_observation",
+          label: "后台听到的声音",
+          content: observation.text || nativeAudioAuditSummary(sensingTrace.status),
+          auditOnly: sensingTrace.status !== "content",
+          observedAt: body.observedAt,
+          batchId: body.batchId,
+          sensingTrace
+        });
+      }
+      if (body.imageDataUrl) {
+        const facing = body.cameraFacing === "back" ? "后置" : "前置";
+        const prompt = `请用中文把这张 ${facing}摄像头定时取帧压缩成一段 100 字以内的生活场景观察，给 Papo 后续注意机制使用。只描述画面直接可见的事实，不推断身份、关系、情绪、隐私或画面外事件；看不清就返回空文本。`;
+        const summary = (await provider.summarizeImage(body.imageDataUrl, prompt)).slice(0, 600).trim();
+        const sensingTrace = imageSensingTrace(provider, `Android ${facing}摄像头`, summary);
+        segments.push({
+          id: `${body.batchId}:image`,
+          kind: "image_summary",
+          label: `${facing}摄像头看到的画面`,
+          content: summary || "这次定时画面没有看清。",
+          auditOnly: !summary,
+          observedAt: body.observedAt,
+          batchId: body.batchId,
+          sensingTrace
+        });
+      }
+      await persistCuriousCapture(profile, segments);
+    } finally {
+      release();
+      if (nativeBatchLocks.get(lockKey) === tail) nativeBatchLocks.delete(lockKey);
+    }
+  }
+
+  const nativeIngestQueue = new NativeIngestQueue(
+    processNativeBatch,
+    input.nativeIngest?.directory,
+    input.nativeIngest?.intervalMs
+  );
+  if (input.nativeIngest?.autoStart !== false) nativeIngestQueue.start();
 
   app.use(cors());
   app.use(express.json({ limit: "28mb" }));
@@ -516,75 +579,19 @@ export function createApp(input: {
   });
 
   app.post("/api/profiles/:userId/listening/native-batch", async (req, res, next) => {
-    let releaseBatchLock: (() => void) | undefined;
     try {
       await requireNativeProfile(store, deviceAuth, req.params.userId, req);
       const body = nativeListeningBatchSchema.parse(req.body);
-      const lockKey = `${req.params.userId}\u0000${body.batchId}`;
-      const previous = nativeBatchLocks.get(lockKey) ?? Promise.resolve();
-      let release!: () => void;
-      const gate = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      const tail = previous.then(() => gate);
-      nativeBatchLocks.set(lockKey, tail);
-      await previous;
-      releaseBatchLock = () => {
-        release();
-        if (nativeBatchLocks.get(lockKey) === tail) nativeBatchLocks.delete(lockKey);
-      };
-
       const profile = await requireExistingProfile(store, req.params.userId);
       const sourceIds = [`${body.batchId}:audio`, `${body.batchId}:image`];
       if (profile.conversation.some((message) => message.sourceId && sourceIds.includes(message.sourceId))) {
         res.json({ profile: publicProfile(profile), batchId: body.batchId, duplicate: true });
         return;
       }
-
-      const segments: StreamSegment[] = [];
-      if (body.audioDataUrl) {
-        const prompt = `请直接理解这段音频，写成一段给 Papo 后续注意机制使用的中文生活观察。只描述能直接听见的事实、明确听清的说话内容、环境声类型或正在发生的事；不能猜测人声、文字、看不见的物体、身份或原因，不能把非语音声音当成说话；不确定就写“不确定的声音”。最多 400 字；如果没有可用生活信息，返回空文本。如果你无法读取或处理这段音频，只返回 ERROR_AUDIO_UNREADABLE。标签：Android 后台倾听`;
-        const observation = normalizeAudioObservation((await observeAudioForSensing(provider, body.audioDataUrl, prompt)).slice(0, 1200));
-        const sensingTrace = audioSensingTrace(provider, "Android 后台倾听", observation);
-        segments.push({
-          id: `${body.batchId}:audio`,
-          kind: "audio_observation",
-          label: "后台听到的声音",
-          content: observation.text || nativeAudioAuditSummary(sensingTrace.status),
-          auditOnly: sensingTrace.status !== "content",
-          observedAt: body.observedAt,
-          batchId: body.batchId,
-          sensingTrace
-        });
-      }
-
-      if (body.imageDataUrl) {
-        const facing = body.cameraFacing === "back" ? "后置" : "前置";
-        const prompt = `请用中文把这张 ${facing}摄像头定时取帧压缩成一段 100 字以内的生活场景观察，给 Papo 后续注意机制使用。只描述画面直接可见的事实，不推断身份、关系、情绪、隐私或画面外事件；看不清就返回空文本。`;
-        const summary = (await provider.summarizeImage(body.imageDataUrl, prompt)).slice(0, 600).trim();
-        const sensingTrace = imageSensingTrace(provider, `Android ${facing}摄像头`, summary);
-        segments.push({
-          id: `${body.batchId}:image`,
-          kind: "image_summary",
-          label: `${facing}摄像头看到的画面`,
-          content: summary || "这次定时画面没有看清。",
-          auditOnly: !summary,
-          observedAt: body.observedAt,
-          batchId: body.batchId,
-          sensingTrace
-        });
-      }
-
-      const result = await persistCuriousCapture(profile, segments);
-      res.json({
-        ...publicCaptureResult(result, provider.kind),
-        batchId: body.batchId,
-        sensing: segments.map((segment) => ({ id: segment.id, status: segment.sensingTrace?.status }))
-      });
+      const queued = await nativeIngestQueue.enqueue(req.params.userId, body);
+      res.status(202).json({ ...queued, batchId: body.batchId });
     } catch (error) {
       next(error);
-    } finally {
-      releaseBatchLock?.();
     }
   });
 
@@ -1930,7 +1937,7 @@ async function requireNativeProfile(store: ProfileStore, deviceAuth: DeviceAuthS
   const authorization = req.header("authorization") ?? "";
   const match = authorization.match(/^Bearer\s+([^\s]+)$/i);
   if (match && await deviceAuth.verify(userId, match[1])) return requireExistingProfile(store, userId);
-  return requireProfile(store, userId, req);
+  throw new HttpError(401, "Valid device session required");
 }
 
 function assertProfilePassword(profile: CreatureProfile, inputPassword?: string) {

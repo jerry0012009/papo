@@ -37,8 +37,9 @@ public class PapoListeningService extends Service {
     static final String EXTRA_EVENT = "event";
     static final String EXTRA_BATCH_ID = "batchId";
     static final String EXTRA_ERROR = "error";
-    static final long SLICE_MS = 30_000;
+    static final long SLICE_MS = 2 * 60_000;
     static final long CAMERA_INTERVAL_MS = 5 * 60_000;
+    static final long CAMERA_RETRY_MS = 15_000;
     private static final int NOTIFICATION_ID = 2401;
     private static final String CHANNEL_ID = "papo_listening";
     private static final String SESSION_ACTIVE = "session_active";
@@ -60,6 +61,8 @@ public class PapoListeningService extends Service {
     private String mode = "listen";
     private String cameraFacing = "front";
     private long lastCameraCaptureAt;
+    private int cameraIndex;
+    private boolean cameraReady;
     private boolean stopping;
     private boolean discarding;
 
@@ -141,7 +144,9 @@ public class PapoListeningService extends Service {
         startedAt = System.currentTimeMillis();
         endAt = startedAt + durationMs;
         batchIndex = 0;
+        cameraIndex = 0;
         lastCameraCaptureAt = 0;
+        cameraReady = false;
         stopping = false;
         discarding = false;
         persistSession(true);
@@ -171,6 +176,7 @@ public class PapoListeningService extends Service {
         mode = sessionMode(this);
         cameraFacing = sessionFacing(this);
         batchIndex = Math.max(0, (int) ((System.currentTimeMillis() - startedAt) / SLICE_MS));
+        cameraIndex = Math.max(0, (int) ((System.currentTimeMillis() - startedAt) / CAMERA_INTERVAL_MS));
         lastCameraCaptureAt = SecureListeningConfig.prefs(this).getLong(SESSION_LAST_CAMERA_CAPTURE_AT, 0);
         stopping = false;
         discarding = false;
@@ -224,15 +230,7 @@ public class PapoListeningService extends Service {
         }
         if (audioFile == null) return;
 
-        long now = System.currentTimeMillis();
-        if (camera != null && (lastCameraCaptureAt == 0 || now - lastCameraCaptureAt >= CAMERA_INTERVAL_MS)) {
-            lastCameraCaptureAt = now;
-            SecureListeningConfig.prefs(this).edit().putLong(SESSION_LAST_CAMERA_CAPTURE_AT, lastCameraCaptureAt).apply();
-            File imageFile = ListeningBatchUploader.createMediaFile(this, batchId, "-frame.jpg");
-            camera.capture(imageFile, (captured, error) -> enqueueBatch(batchId, observedAt, audioFile, captured, error));
-        } else {
-            enqueueBatch(batchId, observedAt, audioFile, null, null);
-        }
+        enqueueBatch(batchId, observedAt, audioFile, null, null);
     }
 
     private File releaseRecorder(boolean keepFile) {
@@ -278,6 +276,7 @@ public class PapoListeningService extends Service {
         persistSession(false);
         if (camera != null) camera.close();
         camera = null;
+        cameraReady = false;
         releaseWakeLock();
         broadcast(this, reason, null, null);
         stopForeground(STOP_FOREGROUND_REMOVE);
@@ -291,6 +290,7 @@ public class PapoListeningService extends Service {
         releaseRecorder(false);
         if (camera != null) camera.close();
         camera = null;
+        cameraReady = false;
         releaseWakeLock();
         persistSession(false);
         SecureListeningConfig.clear(this);
@@ -307,15 +307,61 @@ public class PapoListeningService extends Service {
             return;
         }
         try {
-            camera = new CameraFrameCapture(this);
-            camera.start(cameraFacing);
+            if (camera != null) camera.close();
+            cameraReady = false;
+            CameraFrameCapture nextCamera = new CameraFrameCapture(this);
+            camera = nextCamera;
+            nextCamera.start(cameraFacing, new CameraFrameCapture.StateCallback() {
+                @Override
+                public void ready() {
+                    handler.post(() -> {
+                        if (stopping || !"watch".equals(mode) || camera != nextCamera) return;
+                        cameraReady = true;
+                        scheduleCameraCapture(0);
+                    });
+                }
+
+                @Override
+                public void failed(String error) {
+                    handler.post(() -> {
+                        if (camera == nextCamera) handleCameraFailure(error);
+                    });
+                }
+            });
         } catch (Exception error) {
-            camera = null;
-            mode = "listen";
-            persistSession(true);
-            startForegroundNow();
-            broadcast(this, "error", null, "camera-start-failed");
+            handleCameraFailure("camera-start-failed");
         }
+    }
+
+    private void scheduleCameraCapture(long delayMs) {
+        handler.postDelayed(this::captureCameraFrame, delayMs);
+    }
+
+    private void captureCameraFrame() {
+        if (stopping || !"watch".equals(mode) || !cameraReady || camera == null) return;
+        cameraIndex += 1;
+        String batchId = "native-" + startedAt + "-camera-" + String.format(Locale.US, "%03d", cameraIndex);
+        String observedAt = isoNow();
+        File imageFile = ListeningBatchUploader.createMediaFile(this, batchId, "-frame.jpg");
+        camera.capture(imageFile, (captured, error) -> handler.post(() -> {
+            if (captured != null) {
+                lastCameraCaptureAt = System.currentTimeMillis();
+                SecureListeningConfig.prefs(this).edit().putLong(SESSION_LAST_CAMERA_CAPTURE_AT, lastCameraCaptureAt).apply();
+                enqueueBatch(batchId, observedAt, null, captured, null);
+                scheduleCameraCapture(Math.min(CAMERA_INTERVAL_MS, Math.max(1_000, endAt - System.currentTimeMillis())));
+            } else {
+                handleCameraFailure(error == null ? "camera-capture-failed" : error);
+            }
+        }));
+    }
+
+    private void handleCameraFailure(String error) {
+        if (stopping || !"watch".equals(mode)) return;
+        cameraReady = false;
+        if (camera != null) camera.close();
+        camera = null;
+        broadcast(this, "camera-retrying", null, error);
+        handler.postDelayed(this::startCamera, CAMERA_RETRY_MS);
     }
 
     private void startForegroundNow() {

@@ -6,9 +6,9 @@ test.beforeEach(async ({ page }, testInfo) => {
   await installMockApi(page);
   await page.route("**/papo/android/latest.json", async (route) => {
     await json(route, {
-      versionName: "0.2.1",
-      versionCode: 3,
-      downloadUrl: "https://eu.jerrypsy.top/papo/android/papo-0.2.1.apk",
+      versionName: "0.3.0",
+      versionCode: 4,
+      downloadUrl: "https://eu.jerrypsy.top/papo/android/papo-0.3.0.apk",
       publishedAt: "2026-07-10T22:00:00.000Z",
       notes: ["陪看模式调整为每 5 分钟拍摄一帧"]
     });
@@ -106,21 +106,21 @@ test("profile checks and exposes the latest Android APK", async ({ page }) => {
   await page.getByRole("button", { name: "看看哪只 Papo 在身边" }).click();
 
   const updater = page.locator(".app-update-settings");
-  await expect(updater).toContainText("Android 最新版 0.2.1");
+  await expect(updater).toContainText("Android 最新版 0.3.0");
   await expect(updater.getByRole("button", { name: "检查更新" })).toBeVisible();
-  await expect(updater.getByRole("button", { name: "下载 0.2.1" })).toBeVisible();
+  await expect(updater.getByRole("button", { name: "下载 0.3.0" })).toBeVisible();
 });
 
-test("installed Android 0.2.0 detects and opens the 0.2.1 update", async ({ page }) => {
-  await installMockAndroidBridge(page, { versionName: "0.2.0", versionCode: 2 });
+test("installed Android detects and opens the latest update", async ({ page }) => {
+  await installMockAndroidBridge(page, { versionName: "0.2.1", versionCode: 3 });
   await page.goto("/");
   await page.getByRole("button", { name: "看看哪只 Papo 在身边" }).click();
 
   const updater = page.locator(".app-update-settings");
-  await expect(updater).toContainText("当前 0.2.0，可更新到 0.2.1");
-  await updater.getByRole("button", { name: "下载 0.2.1" }).click();
+  await expect(updater).toContainText("当前 0.2.1，可更新到 0.3.0");
+  await updater.getByRole("button", { name: "下载 0.3.0" }).click();
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("papo:testOpenedUpdate"))).toBe(
-    "https://eu.jerrypsy.top/papo/android/papo-0.2.1.apk"
+    "https://eu.jerrypsy.top/papo/android/papo-0.3.0.apk"
   );
 });
 

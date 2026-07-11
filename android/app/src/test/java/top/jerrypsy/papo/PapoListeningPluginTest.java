@@ -15,4 +15,10 @@ public class PapoListeningPluginTest {
     public void defaultsOnlyWhenDurationIsMissing() {
         assertEquals(180_000L, PapoListeningPlugin.requestedDurationMs((Object) null));
     }
+
+    @Test
+    public void nativeCaptureCadenceProtectsTheAudioProvider() {
+        assertEquals(120_000L, PapoListeningService.SLICE_MS);
+        assertEquals(300_000L, PapoListeningService.CAMERA_INTERVAL_MS);
+    }
 }
