@@ -1,6 +1,6 @@
 {
   "name": "papo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,6 +10,12 @@
     "serve:api": "tsx src/server/index.ts",
     "build": "tsc --noEmit && vite build",
     "build:papo": "VITE_BASE_PATH=/papo/ VITE_API_BASE=/papo-api npm run build",
+    "build:android:web": "VITE_BASE_PATH=/ VITE_API_BASE=https://eu.jerrypsy.top/papo-api npm run build",
+    "android:sync": "npm run build:android:web && cap sync android",
+    "android:assets": "bash scripts/generate-android-assets.sh",
+    "android:doctor": "bash scripts/android-doctor.sh",
+    "apk:debug": "npm run android:sync && cd android && ./gradlew assembleDebug && cd .. && mkdir -p artifacts && cp android/app/build/outputs/apk/debug/app-debug.apk artifacts/papo-debug.apk",
+    "apk:release": "bash scripts/build-android-release.sh",
     "test": "npm run build && npm run test:unit",
     "test:unit": "node --test --import tsx tests/*.test.ts",
     "test:ui": "playwright test",
@@ -17,6 +23,8 @@
     "start": "node dist/server/index.js"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.1",
+    "@capacitor/core": "^8.4.1",
     "@radix-ui/react-dialog": "^1.1.19",
     "@radix-ui/react-tooltip": "^1.2.12",
     "concurrently": "^9.1.2",
@@ -27,15 +35,18 @@
     "nanoid": "^5.0.9",
     "tsx": "^4.19.2",
     "vite": "^6.0.7",
+    "web-push": "^3.6.7",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.4.1",
     "@playwright/test": "^1.61.1",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
+    "@types/web-push": "^3.6.4",
     "@vitejs/plugin-react": "^4.3.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

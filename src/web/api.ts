@@ -26,6 +26,45 @@ export interface ProfileSummary {
   createdAt: string;
 }
 
+export interface PushConfig {
+  enabled: boolean;
+  publicKey?: string;
+}
+
+export async function getPushConfig(): Promise<PushConfig> {
+  return request("/api/push/config");
+}
+
+export async function registerPushSubscription(userId: string, subscription: PushSubscriptionJSON, appUrl: string) {
+  return request<{ ok: true }>(`/api/profiles/${userId}/push-subscriptions`, {
+    method: "POST",
+    headers: profileJsonHeaders(userId),
+    body: JSON.stringify({ ...subscription, appUrl })
+  });
+}
+
+export async function removePushSubscription(userId: string, endpoint: string) {
+  return request<{ ok: true }>(`/api/profiles/${userId}/push-subscriptions`, {
+    method: "DELETE",
+    headers: profileJsonHeaders(userId),
+    body: JSON.stringify({ endpoint })
+  });
+}
+
+export async function createDeviceSession(userId: string) {
+  return request<{ token: string; expiresAt: string }>(`/api/profiles/${userId}/device-sessions`, {
+    method: "POST",
+    headers: authHeaders(userId)
+  });
+}
+
+export async function revokeDeviceSessions(userId: string) {
+  return request<{ ok: true }>(`/api/profiles/${userId}/device-sessions`, {
+    method: "DELETE",
+    headers: authHeaders(userId)
+  });
+}
+
 export async function getProvider(): Promise<ProviderInfo> {
   return request("/api/provider");
 }
@@ -91,6 +130,14 @@ export async function summarizeImage(dataUrl: string, label: string): Promise<{ 
     headers: jsonHeaders,
     body: JSON.stringify({ dataUrl, label })
   });
+}
+
+export async function observeCameraFrame(dataUrl: string, label: string): Promise<{ summary: string; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }> {
+  return request<{ summary: string; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }>("/api/camera-observation", {
+    method: "POST",
+    headers: jsonHeaders,
+    body: JSON.stringify({ dataUrl, label })
+  }, { retries: 2, retryDelayMs: 1200 });
 }
 
 export async function observeAudio(dataUrl: string, label: string): Promise<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; unreadable?: boolean; semanticSource: "llm"; sensingTrace?: SensingTrace }> {

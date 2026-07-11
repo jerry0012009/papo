@@ -1,0 +1,11 @@
+{
+  "name": "Papo",
+  "short_name": "Papo",
+  "description": "住在手机里的 AI 小动物",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#fffdf7",
+  "theme_color": "#263a32",
+  "lang": "zh-CN"
+}

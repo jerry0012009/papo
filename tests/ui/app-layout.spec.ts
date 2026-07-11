@@ -4,6 +4,15 @@ const now = "2026-07-07T12:00:00.000Z";
 
 test.beforeEach(async ({ page }, testInfo) => {
   await installMockApi(page);
+  await page.route("**/papo/android/latest.json", async (route) => {
+    await json(route, {
+      versionName: "0.2.0",
+      versionCode: 2,
+      downloadUrl: "https://eu.jerrypsy.top/papo/android/papo-0.2.0.apk",
+      publishedAt: "2026-07-10T22:00:00.000Z",
+      notes: ["陪看模式调整为每 5 分钟拍摄一帧"]
+    });
+  });
   if (!testInfo.title.includes("first visit")) {
     await page.addInitScript(() => {
       window.localStorage.setItem("papo:userId", "demo");
@@ -90,6 +99,16 @@ test("profile can rename the creature and logged-in UI follows the new name", as
   await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
   await expect(page.getByPlaceholder("告诉 吉祥...")).toBeVisible();
   await expect(page.getByRole("button", { name: "发送给 吉祥" })).toBeVisible();
+});
+
+test("profile checks and exposes the latest Android APK", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "看看哪只 Papo 在身边" }).click();
+
+  const updater = page.locator(".app-update-settings");
+  await expect(updater).toContainText("Android 最新版 0.2.0");
+  await expect(updater.getByRole("button", { name: "检查更新" })).toBeVisible();
+  await expect(updater.getByRole("button", { name: "下载 0.2.0" })).toBeVisible();
 });
 
 test("home guide poster explains Papo without overflowing", async ({ page }) => {
@@ -312,8 +331,9 @@ test("companion listening starts from home and shows a countdown in chat", async
   await page.goto("/");
 
   await page.getByRole("button", { name: /陪我/ }).first().click();
-  await expect(page.getByRole("dialog", { name: "陪你多久" })).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "怎么陪你" })).toBeVisible();
   await page.getByRole("button", { name: /15 分钟/ }).click();
+  await page.getByRole("button", { name: "开始陪伴" }).click();
   await expect(page.getByPlaceholder("告诉 Papo...")).toBeVisible();
   const listeningStatus = page.locator(".listening-session-status");
   await expect(listeningStatus).toBeVisible();
@@ -321,6 +341,22 @@ test("companion listening starts from home and shows a countdown in chat", async
   await expect(listeningStatus).toContainText("15:00");
   await expect(listeningStatus).toContainText("剩余");
   await expect(listeningStatus.getByRole("button", { name: "停止陪我听" })).toBeVisible();
+});
+
+test("companion picker supports listen, watch, duration, and camera direction", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /陪我/ }).first().click();
+  const dialog = page.getByRole("dialog", { name: "怎么陪你" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "陪我", exact: true })).toHaveClass(/active/);
+  await dialog.getByRole("button", { name: "陪我+看我", exact: true }).click();
+  await expect(dialog.getByRole("button", { name: "陪我+看我", exact: true })).toHaveClass(/active/);
+  await dialog.getByRole("button", { name: "后置" }).click();
+  await expect(dialog.getByRole("button", { name: "后置" })).toHaveClass(/active/);
+  await dialog.getByRole("button", { name: /60 分钟/ }).click();
+  await expect(dialog.getByRole("button", { name: /60 分钟/ })).toHaveClass(/active/);
+  await expect(dialog.getByRole("button", { name: "开始陪伴" })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("companion-picker.png"), fullPage: true });
 });
 
 test("companion listening skips a failed audio slice without showing technical abort errors", async ({ page }) => {
@@ -654,6 +690,7 @@ async function profileWithTestOverrides(route: Route, profile: ReturnType<typeof
 async function startCompanionListening(page: Page, label = "3 分钟") {
   await page.getByRole("button", { name: /陪我/ }).first().click();
   await page.getByRole("button", { name: new RegExp(label) }).click();
+  await page.getByRole("button", { name: "开始陪伴" }).click();
 }
 
 async function installMockMicrophone(page: Page) {

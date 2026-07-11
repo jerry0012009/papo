@@ -1038,6 +1038,29 @@ select {
   gap: 10px;
 }
 
+.listening-mode-options,
+.camera-facing-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.listening-mode-options button,
+.camera-facing-options button {
+  min-width: 0;
+  justify-content: center;
+  border-radius: 8px;
+}
+
+.listening-mode-options button.active,
+.camera-facing-options button.active,
+.duration-options button.active {
+  border-color: var(--green);
+  background: var(--green-soft);
+  color: var(--foreground);
+  box-shadow: inset 0 0 0 1px var(--green);
+}
+
 .duration-options button {
   justify-content: start;
   min-height: 68px;
@@ -1047,6 +1070,11 @@ select {
   background: #f2f7ef;
   color: #24372f;
   text-align: left;
+}
+
+.duration-start {
+  width: 100%;
+  justify-content: center;
 }
 
 .duration-options button strong,
@@ -3242,7 +3270,9 @@ select {
 .profile-name-settings,
 .password-settings,
 .pet-profile-settings,
-.pet-motion-settings {
+.pet-motion-settings,
+.push-notification-settings,
+.app-update-settings {
   display: grid;
   gap: 12px;
   padding: 14px;
@@ -3326,6 +3356,69 @@ select {
 
 .password-actions button {
   width: auto;
+}
+
+.push-notification-settings {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.push-notification-settings > div {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.push-notification-settings > div > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.push-notification-settings small {
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
+
+.push-notification-settings > small {
+  grid-column: 1 / -1;
+}
+
+.app-update-settings {
+  gap: 10px;
+}
+
+.app-update-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.app-update-summary > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.app-update-settings small {
+  color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
+
+.app-update-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.app-update-actions button {
+  width: auto;
+}
+
+.app-update-error {
+  color: #9a3d32 !important;
 }
 
 /* Final chat layout override: keep the composer in normal flow so it cannot cover the last message. */

@@ -1,5 +1,9 @@
 import {
+  Bell,
+  BellOff,
+  Camera,
   Check,
+  Download,
   Eye,
   HelpCircle,
   History,
@@ -14,6 +18,7 @@ import {
   Save,
   Send,
   Sparkles,
+  Smartphone,
   Square,
   UserRound,
   X
@@ -49,9 +54,11 @@ import {
   makeSegment,
   markPapoRead,
   resolveAssetUrl,
+  revokeDeviceSessions,
   sendFeedback,
   summarizeImage,
   observeAudio,
+  observeCameraFrame,
   touchPet,
   updateLongTermMemory,
   updateActionCard,
@@ -72,6 +79,26 @@ import {
   LIVE_LISTENING_MAX_MS,
   shouldSuppressForcedAudioSlice
 } from "./live-listening";
+import {
+  clearNativeListeningCredentials,
+  getNativeListeningStatus,
+  onNativeListeningEvent,
+  startNativeListening,
+  stopNativeListening,
+  supportsNativeListening,
+  type CameraFacing,
+  type ListeningMode,
+  type NativeListeningStatus
+} from "./native-listening";
+import {
+  disablePushNotifications,
+  enablePushNotifications,
+  inspectPushNotifications,
+  pushNotificationStateText,
+  syncExistingPushSubscription,
+  type PushNotificationState
+} from "./push-notifications";
+import { inspectAppUpdate, openAppUpdateDownload, type AppUpdateState } from "./app-update";
 import { formatPapoDateTime, papoTimeZone } from "./time";
 
 type Tab = "home" | "chat" | "memory" | "profile";
@@ -120,7 +147,7 @@ type StagedChatSegment = StreamSegment & {
 };
 
 export function App() {
-  const [tab, setTab] = useState<Tab>("home");
+  const [tab, setTab] = useState<Tab>(() => new URLSearchParams(window.location.search).get("open") === "chat" ? "chat" : "home");
   const [profile, setProfile] = useState<CreatureProfile>();
   const [loadingPetKind] = useState(() => randomRegistrationPetKind());
   const [loadingProfileSnapshot, setLoadingProfileSnapshot] = useState<Partial<CreatureProfile> | undefined>(() => readProfileSnapshot());
@@ -130,6 +157,7 @@ export function App() {
   const [listening, setListening] = useState(false);
   const [listeningElapsed, setListeningElapsed] = useState(0);
   const [listeningDurationMs, setListeningDurationMs] = useState(LIVE_LISTENING_MAX_MS);
+  const [listeningMode, setListeningMode] = useState<ListeningMode>("listen");
   const [listeningDurationPickerOpen, setListeningDurationPickerOpen] = useState(false);
   const [quickRecording, setQuickRecording] = useState(false);
   const [quickAudioProcessing, setQuickAudioProcessing] = useState(false);
@@ -139,6 +167,8 @@ export function App() {
   const [error, setError] = useState<string>();
   const mediaStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const cameraStreamRef = useRef<MediaStream | null>(null);
+  const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const quickMediaStreamRef = useRef<MediaStream | null>(null);
   const quickMediaRecorderRef = useRef<MediaRecorder | null>(null);
   const quickAudioChunksRef = useRef<Blob[]>([]);
@@ -149,11 +179,15 @@ export function App() {
   const activeAudioSliceMetaRef = useRef<AudioSliceMeta | undefined>(undefined);
   const audioObservationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const liveCaptureQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const cameraObservationQueueRef = useRef<Promise<void>>(Promise.resolve());
   const liveBatchBuffersRef = useRef<Map<string, LiveBatchBuffer>>(new Map());
   const segmentIndexRef = useRef(1);
   const lastAudioSliceRequestAtRef = useRef(0);
+  const lastCameraCaptureAtRef = useRef(0);
   const listeningStartedAtRef = useRef<number | undefined>(undefined);
   const listeningDurationMsRef = useRef(LIVE_LISTENING_MAX_MS);
+  const listeningModeRef = useRef<ListeningMode>("listen");
+  const nativeListeningActiveRef = useRef(false);
   const profileRef = useRef<CreatureProfile | undefined>(undefined);
   const tickTimerRef = useRef<number | undefined>(undefined);
   const segmentTimerRef = useRef<number | undefined>(undefined);
@@ -175,7 +209,8 @@ export function App() {
   useEffect(() => {
     void bootstrap();
     return () => {
-      stopListening();
+      if (nativeListeningActiveRef.current) clearListeningTimers();
+      else stopListening();
       stopQuickAudioObservation();
     };
   }, []);
@@ -220,6 +255,56 @@ export function App() {
     }, intervalMs);
     return () => window.clearInterval(timer);
   }, [hasActiveHermesTask, pendingActionCards, pendingPetMotions, profile?.userId]);
+
+  useEffect(() => {
+    if (!profile?.userId) return;
+    void syncExistingPushSubscription(profile.userId).catch(() => undefined);
+  }, [profile?.userId]);
+
+  useEffect(() => {
+    if (!profile?.userId || !supportsNativeListening()) return;
+    let active = true;
+    let listener: Awaited<ReturnType<typeof onNativeListeningEvent>> | undefined;
+    const refreshStatus = async () => {
+      const status = await getNativeListeningStatus();
+      if (active) applyNativeListeningStatus(status);
+    };
+    void refreshStatus().catch(() => undefined);
+    void onNativeListeningEvent((event) => {
+      if (!active) return;
+      if (event.event === "batch-uploaded") {
+        void getProfile(profile.userId).then(setProfile).catch(() => undefined);
+      }
+      if (event.event === "completed" || event.event === "stopped") clearNativeListeningUi();
+      if (event.event === "error") {
+        setError(nativeListeningError(event.error));
+        void refreshStatus();
+      }
+    }).then((handle) => {
+      listener = handle;
+    });
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void refreshStatus().catch(() => undefined);
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      void listener?.remove();
+    };
+  }, [profile?.userId]);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    const handleServiceWorkerMessage = (event: MessageEvent<{ type?: string; userId?: string }>) => {
+      if (event.data?.type === "PAPO_OPEN_CHAT") setTab("chat");
+      if (event.data?.type !== "PAPO_PUSH_MESSAGE" || !profileRef.current?.userId) return;
+      if (event.data.userId && event.data.userId !== profileRef.current.userId) return;
+      void getProfile(profileRef.current.userId).then(setProfile).catch(() => undefined);
+    };
+    navigator.serviceWorker.addEventListener("message", handleServiceWorkerMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", handleServiceWorkerMessage);
+  }, []);
 
   async function bootstrap() {
     try {
@@ -280,9 +365,14 @@ export function App() {
     });
   }
 
-  function logout() {
+  async function logout() {
     stopListening();
-    if (profile?.userId) forgetProfilePassword(profile.userId);
+    if (profile?.userId) {
+      await clearNativeListeningCredentials().catch(() => undefined);
+      await revokeDeviceSessions(profile.userId).catch(() => undefined);
+      await disablePushNotifications(profile.userId).catch(() => undefined);
+      forgetProfilePassword(profile.userId);
+    }
     forgetSavedUserId();
     setProfile(undefined);
     setChatSegments([]);
@@ -653,10 +743,28 @@ export function App() {
     setListeningDurationPickerOpen(true);
   }
 
-  async function startListening(durationMs = LIVE_LISTENING_MAX_MS) {
+  async function startListening(durationMs = LIVE_LISTENING_MAX_MS, mode: ListeningMode = "listen", cameraFacing: CameraFacing = "front") {
     setTab("chat");
     setListeningDurationPickerOpen(false);
     if (listening) return;
+    if (supportsNativeListening()) {
+      if (!profile) return;
+      try {
+        setError(undefined);
+        const status = await startNativeListening({
+          userId: profile.userId,
+          creatureName: profile.creatureName,
+          durationMs,
+          mode,
+          cameraFacing
+        });
+        applyNativeListeningStatus(status);
+      } catch (caught) {
+        setError(nativeListeningError(caught instanceof Error ? caught.message : String(caught)));
+      }
+      return;
+    }
+
     const Recorder = getMediaRecorder();
     if (!Recorder) {
       setError("当前浏览器不支持录音。你可以继续用文字、照片或上传音频。");
@@ -664,9 +772,21 @@ export function App() {
     }
 
     let stream: MediaStream | undefined;
+    let cameraStream: MediaStream | undefined;
     try {
       stream = await navigator.mediaDevices?.getUserMedia?.({ audio: true });
+      if (mode === "watch") {
+        cameraStream = await navigator.mediaDevices?.getUserMedia?.({
+          video: {
+            facingMode: { ideal: cameraFacing === "back" ? "environment" : "user" },
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          }
+        });
+      }
     } catch {
+      stream?.getTracks().forEach((track) => track.stop());
+      cameraStream?.getTracks().forEach((track) => track.stop());
       setError(`我还听不到麦克风。你可以先用文字告诉 ${profile?.creatureName ?? "它"}，或者加照片补充。`);
       return;
     }
@@ -676,6 +796,16 @@ export function App() {
     }
 
     mediaStreamRef.current = stream;
+    if (cameraStream) {
+      try {
+        await attachCameraStream(cameraStream);
+      } catch {
+        stream.getTracks().forEach((track) => track.stop());
+        cameraStream.getTracks().forEach((track) => track.stop());
+        setError("摄像头这次没有准备好，请重新选择陪伴模式。");
+        return;
+      }
+    }
     audioRecorderChunksRef.current = [];
     activeAudioSliceMetaRef.current = undefined;
     audioObservationQueueRef.current = Promise.resolve();
@@ -683,9 +813,12 @@ export function App() {
     clearLiveBatchBuffers();
     segmentIndexRef.current = 1;
     lastAudioSliceRequestAtRef.current = 0;
+    lastCameraCaptureAtRef.current = 0;
     listeningStartedAtRef.current = Date.now();
     listeningDurationMsRef.current = durationMs;
+    listeningModeRef.current = mode;
     setListeningDurationMs(durationMs);
+    setListeningMode(mode);
     setListeningElapsed(0);
     setListening(true);
     setError(undefined);
@@ -749,12 +882,17 @@ export function App() {
   }
 
   function stopListening() {
-    if (tickTimerRef.current) window.clearInterval(tickTimerRef.current);
-    if (segmentTimerRef.current) window.clearInterval(segmentTimerRef.current);
-    if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current);
-    tickTimerRef.current = undefined;
-    segmentTimerRef.current = undefined;
-    stopTimerRef.current = undefined;
+    if (nativeListeningActiveRef.current) {
+      nativeListeningActiveRef.current = false;
+      void stopNativeListening().catch((caught) => setError(nativeListeningError(errorMessage(caught))));
+      clearNativeListeningUi();
+      return;
+    }
+    stopWebListening();
+  }
+
+  function stopWebListening() {
+    clearListeningTimers();
     setListening(false);
     requestAudioSlice(true);
     closeAllLiveBatches();
@@ -771,6 +909,14 @@ export function App() {
     const meta = nextAudioSliceMeta();
     activeAudioSliceMetaRef.current = meta;
     markLiveBatchClosed(meta.batchId);
+    if (listeningModeRef.current === "watch") {
+      const CAMERA_INTERVAL_MS = 5 * 60_000; // 每 5 分钟拍一帧
+      const lastCamera = lastCameraCaptureAtRef.current ?? 0;
+      if (now - lastCamera >= CAMERA_INTERVAL_MS) {
+        lastCameraCaptureAtRef.current = now;
+        captureCameraFrame(meta);
+      }
+    }
     try {
       recorder.stop();
     } catch (caught) {
@@ -957,6 +1103,86 @@ export function App() {
     if (!activeAudioSliceMetaRef.current) audioRecorderChunksRef.current = [];
     mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
     mediaStreamRef.current = null;
+    cameraStreamRef.current?.getTracks().forEach((track) => track.stop());
+    cameraStreamRef.current = null;
+    if (cameraVideoRef.current) cameraVideoRef.current.srcObject = null;
+    cameraVideoRef.current = null;
+  }
+
+  function clearListeningTimers() {
+    if (tickTimerRef.current) window.clearInterval(tickTimerRef.current);
+    if (segmentTimerRef.current) window.clearInterval(segmentTimerRef.current);
+    if (stopTimerRef.current) window.clearTimeout(stopTimerRef.current);
+    tickTimerRef.current = undefined;
+    segmentTimerRef.current = undefined;
+    stopTimerRef.current = undefined;
+  }
+
+  function applyNativeListeningStatus(status: NativeListeningStatus) {
+    if (!status.active || status.endAt <= Date.now()) {
+      clearNativeListeningUi();
+      return;
+    }
+    nativeListeningActiveRef.current = true;
+    listeningStartedAtRef.current = status.startedAt;
+    listeningDurationMsRef.current = status.endAt - status.startedAt;
+    listeningModeRef.current = status.mode;
+    setListeningDurationMs(status.endAt - status.startedAt);
+    setListeningMode(status.mode);
+    setListeningElapsed(Math.max(0, Math.floor((Date.now() - status.startedAt) / 1000)));
+    setListening(true);
+    clearListeningTimers();
+    tickTimerRef.current = window.setInterval(() => {
+      setListeningElapsed(Math.max(0, Math.min(
+        Math.floor((status.endAt - status.startedAt) / 1000),
+        Math.floor((Date.now() - status.startedAt) / 1000)
+      )));
+      if (Date.now() >= status.endAt) clearNativeListeningUi();
+    }, 1000);
+  }
+
+  function clearNativeListeningUi() {
+    nativeListeningActiveRef.current = false;
+    clearListeningTimers();
+    listeningStartedAtRef.current = undefined;
+    setListening(false);
+  }
+
+  async function attachCameraStream(stream: MediaStream) {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.srcObject = stream;
+    await video.play();
+    cameraStreamRef.current = stream;
+    cameraVideoRef.current = video;
+  }
+
+  function captureCameraFrame(meta: AudioSliceMeta) {
+    const video = cameraVideoRef.current;
+    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight) return;
+    const canvas = document.createElement("canvas");
+    const scale = Math.min(1, 640 / Math.max(video.videoWidth, video.videoHeight));
+    canvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+    canvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+    const context = canvas.getContext("2d");
+    if (!context) return;
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.68);
+    cameraObservationQueueRef.current = cameraObservationQueueRef.current.catch(() => undefined).then(async () => {
+      const result = await observeCameraFrame(dataUrl, "陪伴中的定时画面");
+      const content = result.summary.trim();
+      submitLiveSegments([{
+        ...makeSegment(`live-camera-${Date.now()}-${meta.index}`, "image_summary", "陪伴中看到的画面", content || "这次定时画面没有看清。", {
+          observedAt: meta.observedAt,
+          batchId: meta.batchId
+        }),
+        auditOnly: !content,
+        sensingTrace: result.sensingTrace
+      }]);
+    }).catch((caught) => {
+      console.warn("Papo live camera frame was skipped after sensing failed.", { batchId: meta.batchId, error: errorMessage(caught) });
+    });
   }
 
   async function run(action: () => Promise<void>) {
@@ -1067,6 +1293,7 @@ export function App() {
                 onRecordAudio={recordQuickAudioObservation}
                 onStopQuickRecording={stopQuickAudioObservation}
                 listening={listening}
+                listeningMode={listeningMode}
                 listeningElapsed={listeningElapsed}
                 listeningDurationMs={listeningDurationMs}
                 quickRecording={quickRecording}
@@ -1106,7 +1333,7 @@ export function App() {
           open={listeningDurationPickerOpen}
           creatureName={profile.creatureName}
           onOpenChange={setListeningDurationPickerOpen}
-          onSelect={(durationMs) => void startListening(durationMs)}
+          onSelect={(durationMs, mode, facing) => void startListening(durationMs, mode, facing)}
         />
       </main>
     </Tooltip.Provider>
@@ -1484,8 +1711,11 @@ function ListeningDurationDialog(props: {
   open: boolean;
   creatureName: string;
   onOpenChange: (open: boolean) => void;
-  onSelect: (durationMs: number) => void;
+  onSelect: (durationMs: number, mode: ListeningMode, cameraFacing: CameraFacing) => void;
 }) {
+  const [mode, setMode] = useState<ListeningMode>("listen");
+  const [durationMs, setDurationMs] = useState<number>(LIVE_LISTENING_MAX_MS);
+  const [cameraFacing, setCameraFacing] = useState<CameraFacing>("front");
   return (
     <Dialog.Root open={props.open} onOpenChange={props.onOpenChange}>
       <Dialog.Portal>
@@ -1493,21 +1723,41 @@ function ListeningDurationDialog(props: {
         <Dialog.Content className="duration-dialog" aria-describedby={undefined}>
           <div className="duration-dialog-head">
             <div>
-              <Dialog.Title>陪你多久</Dialog.Title>
-              <p>{props.creatureName} 会一直听着，约每 30 秒整理一次。</p>
+              <Dialog.Title>怎么陪你</Dialog.Title>
+              <p>{props.creatureName} 约每 30 秒整理一次。</p>
             </div>
             <Dialog.Close aria-label="关闭">
               <X size={18} />
             </Dialog.Close>
           </div>
-          <div className="duration-options">
+          <div className="listening-mode-options" role="group" aria-label="陪伴方式">
+            <button className={mode === "listen" ? "active" : ""} type="button" onClick={() => setMode("listen")}>
+              <Mic size={17} />
+              陪我
+            </button>
+            <button className={mode === "watch" ? "active" : ""} type="button" onClick={() => setMode("watch")}>
+              <Camera size={17} />
+              陪我+看我
+            </button>
+          </div>
+          {mode === "watch" ? (
+            <div className="camera-facing-options" role="group" aria-label="摄像头方向">
+              <button className={cameraFacing === "front" ? "active" : ""} type="button" onClick={() => setCameraFacing("front")}>前置</button>
+              <button className={cameraFacing === "back" ? "active" : ""} type="button" onClick={() => setCameraFacing("back")}>后置</button>
+            </div>
+          ) : null}
+          <div className="duration-options" role="group" aria-label="陪伴时长">
             {LIVE_LISTENING_DURATION_OPTIONS.map((option) => (
-              <button type="button" key={option.value} onClick={() => props.onSelect(option.value)}>
+              <button className={durationMs === option.value ? "active" : ""} type="button" key={option.value} onClick={() => setDurationMs(option.value)}>
                 <strong>{option.label}</strong>
                 <span>{option.description}</span>
               </button>
             ))}
           </div>
+          <button className="primary duration-start" type="button" onClick={() => props.onSelect(durationMs, mode, cameraFacing)}>
+            {mode === "watch" ? <Camera size={17} /> : <Mic size={17} />}
+            开始陪伴
+          </button>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -2114,6 +2364,7 @@ function ChatView(props: {
   onRecordAudio: () => void;
   onStopQuickRecording: () => void;
   listening: boolean;
+  listeningMode: ListeningMode;
   listeningElapsed: number;
   listeningDurationMs: number;
   quickRecording: boolean;
@@ -2199,7 +2450,7 @@ function ChatView(props: {
       <header className="chat-top">
         <AvatarPreview petKind={props.profile.petKind} petProfile={petProfileFor(props.profile)} state={props.profile.state} dogState={props.profile.dogState} />
         <div>
-          <strong>{props.listening ? `${props.profile.creatureName} 正在听` : `${props.profile.creatureName} 在这里`}</strong>
+          <strong>{props.listening ? `${props.profile.creatureName} 正在${props.listeningMode === "watch" ? "听和看" : "听"}` : `${props.profile.creatureName} 在这里`}</strong>
           <span>{props.listening ? formatListeningTime(props.listeningElapsed) : papoMoodLabel(props.profile.state)}</span>
         </div>
         <button className="listen-toggle" onClick={props.listening ? props.onStopListening : props.onStartListening} disabled={props.busy}>
@@ -2243,8 +2494,8 @@ function ChatView(props: {
           {props.listening ? (
             <section className="listening-session-status" aria-live="polite">
               <div>
-                <Mic size={16} />
-                <span>陪你听着 {formatListeningTime(props.listeningElapsed)} / {formatListeningTime(listeningTotalSeconds)}</span>
+                {props.listeningMode === "watch" ? <Camera size={16} /> : <Mic size={16} />}
+                <span>陪你{props.listeningMode === "watch" ? "听和看" : "听着"} {formatListeningTime(props.listeningElapsed)} / {formatListeningTime(listeningTotalSeconds)}</span>
                 <small>剩余 {formatListeningTime(listeningRemainingSeconds)}</small>
               </div>
               <button type="button" onClick={props.onStopListening} aria-label="停止陪我听">
@@ -3354,7 +3605,7 @@ function MemoryFeedbackBox(props: {
 
 function ProfileView(props: {
   profile: CreatureProfile;
-  onLogout: () => void;
+  onLogout: () => void | Promise<void>;
   onRename: (creatureName: string) => Promise<void>;
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   onChangePetProfile: (input: { guidance?: string; referenceSummary?: string; referenceAttachment?: MediaAttachment }) => Promise<void>;
@@ -3492,6 +3743,8 @@ function ProfileView(props: {
             <span>默认时间：{papoTimeZone}</span>
           </div>
         </div>
+        <PushNotificationSettings profile={props.profile} />
+        <AppUpdateSettings />
         <div className="profile-name-settings">
           <strong>小动物名字</strong>
           <label className="field-label">
@@ -3634,12 +3887,135 @@ function ProfileView(props: {
           </div>
           {passwordMessage ? <small>{passwordMessage}</small> : null}
         </div>
-        <button onClick={props.onLogout}>
+        <button onClick={() => void props.onLogout()}>
           <RefreshCcw size={18} />
           退出登录
         </button>
       </div>
     </section>
+  );
+}
+
+function AppUpdateSettings() {
+  const [state, setState] = useState<AppUpdateState>();
+  const [busy, setBusy] = useState(true);
+  const [message, setMessage] = useState("");
+
+  const check = useCallback(async () => {
+    setBusy(true);
+    setMessage("");
+    try {
+      setState(await inspectAppUpdate());
+    } catch (caught) {
+      setMessage(errorMessage(caught));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void check();
+  }, [check]);
+
+  async function download() {
+    if (!state) return;
+    setMessage("");
+    try {
+      await openAppUpdateDownload(state.release.downloadUrl);
+    } catch (caught) {
+      setMessage(errorMessage(caught));
+    }
+  }
+
+  const status = !state
+    ? busy ? "正在获取版本信息" : "暂时无法获取版本信息"
+    : !state.native
+      ? `Android 最新版 ${state.release.versionName}`
+      : state.updateAvailable
+        ? `${state.legacyNative ? "当前为早期版本" : `当前 ${state.currentVersionName}`}，可更新到 ${state.release.versionName}`
+        : `当前 ${state.currentVersionName}，已是最新版`;
+
+  return (
+    <div className="app-update-settings">
+      <div className="app-update-summary">
+        <Smartphone size={18} />
+        <div>
+          <strong>应用更新</strong>
+          <small>{status}</small>
+        </div>
+      </div>
+      <div className="app-update-actions">
+        <button onClick={() => void check()} disabled={busy} type="button" title="检查更新">
+          <RefreshCcw className={busy ? "spin" : ""} size={16} />
+          {busy ? "检查中" : "检查更新"}
+        </button>
+        {state && (!state.native || state.updateAvailable) ? (
+          <button className="primary" onClick={() => void download()} type="button">
+            <Download size={16} />
+            下载 {state.release.versionName}
+          </button>
+        ) : null}
+      </div>
+      {state?.updateAvailable && state.release.notes.length ? (
+        <small>{state.release.notes.join("；")}</small>
+      ) : null}
+      {message ? <small className="app-update-error">{message}</small> : null}
+    </div>
+  );
+}
+
+function PushNotificationSettings({ profile }: { profile: CreatureProfile }) {
+  const [state, setState] = useState<PushNotificationState>("loading");
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void inspectPushNotifications()
+      .then((next) => {
+        if (active) setState(next);
+      })
+      .catch((error) => {
+        if (active) {
+          setState("disabled");
+          setMessage(errorMessage(error));
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [profile.userId]);
+
+  async function toggle() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const next = state === "enabled"
+        ? await disablePushNotifications(profile.userId)
+        : await enablePushNotifications(profile.userId);
+      setState(next);
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const canToggle = state !== "loading" && state !== "unsupported" && state !== "unconfigured" && state !== "denied";
+  return (
+    <div className="push-notification-settings">
+      <div>
+        {state === "enabled" ? <Bell size={18} /> : <BellOff size={18} />}
+        <div>
+          <strong>消息通知</strong>
+          <small>{pushNotificationStateText(state)}</small>
+        </div>
+      </div>
+      <button className={state === "enabled" ? "" : "primary"} onClick={() => void toggle()} disabled={busy || !canToggle} type="button">
+        {busy ? "处理中" : state === "enabled" ? "关闭" : "开启"}
+      </button>
+      {message ? <small>{message}</small> : null}
+    </div>
   );
 }
 
@@ -3959,6 +4335,18 @@ function errorMessage(error: unknown) {
   if (message === "Password is incorrect") return "密码不对。";
   if (/Request failed: 50[234]|Bad Gateway|Gateway Timeout|Service Unavailable/i.test(message)) return "连接刚才等太久断开了。你可以继续使用，稍慢的生成任务会在后台完成。";
   return message;
+}
+
+function nativeListeningError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (/Microphone permission/i.test(message)) return "需要允许麦克风权限才能开始陪伴。";
+  if (/Camera permission/i.test(message)) return "“陪我+看我”需要允许摄像头权限。";
+  if (/notification/i.test(message)) return "需要允许系统通知，才能显示后台陪伴状态。";
+  if (/securely cache|Keystore/i.test(message)) return "这台设备暂时无法安全保存后台陪伴凭据。";
+  if (/microphone-(start|restart)-failed/i.test(message)) return "后台麦克风没有成功启动，请停止后重试。";
+  if (/camera-(start-failed|permission-missing)/i.test(message)) return "摄像头没有成功启动；声音陪伴仍可单独使用。";
+  if (/batch-persist-failed/i.test(message)) return "这一段没有安全写入待上传队列，陪伴已暂停。";
+  return message || "后台陪伴暂时没有启动。";
 }
 
 function stagedSegmentReady(segment: StagedChatSegment | StreamSegment) {

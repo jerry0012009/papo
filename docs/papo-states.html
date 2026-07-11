@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Papo 状态系统全景</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif; background: #0a0a0a; color: #e0e0e0; padding: 20px; }
+  h1 { text-align: center; font-size: 28px; margin-bottom: 8px; color: #fff; }
+  .subtitle { text-align: center; color: #888; font-size: 14px; margin-bottom: 30px; }
+  .stats { display: flex; justify-content: center; gap: 24px; margin-bottom: 30px; flex-wrap: wrap; }
+  .stat { background: #1a1a2e; border: 1px solid #333; border-radius: 12px; padding: 16px 24px; text-align: center; min-width: 120px; }
+  .stat-num { font-size: 36px; font-weight: 700; color: #7c6ff7; }
+  .stat-label { font-size: 12px; color: #888; margin-top: 4px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px; max-width: 1200px; margin: 0 auto; }
+  .card { background: #141428; border: 1px solid #2a2a4a; border-radius: 12px; padding: 20px; transition: border-color 0.2s; }
+  .card:hover { border-color: #7c6ff7; }
+  .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .card-title { font-size: 15px; font-weight: 600; color: #fff; }
+  .card-count { background: #7c6ff7; color: #fff; font-size: 12px; font-weight: 700; padding: 2px 10px; border-radius: 20px; }
+  .card-meta { font-size: 11px; color: #666; margin-bottom: 10px; line-height: 1.5; }
+  .card-meta code { background: #1e1e3a; padding: 1px 5px; border-radius: 4px; color: #aaa; font-size: 10px; }
+  .items { display: flex; flex-wrap: wrap; gap: 6px; }
+  .item { background: #1a1a35; border: 1px solid #2a2a50; border-radius: 8px; padding: 5px 10px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+  .item-zh { color: #ccc; }
+  .item-en { color: #7c6ff7; font-size: 10px; font-family: monospace; }
+  .cat-continuous { border-left: 3px solid #4ade80; }
+  .cat-enum { border-left: 3px solid #60a5fa; }
+  .cat-derived { border-left: 3px solid #f59e0b; }
+  .cat-system { border-left: 3px solid #888; }
+  .legend { display: flex; justify-content: center; gap: 20px; margin-bottom: 24px; font-size: 12px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-dot { width: 12px; height: 12px; border-radius: 3px; }
+</style>
+</head>
+<body>
+<h1>🐾 Papo 动态状态系统全景</h1>
+<p class="subtitle">CreatureProfile 中所有状态、枚举、维度的完整清单 — 共 117 个</p>
+
+<div class="stats">
+  <div class="stat"><div class="stat-num">117</div><div class="stat-label">总状态数</div></div>
+  <div class="stat"><div class="stat-num">21</div><div class="stat-label">连续值维度</div></div>
+  <div class="stat"><div class="stat-num">96</div><div class="stat-label">枚举/开关</div></div>
+  <div class="stat"><div class="stat-num">21</div><div class="stat-label">分类</div></div>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#4ade80"></div>连续值（0-100）</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#60a5fa"></div>枚举类型</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>推导/派生</div>
+</div>
+
+<div class="grid">
+
+<div class="card cat-continuous">
+  <div class="card-head"><span class="card-title">🧠 CreatureState 内在状态</span><span class="card-count">6</span></div>
+  <div class="card-meta">范围: 0-100 连续值 · 每次互动通过 <code>stateDeltas ±12</code> 微调<br>来源: <code>state.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">好奇心</span><span class="item-en">curiosity</span></div>
+    <div class="item"><span class="item-zh">依恋度</span><span class="item-en">attachment</span></div>
+    <div class="item"><span class="item-zh">精力</span><span class="item-en">energy</span></div>
+    <div class="item"><span class="item-zh">唤醒度</span><span class="item-en">arousal</span></div>
+    <div class="item"><span class="item-zh">安全感</span><span class="item-en">safety</span></div>
+    <div class="item"><span class="item-zh">自信度</span><span class="item-en">confidence</span></div>
+  </div>
+</div>
+
+<div class="card cat-derived">
+  <div class="card-head"><span class="card-title">😊 Mood 心情</span><span class="card-count">6</span></div>
+  <div class="card-meta">由 6 维状态自动推导 · <code>deriveMood()</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">好奇</span><span class="item-en">curious</span></div>
+    <div class="item"><span class="item-zh">平静</span><span class="item-en">calm</span></div>
+    <div class="item"><span class="item-zh">依恋</span><span class="item-en">attached</span></div>
+    <div class="item"><span class="item-zh">谨慎</span><span class="item-en">careful</span></div>
+    <div class="item"><span class="item-zh">疲惫</span><span class="item-en">tired</span></div>
+    <div class="item"><span class="item-zh">明亮</span><span class="item-en">bright</span></div>
+  </div>
+</div>
+
+<div class="card cat-continuous">
+  <div class="card-head"><span class="card-title">🎓 FeedbackPolicyProfile 教养策略</span><span class="card-count">7</span></div>
+  <div class="card-meta">范围: 0-100 · 用户反馈逐步调整<br>来源: <code>types.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">深度偏好</span><span class="item-en">preferDepth</span></div>
+    <div class="item"><span class="item-zh">主动偏好</span><span class="item-en">preferProactivity</span></div>
+    <div class="item"><span class="item-zh">隐私敏感度</span><span class="item-en">privacySensitivity</span></div>
+    <div class="item"><span class="item-zh">保存阈值</span><span class="item-en">saveThreshold</span></div>
+    <div class="item"><span class="item-zh">询问阈值</span><span class="item-en">askThreshold</span></div>
+    <div class="item"><span class="item-zh">回忆倾向</span><span class="item-en">recallTendency</span></div>
+    <div class="item"><span class="item-zh">安静倾向</span><span class="item-en">quietTendency</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">⚡ ActionKind 行动类型</span><span class="card-count">11</span></div>
+  <div class="card-meta">LLM 每次决策选择一个 · 来源: <code>semantic-action.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">观察</span><span class="item-en">observe</span></div>
+    <div class="item"><span class="item-zh">回应</span><span class="item-en">respond</span></div>
+    <div class="item"><span class="item-zh">提问</span><span class="item-en">ask</span></div>
+    <div class="item"><span class="item-zh">保存经历</span><span class="item-en">save_episode</span></div>
+    <div class="item"><span class="item-zh">保存长期记忆</span><span class="item-en">save_long_term</span></div>
+    <div class="item"><span class="item-zh">回忆</span><span class="item-en">recall</span></div>
+    <div class="item"><span class="item-zh">回顾</span><span class="item-en">review</span></div>
+    <div class="item"><span class="item-zh">安静</span><span class="item-en">quiet</span></div>
+    <div class="item"><span class="item-zh">草拟提醒</span><span class="item-en">draft_reminder</span></div>
+    <div class="item"><span class="item-zh">草拟问题清单</span><span class="item-en">draft_question_list</span></div>
+    <div class="item"><span class="item-zh">召唤虾虾</span><span class="item-en">use_hermes</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">📦 ActionResult.kind 行动结果</span><span class="card-count">6</span></div>
+  <div class="card-meta">来源: <code>semantic-action.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">无</span><span class="item-en">none</span></div>
+    <div class="item"><span class="item-zh">可见回复</span><span class="item-en">visible_reply</span></div>
+    <div class="item"><span class="item-zh">记忆意图</span><span class="item-en">memory_intent</span></div>
+    <div class="item"><span class="item-zh">提醒草稿</span><span class="item-en">reminder_draft</span></div>
+    <div class="item"><span class="item-zh">问题清单草稿</span><span class="item-en">question_list_draft</span></div>
+    <div class="item"><span class="item-zh">Hermes 任务</span><span class="item-en">hermes_task</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">👆 FeedbackKind 反馈类型</span><span class="card-count">8</span></div>
+  <div class="card-meta">用户通过按钮触发 · 来源: <code>types.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">理解了</span><span class="item-en">understood</span></div>
+    <div class="item"><span class="item-zh">继续</span><span class="item-en">continue</span></div>
+    <div class="item"><span class="item-zh">暂时不要</span><span class="item-en">not_now</span></div>
+    <div class="item"><span class="item-zh">记住</span><span class="item-en">remember</span></div>
+    <div class="item"><span class="item-zh">重要</span><span class="item-en">important</span></div>
+    <div class="item"><span class="item-zh">提醒我</span><span class="item-en">remind</span></div>
+    <div class="item"><span class="item-zh">纠正</span><span class="item-en">correct</span></div>
+    <div class="item"><span class="item-zh">忘了</span><span class="item-en">forget</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">💬 FeedbackResponseAction 反馈响应</span><span class="card-count">4</span></div>
+  <div class="card-meta">LLM 决定如何回应用户反馈 · <code>feedback.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">确认</span><span class="item-en">acknowledge</span></div>
+    <div class="item"><span class="item-zh">追问</span><span class="item-en">ask_follow_up</span></div>
+    <div class="item"><span class="item-zh">安静</span><span class="item-en">quiet</span></div>
+    <div class="item"><span class="item-zh">记下</span><span class="item-en">note_memory</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">🧩 LongTermMemory.kind 记忆类型</span><span class="card-count">8</span></div>
+  <div class="card-meta">LLM 分类 · <code>semantic-memory.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">用户偏好</span><span class="item-en">user_preference</span></div>
+    <div class="item"><span class="item-zh">长期主题</span><span class="item-en">long_theme</span></div>
+    <div class="item"><span class="item-zh">自我记忆</span><span class="item-en">creature_self_memory</span></div>
+    <div class="item"><span class="item-zh">安全规则</span><span class="item-en">safety_rule</span></div>
+    <div class="item"><span class="item-zh">待回顾</span><span class="item-en">future_review</span></div>
+    <div class="item"><span class="item-zh">关系</span><span class="item-en">relationship</span></div>
+    <div class="item"><span class="item-zh">习惯</span><span class="item-en">habit</span></div>
+    <div class="item"><span class="item-zh">开放问题</span><span class="item-en">open_question</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">✍️ writePolicy 写入策略</span><span class="card-count">4</span></div>
+  <div class="card-meta">决定候选记忆是否晋升 · <code>semantic-memory.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">自动写入</span><span class="item-en">auto</span></div>
+    <div class="item"><span class="item-zh">询问用户</span><span class="item-en">ask_user</span></div>
+    <div class="item"><span class="item-zh">等反馈</span><span class="item-en">wait_feedback</span></div>
+    <div class="item"><span class="item-zh">不保存</span><span class="item-en">do_not_save</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">📉 decayPolicy 衰减策略</span><span class="card-count">3</span></div>
+  <div class="card-meta"><code>semantic-memory.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">稳定</span><span class="item-en">stable</span></div>
+    <div class="item"><span class="item-zh">无反馈则衰减</span><span class="item-en">decay_without_feedback</span></div>
+    <div class="item"><span class="item-zh">忽略则遗忘</span><span class="item-en">forget_if_dismissed</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">📌 MemoryCandidate.status 候选状态</span><span class="card-count">3</span></div>
+  <div class="card-meta"><code>memory.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">候选中</span><span class="item-en">candidate</span></div>
+    <div class="item"><span class="item-zh">已晋升</span><span class="item-en">promoted</span></div>
+    <div class="item"><span class="item-zh">已丢弃</span><span class="item-en">dismissed</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">✨ Emergence.kind 浮现类型</span><span class="card-count">3</span></div>
+  <div class="card-meta"><code>emergence.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">记忆共鸣</span><span class="item-en">memory_resonance</span></div>
+    <div class="item"><span class="item-zh">驱动型</span><span class="item-en">drive_based</span></div>
+    <div class="item"><span class="item-zh">节奏型</span><span class="item-en">rhythm</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">🔥 driveSource 浮现驱动</span><span class="card-count">5</span></div>
+  <div class="card-meta">LLM 选择为什么主动说话 · <code>emergence.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">好奇</span><span class="item-en">curiosity</span></div>
+    <div class="item"><span class="item-zh">依恋</span><span class="item-en">attachment</span></div>
+    <div class="item"><span class="item-zh">安全</span><span class="item-en">safety</span></div>
+    <div class="item"><span class="item-zh">节奏</span><span class="item-en">rhythm</span></div>
+    <div class="item"><span class="item-zh">记忆共鸣</span><span class="item-en">memory_resonance</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">📢 proactiveLevel 主动程度</span><span class="card-count">3</span></div>
+  <div class="card-meta"><code>emergence.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">安静</span><span class="item-en">quiet</span></div>
+    <div class="item"><span class="item-zh">温和</span><span class="item-en">gentle</span></div>
+    <div class="item"><span class="item-zh">积极</span><span class="item-en">active</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">🐕 DogInteractionState.animation 小狗动画</span><span class="card-count">10</span></div>
+  <div class="card-meta">根据状态和交互选择 · <code>profile.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">待机</span><span class="item-en">idle</span></div>
+    <div class="item"><span class="item-zh">摇尾巴</span><span class="item-en">wag</span></div>
+    <div class="item"><span class="item-zh">蹦跳</span><span class="item-en">bounce</span></div>
+    <div class="item"><span class="item-zh">嗅嗅</span><span class="item-en">sniff</span></div>
+    <div class="item"><span class="item-zh">打盹</span><span class="item-en">nap</span></div>
+    <div class="item"><span class="item-zh">伸懒腰</span><span class="item-en">stretch</span></div>
+    <div class="item"><span class="item-zh">玩耍</span><span class="item-en">play</span></div>
+    <div class="item"><span class="item-zh">倾听</span><span class="item-en">listen</span></div>
+    <div class="item"><span class="item-zh">偷看</span><span class="item-en">peek</span></div>
+    <div class="item"><span class="item-zh">晒太阳</span><span class="item-en">sun</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">📡 ConversationChannel 对话通道</span><span class="card-count">5</span></div>
+  <div class="card-meta"><code>types.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">唤醒</span><span class="item-en">wake</span></div>
+    <div class="item"><span class="item-zh">按钮</span><span class="item-en">button</span></div>
+    <div class="item"><span class="item-zh">好奇模式</span><span class="item-en">curious</span></div>
+    <div class="item"><span class="item-zh">反馈</span><span class="item-en">feedback</span></div>
+    <div class="item"><span class="item-zh">浮现</span><span class="item-en">emergence</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">👁️ SegmentKind 感知类型</span><span class="card-count">3</span></div>
+  <div class="card-meta">输入模态</div>
+  <div class="items">
+    <div class="item"><span class="item-zh">文字</span><span class="item-en">text</span></div>
+    <div class="item"><span class="item-zh">图片摘要</span><span class="item-en">image_summary</span></div>
+    <div class="item"><span class="item-zh">音频观察</span><span class="item-en">audio_observation</span></div>
+  </div>
+</div>
+
+<div class="card cat-system">
+  <div class="card-head"><span class="card-title">⏰ ProactiveEmergenceState 浮现调度</span><span class="card-count">8</span></div>
+  <div class="card-meta">控制浮现循环的调度状态</div>
+  <div class="items">
+    <div class="item"><span class="item-en">pendingCount</span></div>
+    <div class="item"><span class="item-en">paused</span></div>
+    <div class="item"><span class="item-en">nextCheckAt</span></div>
+    <div class="item"><span class="item-en">lastCheckedAt</span></div>
+    <div class="item"><span class="item-en">lastActiveAt</span></div>
+    <div class="item"><span class="item-en">lastUserResponseAt</span></div>
+    <div class="item"><span class="item-en">lastQuietAt</span></div>
+    <div class="item"><span class="item-en">pauseReason</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">🚀 HermesTaskRecord.status 任务状态</span><span class="card-count">5</span></div>
+  <div class="card-meta"><code>hermes.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">待发</span><span class="item-en">pending</span></div>
+    <div class="item"><span class="item-zh">已发</span><span class="item-en">sent</span></div>
+    <div class="item"><span class="item-zh">完成</span><span class="item-en">completed</span></div>
+    <div class="item"><span class="item-zh">超时</span><span class="item-en">timeout</span></div>
+    <div class="item"><span class="item-zh">失败</span><span class="item-en">failed</span></div>
+  </div>
+</div>
+
+<div class="card cat-continuous">
+  <div class="card-head"><span class="card-title">📊 SegmentScore 注意力评分</span><span class="card-count">4</span></div>
+  <div class="card-meta">数值 · <code>attention.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">总分</span><span class="item-en">total</span></div>
+    <div class="item"><span class="item-zh">隐私风险</span><span class="item-en">privacyRisk</span></div>
+    <div class="item"><span class="item-zh">状态偏置</span><span class="item-en">stateBias</span></div>
+    <div class="item"><span class="item-zh">疲劳惩罚</span><span class="item-en">fatiguePenalty</span></div>
+  </div>
+</div>
+
+<div class="card cat-enum">
+  <div class="card-head"><span class="card-title">💤 DreamRecord.operation 梦境操作</span><span class="card-count">5</span></div>
+  <div class="card-meta">自动记忆整合</div>
+  <div class="items">
+    <div class="item"><span class="item-zh">更新记忆</span><span class="item-en">update_memory</span></div>
+    <div class="item"><span class="item-zh">合并记忆</span><span class="item-en">merge_memories</span></div>
+    <div class="item"><span class="item-zh">丢弃候选</span><span class="item-en">dismiss_candidate</span></div>
+    <div class="item"><span class="item-zh">晋升候选</span><span class="item-en">promote_candidate</span></div>
+    <div class="item"><span class="item-zh">调整状态</span><span class="item-en">adjust_state</span></div>
+  </div>
+</div>
+
+<div class="card cat-continuous">
+  <div class="card-head"><span class="card-title">🔄 SegmentScore (Attention) 注意力评分维度</span><span class="card-count">4</span></div>
+  <div class="card-meta">数值 · <code>attention.ts</code></div>
+  <div class="items">
+    <div class="item"><span class="item-zh">总分</span><span class="item-en">total</span></div>
+    <div class="item"><span class="item-zh">隐私风险</span><span class="item-en">privacyRisk</span></div>
+    <div class="item"><span class="item-zh">状态偏置</span><span class="item-en">stateBias</span></div>
+    <div class="item"><span class="item-zh">疲劳惩罚</span><span class="item-en">fatiguePenalty</span></div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

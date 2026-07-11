@@ -1,8 +1,12 @@
 node_modules
 dist
+artifacts
 test-results
 data
 .env
 papo.config.json
 .papo
+*.jks
+*.keystore
+android/keystore.properties
 .DS_Store

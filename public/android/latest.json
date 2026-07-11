@@ -1,0 +1,12 @@
+{
+  "versionName": "0.2.0",
+  "versionCode": 2,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.2.0.apk",
+  "publishedAt": "2026-07-11T02:22:31.000Z",
+  "notes": [
+    "陪看模式调整为每 5 分钟拍摄一帧",
+    "新增应用内检查更新和 APK 下载入口"
+  ],
+  "sha256": "de4172ada085ac44c45f73f40229f6487e3a4d0df5f367b3b2f2f3a0361dc1ac",
+  "size": 22772286
+}

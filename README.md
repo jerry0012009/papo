@@ -90,6 +90,34 @@ Discord 模式需要使用 Hermes Gateway 会当作用户输入处理的独立 P
 
 CLI 模式使用 `hermes chat -Q --source tool`，不是一次性 `-z`。Papo 会为每个 `userId` 持久化独立 Hermes `sessionId/sessionName`，后续任务用 `--resume` 进入同一虾虾上下文，不同用户不会串线。
 
+## 手机消息通知
+
+Papo 支持标准 Web Push。Android Chrome 在 HTTPS 站点中打开“资料 -> 消息通知”后，Papo 的新回复、主动浮现和 Hermes 后台结果都可以在网页退到后台后显示为系统通知；当前页面可见时只同步消息，不重复弹通知。
+
+服务端配置：
+
+```bash
+PAPO_WEB_PUSH_SUBJECT=https://your-papo-host.example/papo/
+PAPO_WEB_PUSH_PUBLIC_KEY=your-vapid-public-key
+PAPO_WEB_PUSH_PRIVATE_KEY=your-vapid-private-key
+```
+
+可用 `npx web-push generate-vapid-keys` 生成一对稳定的 VAPID 密钥。私钥不能提交到仓库；浏览器订阅保存在 `data/push-subscriptions.json`。更换 VAPID 密钥会使已有设备订阅失效，用户需要重新开启通知。
+
+Web Push 不等于 Android 后台录音。Chrome 可以在页面退到后台后接收服务端已经生成的新消息，但 Android 仍可能冻结网页、暂停计时器或停止麦克风，因此 15/60 分钟“陪我”不能保证在锁屏或系统回收页面后持续采音。
+
+## Android APK
+
+APK 是同一套 React/Vite 产品代码的安卓容器，不维护第二套页面。只有浏览器无法提供的持续录音、后台相机、加密设备令牌和断网队列位于原生层。
+
+```bash
+npm run android:doctor
+npm run apk:debug
+npm run apk:release
+```
+
+产物位于 `artifacts/`。首次 release 构建会在被 Git 忽略的 `.papo/` 中生成本机签名；正式发布前必须备份该目录。资料页可检查最新版并打开 APK 下载。架构、权限、调试和发布细节见 [`docs/android.md`](docs/android.md)。
+
 ## 校验
 
 ```bash

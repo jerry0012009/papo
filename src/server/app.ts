@@ -16,6 +16,8 @@ import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResp
 import { wakeCreature } from "../core/rhythm";
 import type { ActionCardRecord, ActionResult, CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationPlan, IllustrationRecord, MediaAttachment, MessageCognitionTrace, PetIdentityProfile, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
 import { createHermesBridge, type HermesBridge } from "./hermes";
+import { JsonDeviceAuthService, type DeviceAuthService } from "./device-auth";
+import { createWebPushService, PushNotifyingProfileStore, type WebPushService } from "./push";
 import { JsonProfileStore, type ProfileStore } from "./store";
 
 const createProfileSchema = z.object({
@@ -114,18 +116,22 @@ const curiousSchema = z.object({
 });
 
 const imageSummarySchema = z.object({
-  dataUrl: z.string().min(64).max(18_000_000).regex(/^data:image\/(png|jpe?g|webp);base64,/),
+  dataUrl: imageDataUrlSchema(),
   label: z.string().min(1).max(80).optional()
 });
 
 const audioObservationSchema = z.object({
-  dataUrl: z
-    .string()
-    .min(64)
-    .max(24_000_000)
-    .regex(/^data:audio\/(webm|wav|wave|x-wav|mpeg|mp3|mp4|m4a|x-m4a|ogg|aac)(?:;[^,]+)?;base64,/),
+  dataUrl: audioDataUrlSchema(),
   label: z.string().min(1).max(80).optional()
 });
+
+const nativeListeningBatchSchema = z.object({
+  batchId: z.string().min(1).max(80),
+  observedAt: z.string().datetime(),
+  audioDataUrl: audioDataUrlSchema().optional(),
+  imageDataUrl: imageDataUrlSchema().optional(),
+  cameraFacing: z.enum(["front", "back"]).optional()
+}).refine((body) => Boolean(body.audioDataUrl || body.imageDataUrl), { message: "Native listening batch is empty" });
 
 const feedbackSchema = z.object({
   kind: z.enum(["understood", "continue", "not_now", "remember", "important", "remind", "correct", "forget"]),
@@ -142,16 +148,77 @@ const readStateSchema = z.object({
   lastReadPapoMessageId: z.string().min(1).optional()
 });
 
+const pushSubscriptionSchema = z.object({
+  endpoint: z.string().url().max(2048).refine(isTrustedPushEndpoint, "Unsupported Web Push endpoint"),
+  expirationTime: z.number().nullable().optional(),
+  keys: z.object({
+    p256dh: z.string().min(1).max(512),
+    auth: z.string().min(1).max(512)
+  }),
+  appUrl: z.string().url().max(2048)
+});
+
+const removePushSubscriptionSchema = z.object({
+  endpoint: z.string().url().max(2048)
+});
+
 export function createApp(input: {
   store?: ProfileStore;
   provider?: ModelProvider;
+  push?: WebPushService;
+  deviceAuth?: DeviceAuthService;
   proactive?: { enabled?: boolean; intervalMs?: number };
   hermes?: { enabled?: boolean; bridge?: HermesBridge };
 } = {}) {
-  const store = input.store ?? new JsonProfileStore();
+  const push = input.push ?? createWebPushService();
+  const deviceAuth = input.deviceAuth ?? new JsonDeviceAuthService();
+  const baseStore = input.store ?? new JsonProfileStore();
+  const store = push.enabled ? new PushNotifyingProfileStore(baseStore, push) : baseStore;
   const provider = input.provider ?? createModelProvider();
   const hermesBridge = input.hermes?.bridge ?? (input.hermes?.enabled ? createHermesBridge({ store, provider }) : undefined);
   const app = express();
+  const nativeBatchLocks = new Map<string, Promise<void>>();
+
+  async function persistCuriousCapture(profile: CreatureProfile, segments: StreamSegment[]) {
+    markProactiveUserResponse(profile);
+    const beforeSemanticIds = semanticRecordIds(profile);
+    const result = await runCuriousHarness(profile, segments, provider);
+    await hermesBridge?.enqueueTasks(profile, result);
+    applyPetProfileActionResults(profile, result);
+    const illustrationAttachments = await executeIllustrationActions(profile, result, provider, "action");
+    const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
+    const sensingTraces = segments.flatMap((segment) => segment.sensingTrace ? [segment.sensingTrace] : []);
+    const cognitionTrace = captureCognitionTrace(result, provider, "curious_stream", modelRuns, sensingTraces);
+    for (const segment of segments) {
+      const text = `${segment.label}：${segment.content}`;
+      appendInputMessage(profile, {
+        channel: "curious",
+        role: segment.kind === "text" ? "user" : "world",
+        text,
+        displayText: segmentDisplayText(segment.kind, text),
+        auditOnly: segment.auditOnly,
+        sourceId: segment.id,
+        modality: segment.kind,
+        batchId: segment.batchId,
+        observedAt: segment.observedAt,
+        location: segment.location,
+        attachments: segment.attachments,
+        sensingTrace: segment.sensingTrace,
+        cognitionTrace
+      });
+    }
+    appendPapoMessage(profile, {
+      channel: "curious",
+      text: result.response,
+      sourceId: result.episodes[0]?.id ?? result.curiousSession?.id ?? result.events[0]?.id,
+      relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
+      attachments: illustrationAttachments,
+      cognitionTrace
+    });
+    await store.saveProfile(profile);
+    queueActionCardGeneration({ store, userId: profile.userId, result, provider });
+    return result;
+  }
 
   app.use(cors());
   app.use(express.json({ limit: "28mb" }));
@@ -168,6 +235,52 @@ export function createApp(input: {
       usesRealModel: provider.usesRealModel,
       diagnostics: provider.diagnostics
     });
+  });
+
+  app.get("/api/push/config", (_req, res) => {
+    res.json({ enabled: push.enabled, publicKey: push.publicKey });
+  });
+
+  app.post("/api/profiles/:userId/device-sessions", async (req, res, next) => {
+    try {
+      await requireProfile(store, req.params.userId, req);
+      res.status(201).json(await deviceAuth.create(req.params.userId));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/profiles/:userId/device-sessions", async (req, res, next) => {
+    try {
+      await requireProfile(store, req.params.userId, req);
+      await deviceAuth.revokeAll(req.params.userId);
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/profiles/:userId/push-subscriptions", async (req, res, next) => {
+    try {
+      await requireProfile(store, req.params.userId, req);
+      const subscription = pushSubscriptionSchema.parse(req.body);
+      if (!push.enabled) throw new HttpError(503, "Web Push is not configured");
+      await push.subscribe(req.params.userId, subscription);
+      res.status(201).json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete("/api/profiles/:userId/push-subscriptions", async (req, res, next) => {
+    try {
+      await requireProfile(store, req.params.userId, req);
+      const body = removePushSubscriptionSchema.parse(req.body);
+      await push.unsubscribe(req.params.userId, body.endpoint);
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get("/api/assets/:filename", async (req, res, next) => {
@@ -190,6 +303,25 @@ export function createApp(input: {
       res.json({
         summary,
         asset,
+        provider: sensingProvider(provider, "vision"),
+        model: provider.diagnostics?.visionModel,
+        route: "chat_completions",
+        semanticSource: "llm",
+        sensingTrace: trace
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/camera-observation", async (req, res, next) => {
+    try {
+      const body = imageSummarySchema.parse(req.body);
+      const prompt = `请用中文把这张定时摄像头画面压缩成一段 100 字以内的生活场景观察，给 Papo 后续注意机制使用。只描述画面直接可见的事实，不推断身份、关系、情绪、隐私或画面外事件；看不清就返回空文本。标签：${body.label ?? "陪伴画面"}`;
+      const summary = (await provider.summarizeImage(body.dataUrl, prompt)).slice(0, 600).trim();
+      const trace = imageSensingTrace(provider, body.label ?? "陪伴画面", summary);
+      res.json({
+        summary,
         provider: sensingProvider(provider, "vision"),
         model: provider.diagnostics?.visionModel,
         route: "chat_completions",
@@ -376,46 +508,83 @@ export function createApp(input: {
     try {
       const profile = await requireProfile(store, req.params.userId, req);
       const body = curiousSchema.parse(req.body);
-      markProactiveUserResponse(profile);
-      const beforeSemanticIds = semanticRecordIds(profile);
-      const result = await runCuriousHarness(profile, body.segments as StreamSegment[], provider);
-      await hermesBridge?.enqueueTasks(profile, result);
-      applyPetProfileActionResults(profile, result);
-      const illustrationAttachments = await executeIllustrationActions(profile, result, provider, "action");
-      const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
-      const sensingTraces = body.segments.flatMap((segment) => segment.sensingTrace ? [segment.sensingTrace as SensingTrace] : []);
-      const cognitionTrace = captureCognitionTrace(result, provider, "curious_stream", modelRuns, sensingTraces);
-      for (const segment of body.segments) {
-        const text = `${segment.label}：${segment.content}`;
-        appendInputMessage(profile, {
-          channel: "curious",
-          role: segment.kind === "text" ? "user" : "world",
-          text,
-          displayText: segmentDisplayText(segment.kind, text),
-          auditOnly: segment.auditOnly,
-          sourceId: segment.id,
-          modality: segment.kind,
-          batchId: segment.batchId,
-          observedAt: segment.observedAt,
-          location: segment.location,
-          attachments: segment.attachments,
-          sensingTrace: segment.sensingTrace as SensingTrace | undefined,
-          cognitionTrace
-        });
-      }
-      appendPapoMessage(profile, {
-        channel: "curious",
-        text: result.response,
-        sourceId: result.episodes[0]?.id ?? result.curiousSession?.id ?? result.events[0]?.id,
-        relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
-        attachments: illustrationAttachments,
-        cognitionTrace
-      });
-      await store.saveProfile(profile);
-      queueActionCardGeneration({ store, userId: profile.userId, result, provider });
+      const result = await persistCuriousCapture(profile, body.segments as StreamSegment[]);
       res.json(publicCaptureResult(result, provider.kind));
     } catch (error) {
       next(error);
+    }
+  });
+
+  app.post("/api/profiles/:userId/listening/native-batch", async (req, res, next) => {
+    let releaseBatchLock: (() => void) | undefined;
+    try {
+      await requireNativeProfile(store, deviceAuth, req.params.userId, req);
+      const body = nativeListeningBatchSchema.parse(req.body);
+      const lockKey = `${req.params.userId}\u0000${body.batchId}`;
+      const previous = nativeBatchLocks.get(lockKey) ?? Promise.resolve();
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const tail = previous.then(() => gate);
+      nativeBatchLocks.set(lockKey, tail);
+      await previous;
+      releaseBatchLock = () => {
+        release();
+        if (nativeBatchLocks.get(lockKey) === tail) nativeBatchLocks.delete(lockKey);
+      };
+
+      const profile = await requireExistingProfile(store, req.params.userId);
+      const sourceIds = [`${body.batchId}:audio`, `${body.batchId}:image`];
+      if (profile.conversation.some((message) => message.sourceId && sourceIds.includes(message.sourceId))) {
+        res.json({ profile: publicProfile(profile), batchId: body.batchId, duplicate: true });
+        return;
+      }
+
+      const segments: StreamSegment[] = [];
+      if (body.audioDataUrl) {
+        const prompt = `请直接理解这段音频，写成一段给 Papo 后续注意机制使用的中文生活观察。只描述能直接听见的事实、明确听清的说话内容、环境声类型或正在发生的事；不能猜测人声、文字、看不见的物体、身份或原因，不能把非语音声音当成说话；不确定就写“不确定的声音”。最多 400 字；如果没有可用生活信息，返回空文本。如果你无法读取或处理这段音频，只返回 ERROR_AUDIO_UNREADABLE。标签：Android 后台倾听`;
+        const observation = normalizeAudioObservation((await observeAudioForSensing(provider, body.audioDataUrl, prompt)).slice(0, 1200));
+        const sensingTrace = audioSensingTrace(provider, "Android 后台倾听", observation);
+        segments.push({
+          id: `${body.batchId}:audio`,
+          kind: "audio_observation",
+          label: "后台听到的声音",
+          content: observation.text || nativeAudioAuditSummary(sensingTrace.status),
+          auditOnly: sensingTrace.status !== "content",
+          observedAt: body.observedAt,
+          batchId: body.batchId,
+          sensingTrace
+        });
+      }
+
+      if (body.imageDataUrl) {
+        const facing = body.cameraFacing === "back" ? "后置" : "前置";
+        const prompt = `请用中文把这张 ${facing}摄像头定时取帧压缩成一段 100 字以内的生活场景观察，给 Papo 后续注意机制使用。只描述画面直接可见的事实，不推断身份、关系、情绪、隐私或画面外事件；看不清就返回空文本。`;
+        const summary = (await provider.summarizeImage(body.imageDataUrl, prompt)).slice(0, 600).trim();
+        const sensingTrace = imageSensingTrace(provider, `Android ${facing}摄像头`, summary);
+        segments.push({
+          id: `${body.batchId}:image`,
+          kind: "image_summary",
+          label: `${facing}摄像头看到的画面`,
+          content: summary || "这次定时画面没有看清。",
+          auditOnly: !summary,
+          observedAt: body.observedAt,
+          batchId: body.batchId,
+          sensingTrace
+        });
+      }
+
+      const result = await persistCuriousCapture(profile, segments);
+      res.json({
+        ...publicCaptureResult(result, provider.kind),
+        batchId: body.batchId,
+        sensing: segments.map((segment) => ({ id: segment.id, status: segment.sensingTrace?.status }))
+      });
+    } catch (error) {
+      next(error);
+    } finally {
+      releaseBatchLock?.();
     }
   });
 
@@ -589,6 +758,7 @@ export function createApp(input: {
         delete profile.password;
       }
       await store.saveProfile(profile);
+      await deviceAuth.revokeAll(profile.userId);
       res.json({ profile: publicProfile(profile) });
     } catch (error) {
       next(error);
@@ -1756,6 +1926,13 @@ async function requireProfile(store: ProfileStore, userId: string, req?: express
   return profile;
 }
 
+async function requireNativeProfile(store: ProfileStore, deviceAuth: DeviceAuthService, userId: string, req: express.Request) {
+  const authorization = req.header("authorization") ?? "";
+  const match = authorization.match(/^Bearer\s+([^\s]+)$/i);
+  if (match && await deviceAuth.verify(userId, match[1])) return requireExistingProfile(store, userId);
+  return requireProfile(store, userId, req);
+}
+
 function assertProfilePassword(profile: CreatureProfile, inputPassword?: string) {
   const password = profilePassword(profile);
   if (!password) return;
@@ -2096,6 +2273,12 @@ function normalizeAudioObservation(text: string) {
   return { text: normalized, unreadable: false };
 }
 
+function nativeAudioAuditSummary(status: SensingTrace["status"]) {
+  if (status === "unreadable") return "这 30 秒的后台录音没有整理出可用内容。";
+  if (status === "empty") return "这 30 秒里没有听到需要继续处理的内容。";
+  return "这 30 秒里没有形成需要继续处理的声音线索。";
+}
+
 function isEmptyAudioObservation(text: string) {
   const normalized = text.replace(/\s+/g, "");
   return [
@@ -2184,6 +2367,31 @@ function zodErrorMessage(error: z.ZodError) {
   }
   if (dataUrlErrors.length) return "Invalid image data";
   return "Invalid request";
+}
+
+function imageDataUrlSchema() {
+  return z.string().min(64).max(18_000_000).regex(/^data:image\/(png|jpe?g|webp);base64,/);
+}
+
+function audioDataUrlSchema() {
+  return z
+    .string()
+    .min(64)
+    .max(24_000_000)
+    .regex(/^data:audio\/(webm|wav|wave|x-wav|mpeg|mp3|mp4|m4a|x-m4a|ogg|aac)(?:;[^,]+)?;base64,/);
+}
+
+function isTrustedPushEndpoint(endpoint: string) {
+  try {
+    const url = new URL(endpoint);
+    return url.protocol === "https:" && [
+      "fcm.googleapis.com",
+      "updates.push.services.mozilla.com",
+      "web.push.apple.com"
+    ].includes(url.hostname);
+  } catch {
+    return false;
+  }
 }
 
 class HttpError extends Error {
