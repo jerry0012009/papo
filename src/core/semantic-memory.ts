@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext, modelPetContext } from "./model-context";
-import { normalizeSharedMemoryText, toCreatureMemoryVoice } from "./memory";
+import { memoryShortTitle, normalizeSharedMemoryText, toCreatureMemoryVoice } from "./memory";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
 import type { CreatureProfile, MemoryCandidate } from "./types";
@@ -35,6 +35,7 @@ const semanticMemorySchema = z.object({
         candidateId: z.string().min(1),
         shouldKeepCandidate: z.boolean().optional(),
         candidateText: optionalText(650),
+        shortTitle: optionalText(8),
         memoryKind: optionalMemoryKind,
         confidence: z.number().min(0).max(100).optional(),
         writePolicy: optionalWritePolicy,
@@ -91,6 +92,7 @@ function applySemanticMemorySuggestion(profile: CreatureProfile, candidates: Mem
     const candidateText = safeMemoryText(item.candidateText);
     if (!candidateText) throw new Error("memory model kept candidate without a usable memory text");
     candidate.candidateText = candidateText;
+    candidate.shortTitle = memoryShortTitle(candidateText, item.shortTitle);
     if (item.memoryKind) candidate.memoryKind = item.memoryKind;
     if (Number.isFinite(item.confidence)) candidate.confidence = Math.max(0, Math.min(100, Math.round(item.confidence ?? candidate.confidence)));
     if (item.writePolicy) candidate.writePolicy = guardWritePolicy(item.writePolicy, privacyHigh);
@@ -165,6 +167,7 @@ JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 护栏会校验：
 - candidateId 必须来自候选列表。
 - shouldKeepCandidate=true 时必须给出 candidateText；这是 Papo 真正会留下的记忆候选文本，不能依赖系统预填文本。
+- shouldKeepCandidate=true 时必须给 shortTitle：2-8 个中文字符，根据文字和图片内容提炼，例如“泳池下午”“可乐闲聊”“Jojo 护食”；它只用于内容缩略卡，不替代完整记忆。
 - shouldKeepCandidate=false 时必须给出 whyConsolidate 说明为什么不留下。
 - shouldKeepCandidate=false 时不要填写 candidateText、memoryKind、writePolicy、decayPolicy；不要用空字符串占位。
 - memoryKind 必须只使用：user_preference, long_theme, creature_self_memory, safety_rule, future_review, relationship, habit, open_question。
@@ -184,6 +187,7 @@ JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
       "candidateId": "candidate_xxx",
       "shouldKeepCandidate": true,
       "candidateText": "...",
+      "shortTitle": "2-8字短标题",
       "memoryKind": "habit",
       "confidence": 74,
       "writePolicy": "wait_feedback",

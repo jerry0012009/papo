@@ -297,6 +297,7 @@ export interface LongTermMemory {
     | "habit"
     | "open_question";
   text: string;
+  shortTitle?: string;
   sourceEpisodeId?: string;
   consolidatedBecause?: string;
   weight: number;
@@ -309,6 +310,7 @@ export interface MemoryCandidate {
   id: string;
   createdAt: string;
   candidateText: string;
+  shortTitle?: string;
   memoryKind: LongTermMemory["kind"];
   confidence: number;
   sourceEpisodeId: string;

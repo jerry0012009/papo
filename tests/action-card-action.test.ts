@@ -7,6 +7,8 @@ const store = new MemoryProfileStore();
 await store.createProfile({ userId: "action-card-user", creatureName: "吉祥", petKind: "british-shorthair" });
 
 let videoPrompt = "";
+let keyframePrompt = "";
+let videoReference = "";
 const provider: ModelProvider = {
   kind: "openrouter",
   name: "Action card provider",
@@ -77,11 +79,18 @@ const provider: ModelProvider = {
   async observeAudio() {
     return "";
   },
-  async generateImage() {
-    throw new Error("image generation should not be used");
+  async generateImage(prompt, input) {
+    keyframePrompt = prompt;
+    assert.ok(input?.references?.length, "profile visual reference should ground the cover");
+    return {
+      dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+      mime: "image/png",
+      model: "fake-image"
+    };
   },
-  async generateVideo(prompt) {
+  async generateVideo(prompt, input) {
     videoPrompt = prompt;
+    videoReference = input?.referenceImage?.dataUrl ?? "";
     return {
       dataUrl: "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQ==",
       mime: "video/mp4",
@@ -123,12 +132,17 @@ try {
   assert.match(videoPrompt, /living digital pet/);
   assert.match(videoPrompt, /first frame and final frame should match/i);
   assert.match(videoPrompt, /Forbidden look: stuffed animal, plush toy/);
+  assert.match(videoPrompt, /approved action-card cover and exact first frame/i);
+  assert.match(keyframePrompt, /authoritative visual style/i);
+  assert.match(keyframePrompt, /profile\/avatar image is the single authoritative/i);
+  assert.match(videoReference, /^data:image\/png;base64,/);
   const papoMessage = current?.conversation.find((message) => message.role === "papo");
   assert.ok(papoMessage?.attachments?.[0]?.url, "Papo reply should carry generated action video");
   assert.equal(papoMessage.attachments[0].kind, "video");
   assert.equal(papoMessage.attachments[0].generatedBy, "papo_action_card");
   assert.equal(papoMessage.cognitionTrace?.eventDecisions?.[0]?.actionResult?.kind, "action_card");
   assert.equal(current?.actionCards?.[0]?.video.id, papoMessage.attachments[0].id);
+  assert.equal(current?.actionCards?.[0]?.cover?.kind, "image");
   assert.equal(current?.actionCards?.[0]?.title, "吉祥抓蝴蝶");
   console.log(JSON.stringify({ ok: true, video: papoMessage.attachments[0].url }, null, 2));
 } finally {

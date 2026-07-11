@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { clampPolicy } from "./drive";
 import { makeId } from "./ids";
-import { adjustMemoryWeight, forgetMemory, mergeAttachments, normalizeSharedMemoryText, promoteMemoryCandidate } from "./memory";
+import { adjustMemoryWeight, forgetMemory, memoryShortTitle, mergeAttachments, normalizeSharedMemoryText, promoteMemoryCandidate } from "./memory";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
@@ -81,6 +81,7 @@ const semanticFeedbackSchema = z
       .object({
         type: z.enum(["none", "promote_episode", "promote_candidate", "update_memory", "update_candidate", "dismiss_target"]),
         text: optionalText(650),
+        shortTitle: optionalText(8),
         kind: memoryKindSchema.optional(),
         tags: optionalTextArray(10, 40),
         consolidatedBecause: optionalText(360),
@@ -415,6 +416,7 @@ function upsertSemanticFeedbackSelfMemory(
     createdAt: feedback.at,
     kind: "creature_self_memory",
     text: normalizedText,
+    shortTitle: memoryShortTitle(normalizedText),
     sourceEpisodeId,
     weight: Math.max(0, Math.min(100, Math.round(memory.weight ?? 68))),
     tags,
@@ -446,6 +448,7 @@ function applySemanticMemoryOperation(
     if (existing) {
       existing.kind = operation.kind;
       existing.text = normalizeSharedMemoryText(text);
+      existing.shortTitle = memoryShortTitle(existing.text, operation.shortTitle);
       existing.consolidatedBecause = safeCreatureText(operation.consolidatedBecause) ?? existing.consolidatedBecause;
       existing.weight = Math.max(0, Math.min(100, Math.round(operation.weight ?? Math.max(existing.weight, targetEpisode.weight + 18))));
       if (tags.length) existing.tags = tags;
@@ -457,6 +460,7 @@ function applySemanticMemoryOperation(
         createdAt: feedback.at,
         kind: operation.kind,
         text: normalizeSharedMemoryText(text),
+        shortTitle: memoryShortTitle(text, operation.shortTitle),
         sourceEpisodeId: targetEpisode.id,
         consolidatedBecause: safeCreatureText(operation.consolidatedBecause),
         weight: Math.max(0, Math.min(100, Math.round(operation.weight ?? targetEpisode.weight + 18))),
@@ -477,6 +481,7 @@ function applySemanticMemoryOperation(
     if (!operation.kind) throw new Error("feedback model requested candidate promotion without memory kind");
     const memory = promoteMemoryCandidate(profile, targetCandidate.id, {
       text,
+      shortTitle: operation.shortTitle,
       kind: operation.kind,
       tags: operation.tags?.length ? safeStoredTags(operation.tags) : targetCandidate.tags,
       consolidatedBecause: safeCreatureText(operation.consolidatedBecause) ?? targetCandidate.whyConsolidate,
@@ -491,6 +496,7 @@ function applySemanticMemoryOperation(
     if (!targetCandidate) throw new Error("feedback model requested candidate update without a candidate target");
     const text = safeCreatureText(operation.text);
     if (text) targetCandidate.candidateText = normalizeSharedMemoryText(text);
+    targetCandidate.shortTitle = memoryShortTitle(targetCandidate.candidateText, operation.shortTitle ?? targetCandidate.shortTitle);
     if (operation.kind) targetCandidate.memoryKind = operation.kind;
     if (operation.tags?.length) targetCandidate.tags = safeStoredTags(operation.tags);
     if (operation.consolidatedBecause) targetCandidate.whyConsolidate = safeCreatureText(operation.consolidatedBecause) ?? targetCandidate.whyConsolidate;
@@ -502,6 +508,7 @@ function applySemanticMemoryOperation(
     if (!targetLongTerm) throw new Error("feedback model requested memory update without a memory target");
     const text = safeCreatureText(operation.text);
     if (text) targetLongTerm.text = normalizeSharedMemoryText(text);
+    targetLongTerm.shortTitle = memoryShortTitle(targetLongTerm.text, operation.shortTitle ?? targetLongTerm.shortTitle);
     if (operation.kind) targetLongTerm.kind = operation.kind;
     if (operation.tags?.length) targetLongTerm.tags = safeStoredTags(operation.tags);
     if (operation.consolidatedBecause) targetLongTerm.consolidatedBecause = safeCreatureText(operation.consolidatedBecause) ?? targetLongTerm.consolidatedBecause;
@@ -568,6 +575,7 @@ JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 - policyDeltas：preferDepth, preferProactivity, privacySensitivity, saveThreshold, askThreshold, recallTendency, quietTendency，每项 -15 到 15。
 - memoryWeightDelta：目标 episode 或 memory 的权重变化，-30 到 30。
 - memoryOperation：none, promote_episode, promote_candidate, update_memory, update_candidate, dismiss_target。
+- 当 memoryOperation 会保存或更新记忆时，给出 shortTitle：2-8 个中文字符，根据文字/图片核心内容提炼，用于“我的”缩略卡。
 - memoryOperation.kind 只能使用这些内部枚举 ID：user_preference, long_theme, creature_self_memory, safety_rule, future_review, relationship, habit, open_question。不要输出 preference、preference_memory、preference_user 等别名。
 - creatureSelfMemory.weight 和 memoryOperation.weight 都是绝对权重，只能在 0 到 100 之间；即使用户说“很重要”，也不能超过 100。
 - responseAction：acknowledge, ask_follow_up, quiet, note_memory。
@@ -621,6 +629,7 @@ memoryOperation 使用口径：
   "memoryOperation":{
     "type":"promote_episode",
     "text":"...",
+    "shortTitle":"2-8字标题",
     "kind":"habit",
     "tags":["..."],
     "consolidatedBecause":"...",

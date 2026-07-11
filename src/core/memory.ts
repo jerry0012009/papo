@@ -48,6 +48,7 @@ export function createMemoryCandidateFromEpisode(
     id: makeId("candidate"),
     createdAt: now,
     candidateText: sourceMaterial,
+    shortTitle: memoryShortTitle(sourceMaterial),
     memoryKind: "open_question",
     confidence: 0,
     sourceEpisodeId: episode.id,
@@ -90,6 +91,7 @@ function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new D
     createdAt: now,
     kind: candidate.memoryKind,
     text: candidate.candidateText,
+    shortTitle: candidate.shortTitle ?? memoryShortTitle(candidate.candidateText),
     sourceEpisodeId: episode.id,
     consolidatedBecause: candidate.whyConsolidate,
     weight: Math.min(100, episode.weight + 18),
@@ -107,6 +109,7 @@ export function promoteMemoryCandidate(
   candidateId: string,
   input: {
     text?: string;
+    shortTitle?: string;
     kind?: LongTermMemory["kind"];
     tags?: string[];
     consolidatedBecause?: string;
@@ -127,6 +130,7 @@ export function promoteMemoryCandidate(
     if (episode) episode.promotedToLongTerm = true;
     duplicate.kind = input.kind ?? candidate.memoryKind;
     duplicate.text = text;
+    duplicate.shortTitle = memoryShortTitle(text, input.shortTitle ?? candidate.shortTitle);
     duplicate.weight = Math.max(0, Math.min(100, Math.round(input.weight ?? Math.max(duplicate.weight, (episode?.weight ?? 45) + 18))));
     duplicate.tags = unique([...duplicate.tags, ...tags]);
     duplicate.attachments = mergeAttachments(duplicate.attachments, candidate.attachments);
@@ -139,6 +143,7 @@ export function promoteMemoryCandidate(
     createdAt: now,
     kind: input.kind ?? candidate.memoryKind,
     text,
+    shortTitle: memoryShortTitle(text, input.shortTitle ?? candidate.shortTitle),
     sourceEpisodeId: candidate.sourceEpisodeId,
     consolidatedBecause: input.consolidatedBecause ?? candidate.whyConsolidate,
     weight: Math.max(0, Math.min(100, Math.round(input.weight ?? (episode?.weight ?? 45) + 18))),
@@ -149,6 +154,14 @@ export function promoteMemoryCandidate(
   if (episode) episode.promotedToLongTerm = true;
   profile.longTermMemories.unshift(memory);
   return memory;
+}
+
+export function memoryShortTitle(text: string, suggested?: string) {
+  const compact = (value: string) => value.replace(/[\s，。！？、；：,.!?;:'"“”‘’（）()【】\[\]]/g, "").trim();
+  const cleanSuggested = compact(suggested ?? "");
+  if ([...cleanSuggested].length >= 2) return [...cleanSuggested].slice(0, 8).join("");
+  const clean = compact(normalizeSharedMemoryText(text).replace(/^(?:用户|你|我|Papo|它)(?:曾经|最近|今天|提到|说|觉得|希望|喜欢|想要|正在)?/i, ""));
+  return [...(clean || "一段记忆")].slice(0, 8).join("");
 }
 
 function findActiveDuplicateMemory(profile: CreatureProfile, candidate: MemoryCandidate) {

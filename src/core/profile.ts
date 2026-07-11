@@ -1,4 +1,5 @@
 import { makeId } from "./ids";
+import { memoryShortTitle } from "./memory";
 import { normalizeDogState, seedDogState } from "./dog-states";
 import { normalizePetKind, petKindMeta } from "./pet-kinds";
 import { initialState } from "./state";
@@ -75,6 +76,7 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.actionCards ??= [];
   profile.actionCards = profile.actionCards.slice(0, 30);
   profile.petProfile = normalizePetProfile(profile.petProfile, profile.petKind);
+  for (const card of profile.actionCards) card.cover ??= profile.petProfile.avatarImage;
   profile.dogState = normalizeDogState(profile.dogState, new Date().toISOString());
   profile.dogStateHistory ??= [];
   profile.dogStateHistory = profile.dogStateHistory.map((state) => normalizeDogState(state, state.selectedAt)).slice(0, 40);
@@ -91,9 +93,11 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   }
   for (const memory of profile.longTermMemories) {
     memory.attachments ??= [];
+    memory.shortTitle = memoryShortTitle(memory.text, memory.shortTitle);
   }
   for (const candidate of profile.memoryCandidates) {
     candidate.attachments ??= [];
+    candidate.shortTitle = memoryShortTitle(candidate.candidateText, candidate.shortTitle);
   }
   for (const message of profile.conversation) {
     message.attachments ??= [];

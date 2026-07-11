@@ -4,6 +4,7 @@ import {
   Camera,
   Check,
   ChevronRight,
+  ArrowLeft,
   Download,
   Eye,
   HelpCircle,
@@ -19,6 +20,7 @@ import {
   RefreshCcw,
   RotateCcw,
   Save,
+  Settings,
   Send,
   Sparkles,
   Smartphone,
@@ -34,7 +36,7 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
 import { audioObservationPreview, imageSummaryPreview } from "../core/display-text";
-import { toCreatureMemoryVoice } from "../core/memory";
+import { memoryShortTitle, toCreatureMemoryVoice } from "../core/memory";
 import { PET_KINDS, normalizePetKind, petKindLabel, petKindMeta } from "../core/pet-kinds";
 import type {
   ActionResult,
@@ -1322,6 +1324,7 @@ export function App() {
                 onChangePetProfile={changePetProfile}
                 onGenerateInitialActionCards={startInitialActionCards}
                 onGoMemory={() => setTab("memory")}
+                onGoChat={() => setTab("chat")}
                 onUpdateActionCard={changeActionCard}
               />
             ) : null}
@@ -1667,7 +1670,7 @@ function HomeActionCardsPeek({ profile, compact = false }: { profile: CreaturePr
           <div className="action-card-gallery">
             {cards.map((card) => (
               <article className="action-card-preview" key={card.id}>
-                <video src={resolveAssetUrl(card.video.url)} controls muted playsInline preload="metadata" />
+                <video src={resolveAssetUrl(card.video.url)} poster={card.cover ? resolveAssetUrl(card.cover.url) : undefined} controls muted playsInline preload="none" />
                 <strong>{namedCreatureText(card.title, profile.creatureName) || card.title}</strong>
                 {card.caption ? <span>{namedCreatureText(card.caption, profile.creatureName) || card.caption}</span> : null}
               </article>
@@ -2019,7 +2022,7 @@ function GeneratedPetAvatar({ petKind, dogState, idle = false, interactionAction
 function ActionCardAvatar({ card }: { card: NonNullable<CreatureProfile["actionCards"]>[number] }) {
   return (
     <div className="action-card-avatar" aria-label={card.title}>
-      <video src={resolveAssetUrl(card.video.url)} autoPlay loop muted playsInline preload="metadata" />
+      <video src={resolveAssetUrl(card.video.url)} poster={card.cover ? resolveAssetUrl(card.cover.url) : undefined} autoPlay loop muted playsInline preload="metadata" />
     </div>
   );
 }
@@ -2279,7 +2282,7 @@ function StatePolicySnapshot({ profile, onUpdateActionCard }: { profile: Creatur
           <div className="action-card-admin-list">
             {actionCards.map((card) => (
               <article className={card.disabled ? "action-card-admin disabled" : "action-card-admin"} key={card.id}>
-                <video src={resolveAssetUrl(card.video.url)} controls muted playsInline preload="metadata" />
+                <video src={resolveAssetUrl(card.video.url)} poster={card.cover ? resolveAssetUrl(card.cover.url) : undefined} controls muted playsInline preload="none" />
                 <div>
                   <b>{namedCreatureText(card.title, profile.creatureName) || card.title}</b>
                   {card.caption ? <small>{namedCreatureText(card.caption, profile.creatureName) || card.caption}</small> : null}
@@ -3718,6 +3721,7 @@ function ProfileView(props: {
   onChangePetProfile: (input: { guidance?: string; referenceSummary?: string; referenceAttachment?: MediaAttachment }) => Promise<void>;
   onGenerateInitialActionCards: (guidance?: string) => Promise<void>;
   onGoMemory: () => void;
+  onGoChat: () => void;
   onUpdateActionCard: (cardId: string, input: { disabled?: boolean; deleted?: boolean }) => void;
 }) {
   const petProfile = petProfileFor(props.profile);
@@ -3728,8 +3732,10 @@ function ProfileView(props: {
   const actionCards = allActionCards.slice(0, 8);
   const memories = (props.profile.longTermMemories ?? []).filter((memory) => memory.kind !== "creature_self_memory");
   const candidates = (props.profile.memoryCandidates ?? []).filter((candidate) => candidate.status === "candidate");
-  const latestMemory = [...memories].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
   const [viewerIndex, setViewerIndex] = useState<number>();
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const settingsOpenRef = useRef(settingsOpen);
+  settingsOpenRef.current = settingsOpen;
   const viewerIndexRef = useRef(viewerIndex);
   viewerIndexRef.current = viewerIndex;
   const [nameDraft, setNameDraft] = useState(props.profile.creatureName);
@@ -3762,6 +3768,7 @@ function ProfileView(props: {
   useEffect(() => {
     const handlePopState = () => {
       if (viewerIndexRef.current !== undefined) setViewerIndex(undefined);
+      else if (settingsOpenRef.current) setSettingsOpen(false);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -3775,6 +3782,16 @@ function ProfileView(props: {
   function closeIllustration() {
     if (window.history.state?.papoOverlay === "profile-image-viewer") window.history.back();
     else setViewerIndex(undefined);
+  }
+
+  function openSettings() {
+    window.history.pushState({ ...(window.history.state ?? {}), papoOverlay: "profile-settings" }, "");
+    setSettingsOpen(true);
+  }
+
+  function closeSettings() {
+    if (window.history.state?.papoOverlay === "profile-settings") window.history.back();
+    else setSettingsOpen(false);
   }
 
   async function saveName() {
@@ -3878,8 +3895,12 @@ function ProfileView(props: {
           <p>{petProfile.displaySpecies} · {papoMoodLabel(props.profile.state)}</p>
           <small>@{props.profile.userId}</small>
         </div>
+        <button className="profile-settings-button" type="button" onClick={openSettings} aria-label="Papo 设置">
+          <Settings size={20} />
+        </button>
       </header>
 
+      {!settingsOpen ? <>
       <section className="profile-stats" aria-label="我的内容概览">
         <button type="button" onClick={props.onGoMemory}>
           <strong>{memories.length}</strong>
@@ -3915,7 +3936,7 @@ function ProfileView(props: {
           <div className="profile-action-rail">
             {actionCards.map((card) => (
               <article className={card.disabled ? "profile-action-item disabled" : "profile-action-item"} key={card.id}>
-                <video src={resolveAssetUrl(card.video.url)} muted playsInline loop autoPlay preload="metadata" />
+                <ActionCardCover card={card} profile={props.profile} />
                 <div>
                   <strong>{namedCreatureText(card.title, props.profile.creatureName) || card.title}</strong>
                   <button type="button" onClick={() => props.onUpdateActionCard(card.id, { disabled: !card.disabled })}>
@@ -3928,15 +3949,20 @@ function ProfileView(props: {
         ) : <ProfileEmptyState icon={Play} text="生成的动作会收在这里" />}
       </section>
 
-      <button className="profile-memory-summary" type="button" onClick={props.onGoMemory}>
-        <span className="profile-memory-icon"><History size={20} /></span>
-        <span className="profile-memory-copy">
-          <strong>记忆</strong>
-          <small>{latestMemory ? memoryResultLine(latestMemory) : `${props.profile.creatureName} 还在慢慢认识你`}</small>
-        </span>
-        <span className="profile-memory-count">{candidates.length ? `${candidates.length} 条待确认` : `${memories.length} 条长期记忆`}</span>
-        <ChevronRight size={18} />
-      </button>
+      <section className="profile-content-section profile-memory-section">
+        <ProfileSectionHeading icon={History} title="记忆" meta={candidates.length ? `${candidates.length} 条待确认` : `${memories.length} 条`} />
+        {memories.length ? (
+          <div className="profile-memory-rail">
+            {memories.slice(0, 8).map((memory) => <MemoryCover key={memory.id} memory={memory} onClick={props.onGoMemory} />)}
+          </div>
+        ) : <ProfileEmptyState icon={History} text={`${props.profile.creatureName} 还在慢慢认识你`} />}
+        <button className="profile-view-all" type="button" onClick={props.onGoMemory}>查看全部记忆 <ChevronRight size={16} /></button>
+      </section>
+      </> : <>
+      <header className="profile-settings-header">
+        <button type="button" onClick={closeSettings} aria-label="返回我的"><ArrowLeft size={20} /></button>
+        <div><strong>Papo 设置</strong><small>形象、设备与账号</small></div>
+      </header>
 
       <section className="profile-settings-section">
         <ProfileSectionHeading icon={Sparkles} title={`${props.profile.creatureName} 的设定`} />
@@ -4044,7 +4070,7 @@ function ProfileView(props: {
             <strong>动作卡</strong>
             <span>初始动作 {Math.min(initialMotionCount, 4)}/4</span>
           </div>
-          <p className="muted">这里每次只生成一个动作：先生成动作首帧，再让它动起来。更多具体动作可以直接在对话里告诉 {props.profile.creatureName}。</p>
+          <p className="muted">{initialMotionCount >= 4 ? `初始动作已经准备好。还想增加动作卡，直接在对话里告诉 ${props.profile.creatureName} 想做什么。` : `这里每次生成一个初始动作：先生成与当前形象一致的封面，再让它动起来。`}</p>
           <label className="field-label">
             这次想让它做什么
             <input
@@ -4056,9 +4082,9 @@ function ProfileView(props: {
             />
           </label>
           <div className="pet-profile-actions">
-            <button onClick={() => void generateMotions()} disabled={motionBusy || petProfile.initialMotion?.status === "pending" || initialMotionCount >= 4} type="button">
+            <button onClick={() => initialMotionCount >= 4 ? props.onGoChat() : void generateMotions()} disabled={motionBusy || petProfile.initialMotion?.status === "pending"} type="button">
               <Sparkles size={16} />
-              {petProfile.initialMotion?.status === "pending" ? "动作生成中" : motionBusy ? "启动中" : initialMotionCount >= 4 ? "初始动画已够用" : "生成一个初始动画"}
+              {petProfile.initialMotion?.status === "pending" ? "动作生成中" : motionBusy ? "启动中" : initialMotionCount >= 4 ? "去对话生成更多" : "生成一个初始动画"}
             </button>
           </div>
           {petProfile.initialMotion?.status === "failed" ? <small>动作生成失败：{petProfile.initialMotion.error}</small> : null}
@@ -4127,6 +4153,7 @@ function ProfileView(props: {
           退出登录
         </button>
       </section>
+      </>}
 
       {viewerIndex !== undefined && illustrations[viewerIndex] ? (
         <IllustrationViewer item={illustrations[viewerIndex]} onClose={closeIllustration} />
@@ -4146,6 +4173,41 @@ function ProfileSectionHeading({ icon: Icon, title, meta }: { icon: typeof Check
 
 function ProfileEmptyState({ icon: Icon, text }: { icon: typeof Check; text: string }) {
   return <div className="profile-empty"><Icon size={22} /><span>{text}</span></div>;
+}
+
+function ActionCardCover({ card, profile }: { card: NonNullable<CreatureProfile["actionCards"]>[number]; profile: CreatureProfile }) {
+  const [playing, setPlaying] = useState(false);
+  const coverUrl = card.cover
+    ? resolveAssetUrl(card.cover.url)
+    : profile.petProfile?.avatarImage
+      ? resolveAssetUrl(profile.petProfile.avatarImage.url)
+      : undefined;
+  return (
+    <button className="action-card-cover" type="button" onClick={() => setPlaying(true)} aria-label={`播放动作：${card.title}`}>
+      {playing ? (
+        <video src={resolveAssetUrl(card.video.url)} poster={coverUrl} muted playsInline loop autoPlay preload="auto" />
+      ) : coverUrl ? (
+        <img src={coverUrl} alt="" loading="lazy" />
+      ) : (
+        <AvatarPreview petKind={profile.petKind} petProfile={petProfileFor(profile)} state={profile.state} dogState={profile.dogState} />
+      )}
+      {!playing ? <span className="action-card-play"><Play size={18} fill="currentColor" /></span> : null}
+    </button>
+  );
+}
+
+function MemoryCover({ memory, onClick }: { memory: CreatureProfile["longTermMemories"][number]; onClick: () => void }) {
+  const image = memory.attachments?.find((attachment) => attachment.kind === "image");
+  const title = memory.shortTitle ?? memoryShortTitle(memory.text);
+  return (
+    <button className={image ? "memory-cover has-image" : "memory-cover text-only"} type="button" onClick={onClick}>
+      <span className="memory-cover-art">
+        {image ? <img src={resolveAssetUrl(image.url)} alt="" loading="lazy" /> : <strong>{title}</strong>}
+      </span>
+      <strong>{title}</strong>
+      <small>{memoryResultLine(memory)}</small>
+    </button>
+  );
 }
 
 function AppUpdateSettings() {

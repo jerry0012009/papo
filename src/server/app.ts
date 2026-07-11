@@ -350,6 +350,7 @@ export function createApp(input: {
     try {
       const filename = req.params.filename;
       if (!/^(img|vid)_[a-f0-9]{24}\.(png|jpg|webp|mp4)$/.test(filename)) throw new HttpError(404, "Asset not found");
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
       res.sendFile(path.join(imageAssetDir(), filename));
     } catch (error) {
       next(error);
@@ -1012,6 +1013,37 @@ async function saveGeneratedActionKeyframe(input: {
   };
 }
 
+async function createActionCardCover(input: {
+  profile: CreatureProfile;
+  provider: ModelProvider;
+  prompt: string;
+  references: ImageReference[];
+  label: string;
+  sourceIds: string[];
+}) {
+  try {
+    const generated = await input.provider.generateImage(input.prompt, {
+      style: input.profile.petProfile.visualStyle,
+      references: input.references
+    });
+    const cover = await saveGeneratedActionKeyframe({
+      dataUrl: generated.dataUrl,
+      label: input.label,
+      prompt: input.prompt,
+      sourceIds: input.sourceIds
+    });
+    return { cover, referenceImage: { dataUrl: generated.dataUrl, label: cover.label } satisfies ImageReference };
+  } catch (error) {
+    const referenceImage = input.references[0];
+    if (!referenceImage) throw error;
+    console.warn(`Action cover generation failed; using current profile image for ${input.profile.userId}`, error);
+    return {
+      cover: input.profile.petProfile.avatarImage ?? input.profile.petProfile.referenceImage,
+      referenceImage
+    };
+  }
+}
+
 async function saveGeneratedProfileImage(input: {
   dataUrl: string;
   label: string;
@@ -1087,21 +1119,19 @@ function queueInitialPetMotionGeneration(input: {
       const references = await petProfileVisualReferences(profile);
       const sourceIds = [`pet-profile:${profile.petProfile.updatedAt}`, `initial-motion:${card.key}`];
       const keyframePrompt = buildInitialMotionKeyframePrompt(profile, card, Boolean(references[0]));
-      const keyframeGenerated = await input.provider.generateImage(keyframePrompt, {
-        style: card.style,
-        references
-      });
-      const cover = await saveGeneratedActionKeyframe({
-        dataUrl: keyframeGenerated.dataUrl,
-        label: `${card.title} 首帧`,
+      const coverResult = await createActionCardCover({
+        profile,
+        provider: input.provider,
         prompt: keyframePrompt,
+        references,
+        label: `${card.title} 首帧`,
         sourceIds
       });
       const videoPrompt = buildInitialMotionVideoPrompt(profile, card, true);
       const generated = await input.provider.generateVideo(videoPrompt, {
         durationSeconds: card.durationSeconds,
         style: card.style,
-        referenceImage: { dataUrl: keyframeGenerated.dataUrl, label: cover.label }
+        referenceImage: coverResult.referenceImage
       });
       const video = await saveGeneratedActionVideo({
         dataUrl: generated.dataUrl,
@@ -1117,7 +1147,7 @@ function queueInitialPetMotionGeneration(input: {
         prompt: videoPrompt,
         style: card.style,
         durationSeconds: card.durationSeconds,
-        cover,
+        cover: coverResult.cover,
         video,
         sourceIds,
         providerKind: input.provider.diagnostics?.videoProvider ?? input.provider.kind,
@@ -1253,11 +1283,20 @@ async function executeActionCardActions(
     const referenceImage = references[0];
     if (!provider.generateVideo) throw new Error("Video generation provider is not configured");
     const sourceIds = [...new Set([event.id, event.triggerSegmentId, event.triggerBatchId, ...(event.relatedMemoryIds ?? []), ...(event.attachments ?? []).map((item) => item.id), ...(actionResult.sourceIds ?? [])].filter(Boolean) as string[])];
-    const videoPrompt = actionCardVideoPrompt(profile, actionResult, event, Boolean(referenceImage));
+    const keyframePrompt = actionCardKeyframePrompt(profile, actionResult, event, Boolean(referenceImage));
+    const coverResult = await createActionCardCover({
+      profile,
+      provider,
+      prompt: keyframePrompt,
+      references,
+      label: `${actionResult.title ?? profile.creatureName} 封面`,
+      sourceIds
+    });
+    const videoPrompt = actionCardVideoPrompt(profile, actionResult, event, true);
     const generated = await provider.generateVideo(videoPrompt, {
       durationSeconds: actionResult.durationSeconds ?? 8,
-      style: actionResult.style,
-      referenceImage
+      style: profile.petProfile.visualStyle,
+      referenceImage: coverResult.referenceImage
     });
     const video = await saveGeneratedActionVideo({
       dataUrl: generated.dataUrl,
@@ -1284,6 +1323,7 @@ async function executeActionCardActions(
       prompt: videoPrompt,
       style: actionResult.style,
       durationSeconds: actionResult.durationSeconds ?? 8,
+      cover: coverResult.cover,
       video,
       sourceIds,
       actionEventId: event.id,
@@ -1313,11 +1353,20 @@ async function executeEmergenceActionCard(
       .flatMap((episode) => episode.attachments ?? [])
   );
   const sourceIds = [...new Set([emergence.id, emergence.memoryId, ...(emergence.relatedMemoryIds ?? []), ...(actionResult.sourceIds ?? [])].filter(Boolean) as string[])];
-  const videoPrompt = actionCardVideoPromptForEmergence(profile, actionResult, emergence, Boolean(references[0]));
+  const keyframePrompt = actionCardKeyframePromptForEmergence(profile, actionResult, emergence, Boolean(references[0]));
+  const coverResult = await createActionCardCover({
+    profile,
+    provider,
+    prompt: keyframePrompt,
+    references,
+    label: `${actionResult.title ?? profile.creatureName} 封面`,
+    sourceIds
+  });
+  const videoPrompt = actionCardVideoPromptForEmergence(profile, actionResult, emergence, true);
   const generated = await provider.generateVideo(videoPrompt, {
     durationSeconds: actionResult.durationSeconds ?? 8,
-    style: actionResult.style,
-    referenceImage: references[0]
+    style: profile.petProfile.visualStyle,
+    referenceImage: coverResult.referenceImage
   });
   const video = await saveGeneratedActionVideo({
     dataUrl: generated.dataUrl,
@@ -1342,6 +1391,7 @@ async function executeEmergenceActionCard(
     prompt: videoPrompt,
     style: actionResult.style,
     durationSeconds: actionResult.durationSeconds ?? 8,
+    cover: coverResult.cover,
     video,
     sourceIds,
     emergenceId: emergence.id,
@@ -1479,7 +1529,7 @@ function actionCardVideoPrompt(profile: CreatureProfile, actionResult: ActionRes
     `Personality and habits to express through motion: ${identity.personality} ${identity.habits}`,
     `Visual style: ${identity.visualStyle}`,
     `Motion style: ${identity.motionStyle}`,
-    hasReferenceImage ? "Use the attached profile/reference image as strict visual grounding. Preserve coat colors, markings, face shape, body proportions, expression, and overall identity from the image." : "Keep the character design consistent with the pet kind and current profile.",
+    hasReferenceImage ? "The attached image is the approved action-card cover and exact first frame. Animate this image; do not redesign, reinterpret, restyle, or replace the character, background, palette, proportions, or rendering technique." : "Keep the character design consistent with the pet kind and current profile.",
     "Action priority: preserve the action, object, mood, and scene requested by the action model and user moment. Do not replace a specific requested action with a generic idle, wave, ball, or nap action.",
     "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
     "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
@@ -1489,6 +1539,19 @@ function actionCardVideoPrompt(profile: CreatureProfile, actionResult: ActionRes
     sourceImages ? `Source image assets:\n${sourceImages}` : "",
     `Action model prompt:\n${actionResult.prompt}`
   ].filter(Boolean).join("\n\n");
+}
+
+function actionCardKeyframePrompt(profile: CreatureProfile, actionResult: ActionResult, event: CaptureResult["events"][number], hasReferenceImage: boolean) {
+  const identity = petVisualIdentity(profile);
+  return [
+    `Create one square approved cover and exact first frame for ${profile.creatureName}'s action card.`,
+    `Character: ${identity.species}. Identity: ${identity.appearance}.`,
+    `Authoritative visual style: ${identity.visualStyle}. Match the current profile/avatar image's exact rendering medium, palette, linework or 3D treatment, lighting, facial design, body proportions, and background language. Do not introduce a different art style.`,
+    hasReferenceImage ? "The attached current profile/avatar image is the single authoritative character reference. Preserve its identity exactly; change only pose and action setup." : "Use the written profile as the authoritative identity.",
+    `Action setup: ${actionResult.prompt}. Moment: ${event.noticed || event.triggerContent}.`,
+    "Full body readable, centered, stable scale, clean simple background consistent with the avatar, suitable as both the first and final loop frame.",
+    "Forbidden: character redesign, style transfer, different species, changed coat colors or markings, plush toy, figurine, text, UI, watermark, extra animals or humans."
+  ].join("\n\n");
 }
 
 function namedCreatureText(text: string | undefined, creatureName: string) {
@@ -1504,7 +1567,7 @@ function actionCardVideoPromptForEmergence(profile: CreatureProfile, actionResul
     `Keep the pet identity consistent: ${identity.appearance}`,
     `Personality and habits to express through motion: ${identity.personality} ${identity.habits}`,
     `Visual and motion style: ${identity.visualStyle} ${identity.motionStyle}`,
-    hasReferenceImage ? "Use the attached profile/reference image as strict visual grounding. Preserve coat colors, markings, face shape, body proportions, expression, and overall identity from the image." : "",
+    hasReferenceImage ? "The attached image is the approved action-card cover and exact first frame. Animate it without redesigning or restyling the character or scene." : "",
     "Action priority: preserve the action, object, mood, and scene requested by the emergence/action model. Do not replace a specific requested action with a generic idle, wave, ball, or nap action.",
     "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
     "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
@@ -1513,6 +1576,19 @@ function actionCardVideoPromptForEmergence(profile: CreatureProfile, actionResul
     `Visible message: ${emergence.message}`,
     `Action model prompt:\n${actionResult.prompt}`
   ].filter(Boolean).join("\n\n");
+}
+
+function actionCardKeyframePromptForEmergence(profile: CreatureProfile, actionResult: ActionResult, emergence: EmergenceRecord, hasReferenceImage: boolean) {
+  const identity = petVisualIdentity(profile);
+  return [
+    `Create one square approved cover and exact first frame for ${profile.creatureName}'s action card.`,
+    `Character identity: ${identity.species}; ${identity.appearance}.`,
+    `Authoritative visual style: ${identity.visualStyle}. Match the current profile/avatar image exactly in rendering medium, palette, facial design, body proportions, lighting and background language.`,
+    hasReferenceImage ? "The attached profile/avatar image is authoritative. Preserve the same character exactly; change only pose and action setup." : "Use the written profile as authoritative identity.",
+    `Action setup: ${actionResult.prompt}. Why now: ${emergence.whyNow}.`,
+    "Full body centered, stable scale, clean background, loop-compatible starting pose.",
+    "No redesign, no different art style, no plush or figurine, no text, UI, watermark, extra animals or humans."
+  ].join("\n\n");
 }
 
 function petVisualIdentity(profile: CreatureProfile) {
@@ -1667,7 +1743,7 @@ function buildInitialMotionVideoPrompt(profile: CreatureProfile, card: { title: 
     `Character identity: ${identity.appearance}`,
     `Personality/habits: ${identity.personality} ${identity.habits}`,
     `Motion style: ${identity.motionStyle}`,
-    hasReferenceImage ? "The attached image is the generated first-frame/keyframe for this exact action. Animate from it while preserving the same identity, pose family, coat colors, markings, face shape, body proportions, expression, and background." : "Use the written profile as strict grounding for character identity.",
+    hasReferenceImage ? "The attached image is the approved cover and exact first frame for this action. Animate it directly. Do not redesign, reinterpret or restyle the character, background, palette, proportions, lighting, or rendering technique." : "Use the written profile as strict grounding for character identity.",
     "Action priority: preserve the action, object, mood, and scene requested in the action direction. Do not replace a user-requested action with a generic idle, wave, ball, or nap action.",
     "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
     "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
@@ -1684,10 +1760,11 @@ function buildInitialMotionKeyframePrompt(profile: CreatureProfile, card: { titl
     `Create one square first-frame key image for a looping action video of ${profile.creatureName}, a ${identity.species}.`,
     "This is not the final video. It is the still keyframe that the video model will animate from.",
     "Visual goal: a living digital pet based on the current profile image/photo, lightly stylized for a polished companion app. It must look like the same animal/creature from the profile, not a plush toy or figurine.",
-    hasReferenceImage ? "Use the attached user/profile reference image as the primary identity source. Preserve coat colors, markings, face shape, body proportions, recognizable expression, and species." : "Use the written profile as the identity source.",
+    hasReferenceImage ? "The first attached current profile/avatar image is the authoritative identity and art-style source. Match its exact rendering medium, palette, linework or 3D treatment, lighting, facial design, body proportions and background language. Change only pose/action setup." : "Use the written profile as the identity source.",
     "Composition: warm clean app background, soft natural light, full body centered, stable scale, clear silhouette. The pose should be the starting pose and also suitable as the ending pose for a loop.",
     "Action priority: the still keyframe must visibly set up the user's requested action. Do not fall back to a generic default pose if the action direction names a specific action.",
     `Character identity: ${identity.appearance}`,
+    `Authoritative visual style: ${identity.visualStyle}`,
     `Personality/habits: ${identity.personality} ${identity.habits}`,
     `Action title: ${card.title}`,
     `Action keyframe direction: ${card.prompt}`,
@@ -1853,12 +1930,11 @@ async function illustrationReferences(attachments?: MediaAttachment[]): Promise<
 }
 
 async function actionCardReferences(profile: CreatureProfile, attachments?: MediaAttachment[]): Promise<ImageReference[]> {
-  const uploaded = await illustrationReferences(attachments);
-  if (uploaded.length) return uploaded;
   const profileReferences = await petProfileVisualReferences(profile);
-  if (profileReferences.length) return profileReferences;
+  const uploaded = await illustrationReferences(attachments);
+  if (profileReferences.length) return [...profileReferences, ...uploaded].slice(0, 4);
   const character = await generatedPetReference(profile);
-  return character ? [character] : [];
+  return [...(character ? [character] : []), ...uploaded].slice(0, 4);
 }
 
 async function petProfileReferences(referenceAttachment?: MediaAttachment): Promise<ImageReference[]> {
@@ -1869,7 +1945,7 @@ async function petProfileReferences(referenceAttachment?: MediaAttachment): Prom
 
 async function petProfileVisualReferences(profile: CreatureProfile): Promise<ImageReference[]> {
   const references: ImageReference[] = [];
-  for (const image of [profile.petProfile?.referenceImage, profile.petProfile?.avatarImage]) {
+  for (const image of [profile.petProfile?.avatarImage, profile.petProfile?.referenceImage]) {
     if (!image) continue;
     const dataUrl = await imageAttachmentDataUrl(image);
     if (dataUrl) references.push({ dataUrl, label: image.label });

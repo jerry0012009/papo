@@ -101,6 +101,7 @@ test("profile can rename the creature and logged-in UI follows the new name", as
   await page.goto("/");
 
   await page.locator(".nav").getByRole("button", { name: "我的" }).click();
+  await page.getByRole("button", { name: "Papo 设置" }).click();
   await page.locator(".profile-setting-group").filter({ hasText: "名字" }).locator("summary").click();
   await page.getByLabel("名字").fill("吉祥");
   await page.getByRole("button", { name: "保存名字" }).click();
@@ -134,9 +135,10 @@ test("my tab organizes content, companion settings, and account settings", async
   await expect(hub.getByText("画过", { exact: true }).first()).toBeVisible();
   await expect(hub.getByText("动作卡", { exact: true }).first()).toBeVisible();
   await expect(hub.locator(".profile-illustration-rail img")).toBeVisible();
-  await expect(hub.locator(".profile-action-item video")).toBeVisible();
-  await expect(hub.getByText("设备与服务")).toBeVisible();
-  await expect(hub.getByText("账号与安全")).toBeVisible();
+  const actionItem = hub.locator(".profile-action-item").first();
+  await expect(actionItem.locator(".action-card-cover img, .action-card-cover .shiba")).toBeVisible();
+  await expect(actionItem.locator("video")).toHaveCount(0);
+  await expect(hub.locator(".memory-cover")).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath("my-hub.png"), fullPage: true });
 
   await hub.getByRole("button", { name: /查看图片：今天的泳池小画/ }).click();
@@ -146,23 +148,69 @@ test("my tab organizes content, companion settings, and account settings", async
   await expect(viewer).toBeHidden();
   await expect(hub).toBeVisible();
 
-  const actionItem = hub.locator(".profile-action-item").first();
+  await actionItem.getByRole("button", { name: /播放动作/ }).click();
+  await expect(actionItem.locator("video")).toBeVisible();
   await actionItem.getByRole("button", { name: "停用" }).click();
   await expect(actionItem).toHaveClass(/disabled/);
   await actionItem.getByRole("button", { name: "启用" }).click();
   await expect(actionItem).not.toHaveClass(/disabled/);
 
+  await hub.getByRole("button", { name: "Papo 设置" }).click();
+  await expect(hub.getByText("设备与服务")).toBeVisible();
+  await expect(hub.getByText("账号与安全")).toBeVisible();
   await hub.locator(".profile-setting-group").filter({ hasText: "名字" }).locator("summary").click();
   await expect(hub.getByLabel("名字")).toBeVisible();
   await hub.locator(".profile-setting-group").filter({ hasText: "形象与性格" }).locator("summary").click();
   await expect(hub.getByText("你想把它养成什么样")).toBeVisible();
-  await hub.locator(".profile-memory-summary").click();
+  await page.goBack();
+  await expect(hub.getByRole("button", { name: "Papo 设置" })).toBeVisible();
+  await hub.locator(".memory-cover").first().click();
   await expect(page.getByRole("heading", { level: 1, name: "Papo 记得的生活" })).toBeVisible();
+});
+
+test("four initial motions guide the user to chat for more action cards", async ({ page }) => {
+  await page.addInitScript(() => {
+    const baseCard = {
+      id: "",
+      createdAt: "2026-07-07T12:00:00.000Z",
+      title: "动作",
+      prompt: "动作",
+      durationSeconds: 8,
+      sourceIds: [],
+      providerKind: "generic",
+      providerName: "test",
+      video: {
+        id: "",
+        kind: "video",
+        label: "动作",
+        mime: "video/mp4",
+        url: "data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28ybXA0MQ==",
+        createdAt: "2026-07-07T12:00:00.000Z"
+      }
+    };
+    localStorage.setItem("papo:testProfileOverride", JSON.stringify({
+      actionCards: Array.from({ length: 4 }, (_, index) => ({
+        ...baseCard,
+        id: `initial-${index}`,
+        title: `初始动作 ${index + 1}`,
+        sourceIds: [`initial-motion:motion-${index}`],
+        video: { ...baseCard.video, id: `video-${index}` }
+      }))
+    }));
+  });
+  await page.goto("/");
+  await page.locator(".nav").getByRole("button", { name: "我的" }).click();
+  await page.getByRole("button", { name: "Papo 设置" }).click();
+  await page.locator(".profile-setting-group").filter({ hasText: "生成动作" }).locator("summary").click();
+  await expect(page.getByText(/还想增加动作卡，直接在对话里告诉/)).toBeVisible();
+  await page.getByRole("button", { name: "去对话生成更多" }).click();
+  await expect(page.getByPlaceholder("告诉 Papo...")).toBeVisible();
 });
 
 test("profile checks and exposes the latest Android APK", async ({ page }) => {
   await page.goto("/");
   await page.locator(".nav").getByRole("button", { name: "我的" }).click();
+  await page.getByRole("button", { name: "Papo 设置" }).click();
 
   const updater = page.locator(".app-update-settings");
   await expect(updater).toContainText("Android 最新版 0.3.1");
@@ -174,6 +222,7 @@ test("installed Android detects and opens the latest update", async ({ page }) =
   await installMockAndroidBridge(page, { versionName: "0.2.1", versionCode: 3 });
   await page.goto("/");
   await page.locator(".nav").getByRole("button", { name: "我的" }).click();
+  await page.getByRole("button", { name: "Papo 设置" }).click();
 
   const updater = page.locator(".app-update-settings");
   await expect(updater).toContainText("当前 0.2.1，可更新到 0.3.1");
