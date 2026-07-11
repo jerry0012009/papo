@@ -27,14 +27,11 @@ import {
   Square,
   Play,
   UserRound,
-  ZoomIn,
-  ZoomOut,
   X
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
 import { audioObservationPreview, imageSummaryPreview } from "../core/display-text";
 import { memoryShortTitle, toCreatureMemoryVoice } from "../core/memory";
 import { PET_KINDS, normalizePetKind, petKindLabel, petKindMeta } from "../core/pet-kinds";
@@ -108,7 +105,7 @@ import {
   type PushNotificationState
 } from "./push-notifications";
 import { inspectAppUpdate, openAppUpdateDownload, type AppUpdateState } from "./app-update";
-import { downloadImage } from "./image-download";
+import { ImageLightbox } from "./ImageLightbox";
 import { formatPapoDateTime, papoTimeZone } from "./time";
 
 type Tab = "home" | "chat" | "memory" | "profile";
@@ -1702,7 +1699,6 @@ function HomeIllustrationsPeek({ profile, compact = false }: { profile: Creature
 
   if (!illustrations.length) return null;
   const latest = illustrations[0];
-  const selected = viewerIndex === undefined ? undefined : illustrations[viewerIndex];
 
   function openGallery() {
     window.history.pushState({ ...(window.history.state ?? {}), papoOverlay: "illustrations" }, "");
@@ -1755,66 +1751,15 @@ function HomeIllustrationsPeek({ profile, compact = false }: { profile: Creature
           </Dialog.Content>
         </Dialog.Portal>
       </Dialog.Root>
-      {selected ? <IllustrationViewer item={selected} onClose={closeViewer} /> : null}
+      <IllustrationLightbox items={illustrations} index={viewerIndex} onClose={closeViewer} onIndexChange={setViewerIndex} />
     </>
   );
 }
 
-function IllustrationViewer({ item, onClose }: { item: NonNullable<CreatureProfile["illustrations"]>[number]; onClose: () => void }) {
-  const [downloadState, setDownloadState] = useState<"idle" | "saving" | "saved" | "failed">("idle");
-  const src = resolveAssetUrl(item.attachment.url);
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+type IllustrationLightboxItem = NonNullable<CreatureProfile["illustrations"]>[number];
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeRef.current();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  async function saveImage() {
-    setDownloadState("saving");
-    try {
-      await downloadImage(src, item.title, item.attachment.mime);
-      setDownloadState("saved");
-    } catch {
-      setDownloadState("failed");
-    }
-  }
-
-  return (
-    <div className="image-viewer" role="dialog" aria-modal="true" aria-label={`查看图片：${item.title}`}>
-          <h2 className="sr-only">{item.title}</h2>
-          <TransformWrapper initialScale={1} minScale={1} maxScale={5} centerOnInit doubleClick={{ mode: "toggle", step: 2 }}>
-            {({ zoomIn, zoomOut, resetTransform }) => (
-              <>
-                <div className="image-viewer-toolbar">
-                  <button type="button" onClick={onClose} aria-label="关闭图片"><X size={21} /></button>
-                  <div className="image-viewer-tools">
-                    <button type="button" onClick={() => zoomOut()} aria-label="缩小"><ZoomOut size={20} /></button>
-                    <button type="button" onClick={() => resetTransform()} aria-label="恢复原始大小"><RotateCcw size={19} /></button>
-                    <button type="button" onClick={() => zoomIn()} aria-label="放大"><ZoomIn size={20} /></button>
-                    <button type="button" onClick={() => void saveImage()} disabled={downloadState === "saving"} aria-label="下载图片">
-                      {downloadState === "saving" ? <Loader2 className="spin" size={20} /> : <Download size={20} />}
-                    </button>
-                  </div>
-                </div>
-                <TransformComponent wrapperClass="image-viewer-canvas" contentClass="image-viewer-image-wrap">
-                  <img src={src} alt={item.title} draggable={false} />
-                </TransformComponent>
-                <div className="image-viewer-caption">
-                  <strong>{item.title}</strong>
-                  {item.caption ? <span>{item.caption}</span> : null}
-                  {downloadState === "saved" ? <small>已保存到下载目录</small> : null}
-                  {downloadState === "failed" ? <small className="error-text">保存失败，请稍后重试</small> : null}
-                </div>
-              </>
-            )}
-          </TransformWrapper>
-    </div>
-  );
+function IllustrationLightbox(props: { items: IllustrationLightboxItem[]; index?: number; onClose: () => void; onIndexChange?: (index: number) => void }) {
+  return <ImageLightbox items={props.items.map((item) => ({ id: item.id, src: resolveAssetUrl(item.attachment.url), title: item.title, mime: item.attachment.mime }))} index={props.index} onClose={props.onClose} onIndexChange={props.onIndexChange} />;
 }
 
 function ListeningDurationDialog(props: {
@@ -4164,9 +4109,7 @@ function ProfileView(props: {
       </section>
       </>}
 
-      {viewerIndex !== undefined && illustrations[viewerIndex] ? (
-        <IllustrationViewer item={illustrations[viewerIndex]} onClose={closeIllustration} />
-      ) : null}
+      <IllustrationLightbox items={illustrations} index={viewerIndex} onClose={closeIllustration} onIndexChange={setViewerIndex} />
     </section>
   );
 }

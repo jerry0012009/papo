@@ -1,14 +1,14 @@
 {
-  "versionName": "0.4.0",
-  "versionCode": 6,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.0.apk",
-  "publishedAt": "2026-07-11T16:56:00.000Z",
+  "versionName": "0.4.1",
+  "versionCode": 7,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.1.apk",
+  "publishedAt": "2026-07-11T18:42:00.000Z",
   "notes": [
-    "长期记忆新增共同回忆封面、短标题和时间展示",
-    "Papo 会用第一人称整理共同回忆，不再以系统口吻称呼用户",
-    "记忆文字反馈可同步修订标题、叙事与回忆画面",
-    "新增每用户私有 Client.md，并仅在小眼睛中展示"
+    "大图查看改用成熟 lightbox 组件，双指、双击缩放和拖动更稳定",
+    "图片不再被标题或工具蒙层遮挡，操作按钮统一放在底部",
+    "支持点击背景、底部关闭和全面屏返回手势退出大图",
+    "保留一键下载图片和图库左右滑动浏览"
   ],
-  "sha256": "b9647207a42edd93ed85d517a96e903f29c50a9fe6767479a2c0fd3dd977f125",
-  "size": 22788802
+  "sha256": "ffe675c43017126c76fd8260ed55d0fba341625509015fd127f950ae56e94490",
+  "size": 22796842
 }

@@ -80,19 +80,37 @@ test("home developer panel opens and closes without overflowing", async ({ page 
   await expectInViewport(page, gallery);
 
   await gallery.getByRole("button", { name: /今天的泳池小画/ }).click();
-  const imageViewer = page.getByRole("dialog", { name: "查看图片：今天的泳池小画" });
+  const imageViewer = page.locator(".papo-lightbox");
   await expect(imageViewer).toBeVisible();
-  await expect(imageViewer.getByRole("button", { name: "放大" })).toBeVisible();
+  await expect(imageViewer.getByRole("button", { name: "放大图片" })).toBeVisible();
   await expect(imageViewer.getByRole("button", { name: "下载图片" })).toBeVisible();
-  await imageViewer.getByRole("button", { name: "放大" }).click();
+  await expect(imageViewer.getByRole("button", { name: "关闭图片" })).toBeVisible();
+  const imageBox = await imageViewer.locator(".yarl__slide_image").boundingBox();
+  const toolbarBox = await imageViewer.locator(".yarl__toolbar").boundingBox();
+  expect(imageBox).not.toBeNull();
+  expect(toolbarBox).not.toBeNull();
+  expect(toolbarBox!.y).toBeGreaterThanOrEqual(imageBox!.y + imageBox!.height);
+  await imageViewer.getByRole("button", { name: "放大图片" }).click();
   await expect.poll(async () => {
-    const transform = await imageViewer.locator(".image-viewer-image-wrap").evaluate((node) => getComputedStyle(node).transform);
-    return Number(transform.match(/^matrix\(([^,]+)/)?.[1] ?? 1);
+    return Number(await imageViewer.evaluate((node) => node.style.getPropertyValue("--yarl__papo_zoom") || 1));
   }).toBeGreaterThan(1.5);
 
   await page.goBack();
   await expect(imageViewer).toBeHidden();
   await expect(gallery).toBeVisible();
+
+  await gallery.getByRole("button", { name: /今天的泳池小画/ }).click();
+  await expect(imageViewer).toBeVisible();
+  await imageViewer.getByRole("button", { name: "关闭图片" }).click();
+  await expect(imageViewer).toBeHidden();
+  await expect(gallery).toBeVisible();
+
+  await gallery.getByRole("button", { name: /今天的泳池小画/ }).click();
+  await expect(imageViewer).toBeVisible();
+  await imageViewer.locator(".yarl__container").click({ position: { x: 5, y: 5 } });
+  await expect(imageViewer).toBeHidden();
+  await expect(gallery).toBeVisible();
+
   await page.goBack();
   await expect(gallery).toBeHidden();
 });
@@ -142,7 +160,7 @@ test("my tab organizes content, companion settings, and account settings", async
   await page.screenshot({ path: testInfo.outputPath("my-hub.png"), fullPage: true });
 
   await hub.getByRole("button", { name: /查看图片：今天的泳池小画/ }).click();
-  const viewer = page.getByRole("dialog", { name: /查看图片：今天的泳池小画/ });
+  const viewer = page.locator(".papo-lightbox");
   await expect(viewer).toBeVisible();
   await page.goBack();
   await expect(viewer).toBeHidden();
@@ -1114,8 +1132,8 @@ function makeProfile() {
           id: "img_ui_illustration",
           kind: "image",
           label: "今天的泳池小画",
-          mime: "image/png",
-          url: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+          mime: "image/jpeg",
+          url: "/pets/register/shiba.jpg",
           createdAt: now,
           generatedBy: "papo_illustration",
           sizeBytes: 68
