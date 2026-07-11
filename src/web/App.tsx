@@ -3,11 +3,13 @@ import {
   BellOff,
   Camera,
   Check,
+  ChevronRight,
   Download,
   Eye,
   HelpCircle,
   History,
   ImagePlus,
+  Images,
   Lightbulb,
   Loader2,
   MessageCircle,
@@ -21,6 +23,7 @@ import {
   Sparkles,
   Smartphone,
   Square,
+  Play,
   UserRound,
   ZoomIn,
   ZoomOut,
@@ -1231,7 +1234,7 @@ export function App() {
     );
   }
 
-  const pageTitle = tab === "home" ? profile.creatureName : tab === "chat" ? `和 ${profile.creatureName} 说话` : tab === "memory" ? `${profile.creatureName} 记得的生活` : "资料";
+  const pageTitle = tab === "home" ? profile.creatureName : tab === "chat" ? `和 ${profile.creatureName} 说话` : tab === "memory" ? `${profile.creatureName} 记得的生活` : "我的";
   const species = petSpeciesNoun(profile.petKind);
 
   return (
@@ -1249,14 +1252,15 @@ export function App() {
             <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => setTab("home")} />
             <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" unreadCount={hasUnreadPapoMessage ? unreadPapoCount : 0} onClick={() => setTab("chat")} />
             <NavButton active={tab === "memory"} icon={History} label="记忆" onClick={() => setTab("memory")} />
+            <NavButton active={tab === "profile"} icon={UserRound} label="我的" onClick={() => setTab("profile")} />
           </nav>
         </aside>
 
         <section className="app-main">
           <header className="topbar app-topbar">
-            <button className="icon-button" onClick={() => setTab("profile")} aria-label={`看看哪只 ${profile.creatureName} 在身边`}>
-              <UserRound size={19} />
-            </button>
+            <div className="topbar-avatar" aria-hidden="true">
+              <AvatarPreview petKind={profile.petKind} petProfile={petProfileFor(profile)} state={profile.state} dogState={profile.dogState} />
+            </div>
             <div>
               <p className="eyebrow">住在手机里的{species}</p>
               <h1>{pageTitle}</h1>
@@ -1317,6 +1321,8 @@ export function App() {
                 onChangePassword={changePassword}
                 onChangePetProfile={changePetProfile}
                 onGenerateInitialActionCards={startInitialActionCards}
+                onGoMemory={() => setTab("memory")}
+                onUpdateActionCard={changeActionCard}
               />
             ) : null}
           </section>
@@ -1624,7 +1630,7 @@ function CompanionPanel(props: {
         </button>
         <button onClick={props.onGoProfile}>
           <UserRound size={16} />
-          资料
+          我的
         </button>
         <HomeBrainPeek profile={props.profile} compact onUpdateActionCard={props.onUpdateActionCard} />
       </div>
@@ -3711,9 +3717,21 @@ function ProfileView(props: {
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   onChangePetProfile: (input: { guidance?: string; referenceSummary?: string; referenceAttachment?: MediaAttachment }) => Promise<void>;
   onGenerateInitialActionCards: (guidance?: string) => Promise<void>;
+  onGoMemory: () => void;
+  onUpdateActionCard: (cardId: string, input: { disabled?: boolean; deleted?: boolean }) => void;
 }) {
   const petProfile = petProfileFor(props.profile);
   const initialMotionCount = initialMotionActionCardCount(props.profile);
+  const allIllustrations = props.profile.illustrations ?? [];
+  const illustrations = allIllustrations.slice(0, 8);
+  const allActionCards = (props.profile.actionCards ?? []).filter((card) => !card.deleted);
+  const actionCards = allActionCards.slice(0, 8);
+  const memories = (props.profile.longTermMemories ?? []).filter((memory) => memory.kind !== "creature_self_memory");
+  const candidates = (props.profile.memoryCandidates ?? []).filter((candidate) => candidate.status === "candidate");
+  const latestMemory = [...memories].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0];
+  const [viewerIndex, setViewerIndex] = useState<number>();
+  const viewerIndexRef = useRef(viewerIndex);
+  viewerIndexRef.current = viewerIndex;
   const [nameDraft, setNameDraft] = useState(props.profile.creatureName);
   const [nameBusy, setNameBusy] = useState(false);
   const [nameMessage, setNameMessage] = useState("");
@@ -3740,6 +3758,24 @@ function ProfileView(props: {
       if (petReferencePreview.startsWith("blob:")) URL.revokeObjectURL(petReferencePreview);
     };
   }, [petReferencePreview]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      if (viewerIndexRef.current !== undefined) setViewerIndex(undefined);
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
+
+  function openIllustration(index: number) {
+    window.history.pushState({ ...(window.history.state ?? {}), papoOverlay: "profile-image-viewer" }, "");
+    setViewerIndex(index);
+  }
+
+  function closeIllustration() {
+    if (window.history.state?.papoOverlay === "profile-image-viewer") window.history.back();
+    else setViewerIndex(undefined);
+  }
 
   async function saveName() {
     setNameBusy(true);
@@ -3831,23 +3867,85 @@ function ProfileView(props: {
   }
 
   return (
-    <section className="stack">
-      <div className="panel">
-        <PanelTitle icon={UserRound} title="账号" />
-        <div className="account-card">
+    <section className="profile-hub">
+      <header className="profile-identity">
+        <div className="profile-identity-avatar">
           <AvatarPreview petKind={props.profile.petKind} petProfile={petProfile} state={props.profile.state} dogState={props.profile.dogState} />
-          <div>
-            <strong>{props.profile.creatureName}</strong>
-            <span>User ID：{props.profile.userId}</span>
-            <span>小动物：{petKindLabel(props.profile.petKind)}</span>
-            <span>密码：{props.profile.hasPassword ? "已创建" : "未创建"}</span>
-            <span>默认时间：{papoTimeZone}</span>
-          </div>
         </div>
-        <PushNotificationSettings profile={props.profile} />
-        <AppUpdateSettings />
-        <div className="profile-name-settings">
-          <strong>小动物名字</strong>
+        <div className="profile-identity-copy">
+          <span className="profile-kicker">我的 Papo</span>
+          <h2>{props.profile.creatureName}</h2>
+          <p>{petProfile.displaySpecies} · {papoMoodLabel(props.profile.state)}</p>
+          <small>@{props.profile.userId}</small>
+        </div>
+      </header>
+
+      <section className="profile-stats" aria-label="我的内容概览">
+        <button type="button" onClick={props.onGoMemory}>
+          <strong>{memories.length}</strong>
+          <span>长期记忆</span>
+        </button>
+        <a href="#my-illustrations">
+          <strong>{allIllustrations.length}</strong>
+          <span>画过</span>
+        </a>
+        <a href="#my-actions">
+          <strong>{allActionCards.filter((card) => !card.disabled).length}</strong>
+          <span>动作卡</span>
+        </a>
+      </section>
+
+      <section className="profile-content-section" id="my-illustrations">
+        <ProfileSectionHeading icon={Images} title="画过" meta={`${allIllustrations.length} 张`} />
+        {illustrations.length ? (
+          <div className="profile-illustration-rail">
+            {illustrations.map((item, index) => (
+              <button type="button" key={item.id} onClick={() => openIllustration(index)} aria-label={`查看图片：${item.title}`}>
+                <img src={resolveAssetUrl(item.attachment.url)} alt="" loading="lazy" />
+                <span>{item.title}</span>
+              </button>
+            ))}
+          </div>
+        ) : <ProfileEmptyState icon={Images} text={`${props.profile.creatureName} 画出的图片会收在这里`} />}
+      </section>
+
+      <section className="profile-content-section" id="my-actions">
+        <ProfileSectionHeading icon={Play} title="动作卡" meta={`${allActionCards.filter((card) => !card.disabled).length} 个可用`} />
+        {actionCards.length ? (
+          <div className="profile-action-rail">
+            {actionCards.map((card) => (
+              <article className={card.disabled ? "profile-action-item disabled" : "profile-action-item"} key={card.id}>
+                <video src={resolveAssetUrl(card.video.url)} muted playsInline loop autoPlay preload="metadata" />
+                <div>
+                  <strong>{namedCreatureText(card.title, props.profile.creatureName) || card.title}</strong>
+                  <button type="button" onClick={() => props.onUpdateActionCard(card.id, { disabled: !card.disabled })}>
+                    {card.disabled ? "启用" : "停用"}
+                  </button>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : <ProfileEmptyState icon={Play} text="生成的动作会收在这里" />}
+      </section>
+
+      <button className="profile-memory-summary" type="button" onClick={props.onGoMemory}>
+        <span className="profile-memory-icon"><History size={20} /></span>
+        <span className="profile-memory-copy">
+          <strong>记忆</strong>
+          <small>{latestMemory ? memoryResultLine(latestMemory) : `${props.profile.creatureName} 还在慢慢认识你`}</small>
+        </span>
+        <span className="profile-memory-count">{candidates.length ? `${candidates.length} 条待确认` : `${memories.length} 条长期记忆`}</span>
+        <ChevronRight size={18} />
+      </button>
+
+      <section className="profile-settings-section">
+        <ProfileSectionHeading icon={Sparkles} title={`${props.profile.creatureName} 的设定`} />
+        <details className="profile-setting-group">
+          <summary>
+            <span><UserRound size={18} /><span><strong>名字</strong><small>{props.profile.creatureName}</small></span></span>
+            <ChevronRight size={18} />
+          </summary>
+          <div className="profile-setting-body profile-name-settings">
           <label className="field-label">
             名字
             <input
@@ -3863,8 +3961,15 @@ function ProfileView(props: {
             {nameBusy ? "保存中" : "保存名字"}
           </button>
           {nameMessage ? <small>{nameMessage}</small> : null}
-        </div>
-        <div className="pet-profile-settings">
+          </div>
+        </details>
+
+        <details className="profile-setting-group">
+          <summary>
+            <span><ImagePlus size={18} /><span><strong>形象与性格</strong><small>{petProfile.displaySpecies} · {petProfile.personality}</small></span></span>
+            <ChevronRight size={18} />
+          </summary>
+          <div className="profile-setting-body pet-profile-settings">
           <div className="pet-profile-head">
             <strong>小动物形象</strong>
             <span>{petProfile.displaySpecies}</span>
@@ -3926,8 +4031,15 @@ function ProfileView(props: {
             </button>
           </div>
           {petMessage ? <small>{petMessage}</small> : null}
-        </div>
-        <div className="pet-motion-settings">
+          </div>
+        </details>
+
+        <details className="profile-setting-group">
+          <summary>
+            <span><Play size={18} /><span><strong>生成动作</strong><small>初始动作 {Math.min(initialMotionCount, 4)}/4</small></span></span>
+            <ChevronRight size={18} />
+          </summary>
+          <div className="profile-setting-body pet-motion-settings">
           <div className="pet-profile-head">
             <strong>动作卡</strong>
             <span>初始动作 {Math.min(initialMotionCount, 4)}/4</span>
@@ -3951,8 +4063,28 @@ function ProfileView(props: {
           </div>
           {petProfile.initialMotion?.status === "failed" ? <small>动作生成失败：{petProfile.initialMotion.error}</small> : null}
           {motionMessage ? <small>{motionMessage}</small> : null}
+          </div>
+        </details>
+      </section>
+
+      <section className="profile-settings-section">
+        <ProfileSectionHeading icon={Smartphone} title="设备与服务" />
+        <PushNotificationSettings profile={props.profile} />
+        <AppUpdateSettings />
+      </section>
+
+      <section className="profile-settings-section">
+        <ProfileSectionHeading icon={UserRound} title="账号与安全" />
+        <div className="profile-account-row">
+          <span><strong>账号</strong><small>User ID · {props.profile.userId}</small></span>
+          <span>{props.profile.hasPassword ? "已设密码" : "未设密码"}</span>
         </div>
-        <div className="password-settings">
+        <details className="profile-setting-group">
+          <summary>
+            <span><Save size={18} /><span><strong>{props.profile.hasPassword ? "修改密码" : "创建密码"}</strong><small>保护你的 Papo 和记忆</small></span></span>
+            <ChevronRight size={18} />
+          </summary>
+          <div className="profile-setting-body password-settings">
           <strong>{props.profile.hasPassword ? "修改密码" : "创建密码"}</strong>
           {props.profile.hasPassword ? (
             <label className="field-label">
@@ -3987,14 +4119,33 @@ function ProfileView(props: {
             ) : null}
           </div>
           {passwordMessage ? <small>{passwordMessage}</small> : null}
-        </div>
-        <button onClick={() => void props.onLogout()}>
+          </div>
+        </details>
+        <div className="profile-meta-row"><span>默认时间</span><strong>{papoTimeZone}</strong></div>
+        <button className="profile-logout" onClick={() => void props.onLogout()}>
           <RefreshCcw size={18} />
           退出登录
         </button>
-      </div>
+      </section>
+
+      {viewerIndex !== undefined && illustrations[viewerIndex] ? (
+        <IllustrationViewer item={illustrations[viewerIndex]} onClose={closeIllustration} />
+      ) : null}
     </section>
   );
+}
+
+function ProfileSectionHeading({ icon: Icon, title, meta }: { icon: typeof Check; title: string; meta?: string }) {
+  return (
+    <header className="profile-section-heading">
+      <span><Icon size={18} /><strong>{title}</strong></span>
+      {meta ? <small>{meta}</small> : null}
+    </header>
+  );
+}
+
+function ProfileEmptyState({ icon: Icon, text }: { icon: typeof Check; text: string }) {
+  return <div className="profile-empty"><Icon size={22} /><span>{text}</span></div>;
 }
 
 function AppUpdateSettings() {

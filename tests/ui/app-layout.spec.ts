@@ -100,11 +100,12 @@ test("home developer panel opens and closes without overflowing", async ({ page 
 test("profile can rename the creature and logged-in UI follows the new name", async ({ page }) => {
   await page.goto("/");
 
-  await page.getByRole("button", { name: "看看哪只 Papo 在身边" }).click();
+  await page.locator(".nav").getByRole("button", { name: "我的" }).click();
+  await page.locator(".profile-setting-group").filter({ hasText: "名字" }).locator("summary").click();
   await page.getByLabel("名字").fill("吉祥");
   await page.getByRole("button", { name: "保存名字" }).click();
   await expect(page.getByText("名字已保存")).toBeVisible();
-  await expect(page.locator(".account-card")).toContainText("吉祥");
+  await expect(page.locator(".profile-identity")).toContainText("吉祥");
 
   await page.locator(".nav").getByRole("button", { name: /首页/ }).click();
   await expect(page.getByRole("heading", { level: 1, name: "吉祥" })).toBeVisible();
@@ -118,9 +119,50 @@ test("profile can rename the creature and logged-in UI follows the new name", as
   await expect(page.getByRole("button", { name: "发送给 吉祥" })).toBeVisible();
 });
 
+test("my tab organizes content, companion settings, and account settings", async ({ page }, testInfo) => {
+  await page.goto("/");
+
+  const nav = page.locator(".nav");
+  await expect(nav.getByRole("button")).toHaveCount(4);
+  await expect(nav.getByRole("button", { name: "我的" })).toBeVisible();
+  await nav.getByRole("button", { name: "我的" }).click();
+
+  const hub = page.locator(".profile-hub");
+  await expect(page.getByRole("heading", { level: 1, name: "我的" })).toBeVisible();
+  await expect(hub).toContainText("@demo");
+  await expect(hub.getByRole("heading", { name: "Papo" })).toBeVisible();
+  await expect(hub.getByText("画过", { exact: true }).first()).toBeVisible();
+  await expect(hub.getByText("动作卡", { exact: true }).first()).toBeVisible();
+  await expect(hub.locator(".profile-illustration-rail img")).toBeVisible();
+  await expect(hub.locator(".profile-action-item video")).toBeVisible();
+  await expect(hub.getByText("设备与服务")).toBeVisible();
+  await expect(hub.getByText("账号与安全")).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath("my-hub.png"), fullPage: true });
+
+  await hub.getByRole("button", { name: /查看图片：今天的泳池小画/ }).click();
+  const viewer = page.getByRole("dialog", { name: /查看图片：今天的泳池小画/ });
+  await expect(viewer).toBeVisible();
+  await page.goBack();
+  await expect(viewer).toBeHidden();
+  await expect(hub).toBeVisible();
+
+  const actionItem = hub.locator(".profile-action-item").first();
+  await actionItem.getByRole("button", { name: "停用" }).click();
+  await expect(actionItem).toHaveClass(/disabled/);
+  await actionItem.getByRole("button", { name: "启用" }).click();
+  await expect(actionItem).not.toHaveClass(/disabled/);
+
+  await hub.locator(".profile-setting-group").filter({ hasText: "名字" }).locator("summary").click();
+  await expect(hub.getByLabel("名字")).toBeVisible();
+  await hub.locator(".profile-setting-group").filter({ hasText: "形象与性格" }).locator("summary").click();
+  await expect(hub.getByText("你想把它养成什么样")).toBeVisible();
+  await hub.locator(".profile-memory-summary").click();
+  await expect(page.getByRole("heading", { level: 1, name: "Papo 记得的生活" })).toBeVisible();
+});
+
 test("profile checks and exposes the latest Android APK", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "看看哪只 Papo 在身边" }).click();
+  await page.locator(".nav").getByRole("button", { name: "我的" }).click();
 
   const updater = page.locator(".app-update-settings");
   await expect(updater).toContainText("Android 最新版 0.3.1");
@@ -131,7 +173,7 @@ test("profile checks and exposes the latest Android APK", async ({ page }) => {
 test("installed Android detects and opens the latest update", async ({ page }) => {
   await installMockAndroidBridge(page, { versionName: "0.2.1", versionCode: 3 });
   await page.goto("/");
-  await page.getByRole("button", { name: "看看哪只 Papo 在身边" }).click();
+  await page.locator(".nav").getByRole("button", { name: "我的" }).click();
 
   const updater = page.locator(".app-update-settings");
   await expect(updater).toContainText("当前 0.2.1，可更新到 0.3.1");
@@ -510,6 +552,11 @@ async function installMockApi(page: Page) {
       await json(route, {
         profiles: [{ userId: profile.userId, creatureName: profile.creatureName, createdAt: profile.createdAt }]
       });
+      return;
+    }
+
+    if (path === "/api/push/config" && route.request().method() === "GET") {
+      await json(route, { enabled: false });
       return;
     }
 
