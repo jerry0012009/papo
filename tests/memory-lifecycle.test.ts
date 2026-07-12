@@ -200,6 +200,15 @@ test("policy 5 selectively redraws symbolic screen prompts without redrawing com
   assert.equal(profile.jobs?.some((job) => job.memoryId === "ltm_good_scene"), false);
 });
 
+test("negative no-icons and no-text guards remain valid visual prompts", async () => {
+  const profile = createCreatureProfile({ userId: "memory-negative-visual-guard", creatureName: "Papo" });
+  const provider = providerWith(() => ({
+    shortTitle: "自然交流", narrative: "我记得大家自然地聊了起来。", visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "手绘具体生活场景",
+    imagePrompt: "A warm hand-drawn watercolor scene with natural expressive faces, visible paper texture, no animals, no icons, no text, no logo.", relatedMemoryIds: [], needsClientReferences: false
+  }));
+  await assert.doesNotReject(() => planMemoryVisual(profile, memory("ltm_negative_guard", "一次自然交流"), provider));
+});
+
 test("persistent memory jobs retry failures and expose a terminal visual error without replacing the old image", async () => {
   const store = new MemoryProfileStore();
   const profile = await store.createProfile({ userId: "memory-retry", creatureName: "Papo" });

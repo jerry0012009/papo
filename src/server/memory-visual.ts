@@ -39,7 +39,7 @@ export async function planMemoryVisual(profile: CreatureProfile, memory: LongTer
 
 function validatePaintedMemoryPrompt(prompt: string) {
   const paintedMedium = /hand[- ]drawn|hand[- ]painted|gouache|watercolou?r|colored[- ]pencil|sketchbook|pastel|ink[- ]wash|comic|illustration|蜡笔|水彩|水粉|彩铅|手绘|漫画|插画|速写/i;
-  const abstractInfographic = /\b(vector|infographic|commercial app style|corporate illustration|interconnected nodes?|neural network|icons?|pictograms?|symbols?|speech bubbles?|thought clouds?|flow arrows?|AI[- ]related)\b|互联节点|神经网络|图标|符号|对话气泡|流程箭头|商业化移动应用|抽象舞台|发光线条|渐变背景/i;
+  const abstractInfographic = /\b(vector|infographic|commercial app style|corporate illustration|interconnected nodes?|neural network|speech bubbles?|thought clouds?|flow arrows?|AI[- ]related)\b|互联节点|神经网络|对话气泡|流程箭头|商业化移动应用|抽象舞台|发光线条|渐变背景/i;
   const incompatibleMedium = /\b(oil[- ]paint(?:ing|ed)?|photorealistic|photo[- ]realistic|3d render(?:ing)?)\b|油画|厚涂|摄影写实|照片级|3D渲染/i;
   if (!paintedMedium.test(prompt)) throw new Error("imaginative_illustration must name a tactile painted medium");
   if (abstractInfographic.test(prompt)) throw new Error("memory image prompt uses forbidden infographic language");

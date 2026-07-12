@@ -9,7 +9,14 @@ export function memoryVisualNeedsPolicyMigration(memory: LongTermMemory) {
   const version = memory.visualPolicyVersion ?? 1;
   if (version < 4) return true;
   if (version >= MEMORY_VISUAL_POLICY_VERSION) return false;
-  return /\b(?:icons?|pictograms?|symbols?|text|letters?|words?|labels?|captions?|typography|infographic|diagram|logo|AI[- ]related)\b|图标|符号|文字|字母|单词|标签|标题|字幕|排版|信息图|示意图|标识/i.test(memory.visualPrompt ?? "");
+  return hasForbiddenVisualContent(memory.visualPrompt ?? "");
+}
+
+function hasForbiddenVisualContent(prompt: string) {
+  const withoutNegativeGuards = prompt
+    .replace(/\b(?:no|without|avoid|exclude)\s+(?:any\s+)?(?:readable\s+)?(?:icons?|pictograms?|symbols?|text|letters?|words?|labels?|captions?|typography|infographics?|diagrams?|logos?)(?:\s*(?:,|and|or)\s*(?:no\s+|without\s+)?(?:any\s+)?(?:readable\s+)?(?:icons?|pictograms?|symbols?|text|letters?|words?|labels?|captions?|typography|infographics?|diagrams?|logos?))*\b/gi, "")
+    .replace(/(?:无|不要|禁止|不出现|避免)(?:任何)?(?:可读的)?(?:图标|符号|文字|字母|单词|标签|标题|字幕|排版|信息图|示意图|标识)(?:[、，和或]*(?:无|不要|禁止|不出现|避免)?(?:任何)?(?:可读的)?(?:图标|符号|文字|字母|单词|标签|标题|字幕|排版|信息图|示意图|标识))*/g, "");
+  return /\b(?:icons?|pictograms?|symbols?|text|letters?|words?|labels?|captions?|typography|infographic|diagram|logo|AI[- ]related)\b|图标|符号|文字|字母|单词|标签|标题|字幕|排版|信息图|示意图|标识/i.test(withoutNegativeGuards);
 }
 
 export function upsertLongTermMemory(
