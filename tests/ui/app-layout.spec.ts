@@ -861,6 +861,19 @@ test("candidate memory inbox keeps visual hierarchy with and without artwork", a
   await page.screenshot({ path: testInfo.outputPath(`memory-candidate-inbox-${testInfo.project.name}.png`), fullPage: true });
 });
 
+test("memory lifecycle failures never appear as chat reply failures", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("papo:testProfileOverride", JSON.stringify({
+    jobs: [
+      { id: "candidate-preview-failed", turnId: "candidate_lifecycle_cand-1", requestId: "candidate_lifecycle_cand-1", type: "candidate_visual", stage: "action", status: "failed", attempt: 2, maxAttempts: 2, retryable: true, createdAt: "2026-07-07T12:00:00.000Z", updatedAt: "2026-07-07T12:01:00.000Z", sourceIds: ["cand-1"], candidateId: "cand-1", error: "provider unavailable" },
+      { id: "memory-preview-failed", turnId: "memory_lifecycle_mem-1", requestId: "memory_lifecycle_mem-1", type: "memory_enrichment", stage: "action", status: "failed", attempt: 3, maxAttempts: 3, retryable: true, createdAt: "2026-07-07T12:00:00.000Z", updatedAt: "2026-07-07T12:01:00.000Z", sourceIds: ["mem-1"], memoryId: "mem-1", error: "provider unavailable" }
+    ]
+  })));
+  await page.goto("/");
+  await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
+  await expect(page.locator(".conversation-work.failed")).toHaveCount(0);
+  await expect(page.getByText(/回复失败：provider unavailable/)).toHaveCount(0);
+});
+
 async function installMockApi(page: Page) {
   let profile = makeProfile();
 

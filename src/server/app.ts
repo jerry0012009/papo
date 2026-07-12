@@ -485,10 +485,16 @@ export function createApp(input: {
       await store.updateProfile(userId, (latest) => {
         const target = latest.memoryCandidates.find((item) => item.id === candidate.id);
         if (!target) return;
-        target.previewStatus = "failed";
-        target.previewError = error instanceof Error ? error.message.slice(0, 300) : "Unknown candidate preview error";
+        const terminal = job.attempt >= job.maxAttempts;
+        target.previewStatus = terminal ? "not_needed" : "failed";
+        target.previewError = terminal ? undefined : error instanceof Error ? error.message.slice(0, 300) : "Unknown candidate preview error";
+        if (terminal) {
+          target.previewMode = "no_visual";
+          target.previewPapoPresence = "absent";
+          target.previewPlanReason = "可选预览暂不可用，继续使用文字候选";
+        }
         target.previewUpdatedAt = new Date().toISOString();
-        if (target.status !== "promoted" || job.attempt < job.maxAttempts) return;
+        if (target.status !== "promoted" || !terminal) return;
         const memory = latest.longTermMemories.find((item) => item.sourceEpisodeId === target.sourceEpisodeId && item.weight > 0);
         if (!memory) return;
         memory.enrichmentStatus = "pending";

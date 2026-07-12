@@ -4643,8 +4643,9 @@ function HermesTaskNotice({ profile }: { profile: CreatureProfile }) {
 }
 
 function ConversationWorkIndicator({ profile }: { profile: CreatureProfile }) {
-  const active = (profile.jobs ?? []).filter((job) => job.status === "queued" || job.status === "running");
-  const failed = (profile.jobs ?? []).filter((job) => job.status === "failed").slice(0, 2);
+  const conversationJobs = (profile.jobs ?? []).filter((job) => job.type !== "memory_enrichment" && job.type !== "candidate_visual");
+  const active = conversationJobs.filter((job) => job.status === "queued" || job.status === "running");
+  const failed = conversationJobs.filter((job) => job.status === "failed").slice(0, 2);
   if (!active.length && !failed.length) return null;
   const byTurn = new Map<string, typeof active>();
   for (const job of active) byTurn.set(job.turnId, [...(byTurn.get(job.turnId) ?? []), job]);
