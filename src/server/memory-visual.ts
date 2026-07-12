@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { clientContextFor } from "../core/client-document";
-import { memoryShortTitle } from "../core/memory";
+import { MEMORY_VISUAL_POLICY_VERSION, memoryShortTitle } from "../core/memory";
 import type { ImageReference, ModelProvider } from "../core/provider";
 import type { CreatureProfile, LongTermMemory, MediaAttachment } from "../core/types";
 
@@ -39,7 +39,7 @@ export async function planMemoryVisual(profile: CreatureProfile, memory: LongTer
 
 function validatePaintedMemoryPrompt(prompt: string) {
   const paintedMedium = /hand[- ]drawn|hand[- ]painted|gouache|watercolou?r|colored[- ]pencil|sketchbook|pastel|ink[- ]wash|comic|illustration|蜡笔|水彩|水粉|彩铅|手绘|漫画|插画|速写/i;
-  const abstractInfographic = /\b(vector|infographic|commercial app style|corporate illustration|interconnected nodes?|neural network|floating icons?|speech bubbles?|thought clouds?|flow arrows?)\b|互联节点|神经网络|漂浮图标|对话气泡|流程箭头|商业化移动应用|抽象舞台|发光线条|渐变背景/i;
+  const abstractInfographic = /\b(vector|infographic|commercial app style|corporate illustration|interconnected nodes?|neural network|icons?|pictograms?|symbols?|speech bubbles?|thought clouds?|flow arrows?|AI[- ]related)\b|互联节点|神经网络|图标|符号|对话气泡|流程箭头|商业化移动应用|抽象舞台|发光线条|渐变背景/i;
   const incompatibleMedium = /\b(oil[- ]paint(?:ing|ed)?|photorealistic|photo[- ]realistic|3d render(?:ing)?)\b|油画|厚涂|摄影写实|照片级|3D渲染/i;
   if (!paintedMedium.test(prompt)) throw new Error("imaginative_illustration must name a tactile painted medium");
   if (abstractInfographic.test(prompt)) throw new Error("memory image prompt uses forbidden infographic language");
@@ -78,7 +78,7 @@ export function applyMemoryVisualPlan(memory: LongTermMemory, plan: MemoryVisual
   memory.visualMode = plan.visualMode;
   memory.papoPresence = plan.papoPresence;
   memory.visualPlanReason = plan.visualReason;
-  memory.visualPolicyVersion = 4;
+  memory.visualPolicyVersion = MEMORY_VISUAL_POLICY_VERSION;
 }
 
 function retrieveRelatedMemories(profile: CreatureProfile, target: LongTermMemory) {
@@ -124,6 +124,7 @@ function memoryVisualPlanPrompt(profile: CreatureProfile, memory: LongTermMemory
 - 画面必须有一个具体可观看的生活场景、视角和主体，根据这条记忆本身选择构图，不要把某一类历史事件当成模板反复套用。
 - 人物可以自然地呈现插画化的面部、表情、姿态和交流，不要刻意糊脸、抹去五官或把所有人强制画成背影和剪影。没有本人参考图时，只需避免声称画中人精确还原某个真实身份；概括的插画人物不构成身份还原。
 - 禁止用互联节点、神经网络、漂浮图标、对话气泡、灯泡、播放按钮、流程箭头、抽象舞台、发光线条、渐变背景等符号拼贴来代替生活画面。
+- 画面里的屏幕、白板、海报和手机只能作为生活场景中的普通物件，保持空白或只有不可辨认的色块；禁止出现任何图标、概念符号、可读文字、字母、数字、标题或品牌标识。
 - 禁止出现 vector、3D render、commercial app style、corporate illustration、infographic、UI、logo、文字或水印。
 - 如果没有足够证据形成具体画面，选择 no_visual，不要退回抽象概念封面。
 - 知识、工作、日常、旅行和关系记忆都使用同一判断：画实际经历或合理想象出的生活瞬间，不画概念本身，也不预设固定会场构图。

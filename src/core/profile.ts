@@ -1,5 +1,5 @@
 import { makeId } from "./ids";
-import { enqueueCandidateVisualJobs, enqueueMemoryEnrichmentJob, MEMORY_VISUAL_POLICY_VERSION, memoryContentFingerprint, memoryShortTitle } from "./memory";
+import { enqueueCandidateVisualJobs, enqueueMemoryEnrichmentJob, MEMORY_VISUAL_POLICY_VERSION, memoryContentFingerprint, memoryShortTitle, memoryVisualNeedsPolicyMigration } from "./memory";
 import { normalizeDogState, seedDogState } from "./dog-states";
 import { normalizePetKind, petKindMeta } from "./pet-kinds";
 import { initialState } from "./state";
@@ -186,7 +186,7 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
     memory.contentRevision = Math.max(1, memory.contentRevision ?? 1);
     const migrateAbstractCover = memory.weight > 0
       && memory.visualMode !== "no_visual"
-      && (memory.visualPolicyVersion ?? 1) < MEMORY_VISUAL_POLICY_VERSION;
+      && memoryVisualNeedsPolicyMigration(memory);
     memory.visualPolicyVersion = MEMORY_VISUAL_POLICY_VERSION;
     if (migrateAbstractCover) {
       memory.contentRevision += 1;

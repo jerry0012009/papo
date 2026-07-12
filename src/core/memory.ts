@@ -3,7 +3,14 @@ import { hasHighPrivacyText } from "./privacy";
 import { summarizeText } from "./text";
 import type { AttentionEvent, ConversationJobRecord, CreatureProfile, EpisodeMemory, LongTermMemory, MemoryCandidate } from "./types";
 
-export const MEMORY_VISUAL_POLICY_VERSION = 4;
+export const MEMORY_VISUAL_POLICY_VERSION = 5;
+
+export function memoryVisualNeedsPolicyMigration(memory: LongTermMemory) {
+  const version = memory.visualPolicyVersion ?? 1;
+  if (version < 4) return true;
+  if (version >= MEMORY_VISUAL_POLICY_VERSION) return false;
+  return /\b(?:icons?|pictograms?|symbols?|text|letters?|words?|labels?|captions?|typography|infographic|diagram|logo|AI[- ]related)\b|图标|符号|文字|字母|单词|标签|标题|字幕|排版|信息图|示意图|标识/i.test(memory.visualPrompt ?? "");
+}
 
 export function upsertLongTermMemory(
   profile: CreatureProfile,

@@ -184,6 +184,22 @@ test("legacy Papo mascot covers also migrate into the shared hand-drawn album st
   assert.equal(profile.jobs?.some((job) => job.memoryId === "ltm_legacy_papo" && job.memoryRevision === 2), true);
 });
 
+test("policy 5 selectively redraws symbolic screen prompts without redrawing compliant policy 4 art", () => {
+  const profile = createCreatureProfile({ userId: "memory-symbol-screen-migration", creatureName: "Papo" });
+  profile.longTermMemories.push({
+    ...memory("ltm_bad_screen", "一次技术分享"), visualMode: "imaginative_illustration", papoPresence: "absent", visualPolicyVersion: 4,
+    visualPrompt: "A hand-drawn talk with AI-related icons on a projection screen, no text.", visual: attachment("bad_screen", "带概念图标的旧图"), visualStatus: "ready", contentRevision: 1, enrichedRevision: 1, enrichmentStatus: "completed"
+  }, {
+    ...memory("ltm_good_scene", "一次雨后散步"), visualMode: "imaginative_illustration", papoPresence: "absent", visualPolicyVersion: 4,
+    visualPrompt: "A warm hand-drawn watercolor walk after rain, visible paper texture, no animals.", visual: attachment("good_scene", "合格手绘图"), visualStatus: "ready", contentRevision: 1, enrichedRevision: 1, enrichmentStatus: "completed"
+  });
+  normalizeCreatureProfile(profile);
+  assert.equal(profile.longTermMemories.find((item) => item.id === "ltm_bad_screen")?.contentRevision, 2);
+  assert.equal(profile.longTermMemories.find((item) => item.id === "ltm_good_scene")?.contentRevision, 1);
+  assert.equal(profile.jobs?.some((job) => job.memoryId === "ltm_bad_screen"), true);
+  assert.equal(profile.jobs?.some((job) => job.memoryId === "ltm_good_scene"), false);
+});
+
 test("persistent memory jobs retry failures and expose a terminal visual error without replacing the old image", async () => {
   const store = new MemoryProfileStore();
   const profile = await store.createProfile({ userId: "memory-retry", creatureName: "Papo" });
