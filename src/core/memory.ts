@@ -2,6 +2,8 @@ import { makeId } from "./ids";
 import { summarizeText } from "./text";
 import type { AttentionEvent, ConversationJobRecord, CreatureProfile, EpisodeMemory, LongTermMemory, MemoryCandidate } from "./types";
 
+export const MEMORY_VISUAL_POLICY_VERSION = 2;
+
 export function upsertLongTermMemory(
   profile: CreatureProfile,
   incoming: LongTermMemory,
@@ -21,6 +23,7 @@ export function upsertLongTermMemory(
     visualMode: incoming.visualMode ?? existing?.visualMode,
     papoPresence: incoming.papoPresence ?? existing?.papoPresence,
     visualPlanReason: incoming.visualPlanReason ?? existing?.visualPlanReason,
+    visualPolicyVersion: incoming.visualPolicyVersion ?? existing?.visualPolicyVersion ?? MEMORY_VISUAL_POLICY_VERSION,
     narrative: incoming.narrative ?? existing?.narrative,
     attachments: incoming.attachments ?? existing?.attachments ?? [],
     tags: incoming.tags ?? existing?.tags ?? []

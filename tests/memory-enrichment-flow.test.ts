@@ -46,7 +46,7 @@ const provider: ModelProvider = {
       return {
         shortTitle: revised ? "雨后散步" : "傍晚散步",
         narrative: revised ? "我记得 Jerry 喜欢在雨后沿着街道慢慢散步。" : "我记得 Jerry 喜欢在傍晚出去走一走。",
-        imagePrompt: revised ? "Square hand-drawn memory of Papo and Jerry walking on a street after rain, no text." : "Square hand-drawn memory of Papo and Jerry taking an evening walk, no text.",
+        imagePrompt: revised ? "Square hand-painted gouache memory of Papo and Jerry walking on a street after rain, visible brush texture, no text." : "Square hand-painted gouache memory of Papo and Jerry taking an evening walk, visible brush texture, no text.",
         visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "没有现场照片，使用克制的插画表达",
         relatedMemoryIds: [], needsClientReferences: false
       };

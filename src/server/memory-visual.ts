@@ -7,7 +7,7 @@ import type { CreatureProfile, LongTermMemory, MediaAttachment } from "../core/t
 const planSchema = z.object({
   shortTitle: z.string().trim().min(2).max(24).transform((title) => [...title].slice(0, 8).join("")),
   narrative: z.string().trim().min(8).max(500),
-  visualMode: z.enum(["grounded_scene", "imaginative_illustration", "symbolic_cover", "no_visual"]),
+  visualMode: z.enum(["grounded_scene", "imaginative_illustration", "no_visual"]),
   papoPresence: z.enum(["required", "optional", "absent"]),
   visualReason: z.string().trim().min(4).max(360),
   imagePrompt: z.preprocess((value) => value === null || value === "" ? undefined : value, z.string().trim().min(20).max(2200).optional()),
@@ -30,7 +30,15 @@ export async function planMemoryVisual(profile: CreatureProfile, memory: LongTer
   const plan = { ...parsed.data, relatedMemoryIds: parsed.data.relatedMemoryIds.filter((id) => allowed.has(id)) };
   const hasGrounding = Boolean(memory.attachments?.some((item) => item.kind === "image"));
   if (plan.visualMode === "grounded_scene" && !hasGrounding) throw new Error("grounded_scene requires a real image attachment");
+  if (plan.visualMode === "imaginative_illustration") validatePaintedMemoryPrompt(plan.imagePrompt ?? "");
   return plan;
+}
+
+function validatePaintedMemoryPrompt(prompt: string) {
+  const paintedMedium = /hand[- ]painted|gouache|watercolou?r|colored[- ]pencil|sketchbook|oil[- ]paint|pastel|ink[- ]wash|蜡笔|水彩|水粉|彩铅|油画|手绘|速写/i;
+  const abstractInfographic = /\b(vector|infographic|commercial app style|corporate illustration|interconnected nodes?|neural network|floating icons?|speech bubbles?|thought clouds?|flow arrows?)\b|互联节点|神经网络|漂浮图标|对话气泡|流程箭头|商业化移动应用|抽象舞台|发光线条|渐变背景/i;
+  if (!paintedMedium.test(prompt)) throw new Error("imaginative_illustration must name a tactile painted medium");
+  if (abstractInfographic.test(prompt)) throw new Error("memory image prompt uses forbidden infographic language");
 }
 
 export async function memoryVisualReferences(
@@ -65,6 +73,7 @@ export function applyMemoryVisualPlan(memory: LongTermMemory, plan: MemoryVisual
   memory.visualMode = plan.visualMode;
   memory.papoPresence = plan.papoPresence;
   memory.visualPlanReason = plan.visualReason;
+  memory.visualPolicyVersion = 2;
 }
 
 function retrieveRelatedMemories(profile: CreatureProfile, target: LongTermMemory) {
@@ -94,7 +103,7 @@ function memoryVisualPlanPrompt(profile: CreatureProfile, memory: LongTermMemory
     .filter((item) => item.targetId === memory.id && item.inputText?.trim())
     .slice(0, 5)
     .map((item) => ({ id: item.id, inputText: item.inputText, effect: item.effect }));
-  return `你是 ${profile.creatureName} 的共同回忆编辑和视觉导演。先整理 narrative，再独立判断这条记忆是否值得生成图片；不要为了统一版式机械生成图片或机械加入小动物。
+  return `你是 ${profile.creatureName} 的共同回忆编辑和视觉导演，也是生活画面导演。先整理 narrative，再判断这段记忆是否有一个值得被看见的具体画面。图片必须像小动物亲眼看到的生活，或像小动物在画纸上想象的生活；禁止做通用 AI 信息图、商业封面或概念图。
 
 写作要求：
 - narrative 使用 ${profile.creatureName} 这个小动物观察者的第一人称视角，像它带着理解和感情在回想共同经历。
@@ -103,14 +112,18 @@ function memoryVisualPlanPrompt(profile: CreatureProfile, memory: LongTermMemory
 - shortTitle 2-8 个中文字符，适合相册式缩略卡。
 
 视觉要求：
-- visualMode 必须选择 grounded_scene、imaginative_illustration、symbolic_cover、no_visual。
-- 有真实照片附件且能表达记忆核心时优先 grounded_scene，并优先使用真实素材；不得伪造照片里没有的人物、地点和现场细节。
-- 没有真实照片时可以 imaginative_illustration 或 symbolic_cover，但必须明确是插画/象征表达，不伪造具体人物长相、真实地点或现场细节，不包装成真实照片。
-- 讲座、会议等知识型记忆默认优先 symbolic_cover 或 imaginative_illustration，papoPresence 通常 optional 或 absent。
+- visualMode 只能选择 grounded_scene、imaginative_illustration、no_visual。
+- grounded_scene 只用于有真实照片附件的记忆。以照片中的真实人物、物件、空间和光线为依据，不得补造照片外的现场细节。
+- 没有真实照片时只能选择 imaginative_illustration 或 no_visual。imaginative_illustration 必须是有笔触、有材质、明确非摄影的绘画画面，并在 prompt 中直接写明 hand-painted、gouache、watercolor、colored-pencil 或 sketchbook 等具体绘画媒介。
+- 画面必须有一个具体可观看的生活场景、视角和主体。讲座可以画成从听众后方望向讲者与投影幕的手绘现场，会议可以画成桌边交谈的绘画场景；人物只用无身份特征的背影、剪影或概括造型，不虚构真实长相和场地特征。
+- 禁止用互联节点、神经网络、漂浮图标、对话气泡、灯泡、播放按钮、流程箭头、抽象舞台、发光线条、渐变背景等符号拼贴来代替生活画面。
+- 禁止出现 vector、3D render、commercial app style、corporate illustration、infographic、UI、logo、文字或水印。
+- 如果没有足够证据形成具体画面，选择 no_visual，不要退回抽象概念封面。
+- 讲座、会议等知识型记忆通常使用 imaginative_illustration，papoPresence 通常 absent；画的是被听见和经历的现场，而不是知识概念本身。
 - 日常陪伴、旅行、吃饭和关系型共同经历，只有当小动物确实是画面叙事的一部分时才用 papoPresence=required。
 - no_visual 表示这条记忆不值得配图，此时不返回 imagePrompt，papoPresence 只能 optional 或 absent。
 - papoPresence=required 表示明确让 ${profile.creatureName} 出现在画面，系统才会加入小动物参考图；optional/absent 不加入参考图。
-- 非 no_visual 时生成无文字的正方形插画或封面，画面先表达记忆核心，不做通用装饰图。
+- 非 no_visual 时生成无文字的正方形生活画面；画面先表达经历，不做封面排版或通用装饰图。
 - 画风必须与 ${profile.creatureName} 当前 profile 的 visualStyle 一致。
 - 只有当回忆明确涉及使用者本人且 related memories 含自我相关照片时，needsClientReferences=true；不要为了凑参考图使用无关人像。
 - relatedMemoryIds 只能从 related_memories 选择，且只选生成这张图真正需要的记忆。
@@ -123,5 +136,5 @@ target_feedback：${JSON.stringify(feedback)}
 related_memories：${JSON.stringify(related.map((item) => ({ id: item.id, text: item.text, shortTitle: item.shortTitle, tags: item.tags, hasImage: Boolean(item.visual || item.attachments?.some((a) => a.kind === "image")) })))}
 
 返回严格 JSON：
-{"shortTitle":"雨天散步","narrative":"我记得那天下着小雨，你走得不快。","visualMode":"grounded_scene","papoPresence":"absent","visualReason":"真实照片足以表达这段经历","imagePrompt":"...","relatedMemoryIds":[],"needsClientReferences":false}`;
+{"shortTitle":"路演现场","narrative":"我记得陪你听完那场路演。","visualMode":"imaginative_illustration","papoPresence":"absent","visualReason":"没有现场照片，用无身份特征的手绘观看视角保留这次经历","imagePrompt":"A hand-painted gouache memory scene viewed from the back row of a small talk, simplified anonymous audience backs facing a speaker silhouette and a softly lit blank projection screen, visible brush texture, clearly illustrated and non-photographic, no icons, no diagrams, no text, no logo","relatedMemoryIds":[],"needsClientReferences":false}`;
 }

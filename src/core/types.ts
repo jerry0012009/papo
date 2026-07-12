@@ -373,6 +373,7 @@ export interface LongTermMemory {
   visualMode?: "grounded_scene" | "imaginative_illustration" | "symbolic_cover" | "no_visual";
   papoPresence?: "required" | "optional" | "absent";
   visualPlanReason?: string;
+  visualPolicyVersion?: number;
   sourceEpisodeId?: string;
   consolidatedBecause?: string;
   weight: number;

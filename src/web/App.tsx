@@ -133,6 +133,18 @@ const LOCAL_PASSWORD_PREFIX = "papo:password:";
 const LOCAL_PROFILE_SNAPSHOT_KEY = "papo:profileSnapshot";
 const PUBLIC_BASE_URL = import.meta.env.BASE_URL ?? "/";
 const IMAGE_UPLOAD_TARGET_BYTES = 3_500_000;
+
+function initialAppRoute(): { tab: Tab; memoryId?: string } {
+  const params = new URLSearchParams(window.location.search);
+  const open = params.get("open");
+  const tab: Tab = open === "chat" || open === "memory" || open === "profile" ? open : "home";
+  const memoryId = tab === "memory" ? params.get("memory")?.trim() || undefined : undefined;
+  return { tab, memoryId };
+}
+
+function requestMemoryNavigation(memoryId: string) {
+  window.dispatchEvent(new CustomEvent("papo:open-memory", { detail: memoryId }));
+}
 const IMAGE_UPLOAD_HARD_LIMIT_BYTES = 11_500_000;
 
 interface AudioSliceMeta {
@@ -159,7 +171,8 @@ type StagedChatSegment = StreamSegment & {
 };
 
 export function App() {
-  const [tab, setTab] = useState<Tab>(() => new URLSearchParams(window.location.search).get("open") === "chat" ? "chat" : "home");
+  const [tab, setTab] = useState<Tab>(() => initialAppRoute().tab);
+  const [targetMemoryId, setTargetMemoryId] = useState<string | undefined>(() => initialAppRoute().memoryId);
   const [profile, setProfile] = useState<CreatureProfile>();
   const [loadingPetKind] = useState(() => randomRegistrationPetKind());
   const [loadingProfileSnapshot, setLoadingProfileSnapshot] = useState<Partial<CreatureProfile> | undefined>(() => readProfileSnapshot());
@@ -220,6 +233,59 @@ export function App() {
     () => Boolean(profile?.hermes?.tasks?.some((task) => task.status === "pending" || task.status === "sent")),
     [profile?.hermes?.tasks]
   );
+
+  const navigateTab = useCallback((nextTab: Tab, push = true) => {
+    setTab(nextTab);
+    setTargetMemoryId(undefined);
+    const url = new URL(window.location.href);
+    if (nextTab === "home") url.searchParams.delete("open");
+    else url.searchParams.set("open", nextTab);
+    url.searchParams.delete("memory");
+    window.history[push ? "pushState" : "replaceState"]({ ...(window.history.state ?? {}), papoTab: nextTab }, "", url);
+  }, []);
+
+  const openMemory = useCallback((memoryId?: string, push = true) => {
+    setTab("memory");
+    setTargetMemoryId(memoryId);
+    const url = new URL(window.location.href);
+    url.searchParams.set("open", "memory");
+    if (memoryId) url.searchParams.set("memory", memoryId);
+    else url.searchParams.delete("memory");
+    if (push && memoryId && window.history.state?.papoTab !== "memory") {
+      const listUrl = new URL(url);
+      listUrl.searchParams.delete("memory");
+      window.history.pushState({ ...(window.history.state ?? {}), papoTab: "memory", memoryId: undefined }, "", listUrl);
+    }
+    window.history[push ? "pushState" : "replaceState"]({ ...(window.history.state ?? {}), papoTab: "memory", memoryId }, "", url);
+  }, []);
+
+  useEffect(() => {
+    if (!window.history.state?.papoTab) {
+      const route = initialAppRoute();
+      if (route.tab === "memory" && route.memoryId) {
+        const detailUrl = new URL(window.location.href);
+        const listUrl = new URL(detailUrl);
+        listUrl.searchParams.delete("memory");
+        window.history.replaceState({ ...(window.history.state ?? {}), papoTab: "memory", memoryId: undefined }, "", listUrl);
+        window.history.pushState({ ...(window.history.state ?? {}), papoTab: "memory", memoryId: route.memoryId }, "", detailUrl);
+      } else {
+        window.history.replaceState({ ...(window.history.state ?? {}), papoTab: route.tab, memoryId: route.memoryId }, "");
+      }
+    }
+    const restoreRoute = () => {
+      const state = window.history.state as { papoTab?: Tab; memoryId?: string } | null;
+      if (!state?.papoTab) return;
+      setTab(state.papoTab);
+      setTargetMemoryId(state.papoTab === "memory" ? state.memoryId : undefined);
+    };
+    const handleMemoryLink = (event: Event) => openMemory((event as CustomEvent<string>).detail);
+    window.addEventListener("popstate", restoreRoute);
+    window.addEventListener("papo:open-memory", handleMemoryLink);
+    return () => {
+      window.removeEventListener("popstate", restoreRoute);
+      window.removeEventListener("papo:open-memory", handleMemoryLink);
+    };
+  }, [openMemory]);
   const pendingActionCards = useMemo(() => countPendingActionCards(profile), [profile?.conversation, profile?.emergenceHistory]);
   const pendingPetMotions = profile ? petProfileFor(profile).initialMotion?.status === "pending" : false;
 
@@ -1318,10 +1384,10 @@ export function App() {
             </div>
           </div>
           <nav className="nav">
-            <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => setTab("home")} />
-            <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" unreadCount={hasUnreadPapoMessage ? unreadPapoCount : 0} onClick={() => setTab("chat")} />
-            <NavButton active={tab === "memory"} icon={History} label="记忆" onClick={() => setTab("memory")} />
-            <NavButton active={tab === "profile"} icon={UserRound} label="我的" onClick={() => setTab("profile")} />
+            <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => navigateTab("home")} />
+            <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" unreadCount={hasUnreadPapoMessage ? unreadPapoCount : 0} onClick={() => navigateTab("chat")} />
+            <NavButton active={tab === "memory"} icon={History} label="记忆" onClick={() => navigateTab("memory")} />
+            <NavButton active={tab === "profile"} icon={UserRound} label="我的" onClick={() => navigateTab("profile")} />
           </nav>
         </aside>
 
@@ -1381,7 +1447,7 @@ export function App() {
                 onStopListening={stopListening}
               />
             ) : null}
-            {tab === "memory" ? <MemoryView profile={profile} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} onDream={runDreaming} busy={busy} feedbackPendingKey={feedbackPendingKey} /> : null}
+            {tab === "memory" ? <MemoryView profile={profile} targetMemoryId={targetMemoryId} onOpenMemory={openMemory} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} onDream={runDreaming} busy={busy} feedbackPendingKey={feedbackPendingKey} /> : null}
             {tab === "profile" ? (
               <ProfileView
                 profile={profile}
@@ -1390,7 +1456,7 @@ export function App() {
                 onChangePassword={changePassword}
                 onChangePetProfile={changePetProfile}
                 onGenerateInitialActionCards={startInitialActionCards}
-                onGoMemory={() => setTab("memory")}
+                onGoMemory={openMemory}
                 onGoChat={() => setTab("chat")}
                 onUpdateActionCard={changeActionCard}
               />
@@ -3141,11 +3207,15 @@ function RelatedMemories({ ids, profile }: { ids: string[]; profile: CreaturePro
     .filter((memory): memory is CreatureProfile["longTermMemories"][number] => Boolean(memory));
   if (!memories.length) return null;
   return (
-    <ul className="trace-list">
+    <div className="related-memory-links">
       {memories.map((memory) => (
-        <li key={memory.id}>{memory.text}</li>
+        <button type="button" key={memory.id} onClick={() => requestMemoryNavigation(memory.id)}>
+          <History size={14} />
+          <span>{memory.shortTitle ?? memoryShortTitle(memory.narrative ?? memory.text)}</span>
+          <ChevronRight size={14} />
+        </button>
       ))}
-    </ul>
+    </div>
   );
 }
 
@@ -3401,6 +3471,8 @@ function messageKindNoun(message: ConversationMessage) {
 
 function MemoryView(props: {
   profile: CreatureProfile;
+  targetMemoryId?: string;
+  onOpenMemory: (memoryId?: string) => void;
   onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
   onObserveFeedbackAudio: (file: File) => Promise<string>;
   onEditMemory: (memoryId: string, text: string) => void;
@@ -3409,7 +3481,7 @@ function MemoryView(props: {
   feedbackPendingKey?: string;
 }) {
   const [query, setQuery] = useState("");
-  const [view, setView] = useState<"all" | "candidate" | "long">("all");
+  const [view, setView] = useState<"candidate" | "long">("long");
   const [editingId, setEditingId] = useState<string>();
   const [draft, setDraft] = useState("");
   const memories = [...(props.profile.longTermMemories ?? [])]
@@ -3420,27 +3492,60 @@ function MemoryView(props: {
     .filter((candidate) => candidate.status === "candidate")
     .filter((candidate) => `${candidate.candidateText} ${candidate.memoryKind} ${(candidate.tags ?? []).join(" ")}`.toLowerCase().includes(query.toLowerCase()))
     .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
-  const showCandidates = view === "all" || view === "candidate";
-  const showLongTerm = view === "all" || view === "long";
+  const selectedMemory = props.targetMemoryId
+    ? (props.profile.longTermMemories ?? []).find((memory) => memory.id === props.targetMemoryId && memory.kind !== "creature_self_memory")
+    : undefined;
+
+  useEffect(() => {
+    if (!props.targetMemoryId) return;
+    setQuery("");
+    setView("long");
+    const frame = window.requestAnimationFrame(() => document.querySelector<HTMLElement>(".view-frame")?.scrollTo({ top: 0, behavior: "auto" }));
+    return () => window.cancelAnimationFrame(frame);
+  }, [props.targetMemoryId]);
+
+  if (selectedMemory) return (
+    <MemoryDetail
+      memory={selectedMemory}
+      profile={props.profile}
+      editing={editingId === selectedMemory.id}
+      draft={draft}
+      onDraftChange={setDraft}
+      onStartEdit={() => { setEditingId(selectedMemory.id); setDraft(selectedMemory.text); }}
+      onCancelEdit={() => setEditingId(undefined)}
+      onSaveEdit={() => { props.onEditMemory(selectedMemory.id, draft); setEditingId(undefined); }}
+      onBack={() => window.history.state?.memoryId ? window.history.back() : props.onOpenMemory()}
+      onFeedback={props.onFeedback}
+      onObserveFeedbackAudio={props.onObserveFeedbackAudio}
+      busy={props.busy}
+      feedbackPendingKey={props.feedbackPendingKey}
+    />
+  );
 
   return (
-    <section className="stack">
-      <div className="panel">
-        <PanelTitle icon={History} title={`${props.profile.creatureName} 记得的生活`} />
-        <p className="muted">候选是 {props.profile.creatureName} 还在拿捏的记忆，长期记忆是已经留下来的回忆。你可以分别维护它们。</p>
-        <button className="dream-button" onClick={props.onDream} disabled={props.busy}>
-          <Sparkles size={16} />
-          整理记忆
-        </button>
-        <div className="segmented-control" role="group" aria-label="选择记忆类型">
-          <button className={view === "all" ? "active" : ""} onClick={() => setView("all")}>全部</button>
-          <button className={view === "candidate" ? "active" : ""} onClick={() => setView("candidate")}>候选 {candidates.length}</button>
-          <button className={view === "long" ? "active" : ""} onClick={() => setView("long")}>长期 {otherMemories.length}</button>
+    <section className="memory-view">
+      <header className="memory-view-header">
+        <div>
+          <span className="memory-view-kicker">生活档案</span>
+          <h2>{otherMemories.length} 段留下的经历</h2>
+          <p>{candidates.length ? `还有 ${candidates.length} 条正在确认` : `${props.profile.creatureName} 会把真正值得长期留下的内容收在这里`}</p>
         </div>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="找一找哪件事" />
-        {showCandidates && candidates.length ? (
+        <button className="memory-organize-button" onClick={props.onDream} disabled={props.busy}>
+          <Sparkles size={16} />
+          整理
+        </button>
+      </header>
+      <div className="memory-toolbar">
+        <div className="segmented-control" role="group" aria-label="选择记忆类型">
+          <button className={view === "long" ? "active" : ""} onClick={() => setView("long")}>已留下 {otherMemories.length}</button>
+          <button className={view === "candidate" ? "active" : ""} onClick={() => setView("candidate")}>待确认 {candidates.length}</button>
+        </div>
+        <input aria-label="搜索记忆" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索一段生活" />
+      </div>
+      <div className="memory-content">
+        {view === "candidate" && candidates.length ? (
           <section className="memory-section">
-            <h3>候选记忆</h3>
+            <div className="memory-section-heading"><h3>待确认</h3><span>{candidates.length}</span></div>
             {candidates.map((candidate, index) => (
               <MemoryCandidateCard
                 candidate={candidate}
@@ -3453,69 +3558,100 @@ function MemoryView(props: {
             ))}
           </section>
         ) : null}
-        {showLongTerm && otherMemories.length ? (
+        {view === "long" && otherMemories.length ? (
           <section className="memory-section">
-            <h3>长期记忆</h3>
-            {otherMemories.map((memory, index) => (
-          <article className="memory-surface" key={`long-${memory.id}-${index}`}>
-            {editingId === memory.id ? (
-              <>
-                <textarea value={draft} onChange={(event) => setDraft(event.target.value)} rows={3} />
-                <div className="memory-actions">
-                  <button
-                    className="primary"
-                    onClick={() => {
-                      props.onEditMemory(memory.id, draft);
-                      setEditingId(undefined);
-                    }}
-                  >
-                    <Save size={16} />
-                    嗯，就这样记
-                  </button>
-                  <button onClick={() => setEditingId(undefined)}>先不改</button>
-                </div>
-              </>
-            ) : (
-              <MemoryMainLines memory={memory} profile={props.profile} />
-            )}
-            <div className="memory-actions">
-              <button
-                onClick={() => {
-                  setEditingId(memory.id);
-                  setDraft(memory.text);
-                }}
-              >
-                <MessageCircle size={16} />
-                改准
-              </button>
-              <button onClick={() => props.onFeedback("important", memory.id, undefined, "button")} disabled={props.busy || isFeedbackPending(props.feedbackPendingKey, "important", memory.id)}>
-                <Save size={16} />
-                {isFeedbackPending(props.feedbackPendingKey, "important", memory.id) ? "尝试中" : "很重要"}
-              </button>
-              <button onClick={() => props.onFeedback("remind", memory.id, undefined, "button")} disabled={props.busy || isFeedbackPending(props.feedbackPendingKey, "remind", memory.id)}>
-                <Lightbulb size={16} />
-                {isFeedbackPending(props.feedbackPendingKey, "remind", memory.id) ? "尝试中" : "提醒我"}
-              </button>
-              <button onClick={() => props.onFeedback("forget", memory.id)} disabled={props.busy || isFeedbackPending(props.feedbackPendingKey, "forget", memory.id)}>
-                <RefreshCcw size={16} />
-                {isFeedbackPending(props.feedbackPendingKey, "forget", memory.id) ? "尝试中" : memory.weight <= 0 ? "彻底忘掉" : "忘掉"}
-              </button>
-            </div>
-            <MemoryFeedbackBox
-              targetId={memory.id}
-              creatureName={props.profile.creatureName}
-              onFeedback={props.onFeedback}
-              onObserveFeedbackAudio={props.onObserveFeedbackAudio}
-              pending={isFeedbackPending(props.feedbackPendingKey, "continue", memory.id)}
-            />
-            <MemoryTraceList memory={memory} profile={props.profile} />
-          </article>
-            ))}
+            <div className="memory-section-heading"><h3>已留下</h3><span>{otherMemories.length}</span></div>
+            {otherMemories.map((memory) => <MemoryArchiveRow key={memory.id} memory={memory} onOpen={() => props.onOpenMemory(memory.id)} />)}
           </section>
         ) : null}
-        {(showCandidates && candidates.length) || (showLongTerm && otherMemories.length) ? null : <p className="muted">这里还没有符合筛选的记忆。</p>}
+        {(view === "candidate" && candidates.length) || (view === "long" && otherMemories.length) ? null : <p className="muted">这里还没有符合筛选的记忆。</p>}
       </div>
     </section>
+  );
+}
+
+function MemoryArchiveRow({ memory, onOpen }: { memory: CreatureProfile["longTermMemories"][number]; onOpen: () => void }) {
+  const image = memory.visual ?? memory.attachments?.find((attachment) => attachment.kind === "image");
+  const title = memory.shortTitle ?? memoryShortTitle(memory.narrative ?? memory.text);
+  const summary = normalizeMemoryText(memory.narrative ?? memory.text);
+  return (
+    <button className="memory-archive-row" id={`memory-${memory.id}`} type="button" onClick={onOpen} aria-label={`查看记忆：${title}`}>
+      <span className={image ? "memory-archive-thumb has-image" : "memory-archive-thumb text-only"}>
+        {image ? <img src={resolveAssetUrl(image.url)} alt="" loading="lazy" /> : <History size={22} />}
+      </span>
+      <span className="memory-archive-copy">
+        <span>{formatPapoDateTime(memory.createdAt)} · {memoryKindLabel(memory.kind)}</span>
+        <strong>{title}</strong>
+        <small>{summary}</small>
+      </span>
+      <ChevronRight size={18} />
+    </button>
+  );
+}
+
+function MemoryDetail(props: {
+  memory: CreatureProfile["longTermMemories"][number];
+  profile: CreatureProfile;
+  editing: boolean;
+  draft: string;
+  onDraftChange: (value: string) => void;
+  onStartEdit: () => void;
+  onCancelEdit: () => void;
+  onSaveEdit: () => void;
+  onBack: () => void;
+  onFeedback: (kind: FeedbackKind, targetId?: string, content?: string, modality?: "text" | "audio_observation" | "button") => void;
+  onObserveFeedbackAudio: (file: File) => Promise<string>;
+  busy: boolean;
+  feedbackPendingKey?: string;
+}) {
+  const { memory } = props;
+  const title = memory.shortTitle ?? memoryShortTitle(memory.narrative ?? memory.text);
+  const sourceEpisode = memorySourceEpisode(memory, props.profile);
+  const displayText = normalizeMemoryText(memory.narrative ?? memory.text);
+  return (
+    <article className="memory-detail" id={`memory-${memory.id}`}>
+      <header className="memory-detail-header">
+        <button type="button" onClick={props.onBack} aria-label="返回记忆列表"><ArrowLeft size={19} /></button>
+        <div><span>{formatPapoDateTime(memory.createdAt)}</span><h2>{title}</h2></div>
+      </header>
+
+      {memory.visual ? <MediaThumbnail item={attachmentMediaItem(memory.visual, title)} className="memory-detail-visual" /> : null}
+
+      <section className="memory-detail-story">
+        <span>{props.profile.creatureName} 记得</span>
+        <p>{displayText}</p>
+        <AttachmentStrip attachments={memory.attachments} />
+      </section>
+
+      {sourceEpisode ? (
+        <section className="memory-detail-source">
+          <span>那时发生的事</span>
+          <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(props.profile, sourceEpisode))}</p>
+          <AttachmentStrip attachments={sourceEpisode.attachments} />
+          {episodePapoLine(sourceEpisode) ? <small>{props.profile.creatureName} 当时说：{episodePapoLine(sourceEpisode)}</small> : null}
+        </section>
+      ) : null}
+
+      <section className="memory-detail-maintenance">
+        <div className="memory-detail-maintenance-head"><span>维护这段记忆</span><small>只有你可以修改或放下</small></div>
+        {props.editing ? (
+          <div className="memory-detail-editor">
+            <textarea value={props.draft} onChange={(event) => props.onDraftChange(event.target.value)} rows={5} />
+            <div><button className="primary" type="button" onClick={props.onSaveEdit}><Save size={16} />保存</button><button type="button" onClick={props.onCancelEdit}>取消</button></div>
+          </div>
+        ) : (
+          <div className="memory-detail-actions">
+            <button type="button" onClick={props.onStartEdit}><MessageCircle size={16} />改准</button>
+            <button type="button" onClick={() => props.onFeedback("important", memory.id, undefined, "button")} disabled={props.busy || isFeedbackPending(props.feedbackPendingKey, "important", memory.id)}><Save size={16} />{isFeedbackPending(props.feedbackPendingKey, "important", memory.id) ? "处理中" : "很重要"}</button>
+            <button type="button" onClick={() => props.onFeedback("remind", memory.id, undefined, "button")} disabled={props.busy || isFeedbackPending(props.feedbackPendingKey, "remind", memory.id)}><Lightbulb size={16} />{isFeedbackPending(props.feedbackPendingKey, "remind", memory.id) ? "处理中" : "提醒我"}</button>
+            <button type="button" onClick={() => props.onFeedback("forget", memory.id)} disabled={props.busy || isFeedbackPending(props.feedbackPendingKey, "forget", memory.id)}><RefreshCcw size={16} />{isFeedbackPending(props.feedbackPendingKey, "forget", memory.id) ? "处理中" : memory.weight <= 0 ? "彻底忘掉" : "放下"}</button>
+          </div>
+        )}
+        <MemoryFeedbackBox targetId={memory.id} creatureName={props.profile.creatureName} onFeedback={props.onFeedback} onObserveFeedbackAudio={props.onObserveFeedbackAudio} pending={isFeedbackPending(props.feedbackPendingKey, "continue", memory.id)} />
+      </section>
+
+      <MemoryTraceList memory={memory} profile={props.profile} />
+    </article>
   );
 }
 
@@ -3581,12 +3717,14 @@ function MemoryCandidateCard(props: {
 function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTermMemories"][number]; profile: CreatureProfile }) {
   const sourceEpisode = memorySourceEpisode(memory, profile);
   const displayText = memory.narrative ?? memoryResultLine(memory);
+  const title = memory.shortTitle ?? memoryShortTitle(displayText);
 
   return (
     <div className="memory-main">
       {memory.visual ? <MediaThumbnail item={attachmentMediaItem(memory.visual, memory.shortTitle ?? "共同回忆")} className="memory-visual" /> : null}
-      <div>
-        <span>{formatPapoDateTime(memory.createdAt)}</span>
+      <div className="memory-copy">
+        <div className="memory-meta"><span>{formatPapoDateTime(memory.createdAt)}</span><span>{memoryKindLabel(memory.kind)}</span></div>
+        <h3>{title}</h3>
         <strong className="memory-text-preview">{displayText}</strong>
       </div>
       {shouldShowFullMemoryText(displayText) ? (
@@ -3728,7 +3866,7 @@ function ProfileView(props: {
   onChangePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   onChangePetProfile: (input: { guidance?: string; referenceSummary?: string; referenceAttachment?: MediaAttachment }) => Promise<void>;
   onGenerateInitialActionCards: (guidance?: string) => Promise<void>;
-  onGoMemory: () => void;
+  onGoMemory: (memoryId?: string) => void;
   onGoChat: () => void;
   onUpdateActionCard: (cardId: string, input: { disabled?: boolean; deleted?: boolean }) => void;
 }) {
@@ -3897,7 +4035,7 @@ function ProfileView(props: {
 
       {!settingsOpen ? <>
       <section className="profile-stats" aria-label="我的内容概览">
-        <button type="button" onClick={props.onGoMemory}>
+        <button type="button" onClick={() => props.onGoMemory()}>
           <strong>{memories.length}</strong>
           <span>长期记忆</span>
         </button>
@@ -3948,10 +4086,10 @@ function ProfileView(props: {
         <ProfileSectionHeading icon={History} title="记忆" meta={candidates.length ? `${candidates.length} 条待确认` : `${memories.length} 条`} />
         {memories.length ? (
           <div className="profile-memory-rail">
-            {memories.slice(0, 8).map((memory) => <MemoryCover key={memory.id} memory={memory} onClick={props.onGoMemory} />)}
+            {memories.slice(0, 8).map((memory) => <MemoryCover key={memory.id} memory={memory} onClick={() => props.onGoMemory(memory.id)} />)}
           </div>
         ) : <ProfileEmptyState icon={History} text={`${props.profile.creatureName} 还在慢慢认识你`} />}
-        <button className="profile-view-all" type="button" onClick={props.onGoMemory}>查看全部记忆 <ChevronRight size={16} /></button>
+        <button className="profile-view-all" type="button" onClick={() => props.onGoMemory()}>查看全部记忆 <ChevronRight size={16} /></button>
       </section>
       </> : <>
       <header className="profile-settings-header">
@@ -4189,17 +4327,15 @@ function MemoryCover({ memory, onClick }: { memory: CreatureProfile["longTermMem
   const image = memory.visual ?? memory.attachments?.find((attachment) => attachment.kind === "image");
   const title = memory.shortTitle ?? memoryShortTitle(memory.narrative ?? memory.text);
   return (
-    <article className={image ? "memory-cover has-image" : "memory-cover text-only"}>
-      {image ? (
-        <MediaThumbnail item={attachmentMediaItem(image, title)} className="memory-cover-art" />
-      ) : (
-        <button className="memory-cover-art" type="button" onClick={onClick}><strong>{title}</strong></button>
-      )}
-      <button className="memory-cover-details" type="button" onClick={onClick}>
+    <button className={image ? "memory-cover has-image" : "memory-cover text-only"} type="button" onClick={onClick} aria-label={`查看记忆：${title}`}>
+      <span className="memory-cover-art">
+        {image ? <img src={resolveAssetUrl(image.url)} alt="" loading="lazy" /> : <strong>{title}</strong>}
+      </span>
+      <span className="memory-cover-details">
         <strong>{title}</strong>
         <small>{formatPapoDateTime(memory.createdAt)}</small>
-      </button>
-    </article>
+      </span>
+    </button>
   );
 }
 
@@ -4373,6 +4509,13 @@ function EmergenceCard({ emergence, profile }: { emergence: EmergenceSurface; pr
         {emergence.cognitionTrace ? <DeveloperTrace trace={emergence.cognitionTrace} profile={profile} /> : null}
       </div>
       <p>{visibleCreatureText(emergence.text)}</p>
+      {emergence.memoryId ? (
+        <button className="emergence-memory-link" type="button" onClick={() => requestMemoryNavigation(emergence.memoryId!)}>
+          <History size={15} />
+          查看这段记忆
+          <ChevronRight size={15} />
+        </button>
+      ) : null}
     </section>
   );
 }

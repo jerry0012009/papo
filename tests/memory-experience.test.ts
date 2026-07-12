@@ -25,7 +25,7 @@ const provider = {
     return {
       shortTitle: "傍晚散步",
       narrative: "我记得 Jerry 喜欢在傍晚出去走一走，这是一段值得我留在心里的日常。",
-      imagePrompt: "Square hand-drawn memory illustration of Papo accompanying Jerry on an evening walk, no text.",
+      imagePrompt: "Square hand-painted gouache memory scene of Papo accompanying Jerry on an evening walk, visible brush texture, no text.",
       visualMode: "imaginative_illustration", papoPresence: "required", visualReason: "这是共同经历，小动物参与画面",
       relatedMemoryIds: [], needsClientReferences: false
     };

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { upsertLongTermMemory } from "../src/core/memory";
-import { createCreatureProfile } from "../src/core/profile";
+import { createCreatureProfile, normalizeCreatureProfile } from "../src/core/profile";
 import type { ModelProvider } from "../src/core/provider";
 import type { LongTermMemory, MediaAttachment } from "../src/core/types";
 import { createApp } from "../src/server/app";
@@ -45,8 +45,8 @@ test("visual planning avoids fake grounding and only adds Papo when required", a
 
   plan = {
     shortTitle: "检索讲座", narrative: "我记得这场讲座梳理了向量检索的关键结构。",
-    visualMode: "symbolic_cover", papoPresence: "absent", visualReason: "知识内容用象征封面更准确",
-    imagePrompt: "Square symbolic editorial illustration of vector retrieval architecture, no people, no pet, no text.",
+    visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "从听众视角手绘这次讲座经历",
+    imagePrompt: "Square hand-painted gouache memory scene from the back row of a small lecture, anonymous audience backs facing a speaker silhouette and blank screen, visible brush texture, no pet, no text.",
     relatedMemoryIds: [], needsClientReferences: false
   };
   const lecturePlan = await planMemoryVisual(profile, lecture, provider);
@@ -55,7 +55,7 @@ test("visual planning avoids fake grounding and only adds Papo when required", a
   plan = {
     shortTitle: "雨后散步", narrative: "我记得雨后陪你一起慢慢散步。",
     visualMode: "imaginative_illustration", papoPresence: "required", visualReason: "这是 Papo 参与的共同日常",
-    imagePrompt: "Square clearly illustrated shared memory of Papo accompanying a person after rain, no realistic likeness, no text.",
+    imagePrompt: "Square hand-painted watercolor shared memory of Papo accompanying a person after rain, visible paper texture, no realistic likeness, no text.",
     relatedMemoryIds: [], needsClientReferences: false
   };
   const dailyPlan = await planMemoryVisual(profile, daily, provider);
@@ -64,10 +64,34 @@ test("visual planning avoids fake grounding and only adds Papo when required", a
   plan = {
     shortTitle: "想象封面", narrative: "我记得这件事，但当时没有留下现场照片。",
     visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "没有照片，只作明确的想象插画",
-    imagePrompt: "Square imaginative illustration, explicitly non-photographic, no identifiable person or location, no text.",
+    imagePrompt: "Square colored-pencil sketchbook memory scene, explicitly non-photographic, no identifiable person or location, visible paper texture, no text.",
     relatedMemoryIds: [], needsClientReferences: false
   };
   assert.equal((await planMemoryVisual(profile, memory("ltm_no_photo", "没有照片的经历"), provider)).visualMode, "imaginative_illustration");
+
+  plan = {
+    shortTitle: "错误封面", narrative: "这不是生活画面。",
+    visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "错误地使用概念图",
+    imagePrompt: "Clean vector infographic with interconnected nodes, floating icons and a gradient background.",
+    relatedMemoryIds: [], needsClientReferences: false
+  };
+  await assert.rejects(() => planMemoryVisual(profile, memory("ltm_infographic", "不应生成信息图"), provider), /painted medium|infographic language/);
+});
+
+test("legacy symbolic covers migrate once while retaining their old image", () => {
+  const profile = createCreatureProfile({ userId: "memory-visual-migration", creatureName: "Papo" });
+  profile.longTermMemories.push({
+    ...memory("ltm_legacy_cover", "一场路演"), visualMode: "symbolic_cover", visualPolicyVersion: 1,
+    visual: attachment("old_symbolic_cover", "旧抽象图"), visualStatus: "ready", contentRevision: 1, enrichedRevision: 1, enrichmentStatus: "completed"
+  });
+  normalizeCreatureProfile(profile);
+  const migrated = profile.longTermMemories[0];
+  assert.equal(migrated.contentRevision, 2);
+  assert.equal(migrated.visual?.id, "old_symbolic_cover");
+  assert.equal(migrated.enrichmentStatus, "pending");
+  assert.equal(profile.jobs?.filter((job) => job.memoryId === migrated.id && job.memoryRevision === 2).length, 1);
+  normalizeCreatureProfile(profile);
+  assert.equal(migrated.contentRevision, 2, "policy migration must not increment on every normalization");
 });
 
 test("persistent memory jobs retry failures and expose a terminal visual error without replacing the old image", async () => {
@@ -81,7 +105,7 @@ test("persistent memory jobs retry failures and expose a terminal visual error w
   const provider = providerWith(() => ({
     shortTitle: "失败测试", narrative: "我仍保留这条记忆，并会诚实显示配图失败。",
     visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "使用非写实插画",
-    imagePrompt: "Square imaginative illustration for an intentional retry failure test, no text.",
+    imagePrompt: "Square hand-painted gouache memory scene for an intentional retry failure test, visible brush texture, no text.",
     relatedMemoryIds: [], needsClientReferences: false
   }), async () => {
     attempts += 1;

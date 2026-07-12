@@ -59,8 +59,8 @@ test("a 15 minute lecture is tracked continuously and becomes one revisable memo
     async generateJson(prompt) {
       if (prompt.includes("共同回忆编辑和视觉导演")) return {
         shortTitle: "中文路演", narrative: "我记得陪你听完这场产品路演，也理解了它的定位、验证和推广需求。",
-        visualMode: "symbolic_cover", papoPresence: "absent", visualReason: "讲座适合用知识结构的象征封面表达",
-        imagePrompt: "Square editorial illustration of language learning, product validation, subscriptions and global communities, clearly illustrated, no people, no pet, no text.",
+        visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "没有现场照片，用无身份特征的手绘观看视角保留讲座",
+        imagePrompt: "Square hand-painted gouache memory scene viewed from the back row of a small product talk, simplified anonymous audience backs facing a speaker silhouette and blank projection screen, visible brush texture, no pet, no text.",
         relatedMemoryIds: [], needsClientReferences: false
       };
       if (prompt.includes("Client.md 维护脑")) return { facts: [] };
@@ -114,7 +114,7 @@ test("a 15 minute lecture is tracked continuously and becomes one revisable memo
   saved = await store.getProfile(profile.userId);
   const enrichedLecture = saved?.longTermMemories.find((memory) => memory.id.startsWith("ltm_companion_event_"));
   assert.equal(enrichedLecture?.visualStatus, "ready");
-  assert.equal(enrichedLecture?.visualMode, "symbolic_cover");
+  assert.equal(enrichedLecture?.visualMode, "imaginative_illustration");
   assert.equal(enrichedLecture?.papoPresence, "absent");
   assert.equal(enrichedLecture?.visual?.jobId, lifecycleJob?.id);
   worker.stop();

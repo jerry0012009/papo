@@ -204,7 +204,8 @@ test("chat, memory, illustrations, and action cards share the media viewer", asy
   await expect(page.getByRole("heading", { name: "和 Papo 说话" })).toBeVisible();
 
   await nav.getByRole("button", { name: "记忆" }).click();
-  await page.getByRole("button", { name: "查看图片：共同回忆" }).click();
+  await page.getByRole("button", { name: "查看记忆：旺旺仙贝" }).click();
+  await page.getByRole("button", { name: "查看图片：旺旺仙贝" }).click();
   await expect(page.locator(".papo-photo-view")).toBeVisible();
   await page.getByRole("button", { name: "关闭图片" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Papo 记得的生活" })).toBeVisible();
@@ -759,15 +760,38 @@ test("memory feedback shows a pending state while the request is in flight", asy
   await page.goto("/");
   await page.locator(".nav").getByRole("button", { name: /记忆/ }).click();
 
-  const memoryCard = page.locator(".memory-surface").filter({ hasText: "你喜欢旺旺仙贝。" }).first();
+  await page.getByRole("button", { name: "查看记忆：旺旺仙贝" }).click();
+  const memoryCard = page.locator(".memory-detail#memory-mem-1");
   await expect(memoryCard).toBeVisible();
 
-  await memoryCard.getByRole("button", { name: "忘掉" }).click();
-  await expect(memoryCard.getByRole("button", { name: "尝试中" })).toBeVisible();
-  await expect(memoryCard.getByRole("button", { name: /忘掉|彻底忘掉/ })).toBeVisible({ timeout: 2_000 });
+  await memoryCard.getByRole("button", { name: "放下" }).click();
+  await expect(memoryCard.getByRole("button", { name: "处理中" })).toBeVisible();
+  await expect(memoryCard.getByRole("button", { name: /放下|彻底忘掉/ })).toBeVisible({ timeout: 2_000 });
 });
 
-test("wide desktop uses a scan-friendly memory grid and local trace controls", async ({ page }, testInfo) => {
+test("profile memory links deep-link, focus, and survive refresh", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await page.getByLabel("Papo 导航").getByRole("button", { name: "我的" }).click();
+  await page.getByRole("button", { name: "查看记忆：旺旺仙贝" }).click();
+
+  await expect(page).toHaveURL(/open=memory.*memory=mem-1|memory=mem-1.*open=memory/);
+  const target = page.locator(".memory-detail#memory-mem-1");
+  await expect(target).toBeVisible();
+  await expect(target.getByRole("heading", { name: "旺旺仙贝" })).toBeVisible();
+  await expect(target.getByText("你喜欢旺旺仙贝")).toBeVisible();
+  await expectInViewport(page, target.getByRole("heading", { name: "旺旺仙贝" }));
+  await page.screenshot({ path: testInfo.outputPath(`memory-deep-link-${testInfo.project.name}.png`), fullPage: true });
+
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1, name: "Papo 记得的生活" })).toBeVisible();
+  await expect(page.locator(".memory-detail#memory-mem-1")).toBeVisible();
+  await page.getByRole("button", { name: "返回记忆列表" }).click();
+  await expect(page.getByRole("button", { name: "查看记忆：旺旺仙贝" })).toBeVisible();
+  await expect(page).not.toHaveURL(/memory=mem-1/);
+  await page.screenshot({ path: testInfo.outputPath(`memory-list-${testInfo.project.name}.png`), fullPage: true });
+});
+
+test("wide desktop uses a scan-friendly memory archive and local trace controls", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "desktop", "wide desktop layout is verified in the desktop project");
 
   await page.setViewportSize({ width: 1440, height: 920 });
@@ -783,14 +807,29 @@ test("wide desktop uses a scan-friendly memory grid and local trace controls", a
   expect(traceBox!.x + traceBox!.width).toBeLessThanOrEqual(bubbleBox!.x + bubbleBox!.width + 1);
 
   await page.locator(".nav").getByRole("button", { name: /记忆/ }).click();
+  await page.getByRole("button", { name: /待确认 2/ }).click();
   const candidateCards = page.locator(".candidate-memory");
   await expect(candidateCards).toHaveCount(2);
   const first = await candidateCards.nth(0).boundingBox();
   const second = await candidateCards.nth(1).boundingBox();
   expect(first).toBeTruthy();
   expect(second).toBeTruthy();
-  expect(Math.abs(first!.y - second!.y)).toBeLessThanOrEqual(2);
-  expect(second!.x).toBeGreaterThan(first!.x + first!.width * 0.8);
+  expect(second!.y).toBeGreaterThan(first!.y + first!.height * 0.8);
+  expect(Math.abs(first!.x - second!.x)).toBeLessThanOrEqual(2);
+  expect(Math.abs(first!.width - second!.width)).toBeLessThanOrEqual(2);
+
+  await page.getByRole("button", { name: /已留下 1/ }).click();
+  const memoryCard = page.getByRole("button", { name: "查看记忆：旺旺仙贝" });
+  const memoryImage = memoryCard.locator(".memory-archive-thumb");
+  const memoryCopy = memoryCard.locator(".memory-archive-copy");
+  const cardBox = await memoryCard.boundingBox();
+  const imageBox = await memoryImage.boundingBox();
+  const copyBox = await memoryCopy.boundingBox();
+  expect(cardBox).toBeTruthy();
+  expect(imageBox).toBeTruthy();
+  expect(copyBox).toBeTruthy();
+  expect(copyBox!.x).toBeGreaterThan(imageBox!.x + imageBox!.width);
+  expect(cardBox!.x + cardBox!.width).toBeLessThanOrEqual((await page.locator(".app-main").boundingBox())!.x + (await page.locator(".app-main").boundingBox())!.width + 1);
 
   const companionBox = await page.locator(".companion-panel").boundingBox();
   expect(companionBox).toBeTruthy();

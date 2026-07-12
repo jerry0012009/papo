@@ -1,5 +1,5 @@
 import { makeId } from "./ids";
-import { enqueueMemoryEnrichmentJob, memoryContentFingerprint, memoryShortTitle } from "./memory";
+import { enqueueMemoryEnrichmentJob, MEMORY_VISUAL_POLICY_VERSION, memoryContentFingerprint, memoryShortTitle } from "./memory";
 import { normalizeDogState, seedDogState } from "./dog-states";
 import { normalizePetKind, petKindMeta } from "./pet-kinds";
 import { initialState } from "./state";
@@ -184,6 +184,16 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
     memory.attachments ??= [];
     memory.shortTitle = memoryShortTitle(memory.narrative ?? memory.text, memory.shortTitle);
     memory.contentRevision = Math.max(1, memory.contentRevision ?? 1);
+    const migrateAbstractCover = memory.weight > 0
+      && memory.visualMode === "symbolic_cover"
+      && (memory.visualPolicyVersion ?? 1) < MEMORY_VISUAL_POLICY_VERSION;
+    memory.visualPolicyVersion = MEMORY_VISUAL_POLICY_VERSION;
+    if (migrateAbstractCover) {
+      memory.contentRevision += 1;
+      memory.enrichmentStatus = "pending";
+      memory.enrichmentError = undefined;
+      memory.visualError = undefined;
+    }
     memory.contentFingerprint = memoryContentFingerprint(memory);
     memory.enrichedRevision ??= memory.visualStatus === "ready" || memory.visualStatus === "not_needed" ? memory.contentRevision : 0;
     memory.enrichmentStatus ??= memory.enrichedRevision >= memory.contentRevision ? "completed" : "pending";
