@@ -33,7 +33,7 @@ export async function enrichMemoryExperience(
     const imagePrompt = plan.imagePrompt;
     if (!imagePrompt) throw new Error("Memory visual plan omitted imagePrompt");
     const references = await memoryVisualReferences(profile, memory, plan, imageAttachmentDataUrl);
-    const generated = await provider.generateImage(imagePrompt, {
+    const generated = await (provider.generateEconomyImage ?? provider.generateImage)(imagePrompt, {
       size: "1024x1024",
       style: memoryImageStyle(profile, plan),
       references

@@ -10,6 +10,7 @@
   "OPENROUTER_VISION_MODEL": "google/gemini-3.1-flash-lite",
   "OPENROUTER_AUDIO_MODEL": "google/gemini-3.1-flash-lite",
   "OPENROUTER_VIDEO_MODEL": "bytedance/seedance-1-5-pro",
+  "OPENROUTER_ECONOMY_IMAGE_MODEL": "black-forest-labs/flux.2-klein-4b",
   "PAPO_VIDEO_PROVIDER": "dashscope",
   "DASHSCOPE_API_KEY": "",
   "DASHSCOPE_VIDEO_MODEL": "wan2.2-i2v-flash",

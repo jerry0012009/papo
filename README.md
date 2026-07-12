@@ -72,6 +72,7 @@ Provider 配置来自环境变量、`.env`、`papo.config.json` 或 `.papo/provi
 - `OPENROUTER_VISION_MODEL`
 - `OPENROUTER_AUDIO_MODEL`
 - `OPENROUTER_VIDEO_MODEL` defaults to `bytedance/seedance-1-5-pro` at 480P, four seconds, without audio for low-cost square action cards.
+- `OPENROUTER_ECONOMY_IMAGE_MODEL` defaults to `black-forest-labs/flux.2-klein-4b` for memory candidates and memory artwork only. Profile identity, action-card covers, and requested illustrations continue to use `OPENROUTER_IMAGE_MODEL`.
 - `OPENAI_MODEL`
 - `OPENAI_VISION_MODEL`
 - `OPENAI_AUDIO_TRANSCRIPTION_MODEL`

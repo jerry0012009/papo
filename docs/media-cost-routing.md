@@ -43,6 +43,12 @@ For the small in-app action-card surface, a 5-second 480p render is about `$0.20
 
 Chinese image candidates are inexpensive (`wan2.2-t2i-flash` and `wanx2.1-imageedit` are each listed at `0.14 CNY/image` in China), but they are not enabled yet. The action-card cover may combine the pet avatar, uploaded user media, and historical-card continuity; a real multi-reference A/B benchmark must prove identity retention before replacing Nano Banana Lite.
 
+Image routing is tiered by product purpose:
+
+- Identity-critical images use Nano Banana 2 Lite: profile/avatar design, action-card approved covers, explicit user illustrations, and proactive diary illustrations. A 1K image is approximately `$0.039` when it uses roughly 1,290 image-output tokens at `$0.00003/token`.
+- Memory candidates and long-term memory artwork use FLUX.2 Klein 4B through `OPENROUTER_ECONOMY_IMAGE_MODEL`. A 1-megapixel image is `$0.014`, approximately 64% below the Nano estimate.
+- CloseAI exposes the same Gemini image family. The current account is pay-as-you-go and its public base tier is 1.5x official pricing; higher tiers require cumulative deposits. It is not the cheaper route for either tier at the reviewed account state.
+
 ## Product budget
 
 - Semantic action and emergence normalize action cards to 4-5 seconds.

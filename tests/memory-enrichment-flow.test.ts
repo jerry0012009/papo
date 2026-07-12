@@ -22,6 +22,7 @@ profile.memoryCandidates.unshift({
 await store.saveProfile(profile);
 
 let visualRevision = 0;
+let economyImageCalls = 0;
 const provider: ModelProvider = {
   kind: "mimo", name: "Memory flow provider", available: true, usesRealModel: true,
   async generate() { return ""; },
@@ -63,6 +64,10 @@ const provider: ModelProvider = {
   },
   async summarizeImage() { return ""; }, async observeAudio() { return ""; },
   async generateImage() {
+    throw new Error("memory visuals must not use the identity-critical image route");
+  },
+  async generateEconomyImage() {
+    economyImageCalls += 1;
     return { dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=", mime: "image/png", model: "flow-image" };
   }
 };
@@ -102,6 +107,7 @@ try {
   assert.match(revised.narrative ?? "", /雨后/);
   assert.match(revised.visualPrompt ?? "", /after rain/);
   assert.equal(visualRevision, 2);
+  assert.equal(economyImageCalls, 2);
   console.log(JSON.stringify({ ok: true, visualRevision }));
 } finally {
   server.close();

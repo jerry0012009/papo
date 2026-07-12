@@ -9,9 +9,10 @@ globalThis.fetch = (async (url, init) => {
   calls.push({ url: String(url), body });
   assert.equal(String(url), "https://openrouter.ai/api/v1/images");
   assert.equal(init?.method, "POST");
-  assert.equal(body.model, "google/gemini-3.1-flash-lite-image");
+  assert.ok(["google/gemini-3.1-flash-lite-image", "black-forest-labs/flux.2-klein-4b"].includes(String(body.model)));
   assert.equal(body.n, 1);
-  assert.equal(body.resolution, "1K");
+  if (body.model === "google/gemini-3.1-flash-lite-image") assert.equal(body.resolution, "1K");
+  if (body.model === "black-forest-labs/flux.2-klein-4b") assert.equal(body.size, "1024x1024");
   assert.equal(body.aspect_ratio, "1:1");
   assert.match(String(body.prompt), /hand-drawn/);
   return new Response(JSON.stringify({
@@ -36,7 +37,8 @@ try {
     MIMO_MODEL: "mimo-v2.5-pro",
     PAPO_IMAGE_PROVIDER: "openrouter",
     OPENROUTER_API_KEY: "openrouter-test-key",
-    OPENROUTER_IMAGE_MODEL: "google/gemini-3.1-flash-lite-image"
+    OPENROUTER_IMAGE_MODEL: "google/gemini-3.1-flash-lite-image",
+    OPENROUTER_ECONOMY_IMAGE_MODEL: "black-forest-labs/flux.2-klein-4b"
   } as NodeJS.ProcessEnv);
 
   assert.equal(provider.diagnostics?.imageProvider, "openrouter");
@@ -46,6 +48,10 @@ try {
   assert.equal(image.model, "google/gemini-3.1-flash-lite-image");
   assert.equal(image.mime, "image/jpeg");
   assert.match(image.dataUrl, /^data:image\/jpeg;base64,/);
+  const economy = await provider.generateEconomyImage?.("hand-drawn memory preview", { size: "1024x1024", style: "comic" });
+  assert.equal(economy?.model, "black-forest-labs/flux.2-klein-4b");
+  assert.equal(calls[0].body.model, "google/gemini-3.1-flash-lite-image");
+  assert.equal(calls[1].body.model, "black-forest-labs/flux.2-klein-4b");
   console.log(JSON.stringify({ ok: true, route: provider.diagnostics?.imageRoute, mime: image.mime }, null, 2));
 } finally {
   globalThis.fetch = originalFetch;

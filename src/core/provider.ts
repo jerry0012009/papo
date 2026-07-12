@@ -20,6 +20,7 @@ export interface ModelProvider {
   summarizeImage(dataUrl: string, prompt: string): Promise<string>;
   observeAudio(dataUrl: string, prompt: string): Promise<string>;
   generateImage(prompt: string, input?: { size?: string; style?: string; references?: ImageReference[] }): Promise<{ dataUrl: string; mime: "image/png" | "image/jpeg" | "image/webp"; model?: string }>;
+  generateEconomyImage?(prompt: string, input?: { size?: string; style?: string; references?: ImageReference[] }): Promise<{ dataUrl: string; mime: "image/png" | "image/jpeg" | "image/webp"; model?: string }>;
   generateVideo?(prompt: string, input?: { durationSeconds?: number; style?: string; referenceImage?: ImageReference }): Promise<{ dataUrl: string; mime: "video/mp4"; model?: string; remoteUrl?: string }>;
 }
 
@@ -51,6 +52,7 @@ export interface ProviderDiagnostics {
   visionModel?: string;
   audioModel?: string;
   imageModel?: string;
+  economyImageModel?: string;
   videoModel?: string;
   imageProvider?: ProviderKind;
   videoProvider?: ProviderKind;
@@ -105,6 +107,7 @@ function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
   const visionModel = merged.OPENROUTER_VISION_MODEL ?? "nex-agi/nex-n2-mini";
   const audioModel = merged.OPENROUTER_AUDIO_MODEL ?? "xiaomi/mimo-v2.5";
   const imageModel = merged.OPENROUTER_IMAGE_MODEL ?? "google/gemini-3.1-flash-lite-image";
+  const economyImageModel = merged.OPENROUTER_ECONOMY_IMAGE_MODEL ?? "black-forest-labs/flux.2-klein-4b";
   const videoModel = merged.OPENROUTER_VIDEO_MODEL ?? "bytedance/seedance-1-5-pro";
   const baseUrl = "https://openrouter.ai/api/v1";
   return openAiCompatibleProvider({
@@ -118,6 +121,7 @@ function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
     visionModel,
     audioModel,
     imageModel,
+    economyImageModel,
     videoModel,
     imageRoute: "openrouter_images",
     videoRoute: "openrouter_videos",
@@ -282,6 +286,7 @@ function openAiCompatibleProvider(input: {
   visionModel?: string;
   audioModel?: string;
   imageModel?: string;
+  economyImageModel?: string;
   videoModel?: string;
   imageRoute?: ProviderDiagnostics["imageRoute"];
   videoRoute?: ProviderDiagnostics["videoRoute"];
@@ -308,6 +313,7 @@ function openAiCompatibleProvider(input: {
       visionModel: input.visionModel ?? input.model,
       audioModel: input.audioModel ?? input.model,
       imageModel: input.imageModel ?? input.model,
+      economyImageModel: input.economyImageModel,
       videoModel: input.videoModel,
       imageRoute: input.imageRoute ?? (input.imageEndpoint?.endsWith("/images") ? "openrouter_images" : input.imageEndpoint?.endsWith("/chat/completions") ? "chat_completions" : "images_generations"),
       videoRoute: input.videoRoute,
@@ -336,6 +342,9 @@ function openAiCompatibleProvider(input: {
     async generateImage(prompt: string, imageInput = {}) {
       return callImageGeneration(input, prompt, imageInput);
     },
+    generateEconomyImage: input.economyImageModel && input.imageEndpoint
+      ? (prompt, imageInput = {}) => callImageGeneration({ ...input, imageModel: input.economyImageModel }, prompt, imageInput)
+      : undefined,
     async generateVideo(prompt: string, videoInput = {}) {
       return callVideoGeneration(input, prompt, videoInput);
     }
@@ -368,6 +377,7 @@ function withModalityOverrides(primary: ModelProvider, merged: NodeJS.ProcessEnv
         imageModel: primary.diagnostics?.imageModel,
         imageRoute: primary.diagnostics?.imageRoute
       }),
+      economyImageModel: image?.diagnostics?.economyImageModel ?? primary.diagnostics?.economyImageModel,
       ...(video ? {
         videoProvider: video.kind,
         videoModel: video.diagnostics?.videoModel,
@@ -390,6 +400,9 @@ function withModalityOverrides(primary: ModelProvider, merged: NodeJS.ProcessEnv
     summarizeImage: vision ? (dataUrl, prompt) => vision.summarizeImage(dataUrl, prompt) : primary.summarizeImage,
     observeAudio: audio ? (dataUrl, prompt) => audio.observeAudio(dataUrl, prompt) : primary.observeAudio,
     generateImage: image ? (prompt, input) => image.generateImage(prompt, input) : primary.generateImage,
+    generateEconomyImage: image?.generateEconomyImage
+      ? (prompt, input) => image.generateEconomyImage!(prompt, input)
+      : primary.generateEconomyImage,
     generateVideo: video ? (prompt, input) => video.generateVideo?.(prompt, input) ?? Promise.reject(new Error("Video generation provider is not configured")) : primary.generateVideo
   };
 }
