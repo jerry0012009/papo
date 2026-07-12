@@ -3,8 +3,12 @@ import test from "node:test";
 import { createCreatureProfile } from "../src/core/profile";
 import type { ModelProvider } from "../src/core/provider";
 import type { StreamSegment } from "../src/core/types";
+import { createApp } from "../src/server/app";
 import { collectCompanionTurn, processCompanionTurnContext, runCompanionSessionSweep } from "../src/server/companion-session";
 import { MemoryProfileStore } from "../src/server/store";
+import { PersistentTurnWorker } from "../src/server/turn-worker";
+
+const IMAGE = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
 
 function segment(id: string, content: string, observedAt: string): StreamSegment {
   return {
@@ -53,6 +57,13 @@ test("a 15 minute lecture is tracked continuously and becomes one revisable memo
     kind: "generic", name: "continuous event fake", available: true, usesRealModel: true,
     async generate() { return ""; },
     async generateJson(prompt) {
+      if (prompt.includes("共同回忆编辑和视觉导演")) return {
+        shortTitle: "中文路演", narrative: "我记得陪你听完这场产品路演，也理解了它的定位、验证和推广需求。",
+        visualMode: "symbolic_cover", papoPresence: "absent", visualReason: "讲座适合用知识结构的象征封面表达",
+        imagePrompt: "Square editorial illustration of language learning, product validation, subscriptions and global communities, clearly illustrated, no people, no pet, no text.",
+        relatedMemoryIds: [], needsClientReferences: false
+      };
+      if (prompt.includes("Client.md 维护脑")) return { facts: [] };
       if (prompt.includes("连续生活事件归属脑")) {
         const observations = contents.map((content, index) => ({
           segmentId: String(index + 1),
@@ -83,7 +94,7 @@ test("a 15 minute lecture is tracked continuously and becomes one revisable memo
     },
     async summarizeImage() { return ""; },
     async observeAudio() { return ""; },
-    async generateImage() { throw new Error("not used"); }
+    async generateImage() { return { dataUrl: IMAGE, mime: "image/png" }; }
   };
 
   const first = await runCompanionSessionSweep(store, provider, "2026-07-12T10:20:00.000Z");
@@ -92,9 +103,21 @@ test("a 15 minute lecture is tracked continuously and becomes one revisable memo
   const event = saved?.companionSessions?.[0].events?.[0];
   assert.equal(event?.status, "completed");
   assert.equal(event?.sourceSegmentIds.length, 6);
-  assert.equal(saved?.episodes.filter((episode) => episode.id.startsWith("episode_companion_event_")).length, 1);
+  assert.equal(saved?.episodes.filter((episode) => episode.id.startsWith("episode_companion_event_")).length, 1, JSON.stringify(saved?.episodes.map((episode) => episode.id)));
   assert.equal(saved?.longTermMemories.filter((memory) => memory.id.startsWith("ltm_companion_event_")).length, 1);
   assert.equal(saved?.conversation.filter((message) => message.id.startsWith("msg_companion_event_")).length, 1);
+  const lifecycleJob = saved?.jobs?.find((job) => job.memoryId === saved?.longTermMemories[0]?.id);
+  assert.equal(lifecycleJob?.type, "memory_enrichment");
+  const app = createApp({ store, provider, proactive: { enabled: false }, turns: { autoStart: false }, nativeIngest: { autoStart: false } });
+  const worker = app.locals.turnWorker as PersistentTurnWorker;
+  await worker.drainOnce();
+  saved = await store.getProfile(profile.userId);
+  const enrichedLecture = saved?.longTermMemories.find((memory) => memory.id.startsWith("ltm_companion_event_"));
+  assert.equal(enrichedLecture?.visualStatus, "ready");
+  assert.equal(enrichedLecture?.visualMode, "symbolic_cover");
+  assert.equal(enrichedLecture?.papoPresence, "absent");
+  assert.equal(enrichedLecture?.visual?.jobId, lifecycleJob?.id);
+  worker.stop();
 
   const supplement = segment("7", "会后补充：首批试点将覆盖三个海外社群。", "2026-07-12T10:25:00.000Z");
   collectCompanionTurn(saved!, "turn-7", [supplement]);

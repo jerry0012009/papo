@@ -1,82 +1,54 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { updateClientDocument } from "../core/client-document";
 import type { ModelProvider } from "../core/provider";
 import type { CreatureProfile, LongTermMemory, MediaAttachment } from "../core/types";
 import { applyMemoryVisualPlan, memoryVisualReferences, planMemoryVisual } from "./memory-visual";
-import type { ProfileStore } from "./store";
 
-export async function enrichMemoryExperience(profile: CreatureProfile, memory: LongTermMemory, provider: ModelProvider) {
+export class MemoryEnrichmentFailure extends Error {
+  constructor(message: string, readonly memory: LongTermMemory) {
+    super(message);
+  }
+}
+
+export async function enrichMemoryExperience(
+  profile: CreatureProfile,
+  memory: LongTermMemory,
+  provider: ModelProvider,
+  options: { throwOnVisualError?: boolean } = {}
+) {
+  const previousVisual = memory.visual;
   const plan = await planMemoryVisual(profile, memory, provider);
   applyMemoryVisualPlan(memory, plan);
+  if (plan.visualMode === "no_visual") {
+    memory.visual = undefined;
+    memory.visualStatus = "not_needed";
+    memory.visualError = undefined;
+    memory.visualUpdatedAt = new Date().toISOString();
+    return memory;
+  }
   memory.visualStatus = "pending";
   memory.visualError = undefined;
   try {
+    const imagePrompt = plan.imagePrompt;
+    if (!imagePrompt) throw new Error("Memory visual plan omitted imagePrompt");
     const references = await memoryVisualReferences(profile, memory, plan, imageAttachmentDataUrl);
-    const generated = await provider.generateImage(plan.imagePrompt, {
+    const generated = await provider.generateImage(imagePrompt, {
       size: "1024x1024",
       style: profile.petProfile.visualStyle,
       references
     });
-    memory.visual = await saveMemoryVisual(generated.dataUrl, memory.shortTitle ?? "共同回忆", plan.imagePrompt, [memory.id, ...plan.relatedMemoryIds]);
+    memory.visual = await saveMemoryVisual(generated.dataUrl, memory.shortTitle ?? "共同回忆", imagePrompt, [memory.id, ...plan.relatedMemoryIds]);
     memory.visualStatus = "ready";
     memory.visualUpdatedAt = new Date().toISOString();
   } catch (error) {
+    memory.visual = previousVisual;
     memory.visualStatus = "failed";
     memory.visualError = error instanceof Error ? error.message.slice(0, 300) : "Unknown memory image generation error";
     memory.visualUpdatedAt = new Date().toISOString();
+    if (options.throwOnVisualError) throw new MemoryEnrichmentFailure(memory.visualError, memory);
   }
   return memory;
-}
-
-export function queueMemoryEnrichment(input: { store: ProfileStore; userId: string; memoryIds: string[]; provider: ModelProvider }) {
-  const memoryIds = [...new Set(input.memoryIds)].filter(Boolean);
-  if (!memoryIds.length) return;
-  void (async () => {
-    try {
-      for (const id of memoryIds) {
-        const snapshot = await input.store.getProfile(input.userId);
-        const memory = snapshot?.longTermMemories.find((item) => item.id === id && item.weight > 0);
-        if (!snapshot || !memory) continue;
-        await enrichMemoryExperience(snapshot, memory, input.provider);
-        const latest = await input.store.getProfile(input.userId);
-        const target = latest?.longTermMemories.find((item) => item.id === id && item.weight > 0);
-        if (!latest || !target) continue;
-        applyPresentation(target, memory);
-        await input.store.saveProfile(latest);
-      }
-      const profile = await input.store.getProfile(input.userId);
-      if (!profile) return;
-      try {
-        await updateClientDocument(profile, input.provider, memoryIds);
-      } catch (error) {
-        console.error(`Client.md update failed for ${input.userId}`, error);
-      }
-      await input.store.saveProfile(profile);
-    } catch (error) {
-      console.error(`Memory enrichment failed for ${input.userId}`, error);
-    }
-  })();
-}
-
-function applyPresentation(target: LongTermMemory, generated: LongTermMemory) {
-  target.shortTitle = generated.shortTitle;
-  target.narrative = generated.narrative;
-  target.visual = generated.visual;
-  target.visualPrompt = generated.visualPrompt;
-  target.visualStatus = generated.visualStatus;
-  target.visualError = generated.visualError;
-  target.visualUpdatedAt = generated.visualUpdatedAt;
-}
-
-export function markMemoriesPending(profile: CreatureProfile, memoryIds: string[]) {
-  const ids = new Set(memoryIds);
-  for (const memory of profile.longTermMemories) {
-    if (!ids.has(memory.id) || memory.weight <= 0) continue;
-    memory.visualStatus = "pending";
-    memory.visualError = undefined;
-  }
 }
 
 async function saveMemoryVisual(dataUrl: string, label: string, prompt: string, sourceIds: string[]): Promise<MediaAttachment> {

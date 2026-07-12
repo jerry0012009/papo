@@ -1,6 +1,6 @@
 import { handleButtonCapture, handleCuriousStream } from "./attention";
 import { makeId } from "./ids";
-import { applyMemoryWritePolicies } from "./memory";
+import { applyMemoryWritePolicies, upsertLongTermMemory } from "./memory";
 import type { ModelProvider } from "./provider";
 import { semanticSelectAction } from "./semantic-action";
 import { semanticDecideAttention } from "./semantic-attention";
@@ -83,12 +83,15 @@ function mergeTaskResultMemoryOwnership(profile: CreatureProfile, result: Captur
     candidate.sourceEpisodeId = originalEpisode.id;
     originalEpisode.memoryCandidateIds = [...new Set([...originalEpisode.memoryCandidateIds, candidate.id])];
     if (!existingMemory || candidate.writePolicy !== "auto") continue;
-    existingMemory.text = candidate.candidateText;
-    existingMemory.shortTitle = candidate.shortTitle;
-    existingMemory.kind = candidate.memoryKind;
-    existingMemory.tags = [...new Set([...existingMemory.tags, ...candidate.tags])];
-    existingMemory.consolidatedBecause = candidate.whyConsolidate || existingMemory.consolidatedBecause;
-    existingMemory.lastReferencedAt = new Date().toISOString();
+    upsertLongTermMemory(profile, {
+      ...existingMemory,
+      text: candidate.candidateText,
+      shortTitle: candidate.shortTitle,
+      kind: candidate.memoryKind,
+      tags: [...new Set([...existingMemory.tags, ...candidate.tags])],
+      consolidatedBecause: candidate.whyConsolidate || existingMemory.consolidatedBecause,
+      lastReferencedAt: new Date().toISOString()
+    }, { sourceIds: [context.taskId ?? "", context.sourceEpisodeId] });
     candidate.status = "promoted";
     originalEpisode.promotedToLongTerm = true;
   }

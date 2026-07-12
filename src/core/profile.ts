@@ -1,5 +1,5 @@
 import { makeId } from "./ids";
-import { memoryShortTitle } from "./memory";
+import { enqueueMemoryEnrichmentJob, memoryContentFingerprint, memoryShortTitle } from "./memory";
 import { normalizeDogState, seedDogState } from "./dog-states";
 import { normalizePetKind, petKindMeta } from "./pet-kinds";
 import { initialState } from "./state";
@@ -183,6 +183,11 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   for (const memory of profile.longTermMemories) {
     memory.attachments ??= [];
     memory.shortTitle = memoryShortTitle(memory.narrative ?? memory.text, memory.shortTitle);
+    memory.contentRevision = Math.max(1, memory.contentRevision ?? 1);
+    memory.contentFingerprint = memoryContentFingerprint(memory);
+    memory.enrichedRevision ??= memory.visualStatus === "ready" || memory.visualStatus === "not_needed" ? memory.contentRevision : 0;
+    memory.enrichmentStatus ??= memory.enrichedRevision >= memory.contentRevision ? "completed" : "pending";
+    if (memory.weight > 0 && memory.enrichedRevision < memory.contentRevision) enqueueMemoryEnrichmentJob(profile, memory);
   }
   for (const candidate of profile.memoryCandidates) {
     candidate.attachments ??= [];

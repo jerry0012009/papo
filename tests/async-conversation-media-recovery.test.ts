@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { upsertLongTermMemory } from "../src/core/memory";
 import { createApp } from "../src/server/app";
 import type { ModelProvider } from "../src/core/provider";
 import { MemoryProfileStore } from "../src/server/store";
@@ -12,7 +13,7 @@ const provider: ModelProvider = {
   kind: "generic", name: "Media worker provider", available: true, usesRealModel: true,
   async generate() { return ""; },
   async generateJson(prompt) {
-    if (prompt.includes("共同回忆编辑和视觉导演")) return { shortTitle: "咖啡时刻", narrative: "我记得你分享过一杯咖啡。", imagePrompt: "Square warm drawing of a coffee cup, no text.", relatedMemoryIds: [], needsPapoReference: false, needsClientReferences: false };
+    if (prompt.includes("共同回忆编辑和视觉导演")) return { shortTitle: "咖啡时刻", narrative: "我记得你分享过一杯咖啡。", visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "没有现场照片，使用插画表达", imagePrompt: "Square warm drawing of a coffee cup, no text.", relatedMemoryIds: [], needsClientReferences: false };
     if (prompt.includes("Client.md 维护脑")) return { facts: [{ dimension: "leisure", text: "你会分享咖啡时刻", confidence: 80, sourceIds: ["ltm_async_memory"] }] };
     if (prompt.includes("注意决策脑")) {
       const segmentId = [...prompt.matchAll(/"segmentId":"([^"]+)"/g)].at(-1)?.[1];
@@ -82,18 +83,19 @@ try {
   assert.equal(new Set(retried?.jobs?.flatMap((job) => job.result?.memorySourceIds ?? [])).size, retried?.jobs?.flatMap((job) => job.result?.memorySourceIds ?? []).length, "memory stage source IDs stay idempotent");
 
   await store.updateProfile("media-turn-user", (profile) => {
-    profile.longTermMemories.unshift({ id: "ltm_async_memory", createdAt: new Date().toISOString(), kind: "long_theme", text: "你分享了一杯咖啡", sourceEpisodeId: "episode_async_memory", weight: 80, tags: ["咖啡"] });
-    profile.jobs?.unshift({ id: "turn_media_recovery-memory-ltm_async_memory", turnId: "turn_media_recovery", requestId: "turn_media_recovery", type: "memory_enrichment", stage: "action", status: "queued", attempt: 0, maxAttempts: 3, retryable: true, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), sourceIds: ["turn_media_recovery", "turn_media_recovery-cognition", "ltm_async_memory"] });
-    profile.turns?.[0].jobIds.push("turn_media_recovery-memory-ltm_async_memory");
+    upsertLongTermMemory(profile, { id: "ltm_async_memory", createdAt: new Date().toISOString(), kind: "long_theme", text: "你分享了一杯咖啡", sourceEpisodeId: "episode_async_memory", weight: 80, tags: ["咖啡"] }, { sourceIds: ["turn_media_recovery", "turn_media_recovery-cognition"] });
+    const lifecycleJob = profile.jobs?.find((job) => job.memoryId === "ltm_async_memory");
+    if (lifecycleJob) profile.turns?.[0].jobIds.push(lifecycleJob.id);
   });
   worker.wake();
-  await waitFor(async () => (await store.getProfile("media-turn-user"))?.jobs?.find((job) => job.id === "turn_media_recovery-memory-ltm_async_memory")?.status === "completed");
+  await waitFor(async () => (await store.getProfile("media-turn-user"))?.jobs?.find((job) => job.memoryId === "ltm_async_memory")?.status === "completed");
   const enriched = await store.getProfile("media-turn-user");
   const enrichedMemory = enriched?.longTermMemories.find((memory) => memory.id === "ltm_async_memory");
   assert.equal(enrichedMemory?.visualStatus, "ready");
-  assert.equal(enrichedMemory?.visual?.jobId, "turn_media_recovery-memory-ltm_async_memory");
+  const memoryJob = enriched?.jobs?.find((job) => job.memoryId === "ltm_async_memory");
+  assert.equal(enrichedMemory?.visual?.jobId, memoryJob?.id);
   assert.equal(enrichedMemory?.visual?.sourceIds?.includes("turn_media_recovery"), true);
-  assert.equal(enriched?.jobs?.find((job) => job.id === "turn_media_recovery-memory-ltm_async_memory")?.result?.memoryDecision, "created");
+  assert.equal(memoryJob?.result?.memoryDecision, "created");
   assert.equal(enriched?.longTermMemories.filter((memory) => memory.id === "ltm_async_memory").length, 1);
 } finally {
   worker.stop();

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { upsertLongTermMemory } from "../core/memory";
 import type { ModelProvider } from "../core/provider";
 import type {
   CognitionContext,
@@ -432,12 +433,13 @@ async function closeInactiveSessionEvents(store: ProfileStore, userId: string, s
 
 async function consolidateEvent(store: ProfileStore, provider: ModelProvider, userId: string, sessionId: string, eventId: string, now: string) {
   let claimedRevision: number | undefined;
+  const claimedAt = new Date().toISOString();
   const claimed = await store.updateProfile(userId, (profile) => {
     const event = findEvent(profile, sessionId, eventId);
     if (!event || !eventNeedsConsolidation(event)) return;
     claimedRevision = event.revision;
     event.status = "consolidating";
-    event.updatedAt = now;
+    event.updatedAt = claimedAt;
     event.error = undefined;
   });
   const session = claimed?.companionSessions?.find((item) => item.id === sessionId);
@@ -473,7 +475,7 @@ async function consolidateEvent(store: ProfileStore, provider: ModelProvider, us
       return;
     }
     latest.episodes = mergeById(latest.episodes, [records.episode]).slice(0, 80);
-    if (records.memory) latest.longTermMemories = mergeById(latest.longTermMemories, [records.memory]).slice(0, 80);
+    if (records.memory) upsertLongTermMemory(latest, records.memory, { now, sourceIds: [session.id, event.id, ...event.sourceSegmentIds] });
     if (records.message) latest.conversation = mergeById(latest.conversation, [records.message]).slice(0, 80);
     latest.semanticBrainHistory = mergeById(latest.semanticBrainHistory, [records.semanticRun]).slice(0, 30);
     target.status = "completed";

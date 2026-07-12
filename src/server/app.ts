@@ -12,15 +12,16 @@ import { isDreamingDue, recordDreamingFailure, semanticDreamMemories } from "../
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
+import { upsertLongTermMemory } from "../core/memory";
 import { createModelProvider, type ImageReference, type ModelProvider } from "../core/provider";
 import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
 import { wakeCreature } from "../core/rhythm";
 import { clampState, deriveMood } from "../core/state";
-import type { ActionCardRecord, ActionResult, CaptureResult, ConversationJobRecord, ConversationTurnRecord, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationPlan, IllustrationRecord, MediaAttachment, MessageCognitionTrace, PetIdentityProfile, PlannedAction, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
+import type { ActionCardRecord, ActionResult, CaptureResult, ConversationJobRecord, ConversationTurnRecord, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationPlan, IllustrationRecord, LongTermMemory, MediaAttachment, MessageCognitionTrace, PetIdentityProfile, PlannedAction, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
 import { createHermesBridge, type HermesBridge } from "./hermes";
 import { JsonDeviceAuthService, type DeviceAuthService } from "./device-auth";
 import { NativeIngestQueue, type NativeIngestPayload } from "./native-ingest-queue";
-import { enrichMemoryExperience, markMemoriesPending, queueMemoryEnrichment } from "./memory-enrichment";
+import { enrichMemoryExperience, MemoryEnrichmentFailure } from "./memory-enrichment";
 import { createWebPushService, PushNotifyingProfileStore, type WebPushService } from "./push";
 import { JsonProfileStore, type ProfileStore } from "./store";
 import { PersistentTurnWorker } from "./turn-worker";
@@ -259,7 +260,6 @@ export function createApp(input: {
 
   async function persistCuriousCapture(profile: CreatureProfile, segments: StreamSegment[]) {
     markProactiveUserResponse(profile);
-    const beforeMemoryIds = activeMemorySignatures(profile);
     const beforeSemanticIds = semanticRecordIds(profile);
     const result = await runCuriousHarness(profile, segments, provider, new Date().toISOString(), { inputSource: "ambient" });
     await hermesBridge?.enqueueTasks(profile, result);
@@ -294,11 +294,9 @@ export function createApp(input: {
       attachments: illustrationAttachments,
       cognitionTrace
     });
-    const enrichedMemoryIds = newActiveMemoryIds(profile, beforeMemoryIds);
-    markMemoriesPending(profile, enrichedMemoryIds);
     await store.saveProfile(profile);
     queueActionCardGeneration({ store, userId: profile.userId, result, provider });
-    queueMemoryEnrichment({ store, userId: profile.userId, memoryIds: enrichedMemoryIds, provider });
+    turnWorker.wake();
     return result;
   }
 
@@ -355,7 +353,6 @@ export function createApp(input: {
     if (existing) return { messageId: existing.id };
     const baseProfile = structuredClone(profile);
     markProactiveUserResponse(profile);
-    const beforeMemoryIds = activeMemorySignatures(profile);
     const beforeSemanticIds = semanticRecordIds(profile);
     const cognitionContext = {
       inputSource: isAmbientTurn(turn) ? "ambient" as const : "direct" as const,
@@ -380,9 +377,9 @@ export function createApp(input: {
       relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
       cognitionTrace
     });
-    const enrichedMemoryIds = newActiveMemoryIds(profile, beforeMemoryIds);
-    markMemoriesPending(profile, enrichedMemoryIds);
-    const childJobs = [...plannedConversationJobs(turn, job, result), ...memoryEnrichmentJobs(turn, job, enrichedMemoryIds)];
+    const baseJobIds = new Set((baseProfile.jobs ?? []).map((item) => item.id));
+    const lifecycleJobs = (profile.jobs ?? []).filter((item) => !baseJobIds.has(item.id) && item.type === "memory_enrichment");
+    const childJobs = [...plannedConversationJobs(turn, job, result), ...lifecycleJobs];
     profile.jobs = [...childJobs, ...(profile.jobs ?? [])].filter((item, index, list) => list.findIndex((other) => other.id === item.id) === index).slice(0, 240);
     turn.jobIds = [...new Set([...turn.jobIds, ...childJobs.map((item) => item.id)])];
     const saved = await store.updateProfile(userId, (latest) => {
@@ -394,7 +391,7 @@ export function createApp(input: {
     return {
       messageId: reply?.id,
       episodeIds: result.episodes.map((episode) => episode.id),
-      memoryIds: enrichedMemoryIds,
+      memoryIds: lifecycleJobs.flatMap((item) => item.memoryId ? [item.memoryId] : []),
       memorySourceIds: [turn.id, job.id],
       cognition: {
         inputSource: cognitionContext.inputSource,
@@ -407,25 +404,39 @@ export function createApp(input: {
   }
 
   async function processTurnMemoryEnrichment(userId: string, job: ConversationJobRecord) {
-    const memoryId = job.sourceIds.find((id) => id.startsWith("ltm_"));
+    const memoryId = job.memoryId ?? job.sourceIds.find((id) => id.startsWith("ltm_"));
     const snapshot = await store.getProfile(userId);
     const memory = snapshot?.longTermMemories.find((item) => item.id === memoryId && item.weight > 0);
     if (!snapshot || !memory) return { memoryDecision: "skipped_duplicate" as const, memoryReason: "Memory no longer exists", memorySourceIds: job.sourceIds };
-    await enrichMemoryExperience(snapshot, memory, provider);
-    await updateClientDocument(snapshot, provider, [memory.id]).catch(() => false);
-    const saved = await store.updateProfile(userId, (latest) => {
-      const target = latest.longTermMemories.find((item) => item.id === memory.id && item.weight > 0);
-      if (!target) return;
-      target.shortTitle = memory.shortTitle;
-      target.narrative = memory.narrative;
-      target.visual = memory.visual ? { ...memory.visual, turnId: job.turnId, jobId: job.id, sourceIds: [...new Set([...(memory.visual.sourceIds ?? []), job.turnId, job.id, memory.id])] } : undefined;
-      target.visualPrompt = memory.visualPrompt;
-      target.visualStatus = memory.visualStatus;
-      target.visualError = memory.visualError;
-      target.visualUpdatedAt = memory.visualUpdatedAt;
-      if ((snapshot.clientDocument?.revision ?? 0) > (latest.clientDocument?.revision ?? 0)) latest.clientDocument = snapshot.clientDocument;
-    });
-    if (!saved) throw new Error("Profile disappeared before memory enrichment commit");
+    const revision = job.memoryRevision ?? memory.contentRevision ?? 1;
+    if ((memory.contentRevision ?? 1) !== revision) {
+      return { memoryIds: [memory.id], memorySourceIds: job.sourceIds, memoryDecision: "skipped_duplicate" as const, memoryReason: `Stale enrichment revision ${revision}; current revision is ${memory.contentRevision ?? 1}` };
+    }
+    try {
+      await enrichMemoryExperience(snapshot, memory, provider, { throwOnVisualError: true });
+      await updateClientDocument(snapshot, provider, [memory.id]);
+      memory.enrichedRevision = revision;
+      memory.enrichmentStatus = "completed";
+      memory.enrichmentError = undefined;
+      const saved = await store.updateProfile(userId, (latest) => {
+        const target = latest.longTermMemories.find((item) => item.id === memory.id && item.weight > 0);
+        if (!target || (target.contentRevision ?? 1) !== revision) return;
+        applyMemoryEnrichmentResult(target, memory, job, true);
+        if ((snapshot.clientDocument?.revision ?? 0) > (latest.clientDocument?.revision ?? 0)) latest.clientDocument = snapshot.clientDocument;
+      });
+      if (!saved) throw new Error("Profile disappeared before memory enrichment commit");
+    } catch (error) {
+      const computed = error instanceof MemoryEnrichmentFailure ? error.memory : memory;
+      await store.updateProfile(userId, (latest) => {
+        const target = latest.longTermMemories.find((item) => item.id === memory.id && item.weight > 0);
+        if (!target || (target.contentRevision ?? 1) !== revision) return;
+        applyMemoryEnrichmentResult(target, computed, job, false);
+        target.enrichmentStatus = "failed";
+        target.enrichmentError = error instanceof Error ? error.message.slice(0, 300) : "Unknown memory enrichment error";
+        target.visualError ??= target.enrichmentError;
+      });
+      throw error;
+    }
     return { memoryIds: [memory.id], memorySourceIds: [...new Set([job.turnId, job.id, memory.id])], memoryDecision: "created" as const, memoryReason: "Primary cognition approved this long-term memory; presentation was enriched idempotently" };
   }
 
@@ -967,7 +978,6 @@ export function createApp(input: {
       const body = buttonSchema.parse(req.body);
       const inputSourceId = `button-${Date.now()}`;
       markProactiveUserResponse(profile);
-      const beforeMemoryIds = activeMemorySignatures(profile);
       const beforeSemanticIds = semanticRecordIds(profile);
       const result = await runButtonHarness(profile, body.text, provider);
       await hermesBridge?.enqueueTasks(profile, result);
@@ -991,11 +1001,9 @@ export function createApp(input: {
         attachments: illustrationAttachments,
         cognitionTrace
       });
-      const enrichedMemoryIds = newActiveMemoryIds(profile, beforeMemoryIds);
-      markMemoriesPending(profile, enrichedMemoryIds);
       await store.saveProfile(profile);
       queueActionCardGeneration({ store, userId: profile.userId, result, provider });
-      queueMemoryEnrichment({ store, userId: profile.userId, memoryIds: enrichedMemoryIds, provider });
+      turnWorker.wake();
       res.json(publicCaptureResult(result, provider.kind));
     } catch (error) {
       next(error);
@@ -1078,7 +1086,6 @@ export function createApp(input: {
       const profile = await requireProfile(store, req.params.userId, req);
       const body = feedbackSchema.parse(req.body);
       markProactiveUserResponse(profile, new Date().toISOString());
-      const beforeMemoryIds = activeMemorySignatures(profile);
       const targetBefore = feedbackTargetSnapshot(profile, body.targetId);
       const feedback = applyFeedback(profile, body);
       const beforeSemanticIds = semanticRecordIds(profile);
@@ -1104,10 +1111,8 @@ export function createApp(input: {
         relatedMemoryIds,
         cognitionTrace
       });
-      const enrichedMemoryIds = feedbackMemoryEnrichmentIds(profile, beforeMemoryIds, body.targetId, body.content);
-      markMemoriesPending(profile, enrichedMemoryIds);
       await store.saveProfile(profile);
-      queueMemoryEnrichment({ store, userId: profile.userId, memoryIds: enrichedMemoryIds, provider });
+      turnWorker.wake();
       res.json({ profile: publicProfile(profile), feedback });
     } catch (error) {
       next(error);
@@ -1138,7 +1143,6 @@ export function createApp(input: {
     try {
       const profile = await requireProfile(store, req.params.userId, req);
       const body = updateMemorySchema.parse(req.body);
-      const beforeMemoryIds = activeMemorySignatures(profile);
       const previousMemory = profile.longTermMemories.find((item) => item.id === req.params.memoryId);
       if (!previousMemory) throw new HttpError(404, "Memory not found");
       markProactiveUserResponse(profile, new Date().toISOString());
@@ -1176,10 +1180,8 @@ export function createApp(input: {
         cognitionTrace,
         at
       });
-      const enrichedMemoryIds = feedbackMemoryEnrichmentIds(profile, beforeMemoryIds, memory.id, body.text);
-      markMemoriesPending(profile, enrichedMemoryIds);
       await store.saveProfile(profile);
-      queueMemoryEnrichment({ store, userId: profile.userId, memoryIds: enrichedMemoryIds, provider });
+      turnWorker.wake();
       res.json({ profile: publicProfile(profile), memory });
     } catch (error) {
       next(error);
@@ -1281,6 +1283,29 @@ export function createApp(input: {
   return app;
 }
 
+function applyMemoryEnrichmentResult(target: LongTermMemory, generated: LongTermMemory, job: ConversationJobRecord, replaceVisual: boolean) {
+  target.shortTitle = generated.shortTitle;
+  target.narrative = generated.narrative;
+  target.visualPrompt = generated.visualPrompt;
+  target.visualMode = generated.visualMode;
+  target.papoPresence = generated.papoPresence;
+  target.visualPlanReason = generated.visualPlanReason;
+  target.visualStatus = generated.visualStatus;
+  target.visualError = generated.visualError;
+  target.visualUpdatedAt = generated.visualUpdatedAt;
+  target.enrichedRevision = generated.enrichedRevision;
+  target.enrichmentStatus = generated.enrichmentStatus;
+  target.enrichmentError = generated.enrichmentError;
+  if (replaceVisual) {
+    target.visual = generated.visual ? {
+      ...generated.visual,
+      turnId: job.turnId,
+      jobId: job.id,
+      sourceIds: [...new Set([...(generated.visual.sourceIds ?? []), ...job.sourceIds, job.turnId, job.id, target.id])]
+    } : undefined;
+  }
+}
+
 function linkActionAttachmentsToMemorySources(profile: CreatureProfile, job: ConversationJobRecord, attachments: MediaAttachment[]) {
   const sourceIds = [...new Set([job.turnId, job.id, ...job.sourceIds, ...attachments.map((item) => item.id)])];
   const linked = attachments.map((attachment) => ({
@@ -1295,7 +1320,10 @@ function linkActionAttachmentsToMemorySources(profile: CreatureProfile, job: Con
     candidate.attachments = mergeOwnedById(candidate.attachments ?? [], linked);
   }
   for (const memory of profile.longTermMemories.filter((item) => item.sourceEpisodeId === job.episodeId)) {
-    memory.attachments = mergeOwnedById(memory.attachments ?? [], linked);
+    upsertLongTermMemory(profile, {
+      ...memory,
+      attachments: mergeOwnedById(memory.attachments ?? [], linked)
+    }, { sourceIds: [job.id, job.turnId, ...linked.map((item) => item.id)] });
   }
 }
 
@@ -2674,25 +2702,6 @@ function isAmbientTurn(turn: ConversationTurnRecord) {
   return turn.id.startsWith("turn_live_") || turn.id.startsWith("turn_native_");
 }
 
-function memoryEnrichmentJobs(turn: ConversationTurnRecord, parent: ConversationJobRecord, memoryIds: string[]): ConversationJobRecord[] {
-  const now = new Date().toISOString();
-  return [...new Set(memoryIds)].map((memoryId) => ({
-    id: `${turn.id}-memory-${memoryId}`,
-    turnId: turn.id,
-    requestId: turn.requestId,
-    type: "memory_enrichment" as const,
-    stage: "action" as const,
-    status: "queued" as const,
-    attempt: 0,
-    maxAttempts: 3,
-    retryable: true,
-    createdAt: now,
-    updatedAt: now,
-    dependsOn: [parent.id],
-    sourceIds: [turn.id, parent.id, memoryId]
-  }));
-}
-
 function commitCognitionOwnedRecords(
   latest: CreatureProfile,
   base: CreatureProfile,
@@ -2769,24 +2778,6 @@ function feedbackInputText(kind: string, content?: string) {
 
 function semanticRecordIds(profile: CreatureProfile) {
   return new Set((profile.semanticBrainHistory ?? []).map((record) => record.id));
-}
-
-function activeMemorySignatures(profile: CreatureProfile) {
-  return new Map(profile.longTermMemories.filter((memory) => memory.weight > 0).map((memory) => [memory.id, memoryEnrichmentSignature(memory)]));
-}
-
-function newActiveMemoryIds(profile: CreatureProfile, before: Map<string, string>) {
-  return profile.longTermMemories.filter((memory) => memory.weight > 0 && before.get(memory.id) !== memoryEnrichmentSignature(memory)).map((memory) => memory.id);
-}
-
-function feedbackMemoryEnrichmentIds(profile: CreatureProfile, before: Map<string, string>, targetId?: string, content?: string) {
-  const ids = new Set(newActiveMemoryIds(profile, before));
-  if (content?.trim() && targetId && profile.longTermMemories.some((memory) => memory.id === targetId && memory.weight > 0)) ids.add(targetId);
-  return [...ids];
-}
-
-function memoryEnrichmentSignature(memory: CreatureProfile["longTermMemories"][number]) {
-  return JSON.stringify([memory.text, memory.shortTitle, memory.attachments?.map((attachment) => attachment.id).sort() ?? []]);
 }
 
 function segmentDisplayText(kind: StreamSegment["kind"], text: string) {

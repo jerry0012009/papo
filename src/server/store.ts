@@ -275,13 +275,25 @@ function mergeEpisode(left: EpisodeMemory, right: EpisodeMemory): EpisodeMemory 
 }
 
 function mergeLongTermMemory(left: LongTermMemory, right: LongTermMemory): LongTermMemory {
-  const chosen = left.weight <= 0 && right.weight > 0 ? left : right;
+  const leftRevision = left.contentRevision ?? 1;
+  const rightRevision = right.contentRevision ?? 1;
+  const chosen = left.weight <= 0 && right.weight > 0
+    ? left
+    : leftRevision !== rightRevision
+      ? leftRevision > rightRevision ? left : right
+      : memoryEnrichmentRank(left) > memoryEnrichmentRank(right) ? left : right;
   return {
     ...left,
     ...chosen,
     tags: unique([...(left.tags ?? []), ...(right.tags ?? [])]),
     attachments: mergeAttachments(left.attachments, right.attachments)
   };
+}
+
+function memoryEnrichmentRank(memory: LongTermMemory) {
+  const revision = memory.enrichedRevision ?? 0;
+  const status = memory.enrichmentStatus === "completed" ? 3 : memory.enrichmentStatus === "failed" ? 2 : 1;
+  return revision * 10 + status;
 }
 
 function mergeMemoryCandidate(left: MemoryCandidate, right: MemoryCandidate): MemoryCandidate {

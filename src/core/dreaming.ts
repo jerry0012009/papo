@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { makeId } from "./ids";
-import { mergeAttachments, normalizeSharedMemoryText, promoteMemoryCandidate } from "./memory";
+import { mergeAttachments, normalizeSharedMemoryText, promoteMemoryCandidate, upsertLongTermMemory } from "./memory";
 import { modelFeedbackContext, modelMemoryContext } from "./model-context";
 import type { ModelProvider } from "./provider";
 import { applyStateDelta } from "./state";
@@ -148,32 +148,38 @@ function applyDreamOperation(profile: CreatureProfile, operation: DreamOperation
     const memory = operation.targetId ? profile.longTermMemories.find((item) => item.id === operation.targetId && item.weight > 0) : undefined;
     if (!memory) return {};
     const text = normalizeSharedMemoryText(operation.text ?? "");
-    if (text) memory.text = text;
-    if (operation.kind) memory.kind = operation.kind;
-    if (operation.tags?.length) memory.tags = operation.tags;
-    if (operation.consolidatedBecause) memory.consolidatedBecause = normalizeSharedMemoryText(operation.consolidatedBecause);
-    if (Number.isFinite(operation.weight)) memory.weight = clampWeight(operation.weight ?? memory.weight);
-    memory.lastReferencedAt = now;
-    return { operation: dreamOperationRecord(operation, memory.id, memory.text) };
+    const updated = upsertLongTermMemory(profile, {
+      ...memory,
+      text: text || memory.text,
+      kind: operation.kind ?? memory.kind,
+      tags: operation.tags?.length ? operation.tags : memory.tags,
+      consolidatedBecause: operation.consolidatedBecause ? normalizeSharedMemoryText(operation.consolidatedBecause) : memory.consolidatedBecause,
+      weight: Number.isFinite(operation.weight) ? clampWeight(operation.weight ?? memory.weight) : memory.weight,
+      lastReferencedAt: now
+    }, { now, sourceIds: [operation.targetId ?? ""] }).memory;
+    return { operation: dreamOperationRecord(operation, updated.id, updated.text) };
   }
   if (operation.type === "merge_memories") {
     const target = operation.targetId ? profile.longTermMemories.find((item) => item.id === operation.targetId && item.weight > 0) : undefined;
     const sources = (operation.sourceIds ?? []).map((id) => profile.longTermMemories.find((item) => item.id === id && item.weight > 0)).filter((item): item is LongTermMemory => Boolean(item));
     if (!target || !sources.length) return {};
     const text = normalizeSharedMemoryText(operation.text ?? target.text);
-    target.text = text || target.text;
-    if (operation.kind) target.kind = operation.kind;
-    if (operation.tags?.length) target.tags = [...new Set([...target.tags, ...operation.tags])];
-    if (operation.consolidatedBecause) target.consolidatedBecause = normalizeSharedMemoryText(operation.consolidatedBecause);
-    if (Number.isFinite(operation.weight)) target.weight = clampWeight(operation.weight ?? target.weight);
+    const mergedAttachments = sources.reduce((attachments, source) => mergeAttachments(attachments, source.attachments), target.attachments);
     for (const source of sources) {
       if (source.id === target.id) continue;
-      target.attachments = mergeAttachments(target.attachments, source.attachments);
-      source.weight = 0;
-      source.lastReferencedAt = now;
+      upsertLongTermMemory(profile, { ...source, weight: 0, lastReferencedAt: now }, { now, scheduleEnrichment: false });
     }
-    target.lastReferencedAt = now;
-    return { operation: dreamOperationRecord(operation, target.id, target.text) };
+    const updated = upsertLongTermMemory(profile, {
+      ...target,
+      text: text || target.text,
+      kind: operation.kind ?? target.kind,
+      tags: operation.tags?.length ? [...new Set([...target.tags, ...operation.tags])] : target.tags,
+      consolidatedBecause: operation.consolidatedBecause ? normalizeSharedMemoryText(operation.consolidatedBecause) : target.consolidatedBecause,
+      weight: Number.isFinite(operation.weight) ? clampWeight(operation.weight ?? target.weight) : target.weight,
+      attachments: mergedAttachments,
+      lastReferencedAt: now
+    }, { now, sourceIds: operation.sourceIds }).memory;
+    return { operation: dreamOperationRecord(operation, updated.id, updated.text) };
   }
   if (operation.type === "dismiss_candidate") {
     const candidate = operation.targetId ? profile.memoryCandidates.find((item) => item.id === operation.targetId && item.status === "candidate") : undefined;

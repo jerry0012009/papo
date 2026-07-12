@@ -1,15 +1,15 @@
 {
-  "versionName": "0.4.9",
-  "versionCode": 15,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.9.apk",
-  "publishedAt": "2026-07-12T10:21:58.000Z",
+  "versionName": "0.4.10",
+  "versionCode": 16,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.10.apk",
+  "publishedAt": "2026-07-12T11:19:35.000Z",
   "notes": [
-    "陪伴音频按环境、日常交流、讲座、会议和访谈自适应保留内容，不再统一压缩到 400 字",
-    "讲座事件分别保存 transcript、segmentSummary 和跨片段 eventSummary，保留数字、专有名词与论证过程",
-    "支持 speaker_1、speaker_2 等说话人标签，只有可靠证据支持时才关联真实姓名",
-    "transcript 作为事件资料保存，不会机械地写入长期记忆",
-    "后续讲座内容继续修订同一事件、episode 和 memory，避免重复记录"
+    "对话、陪伴事件、反馈、Hermes 结果和梦境统一进入可恢复的长期记忆后处理流程",
+    "长期记忆自动生成叙事、视觉计划、配图和 Client Document 更新，失败会自动重试并清晰记录",
+    "讲座和会议优先生成不含虚构人物或 Papo 的象征封面，日常共同经历可按语义加入 Papo",
+    "没有真实照片时使用明确的想象插画或象征表达，不伪造人物长相、地点和现场照片",
+    "记忆修订沿用原 ID，保留旧图直到新版完成，过期任务不能覆盖最新内容"
   ],
-  "sha256": "c849b7dac328d478518b2027c64368794b844cb5be2c01a6406490975b047cee",
-  "size": 22795272
+  "sha256": "5a58f20448a2aa155ee2b7f7309ff99e54e3c2c0c56b711bcc1da2e7c11b7bf0",
+  "size": 22795284
 }

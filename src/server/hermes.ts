@@ -518,6 +518,8 @@ async function processHermesReplyWithProvider(
   const resultCandidateIds = new Set((result.memoryCandidates ?? []).map((candidate) => candidate.id));
   const baseMemoryIds = new Set(baseProfile.longTermMemories.map((memory) => memory.id));
   const ownedMemories = profile.longTermMemories.filter((memory) => !baseMemoryIds.has(memory.id) || memory.sourceEpisodeId === sourceEpisode.id);
+  const baseJobIds = new Set((baseProfile.jobs ?? []).map((job) => job.id));
+  const memoryJobs = (profile.jobs ?? []).filter((job) => job.type === "memory_enrichment" && !baseJobIds.has(job.id));
   const baseSemanticIds = new Set(baseProfile.semanticBrainHistory.map((record) => record.id));
   const baseStateChangeKeys = new Set(baseProfile.stateChanges.map((change) => `${change.at}\u0000${change.reason}`));
   const ownedStateChanges = profile.stateChanges.filter((change) => !baseStateChangeKeys.has(`${change.at}\u0000${change.reason}`));
@@ -532,7 +534,7 @@ async function processHermesReplyWithProvider(
     latest.conversation = mergeByOwnedId(latest.conversation, [inputMessage, papoMessage].filter((message): message is NonNullable<typeof message> => Boolean(message))).slice(0, 80);
     latest.hermes.tasks = mergeByOwnedId(latest.hermes.tasks, [task]).slice(0, 30);
     latest.turns = mergeByOwnedId(latest.turns ?? [], [resultTurn]).slice(0, 80);
-    latest.jobs = mergeByOwnedId(latest.jobs ?? [], followUpJobs).slice(0, 240);
+    latest.jobs = mergeByOwnedId(latest.jobs ?? [], [...followUpJobs, ...memoryJobs]).slice(0, 240);
     latest.hermes.sessionId = profile.hermes.sessionId ?? latest.hermes.sessionId;
     latest.hermes.sessionName = profile.hermes.sessionName ?? latest.hermes.sessionName;
   });

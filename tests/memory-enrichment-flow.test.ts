@@ -47,7 +47,8 @@ const provider: ModelProvider = {
         shortTitle: revised ? "雨后散步" : "傍晚散步",
         narrative: revised ? "我记得 Jerry 喜欢在雨后沿着街道慢慢散步。" : "我记得 Jerry 喜欢在傍晚出去走一走。",
         imagePrompt: revised ? "Square hand-drawn memory of Papo and Jerry walking on a street after rain, no text." : "Square hand-drawn memory of Papo and Jerry taking an evening walk, no text.",
-        relatedMemoryIds: [], needsPapoReference: false, needsClientReferences: false
+        visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "没有现场照片，使用克制的插画表达",
+        relatedMemoryIds: [], needsClientReferences: false
       };
     }
     if (prompt.includes("Client.md 维护脑")) {
@@ -95,7 +96,7 @@ try {
   const revised = await waitFor(async () => {
     const current = await store.getProfile("memory-flow-user");
     const memory = current?.longTermMemories.find((item) => item.id === first.memory.id);
-    return visualRevision >= 2 && memory?.visualStatus === "ready" && memory.shortTitle === "雨后散步" ? memory : undefined;
+    return visualRevision >= 2 && memory?.enrichmentStatus === "completed" && memory.enrichedRevision === memory.contentRevision && memory.shortTitle === "雨后散步" ? memory : undefined;
   });
   assert.equal(revised.text, "Jerry 喜欢雨后在街道散步");
   assert.match(revised.narrative ?? "", /雨后/);

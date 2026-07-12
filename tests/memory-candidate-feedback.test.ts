@@ -75,7 +75,8 @@ const provider: ModelProvider = {
       shortTitle: "晚间游泳",
       narrative: "我记得你最近每天晚上游泳，只是不喜欢泳池里人太多。",
       imagePrompt: "Square hand-drawn memory of Papo waiting beside a quiet evening swimming pool, no text.",
-      relatedMemoryIds: [], needsPapoReference: false, needsClientReferences: false
+      visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "没有现场照片，使用插画表达",
+      relatedMemoryIds: [], needsClientReferences: false
     };
     if (prompt.includes("Client.md 维护脑")) return { facts: [] };
     return {

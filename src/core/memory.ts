@@ -1,6 +1,95 @@
 import { makeId } from "./ids";
 import { summarizeText } from "./text";
-import type { AttentionEvent, CreatureProfile, EpisodeMemory, LongTermMemory, MemoryCandidate } from "./types";
+import type { AttentionEvent, ConversationJobRecord, CreatureProfile, EpisodeMemory, LongTermMemory, MemoryCandidate } from "./types";
+
+export function upsertLongTermMemory(
+  profile: CreatureProfile,
+  incoming: LongTermMemory,
+  options: { now?: string; sourceIds?: string[]; scheduleEnrichment?: boolean } = {}
+) {
+  const now = options.now ?? new Date().toISOString();
+  const existing = profile.longTermMemories.find((memory) => memory.id === incoming.id);
+  const previousFingerprint = existing ? memoryContentFingerprint(existing) : undefined;
+  const merged: LongTermMemory = {
+    ...existing,
+    ...incoming,
+    visual: incoming.visual ?? existing?.visual,
+    visualPrompt: incoming.visualPrompt ?? existing?.visualPrompt,
+    visualUpdatedAt: incoming.visualUpdatedAt ?? existing?.visualUpdatedAt,
+    visualStatus: incoming.visualStatus ?? existing?.visualStatus,
+    visualError: incoming.visualError ?? existing?.visualError,
+    visualMode: incoming.visualMode ?? existing?.visualMode,
+    papoPresence: incoming.papoPresence ?? existing?.papoPresence,
+    visualPlanReason: incoming.visualPlanReason ?? existing?.visualPlanReason,
+    narrative: incoming.narrative ?? existing?.narrative,
+    attachments: incoming.attachments ?? existing?.attachments ?? [],
+    tags: incoming.tags ?? existing?.tags ?? []
+  };
+  const nextFingerprint = memoryContentFingerprint(merged);
+  const changed = !existing || previousFingerprint !== nextFingerprint;
+  const revision = changed ? Math.max(0, existing?.contentRevision ?? 0) + 1 : Math.max(1, existing?.contentRevision ?? 1);
+  merged.contentRevision = revision;
+  merged.contentFingerprint = nextFingerprint;
+  if (changed) {
+    merged.enrichmentStatus = "pending";
+    merged.enrichmentError = undefined;
+    merged.visualError = undefined;
+    if (!merged.visual) merged.visualStatus = "pending";
+  }
+  profile.longTermMemories = [merged, ...profile.longTermMemories.filter((memory) => memory.id !== merged.id)].slice(0, 80);
+  if (changed && options.scheduleEnrichment !== false && merged.weight > 0) {
+    enqueueMemoryEnrichmentJob(profile, merged, { now, sourceIds: options.sourceIds });
+  }
+  return { memory: merged, changed, revision };
+}
+
+export function enqueueMemoryEnrichmentJob(
+  profile: CreatureProfile,
+  memory: LongTermMemory,
+  options: { now?: string; sourceIds?: string[] } = {}
+) {
+  const now = options.now ?? new Date().toISOString();
+  const revision = Math.max(1, memory.contentRevision ?? 1);
+  const id = `memory_enrichment_${safeJobPart(memory.id)}_r${revision}`;
+  const existing = profile.jobs?.find((job) => job.id === id);
+  if (existing) return existing;
+  const turnId = `memory_lifecycle_${safeJobPart(memory.id)}`.slice(0, 100);
+  const job: ConversationJobRecord = {
+    id,
+    turnId,
+    requestId: turnId,
+    type: "memory_enrichment",
+    stage: "action",
+    status: "queued",
+    attempt: 0,
+    maxAttempts: 3,
+    retryable: true,
+    createdAt: now,
+    updatedAt: now,
+    sourceIds: unique([memory.id, memory.sourceEpisodeId ?? "", ...(memory.attachments ?? []).map((item) => item.id), ...(options.sourceIds ?? [])]),
+    memoryId: memory.id,
+    memoryRevision: revision
+  };
+  profile.jobs = [job, ...(profile.jobs ?? [])].slice(0, 240);
+  return job;
+}
+
+export function memoryContentFingerprint(memory: LongTermMemory) {
+  const value = JSON.stringify({
+    text: normalizeSharedMemoryText(memory.text),
+    kind: memory.kind,
+    sourceEpisodeId: memory.sourceEpisodeId ?? "",
+    consolidatedBecause: normalizeSharedMemoryText(memory.consolidatedBecause ?? ""),
+    tags: [...new Set(memory.tags)].sort(),
+    attachments: (memory.attachments ?? []).map((item) => item.id).sort()
+  });
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `memfp_${(hash >>> 0).toString(16).padStart(8, "0")}`;
+}
 
 export function createEpisodeFromEvent(
   event: AttentionEvent,
@@ -83,12 +172,14 @@ function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new D
   if (duplicate) {
     episode.promotedToLongTerm = true;
     candidate.status = "promoted";
-    duplicate.weight = Math.min(100, Math.max(duplicate.weight + 8, episode.weight + 18));
-    duplicate.tags = unique([...duplicate.tags, ...candidate.tags]);
-    duplicate.attachments = mergeAttachments(duplicate.attachments, candidate.attachments);
-    duplicate.lastReferencedAt = now;
-    if (!duplicate.consolidatedBecause && candidate.whyConsolidate) duplicate.consolidatedBecause = candidate.whyConsolidate;
-    return duplicate;
+    return upsertLongTermMemory(profile, {
+      ...duplicate,
+      weight: Math.min(100, Math.max(duplicate.weight + 8, episode.weight + 18)),
+      tags: unique([...duplicate.tags, ...candidate.tags]),
+      attachments: mergeAttachments(duplicate.attachments, candidate.attachments),
+      lastReferencedAt: now,
+      consolidatedBecause: duplicate.consolidatedBecause || candidate.whyConsolidate
+    }, { now, sourceIds: [episode.id, candidate.id] }).memory;
   }
   const memory: LongTermMemory = {
     id: makeId("ltm"),
@@ -104,8 +195,7 @@ function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new D
   };
   episode.promotedToLongTerm = true;
   candidate.status = "promoted";
-  profile.longTermMemories.unshift(memory);
-  return memory;
+  return upsertLongTermMemory(profile, memory, { now, sourceIds: [episode.id, candidate.id] }).memory;
 }
 
 export function promoteMemoryCandidate(
@@ -132,15 +222,17 @@ export function promoteMemoryCandidate(
   if (duplicate) {
     candidate.status = "promoted";
     if (episode) episode.promotedToLongTerm = true;
-    duplicate.kind = input.kind ?? candidate.memoryKind;
-    duplicate.text = text;
-    duplicate.shortTitle = memoryShortTitle(text, input.shortTitle ?? candidate.shortTitle);
-    duplicate.weight = Math.max(0, Math.min(100, Math.round(input.weight ?? Math.max(duplicate.weight, (episode?.weight ?? 45) + 18))));
-    duplicate.tags = unique([...duplicate.tags, ...tags]);
-    duplicate.attachments = mergeAttachments(duplicate.attachments, candidate.attachments);
-    duplicate.consolidatedBecause = input.consolidatedBecause ?? candidate.whyConsolidate ?? duplicate.consolidatedBecause;
-    duplicate.lastReferencedAt = now;
-    return duplicate;
+    return upsertLongTermMemory(profile, {
+      ...duplicate,
+      kind: input.kind ?? candidate.memoryKind,
+      text,
+      shortTitle: memoryShortTitle(text, input.shortTitle ?? candidate.shortTitle),
+      weight: Math.max(0, Math.min(100, Math.round(input.weight ?? Math.max(duplicate.weight, (episode?.weight ?? 45) + 18)))),
+      tags: unique([...duplicate.tags, ...tags]),
+      attachments: mergeAttachments(duplicate.attachments, candidate.attachments),
+      consolidatedBecause: input.consolidatedBecause ?? candidate.whyConsolidate ?? duplicate.consolidatedBecause,
+      lastReferencedAt: now
+    }, { now, sourceIds: [candidate.id, candidate.sourceEpisodeId] }).memory;
   }
   const memory: LongTermMemory = {
     id: makeId("ltm"),
@@ -156,8 +248,7 @@ export function promoteMemoryCandidate(
   };
   candidate.status = "promoted";
   if (episode) episode.promotedToLongTerm = true;
-  profile.longTermMemories.unshift(memory);
-  return memory;
+  return upsertLongTermMemory(profile, memory, { now, sourceIds: [candidate.id, candidate.sourceEpisodeId] }).memory;
 }
 
 export function memoryShortTitle(text: string, suggested?: string) {
@@ -198,7 +289,7 @@ export function forgetMemory(profile: CreatureProfile, targetId?: string): { cha
       profile.longTermMemories = profile.longTermMemories.filter((memory) => memory.id !== targetId);
       return { changed: true, purged: true };
     }
-    longTerm.weight = 0;
+    upsertLongTermMemory(profile, { ...longTerm, weight: 0 }, { scheduleEnrichment: false });
     return { changed: true, purged: false };
   }
 
@@ -236,7 +327,10 @@ export function adjustMemoryWeight(profile: CreatureProfile, targetId: string | 
   const episode = profile.episodes.find((item) => item.id === targetId);
   if (episode) episode.weight = Math.max(0, Math.min(100, episode.weight + amount));
   const longTerm = profile.longTermMemories.find((item) => item.id === targetId);
-  if (longTerm) longTerm.weight = Math.max(0, Math.min(100, longTerm.weight + amount));
+  if (longTerm) upsertLongTermMemory(profile, {
+    ...longTerm,
+    weight: Math.max(0, Math.min(100, longTerm.weight + amount))
+  });
   const candidate = profile.memoryCandidates.find((item) => item.id === targetId);
   if (candidate) candidate.confidence = Math.max(0, Math.min(100, candidate.confidence + amount));
 }
@@ -267,6 +361,10 @@ export function memoryKeepReasonToCreatureVoice(reason: string) {
 
 function unique(values: string[]) {
   return [...new Set(values.filter(Boolean))];
+}
+
+function safeJobPart(value: string) {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64);
 }
 
 export function mergeAttachments<T extends { id: string }>(left: T[] | undefined, right: T[] | undefined): T[] {

@@ -368,14 +368,22 @@ export interface LongTermMemory {
   visual?: MediaAttachment;
   visualPrompt?: string;
   visualUpdatedAt?: string;
-  visualStatus?: "pending" | "ready" | "failed";
+  visualStatus?: "pending" | "ready" | "failed" | "not_needed";
   visualError?: string;
+  visualMode?: "grounded_scene" | "imaginative_illustration" | "symbolic_cover" | "no_visual";
+  papoPresence?: "required" | "optional" | "absent";
+  visualPlanReason?: string;
   sourceEpisodeId?: string;
   consolidatedBecause?: string;
   weight: number;
   tags: string[];
   attachments?: MediaAttachment[];
   lastReferencedAt?: string;
+  contentRevision?: number;
+  contentFingerprint?: string;
+  enrichedRevision?: number;
+  enrichmentStatus?: "pending" | "completed" | "failed";
+  enrichmentError?: string;
 }
 
 export interface MemoryCandidate {
@@ -699,6 +707,8 @@ export interface ConversationJobRecord {
   eventId?: string;
   event?: AttentionEvent;
   episodeId?: string;
+  memoryId?: string;
+  memoryRevision?: number;
   action?: PlannedAction;
   error?: string;
   attemptHistory?: Array<{

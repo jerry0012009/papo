@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { clampPolicy } from "./drive";
 import { makeId } from "./ids";
-import { adjustMemoryWeight, forgetMemory, memoryShortTitle, mergeAttachments, normalizeSharedMemoryText, promoteMemoryCandidate } from "./memory";
+import { adjustMemoryWeight, forgetMemory, memoryShortTitle, mergeAttachments, normalizeSharedMemoryText, promoteMemoryCandidate, upsertLongTermMemory } from "./memory";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { clientContextFor } from "./client-document";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
@@ -405,14 +405,17 @@ function upsertSemanticFeedbackSelfMemory(
       ((sourceEpisodeId && item.sourceEpisodeId === sourceEpisodeId) || normalizeSharedMemoryText(item.text) === normalizedText)
   );
   if (existing) {
-    existing.text = normalizedText;
-    existing.weight = Math.max(0, Math.min(100, Math.round(memory.weight ?? Math.min(100, existing.weight + 8))));
-    if (tags.length) existing.tags = safeStoredTags([...existing.tags, ...tags]);
-    if (memory.consolidatedBecause) existing.consolidatedBecause = safeCreatureText(memory.consolidatedBecause) ?? existing.consolidatedBecause;
-    existing.lastReferencedAt = feedback.at;
+    upsertLongTermMemory(profile, {
+      ...existing,
+      text: normalizedText,
+      weight: Math.max(0, Math.min(100, Math.round(memory.weight ?? Math.min(100, existing.weight + 8)))),
+      tags: tags.length ? safeStoredTags([...existing.tags, ...tags]) : existing.tags,
+      consolidatedBecause: memory.consolidatedBecause ? safeCreatureText(memory.consolidatedBecause) ?? existing.consolidatedBecause : existing.consolidatedBecause,
+      lastReferencedAt: feedback.at
+    }, { now: feedback.at, sourceIds: [feedback.id] });
     return;
   }
-  profile.longTermMemories.unshift({
+  upsertLongTermMemory(profile, {
     id: makeId("ltm"),
     createdAt: feedback.at,
     kind: "creature_self_memory",
@@ -422,7 +425,7 @@ function upsertSemanticFeedbackSelfMemory(
     weight: Math.max(0, Math.min(100, Math.round(memory.weight ?? 68))),
     tags,
     consolidatedBecause: safeCreatureText(memory.consolidatedBecause)
-  });
+  }, { now: feedback.at, sourceIds: [feedback.id] });
 }
 
 function applySemanticMemoryOperation(
@@ -447,16 +450,19 @@ function applySemanticMemoryOperation(
     const existing = profile.longTermMemories.find((memory) => memory.sourceEpisodeId === targetEpisode.id);
     const tags = operation.tags?.length ? safeStoredTags(operation.tags) : [];
     if (existing) {
-      existing.kind = operation.kind;
-      existing.text = normalizeSharedMemoryText(text);
-      existing.shortTitle = memoryShortTitle(existing.text, operation.shortTitle);
-      existing.consolidatedBecause = safeCreatureText(operation.consolidatedBecause) ?? existing.consolidatedBecause;
-      existing.weight = Math.max(0, Math.min(100, Math.round(operation.weight ?? Math.max(existing.weight, targetEpisode.weight + 18))));
-      if (tags.length) existing.tags = tags;
-      existing.attachments = mergeAttachments(existing.attachments, targetEpisode.attachments);
-      existing.lastReferencedAt = feedback.at;
+      upsertLongTermMemory(profile, {
+        ...existing,
+        kind: operation.kind,
+        text: normalizeSharedMemoryText(text),
+        shortTitle: memoryShortTitle(text, operation.shortTitle),
+        consolidatedBecause: safeCreatureText(operation.consolidatedBecause) ?? existing.consolidatedBecause,
+        weight: Math.max(0, Math.min(100, Math.round(operation.weight ?? Math.max(existing.weight, targetEpisode.weight + 18)))),
+        tags: tags.length ? tags : existing.tags,
+        attachments: mergeAttachments(existing.attachments, targetEpisode.attachments),
+        lastReferencedAt: feedback.at
+      }, { now: feedback.at, sourceIds: [feedback.id, targetEpisode.id] });
     } else {
-      profile.longTermMemories.unshift({
+      upsertLongTermMemory(profile, {
         id: makeId("ltm"),
         createdAt: feedback.at,
         kind: operation.kind,
@@ -467,7 +473,7 @@ function applySemanticMemoryOperation(
         weight: Math.max(0, Math.min(100, Math.round(operation.weight ?? targetEpisode.weight + 18))),
         tags,
         attachments: targetEpisode.attachments ?? []
-      });
+      }, { now: feedback.at, sourceIds: [feedback.id, targetEpisode.id] });
     }
     targetEpisode.promotedToLongTerm = true;
     for (const candidate of profile.memoryCandidates.filter((item) => item.sourceEpisodeId === targetEpisode.id)) {
@@ -508,13 +514,17 @@ function applySemanticMemoryOperation(
   if (operation.type === "update_memory") {
     if (!targetLongTerm) throw new Error("feedback model requested memory update without a memory target");
     const text = safeCreatureText(operation.text);
-    if (text) targetLongTerm.text = normalizeSharedMemoryText(text);
-    targetLongTerm.shortTitle = memoryShortTitle(targetLongTerm.text, operation.shortTitle ?? targetLongTerm.shortTitle);
-    if (operation.kind) targetLongTerm.kind = operation.kind;
-    if (operation.tags?.length) targetLongTerm.tags = safeStoredTags(operation.tags);
-    if (operation.consolidatedBecause) targetLongTerm.consolidatedBecause = safeCreatureText(operation.consolidatedBecause) ?? targetLongTerm.consolidatedBecause;
-    if (Number.isFinite(operation.weight)) targetLongTerm.weight = Math.max(0, Math.min(100, Math.round(operation.weight ?? targetLongTerm.weight)));
-    targetLongTerm.lastReferencedAt = feedback.at;
+    const nextText = text ? normalizeSharedMemoryText(text) : targetLongTerm.text;
+    upsertLongTermMemory(profile, {
+      ...targetLongTerm,
+      text: nextText,
+      shortTitle: memoryShortTitle(nextText, operation.shortTitle ?? targetLongTerm.shortTitle),
+      kind: operation.kind ?? targetLongTerm.kind,
+      tags: operation.tags?.length ? safeStoredTags(operation.tags) : targetLongTerm.tags,
+      consolidatedBecause: operation.consolidatedBecause ? safeCreatureText(operation.consolidatedBecause) ?? targetLongTerm.consolidatedBecause : targetLongTerm.consolidatedBecause,
+      weight: Number.isFinite(operation.weight) ? Math.max(0, Math.min(100, Math.round(operation.weight ?? targetLongTerm.weight))) : targetLongTerm.weight,
+      lastReferencedAt: feedback.at
+    }, { now: feedback.at, sourceIds: [feedback.id] });
   }
 }
 
