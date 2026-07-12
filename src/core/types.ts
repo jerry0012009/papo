@@ -33,6 +33,12 @@ export interface ActionResult {
   petProfile?: Partial<PetIdentityProfile>;
 }
 
+export interface PlannedAction {
+  action: ActionKind;
+  actionResult: ActionResult;
+  reason?: string;
+}
+
 export interface IllustrationPlan {
   summary: string;
   elements: string[];
@@ -126,9 +132,9 @@ export interface StreamSegment {
 
 export interface MediaAttachment {
   id: string;
-  kind: "image" | "video";
+  kind: "image" | "video" | "audio";
   label: string;
-  mime: "image/png" | "image/jpeg" | "image/webp" | "video/mp4";
+  mime: "image/png" | "image/jpeg" | "image/webp" | "video/mp4" | "audio/webm" | "audio/wav" | "audio/mpeg" | "audio/mp4" | "audio/ogg" | "audio/aac";
   url: string;
   createdAt: string;
   observedAt?: string;
@@ -137,6 +143,8 @@ export interface MediaAttachment {
   generatedBy?: "user_upload" | "papo_illustration" | "papo_action_card" | "papo_profile" | "papo_memory";
   prompt?: string;
   sourceIds?: string[];
+  turnId?: string;
+  jobId?: string;
 }
 
 export interface PetIdentityProfile {
@@ -248,6 +256,7 @@ export interface AttentionEvent {
   suggestedAction: ActionKind;
   actionDecision: ActionDecision;
   actionResult?: ActionResult;
+  backgroundActions?: PlannedAction[];
   actionStateDeltas?: CreatureStateDeltaRecord[];
   scoreBreakdown?: SegmentScore;
   creatureExperience: CreatureExperience;
@@ -386,6 +395,8 @@ export interface IllustrationRecord {
   messageId?: string;
   emergenceId?: string;
   actionEventId?: string;
+  turnId?: string;
+  jobId?: string;
   providerKind: ProviderKind;
   providerName: string;
   model?: string;
@@ -405,6 +416,8 @@ export interface ActionCardRecord {
   messageId?: string;
   emergenceId?: string;
   actionEventId?: string;
+  turnId?: string;
+  jobId?: string;
   providerKind: ProviderKind;
   providerName: string;
   model?: string;
@@ -513,6 +526,7 @@ export interface MessageCognitionTrace {
     reason: string;
     visibleReply?: string;
     actionResult?: ActionResult;
+    backgroundActions?: PlannedAction[];
     stateDeltas?: CreatureStateDeltaRecord[];
     episodeKept: boolean;
     memoryCandidateKept: boolean;
@@ -583,6 +597,9 @@ export interface CreatureMessage {
   displayText?: string;
   auditOnly?: boolean;
   sourceId?: string;
+  turnId?: string;
+  jobId?: string;
+  requestId?: string;
   relatedMemoryIds: string[];
   modality?: SegmentKind | "button";
   batchId?: string;
@@ -591,6 +608,56 @@ export interface CreatureMessage {
   attachments?: MediaAttachment[];
   sensingTrace?: SensingTrace;
   cognitionTrace?: MessageCognitionTrace;
+}
+
+export type ConversationJobStatus = "queued" | "running" | "completed" | "failed";
+export type ConversationJobType = "image_understanding" | "audio_understanding" | "cognition" | "memory_enrichment" | "illustration" | "action_card" | "hermes";
+
+export interface ConversationJobRecord {
+  id: string;
+  turnId: string;
+  requestId: string;
+  type: ConversationJobType;
+  stage: "sensing" | "cognition" | "action";
+  status: ConversationJobStatus;
+  attempt: number;
+  maxAttempts: number;
+  retryable: boolean;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  dependsOn?: string[];
+  sourceIds: string[];
+  segmentId?: string;
+  eventId?: string;
+  event?: AttentionEvent;
+  episodeId?: string;
+  action?: PlannedAction;
+  error?: string;
+  result?: {
+    messageId?: string;
+    attachmentIds?: string[];
+    episodeIds?: string[];
+    memoryIds?: string[];
+    memorySourceIds?: string[];
+    memoryDecision?: "created" | "skipped_no_new_fact" | "skipped_duplicate";
+    memoryReason?: string;
+  };
+}
+
+export interface ConversationTurnRecord {
+  id: string;
+  requestId: string;
+  channel: "button" | "curious";
+  status: "queued" | "running" | "completed" | "failed";
+  createdAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  inputMessageIds: string[];
+  jobIds: string[];
+  segments: StreamSegment[];
+  error?: string;
 }
 
 export interface CreatureProfile {
@@ -613,6 +680,8 @@ export interface CreatureProfile {
   dreamHistory: DreamRecord[];
   semanticBrainHistory: SemanticBrainRecord[];
   conversation: CreatureMessage[];
+  turns?: ConversationTurnRecord[];
+  jobs?: ConversationJobRecord[];
   proactive: ProactiveEmergenceState;
   readState: ReadState;
   hermes: HermesProfileState;

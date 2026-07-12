@@ -9,6 +9,9 @@ export function appendPapoMessage(
     channel: ConversationChannel;
     text?: string;
     sourceId?: string;
+    turnId?: string;
+    jobId?: string;
+    requestId?: string;
     relatedMemoryIds?: string[];
     attachments?: StreamSegment["attachments"];
     cognitionTrace?: MessageCognitionTrace;
@@ -30,6 +33,9 @@ export function appendPapoMessage(
     channel: input.channel,
     text,
     sourceId: input.sourceId,
+    turnId: input.turnId,
+    jobId: input.jobId,
+    requestId: input.requestId,
     relatedMemoryIds: input.relatedMemoryIds ?? [],
     attachments: input.attachments ?? [],
     cognitionTrace: input.cognitionTrace
@@ -48,6 +54,9 @@ export function appendInputMessage(
     displayText?: string;
     auditOnly?: boolean;
     sourceId?: string;
+    turnId?: string;
+    jobId?: string;
+    requestId?: string;
     modality?: SegmentKind | "button";
     batchId?: string;
     observedAt?: string;
@@ -76,6 +85,9 @@ export function appendInputMessage(
     displayText: input.displayText?.trim() || undefined,
     auditOnly: input.auditOnly,
     sourceId: input.sourceId,
+    turnId: input.turnId,
+    jobId: input.jobId,
+    requestId: input.requestId,
     relatedMemoryIds: input.relatedMemoryIds ?? [],
     modality: input.modality,
     batchId: input.batchId,

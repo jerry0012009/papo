@@ -17,6 +17,7 @@ import {
   MessagesSquare,
   Mic,
   Plus,
+  PawPrint,
   RefreshCcw,
   RotateCcw,
   Save,
@@ -50,6 +51,7 @@ import type {
 } from "../core/types";
 import {
   activeEmergence,
+  acceptConversationTurn,
   buttonCapture,
   createProfile,
   curiousCapture,
@@ -152,6 +154,7 @@ type StagedChatSegment = StreamSegment & {
   previewUrl?: string;
   statusText?: string;
   displayText?: string;
+  uploadDataUrl?: string;
 };
 
 export function App() {
@@ -197,6 +200,7 @@ export function App() {
   const listeningModeRef = useRef<ListeningMode>("listen");
   const nativeListeningActiveRef = useRef(false);
   const profileRef = useRef<CreatureProfile | undefined>(undefined);
+  const retryTurnRef = useRef<{ signature: string; turnId: string } | undefined>(undefined);
   const tickTimerRef = useRef<number | undefined>(undefined);
   const segmentTimerRef = useRef<number | undefined>(undefined);
   const stopTimerRef = useRef<number | undefined>(undefined);
@@ -207,6 +211,10 @@ export function App() {
   );
   const unreadPapoCount = useMemo(() => countUnreadPapoMessages(profile), [profile?.conversation, profile?.readState?.lastReadPapoMessageId]);
   const hasUnreadPapoMessage = unreadPapoCount > 0;
+  const hasActiveConversationJobs = useMemo(
+    () => (profile?.jobs ?? []).some((job) => job.status === "queued" || job.status === "running"),
+    [profile?.jobs]
+  );
   const hasActiveHermesTask = useMemo(
     () => Boolean(profile?.hermes?.tasks?.some((task) => task.status === "pending" || task.status === "sent")),
     [profile?.hermes?.tasks]
@@ -252,7 +260,7 @@ export function App() {
 
   useEffect(() => {
     if (!profile?.userId) return;
-    const intervalMs = hasActiveHermesTask || pendingActionCards > 0 || pendingPetMotions ? 3_000 : 60_000;
+    const intervalMs = hasActiveConversationJobs || hasActiveHermesTask || pendingActionCards > 0 || pendingPetMotions ? 3_000 : 60_000;
     const timer = window.setInterval(async () => {
       try {
         const next = await getProfile(profile.userId);
@@ -262,7 +270,7 @@ export function App() {
       }
     }, intervalMs);
     return () => window.clearInterval(timer);
-  }, [hasActiveHermesTask, pendingActionCards, pendingPetMotions, profile?.userId]);
+  }, [hasActiveConversationJobs, hasActiveHermesTask, pendingActionCards, pendingPetMotions, profile?.userId]);
 
   useEffect(() => {
     if (!profile?.userId) return;
@@ -392,11 +400,24 @@ export function App() {
   async function submitTextCapture(text: string, nextTab: Tab = "chat") {
     const cleanText = text.trim();
     if (!profile || !cleanText) return;
-    await run(async () => {
-      const result = await buttonCapture(profile.userId, cleanText);
-      setProfile(result.profile);
+    const signature = `text:${cleanText}`;
+    const turnId = retryTurnRef.current?.signature === signature ? retryTurnRef.current.turnId : clientTurnId();
+    retryTurnRef.current = { signature, turnId };
+    setError(undefined);
+    try {
+      const accepted = await acceptConversationTurn(profile.userId, {
+        turnId,
+        requestId: turnId,
+        channel: "button",
+        segments: [{ id: `${turnId}-text`, kind: "text", label: "你刚说的话", content: cleanText, observedAt: new Date().toISOString() }]
+      });
+      retryTurnRef.current = undefined;
+      setProfile(accepted.profile);
       setTab(nextTab);
-    });
+    } catch (caught) {
+      setError(errorMessage(caught));
+      throw caught;
+    }
   }
 
   async function changePassword(currentPassword: string, newPassword: string) {
@@ -447,23 +468,39 @@ export function App() {
       return;
     }
     if (!cleanText && !chatSegments.length) return;
-    await run(async () => {
-      const readySegments = chatSegments.filter((segment) => stagedSegmentReady(segment));
-      const batchId = readySegments[0]?.batchId ?? currentBatchId();
-      const textSegment = cleanText
-        ? [makeSegment(`chat-text-${Date.now()}`, "text", listening ? "这 30 秒里你补充的话" : "你刚说的话", cleanText, { observedAt: new Date().toISOString(), batchId })]
-        : [];
-      const segments = [...textSegment, ...readySegments].filter((segment) => segment.content.trim()).map((segment, index) => ensureSegmentContext(segment, index));
-      if (listening) {
-        await submitLiveSegments(segments, { flushDelayMs: LIVE_BATCH_AUDIO_GRACE_MS });
-      } else {
-        const result = await curiousCapture(profile.userId, segments);
-        setProfile(result.profile);
-      }
+    const readySegments = chatSegments.filter((segment) => stagedSegmentReady(segment));
+    const signature = JSON.stringify([cleanText, ...readySegments.map((segment) => [segment.id, segment.kind, segment.label])]);
+    const turnId = retryTurnRef.current?.signature === signature ? retryTurnRef.current.turnId : clientTurnId();
+    retryTurnRef.current = { signature, turnId };
+    const segments = [
+      ...(cleanText ? [{ id: `${turnId}-text`, kind: "text" as const, label: listening ? "你补充的话" : "你刚说的话", content: cleanText, observedAt: new Date().toISOString() }] : []),
+      ...readySegments.map((segment, index) => ({
+        id: `${turnId}-media-${index}`,
+        kind: segment.kind,
+        label: segment.label,
+        content: segment.content || undefined,
+        dataUrl: segment.uploadDataUrl,
+        observedAt: segment.observedAt,
+        location: segment.location
+      }))
+    ];
+    setError(undefined);
+    try {
+      const accepted = await acceptConversationTurn(profile.userId, {
+        turnId,
+        requestId: turnId,
+        channel: segments.length === 1 && segments[0].kind === "text" ? "button" : "curious",
+        segments
+      });
+      retryTurnRef.current = undefined;
+      setProfile(accepted.profile);
       revokeStagedPreviewUrls(chatSegments);
       setChatSegments([]);
       setTab("chat");
-    });
+    } catch (caught) {
+      setError(errorMessage(caught));
+      throw caught;
+    }
   }
 
   async function uploadChatImageSummary(file?: File) {
@@ -497,27 +534,17 @@ export function App() {
     try {
       const location = await currentLocationSnapshot();
       const dataUrl = await readImageFileAsUploadDataUrl(file);
-      const result = await summarizeImage(dataUrl, file.name || "对话照片");
-      const content = imageSegmentContent(result.summary, file.name || "照片");
-      const asset = result.asset
-        ? {
-            ...result.asset,
-            label: file.name || result.asset.label,
-            observedAt,
-            location
-          }
-        : undefined;
       setChatSegments((current) =>
         current.map((segment) =>
           segment.id === localSegmentId
             ? {
                 ...segment,
-                content,
+                content: "",
                 location,
-                attachments: asset ? [asset] : segment.attachments,
-                sensingTrace: result.sensingTrace,
                 status: "ready",
-                displayText: imageSummaryPreview(content)
+                statusText: "发送后在后台理解",
+                displayText: "一张照片",
+                uploadDataUrl: dataUrl
               }
             : segment
         )
@@ -540,26 +567,20 @@ export function App() {
 
   async function uploadChatAudioObservation(file?: File) {
     if (!file) return;
-    await run(async () => {
+    try {
       const dataUrl = await readAudioFileAsDataUrl(file);
-      const result = await observeAudio(dataUrl, file.name || "对话录音");
-      const content = sensingSegmentContent(result.observation);
-      if (!content) return;
-      const segment = makeSegment(`chat-audio-${Date.now()}`, "audio_observation", file.name || "录音", content, {
+      const segment = makeSegment(`chat-audio-${Date.now()}`, "audio_observation", file.name || "录音", "", {
         observedAt: new Date().toISOString(),
         batchId: currentBatchId()
       });
-      segment.sensingTrace = result.sensingTrace;
-      if (listening) {
-        await submitLiveSegments([ensureSegmentContext(segment, 0)]);
-      } else {
-        setChatSegments((current) => [
-          ...current,
-          { ...segment, label: file.name || `录音 ${current.length + 1}`, batchId: current[0]?.batchId ?? segment.batchId }
-        ]);
-      }
+      setChatSegments((current) => [
+        ...current,
+        { ...segment, label: file.name || `录音 ${current.length + 1}`, batchId: current[0]?.batchId ?? segment.batchId, status: "ready", statusText: "发送后在后台转写", uploadDataUrl: dataUrl }
+      ]);
       setTab("chat");
-    });
+    } catch (caught) {
+      setError(errorMessage(caught));
+    }
   }
 
   async function recordQuickAudioObservation() {
@@ -641,22 +662,17 @@ export function App() {
       return;
     }
     setQuickAudioProcessing(true);
-    setBusy(true);
     setError(undefined);
     try {
       const blob = new Blob(chunks, { type: recorder.mimeType || mimeType || chunks[0]?.type || "audio/webm" });
       const dataUrl = await blobToDataUrl(blob);
-      const result = await observeAudio(dataUrl, "刚录的一段声音");
-      const content = sensingSegmentContent(result.observation);
-      if (!content) return;
-      const segment = makeSegment(`chat-mic-${Date.now()}`, "audio_observation", "刚录的一段声音", content, {
+      const segment = makeSegment(`chat-mic-${Date.now()}`, "audio_observation", "刚录的一段声音", "", {
         observedAt: new Date().toISOString(),
         batchId: currentBatchId()
       });
-      segment.sensingTrace = result.sensingTrace;
       setChatSegments((current) => [
         ...current,
-        { ...segment, label: `麦克风 ${current.length + 1}`, batchId: current[0]?.batchId ?? segment.batchId }
+        { ...segment, label: `麦克风 ${current.length + 1}`, batchId: current[0]?.batchId ?? segment.batchId, status: "ready", statusText: "发送后在后台转写", uploadDataUrl: dataUrl }
       ]);
       setTab("chat");
     } catch (caught) {
@@ -664,7 +680,6 @@ export function App() {
     } finally {
       quickAudioChunksRef.current = [];
       setQuickAudioProcessing(false);
-      setBusy(false);
     }
   }
 
@@ -2430,7 +2445,7 @@ function ChatView(props: {
   const messages = allMessages.slice(0, visibleCount).reverse();
   const sections = groupConversationSections(messages);
   const waitingForStagedSegments = props.stagedSegments.some((segment) => !stagedSegmentReady(segment));
-  const canSubmit = !waitingForStagedSegments && Boolean(draft.trim() || props.stagedSegments.some((segment) => stagedSegmentReady(segment) && segment.content.trim()));
+  const canSubmit = !waitingForStagedSegments && Boolean(draft.trim() || props.stagedSegments.some((segment) => stagedSegmentReady(segment) && (segment.content.trim() || segment.uploadDataUrl)));
   const hasOlderMessages = allMessages.length > visibleCount;
   const listeningTotalSeconds = Math.floor(props.listeningDurationMs / 1000);
   const listeningRemainingSeconds = Math.max(0, listeningTotalSeconds - props.listeningElapsed);
@@ -2485,6 +2500,8 @@ function ChatView(props: {
     setSubmittingMoment(true);
     try {
       await props.onSubmitMoment(text);
+    } catch {
+      setDraft((current) => current || text);
     } finally {
       setSubmittingMoment(false);
     }
@@ -2532,6 +2549,7 @@ function ChatView(props: {
         ) : (
           <p className="muted">还没有对话。第一件小事会从这里开始。</p>
         )}
+        <ConversationWorkIndicator profile={props.profile} />
         <div ref={threadEndRef} aria-hidden="true" />
       </section>
       <div className="chat-composer" ref={composerRef}>
@@ -2645,7 +2663,7 @@ function ChatView(props: {
             <button className="composer-mic-button" onClick={props.onRecordAudio} disabled={props.busy || props.listening || props.quickRecording || props.quickAudioProcessing} aria-label="录一段声音">
               {props.quickAudioProcessing ? <Loader2 size={18} className="spin-icon" /> : <Mic size={18} />}
             </button>
-            <button className="primary chat-send-button" onClick={submitDraft} disabled={props.busy || submittingMoment || !canSubmit} aria-label={`发送给 ${props.profile.creatureName}`}>
+            <button className="primary chat-send-button" onClick={submitDraft} disabled={submittingMoment || !canSubmit} aria-label={`发送给 ${props.profile.creatureName}`}>
               {submittingMoment ? <Loader2 size={18} className="spin-icon" /> : <Send size={18} />}
             </button>
           </div>
@@ -4421,6 +4439,37 @@ function HermesTaskNotice({ profile }: { profile: CreatureProfile }) {
   );
 }
 
+function ConversationWorkIndicator({ profile }: { profile: CreatureProfile }) {
+  const active = (profile.jobs ?? []).filter((job) => job.status === "queued" || job.status === "running");
+  const failed = (profile.jobs ?? []).filter((job) => job.status === "failed").slice(0, 2);
+  if (!active.length && !failed.length) return null;
+  const byTurn = new Map<string, typeof active>();
+  for (const job of active) byTurn.set(job.turnId, [...(byTurn.get(job.turnId) ?? []), job]);
+  return (
+    <div className="conversation-work-list" aria-live="polite">
+      {[...byTurn.entries()].map(([turnId, jobs]) => {
+        const slowAction = jobs.find((job) => job.stage === "action");
+        const sensing = jobs.find((job) => job.stage === "sensing");
+        const label = slowAction
+          ? slowAction.type === "illustration" ? "正在画画" : slowAction.type === "action_card" ? "正在制作动作" : "正在处理外部任务"
+          : sensing ? sensing.type === "audio_understanding" ? "正在听录音" : "正在看照片" : "正在理解和回复";
+        return (
+          <div className="conversation-work" key={turnId} data-stage={slowAction ? "action" : "cognition"}>
+            <span className="working-pet" aria-hidden="true"><PawPrint size={18} /></span>
+            <span>{profile.creatureName} {label}</span>
+          </div>
+        );
+      })}
+      {failed.map((job) => (
+        <div className="conversation-work failed" key={job.id}>
+          <span className="working-pet" aria-hidden="true"><X size={16} /></span>
+          <span>{job.type === "illustration" ? "画画" : job.type === "action_card" ? "动作制作" : job.stage === "sensing" ? "媒体理解" : "回复"}失败：{job.error ?? "可以继续发送消息"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ActionCardPendingNotice({ profile, count }: { profile: CreatureProfile; count: number }) {
   return (
     <div className="hermes-notice action-card-pending" aria-live="polite">
@@ -4586,6 +4635,11 @@ function nativeListeningError(error: unknown) {
 
 function stagedSegmentReady(segment: StagedChatSegment | StreamSegment) {
   return !("status" in segment) || !segment.status || segment.status === "ready";
+}
+
+function clientTurnId() {
+  const random = globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? `${Date.now()}${Math.random().toString(36).slice(2)}`;
+  return `turn_${random}`;
 }
 
 function revokeStagedPreviewUrls(segments: StagedChatSegment[]) {

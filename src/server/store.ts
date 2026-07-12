@@ -7,6 +7,7 @@ export interface ProfileStore {
   listProfiles(): Promise<Array<{ userId: string; creatureName: string; createdAt: string }>>;
   getProfile(userId: string): Promise<CreatureProfile | undefined>;
   saveProfile(profile: CreatureProfile): Promise<void>;
+  updateProfile(userId: string, update: (profile: CreatureProfile) => void | CreatureProfile | Promise<void | CreatureProfile>): Promise<CreatureProfile | undefined>;
   createProfile(input: { userId?: string; creatureName?: string; petKind?: string }): Promise<CreatureProfile>;
 }
 
@@ -41,6 +42,20 @@ export class JsonProfileStore implements ProfileStore {
       const current = data.profiles[incoming.userId] ? normalizeCreatureProfile(data.profiles[incoming.userId]) : undefined;
       data.profiles[incoming.userId] = current ? mergeCreatureProfiles(current, incoming) : incoming;
       await this.write(data);
+    });
+  }
+
+  async updateProfile(userId: string, update: (profile: CreatureProfile) => void | CreatureProfile | Promise<void | CreatureProfile>) {
+    return this.withWriteLock(async () => {
+      const data = await this.read();
+      const stored = data.profiles[userId];
+      if (!stored) return undefined;
+      const profile = normalizeCreatureProfile(stored);
+      const replacement = await update(profile);
+      const next = normalizeCreatureProfile(replacement ?? profile);
+      data.profiles[userId] = next;
+      await this.write(data);
+      return next;
     });
   }
 
@@ -105,6 +120,8 @@ function mergeCreatureProfiles(current: CreatureProfile, incoming: CreatureProfi
     dreamHistory: mergeById(current.dreamHistory, incoming.dreamHistory, "at").slice(0, 30),
     semanticBrainHistory: mergeById(current.semanticBrainHistory, incoming.semanticBrainHistory, "at").slice(0, 30),
     conversation: mergeById(current.conversation, incoming.conversation, "at").slice(0, 80),
+    turns: mergeById(current.turns ?? [], incoming.turns ?? [], "updatedAt", mergeTurn).slice(0, 80),
+    jobs: mergeById(current.jobs ?? [], incoming.jobs ?? [], "updatedAt", mergeJob).slice(0, 240),
     illustrations: mergeById(current.illustrations ?? [], incoming.illustrations ?? [], "createdAt").slice(0, 30),
     actionCards: mergeById(current.actionCards ?? [], incoming.actionCards ?? [], "createdAt").slice(0, 30),
     clientDocument: chooseLatestClientDocument(current, incoming),
@@ -121,6 +138,21 @@ function mergeCreatureProfiles(current: CreatureProfile, incoming: CreatureProfi
     }
   });
   return merged;
+}
+
+function mergeTurn(left: NonNullable<CreatureProfile["turns"]>[number], right: NonNullable<CreatureProfile["turns"]>[number]) {
+  const chosen = timestamp(right.updatedAt) >= timestamp(left.updatedAt) ? right : left;
+  return {
+    ...left,
+    ...chosen,
+    inputMessageIds: unique([...(left.inputMessageIds ?? []), ...(right.inputMessageIds ?? [])]),
+    jobIds: unique([...(left.jobIds ?? []), ...(right.jobIds ?? [])]),
+    segments: mergeById(left.segments ?? [], right.segments ?? [], "observedAt")
+  };
+}
+
+function mergeJob(left: NonNullable<CreatureProfile["jobs"]>[number], right: NonNullable<CreatureProfile["jobs"]>[number]) {
+  return timestamp(right.updatedAt) >= timestamp(left.updatedAt) ? { ...left, ...right } : { ...right, ...left };
 }
 
 function chooseLatestClientDocument(current: CreatureProfile, incoming: CreatureProfile) {
@@ -259,6 +291,7 @@ function unique<T>(values: T[]) {
 
 export class MemoryProfileStore implements ProfileStore {
   private profiles = new Map<string, CreatureProfile>();
+  private writeQueue: Promise<unknown> = Promise.resolve();
 
   async listProfiles() {
     return [...this.profiles.values()].map((profile) => ({
@@ -274,12 +307,39 @@ export class MemoryProfileStore implements ProfileStore {
   }
 
   async saveProfile(profile: CreatureProfile) {
-    this.profiles.set(profile.userId, normalizeCreatureProfile(profile));
+    await this.withWriteLock(async () => {
+      const current = this.profiles.get(profile.userId);
+      this.profiles.set(profile.userId, current ? mergeCreatureProfiles(normalizeCreatureProfile(current), normalizeCreatureProfile(profile)) : normalizeCreatureProfile(profile));
+    });
+  }
+
+  async updateProfile(userId: string, update: (profile: CreatureProfile) => void | CreatureProfile | Promise<void | CreatureProfile>) {
+    return this.withWriteLock(async () => {
+      const stored = this.profiles.get(userId);
+      if (!stored) return undefined;
+      const profile = normalizeCreatureProfile(stored);
+      const replacement = await update(profile);
+      const next = normalizeCreatureProfile(replacement ?? profile);
+      this.profiles.set(userId, next);
+      return next;
+    });
   }
 
   async createProfile(input: { userId?: string; creatureName?: string; petKind?: string }) {
     const profile = createCreatureProfile(input);
     this.profiles.set(profile.userId, profile);
     return profile;
+  }
+
+  private async withWriteLock<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.writeQueue;
+    let release!: () => void;
+    this.writeQueue = new Promise<void>((resolve) => { release = resolve; });
+    await previous.catch(() => undefined);
+    try {
+      return await operation();
+    } finally {
+      release();
+    }
   }
 }

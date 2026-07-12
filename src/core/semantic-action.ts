@@ -10,6 +10,7 @@ import { applyStateDelta } from "./state";
 import type { ActionResult, CaptureResult, CreatureProfile, SemanticBrainRecord } from "./types";
 
 const actionSchema = z.enum(["observe", "respond", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list", "use_hermes", "generate_illustration", "generate_action_card", "update_pet_profile"]);
+const backgroundActionSchema = z.enum(["use_hermes", "generate_illustration", "generate_action_card"]);
 const actionResultKindSchema = z.enum(["none", "visible_reply", "memory_intent", "reminder_draft", "question_list_draft", "hermes_task", "illustration_draft", "action_card_draft", "pet_profile_update"]);
 const stateDeltaSchema = z
   .object({
@@ -39,6 +40,20 @@ const petProfilePatchSchema = z.object({
   userGuidance: optionalText(700)
 }).partial();
 
+const structuredActionResultSchema = z.object({
+  kind: actionResultKindSchema,
+  title: optionalText(120),
+  text: optionalText(500),
+  dueText: optionalText(160),
+  items: optionalTextArray(8, 180).optional(),
+  prompt: optionalText(1600),
+  caption: optionalText(220),
+  style: optionalText(160),
+  durationSeconds: z.number().min(4).max(20).optional(),
+  sourceIds: optionalTextArray(10, 120).optional(),
+  petProfile: petProfilePatchSchema.optional()
+});
+
 function cleanOptionalText(value: unknown, max: number) {
   if (value === null) return undefined;
   if (typeof value !== "string") return value;
@@ -62,21 +77,12 @@ const semanticActionSchema = z.object({
         shouldReply: z.boolean().optional(),
         reply: optionalText(700),
         visibleReaction: optionalText(260),
-        actionResult: z
-          .object({
-            kind: actionResultKindSchema,
-            title: optionalText(120),
-            text: optionalText(500),
-            dueText: optionalText(160),
-            items: optionalTextArray(8, 180).optional(),
-            prompt: optionalText(1600),
-            caption: optionalText(220),
-            style: optionalText(160),
-            durationSeconds: z.number().min(4).max(20).optional(),
-            sourceIds: optionalTextArray(10, 120).optional(),
-            petProfile: petProfilePatchSchema.optional()
-          })
-          .optional(),
+        actionResult: structuredActionResultSchema.optional(),
+        actions: z.array(z.object({
+          action: backgroundActionSchema,
+          reason: optionalText(420),
+          actionResult: structuredActionResultSchema
+        })).max(4).optional(),
         memoryCandidateText: optionalText(650),
         memoryTags: optionalTextArray(10, 40).optional(),
         relatedMemoryIds: optionalTextArray(6, 80).optional(),
@@ -127,6 +133,15 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
     if (relatedMemoryIds.length) event.relatedMemoryIds = relatedMemoryIds;
     const actionResult = normalizeActionResult(decision);
     event.actionResult = actionResult;
+    event.backgroundActions = (decision.actions ?? []).map((planned) => {
+      const actionDecision = { ...decision, action: planned.action, actionResult: planned.actionResult };
+      validatePersistenceDecision(actionDecision);
+      return {
+        action: planned.action,
+        actionResult: normalizeActionResult(actionDecision),
+        reason: safeProcessText(planned.reason)
+      };
+    });
     event.semanticSource = "llm";
     event.decisionTrace = [
       ...(event.decisionTrace ?? []),
@@ -137,6 +152,7 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
       `memory_candidate=${decision.shouldConsiderMemory}`,
       decision.shouldReply === undefined ? "should_reply=not_provided" : `should_reply=${decision.shouldReply}`,
       `action_result=${actionResult.kind}`,
+      `background_actions=${event.backgroundActions.map((planned) => planned.action).join(",") || "none"}`,
       `state_delta=${stateDeltaTrace(stateDeltas)}`,
       `guardrail: action=${guarded.action}`
     ];
@@ -474,6 +490,8 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - generate_action_card：把当前小动物做某个具体动作生成一张动作关键帧，并渲染成 10 秒左右可播放动作卡。
 - update_pet_profile：当用户在对话里明确教 Papo 自己的小动物外观、性格、习惯、行为偏好或形象设定时，更新小动物 profile。
 
+每个 event 只能返回一条 decision。decision.action 是主要对话/记忆动作，reply 是可以立刻显示的主回复；如同一请求还需要画图、动作卡或 Hermes，在 actions 数组中同时返回 0..N 个后台动作。不要为同一 event 重复 decision，也不要为了后台动作牺牲快速文字回答。例如“回答问题并画一幅图”应使用 action=respond、reply=直接回答、actions=[generate_illustration]。
+
 护栏会再次校验：
 - action 必须在白名单内。
 - stateDeltas 每项必须在 -12 到 12 之间，规则会负责 clamp、保存和记录 before/after。
@@ -525,6 +543,13 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
         "petProfile": {"appearance":"...","personality":"...","habits":"...","visualStyle":"...","imagePrompt":"...","motionStyle":"..."},
         "sourceIds": ["episode_xxx", "img_xxx"]
       },
+      "actions": [
+        {
+          "action": "generate_illustration",
+          "reason": "为什么这个后台动作有价值",
+          "actionResult": {"kind":"illustration_draft","title":"...","prompt":"...","caption":"...","sourceIds":["attention_xxx"]}
+        }
+      ],
       "memoryCandidateText": "...",
       "memoryTags": ["..."],
       "relatedMemoryIds": ["ltm_xxx"],
@@ -546,6 +571,7 @@ actionResult 是这一步行动真实产出的结构化结果：
 - action=generate_action_card 时，必须返回 {"kind":"action_card_draft","title":"...","prompt":"...","caption":"...","style":"...","durationSeconds":10,"sourceIds":["..."]}，title 和 prompt 必填。caption 是动作卡生成后可展示给用户的短句；sourceIds 必须来自当前事件、附件、episode 或 memory 的真实 id，不能编造。
 - action=update_pet_profile 时，必须返回 {"kind":"pet_profile_update","text":"...","petProfile":{"appearance":"...","personality":"...","habits":"...","visualStyle":"...","imagePrompt":"...","motionStyle":"...","userGuidance":"..."}}。petProfile 至少一项；不要把用户的生活记忆误写进小动物形象 profile。
 - observe/quiet 应省略 actionResult，或返回 {"kind":"none"}。
+actions 只放可独立后台执行的 use_hermes、generate_illustration、generate_action_card。每项 actionResult 遵守同样字段约束；复合意图必须放在同一条 decision 的 actions 中，不能复制 eventId 创建第二条 decision。后台动作失败不能改变 reply 或主行动的成功结果。
 shouldCreateEpisode 决定这次是否应该留下为一条经历。
 shouldConsiderMemory 决定这次是否进入后续记忆判断；只有值得被之后记住、反馈、回忆或整理的事件才为 true。shouldConsiderMemory=true 时 shouldCreateEpisode 必须为 true。
 如果 action 是 save_episode 或 save_long_term，shouldCreateEpisode 必须为 true；如果 action 是 save_long_term，shouldConsiderMemory 必须为 true。

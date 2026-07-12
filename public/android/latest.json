@@ -1,14 +1,14 @@
 {
-  "versionName": "0.4.4",
-  "versionCode": 10,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.4.apk",
-  "publishedAt": "2026-07-11T19:48:45.000Z",
+  "versionName": "0.4.5",
+  "versionCode": 11,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.5.apk",
+  "publishedAt": "2026-07-12T05:38:20.000Z",
   "notes": [
-    "对话、记忆和画过中的图片统一使用支持双指缩放的全屏查看器",
-    "对话和各处动作卡视频统一点击后全屏播放，并可下载原视频",
-    "图片和视频真正保存到 Android 系统下载/Papo 目录，完成后再提示成功",
-    "统一返回键、下载状态和媒体元数据模块，关闭预览后准确恢复原页面"
+    "文字、照片和录音发送后立即进入对话，输入框无需等待后台认知完成",
+    "照片理解、音频转写、回答、插画和外部任务使用可恢复的异步回合任务",
+    "回答问题与制作插画可同时规划，文字先回复，插画完成后再加入原回合",
+    "后台状态按回合显示；子任务失败不吞输入，也不阻塞继续发送下一条"
   ],
-  "sha256": "b11a5ba52415d20402320992d03f05bfc99778d92aafa2eff48ca10a0e39c1b6",
-  "size": 22793564
+  "sha256": "ce95ab033de0acb9f2ac2cbcb7ecc405222187509d0eb0231232597309bb528e",
+  "size": 22794416
 }

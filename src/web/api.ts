@@ -1,4 +1,4 @@
-import type { CaptureResult, CreatureProfile, DreamRecord, FeedbackKind, FeedbackRecord, MediaAttachment, MessageCognitionTrace, SegmentKind, SensingTrace, StreamSegment, WakeEvent } from "../core/types";
+import type { CaptureResult, ConversationJobRecord, ConversationTurnRecord, CreatureProfile, DreamRecord, FeedbackKind, FeedbackRecord, MediaAttachment, MessageCognitionTrace, SegmentKind, SensingTrace, StreamSegment, WakeEvent } from "../core/types";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 const apiBase = import.meta.env.VITE_API_BASE as string | undefined;
@@ -162,6 +162,30 @@ export async function curiousCapture(userId: string, segments: StreamSegment[]):
     headers: profileJsonHeaders(userId),
     body: JSON.stringify({ segments })
   });
+}
+
+export interface AsyncTurnSegment {
+  id: string;
+  kind: SegmentKind;
+  label: string;
+  content?: string;
+  dataUrl?: string;
+  observedAt?: string;
+  batchId?: string;
+  location?: StreamSegment["location"];
+}
+
+export async function acceptConversationTurn(userId: string, input: {
+  turnId: string;
+  requestId: string;
+  channel: "button" | "curious";
+  segments: AsyncTurnSegment[];
+}) {
+  return request<{ profile: CreatureProfile; turn: ConversationTurnRecord; jobs: ConversationJobRecord[]; duplicate?: boolean }>(`/api/profiles/${userId}/turns`, {
+    method: "POST",
+    headers: profileJsonHeaders(userId),
+    body: JSON.stringify(input)
+  }, { retries: 2, retryDelayMs: 500 });
 }
 
 export async function sendFeedback(

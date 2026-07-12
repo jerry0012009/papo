@@ -192,6 +192,17 @@ export class PushNotifyingProfileStore implements ProfileStore {
       if (this.userQueues.get(profile.userId) === current) this.userQueues.delete(profile.userId);
     }
   }
+
+  async updateProfile(userId: string, update: (profile: CreatureProfile) => void | CreatureProfile | Promise<void | CreatureProfile>) {
+    const before = await this.inner.getProfile(userId);
+    const previousMessageIds = new Set(before?.conversation.map((message) => message.id) ?? []);
+    const saved = await this.inner.updateProfile(userId, update);
+    const newMessages = saved?.conversation.filter((message) =>
+      message.role === "papo" && message.channel !== "wake" && !previousMessageIds.has(message.id)
+    ) ?? [];
+    if (saved && newMessages.length) void this.push.sendMessages(saved, newMessages);
+    return saved ? structuredClone(saved) : undefined;
+  }
 }
 
 function notificationUrl(appUrl: string) {

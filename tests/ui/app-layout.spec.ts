@@ -482,7 +482,7 @@ test("chat opens at latest content and keeps the composer aligned with the threa
   await expectInViewport(page, trace);
 });
 
-test("quick microphone recording exposes recording, stop, processing, and send states", async ({ page }) => {
+test("quick microphone recording stages an audio placeholder without waiting for transcription", async ({ page }) => {
   await installMockMicrophone(page);
   await page.goto("/");
   await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
@@ -492,7 +492,6 @@ test("quick microphone recording exposes recording, stop, processing, and send s
   await expect(page.getByRole("button", { name: "停止" })).toBeVisible();
 
   await page.getByRole("button", { name: "停止" }).click();
-  await expect(page.getByText("正在整理录音")).toBeVisible();
   const stagedAudio = page.locator(".staged-segment.audio_observation");
   await expect(stagedAudio).toBeVisible({ timeout: 3_000 });
   await expect(stagedAudio.locator("textarea")).toHaveCount(0);
@@ -552,12 +551,11 @@ test("photo upload during companion mode waits for explicit submit", async ({ pa
 
   await page.getByRole("button", { name: "发送给 Papo" }).click();
   await expect(page.locator(".staged-segment.image_summary")).toHaveCount(0);
-  const session = page.locator(".companion-session").filter({ hasText: "这张照片里" });
-  await expect(session).toBeVisible();
-  await expect(session).toContainText("1 张照片");
+  await expect(page.locator(".chat-bubble.user", { hasText: "照片已收到" })).toBeVisible();
+  await expect(page.locator(".conversation-work")).toContainText(/正在看照片|正在理解和回复/);
 });
 
-test("photo submit shows a visible in-flight handoff state", async ({ page }) => {
+test("accepted turn shows immediately and composer stays available while work continues", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("papo:slowCuriousCapture", "1");
   });
@@ -573,12 +571,17 @@ test("photo submit shows a visible in-flight handoff state", async ({ page }) =>
 
   await expect(page.locator(".staged-segment.image_summary img")).toBeVisible({ timeout: 3_000 });
   await page.getByRole("button", { name: "发送给 Papo" }).click();
-  await expect(page.getByRole("button", { name: "发送给 Papo" })).toBeDisabled();
-  await expect(page.locator(".chat-bubble.world", { hasText: "这张照片里" })).toBeVisible({ timeout: 4_000 });
+  await expect(page.locator(".chat-bubble.user", { hasText: "照片已收到" })).toBeVisible({ timeout: 2_000 });
+  await expect(page.locator(".conversation-work")).toContainText(/正在看照片|正在理解和回复/);
+  const composer = page.locator(".chat-composer textarea").last();
+  await composer.fill("后台还在处理时发送第二条");
+  await expect(page.getByRole("button", { name: "发送给 Papo" })).toBeEnabled();
+  await page.getByRole("button", { name: "发送给 Papo" }).click();
+  await expect(page.locator(".chat-bubble.user", { hasText: "后台还在处理时发送第二条" })).toBeVisible();
   await expect(page.locator(".chat-bubble.world", { hasText: "handoff-photo.jpg" })).toHaveCount(0);
 });
 
-test("large phone photos are compressed before image summary upload", async ({ page }) => {
+test("large phone photos are compressed before durable turn receipt", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("papo:captureImageUploadBytes", "1");
   });
@@ -614,6 +617,8 @@ test("large phone photos are compressed before image summary upload", async ({ p
 
   const stagedPhoto = page.locator(".staged-segment.image_summary");
   await expect(stagedPhoto.locator(".staged-image-overlay")).toHaveCount(0, { timeout: 5_000 });
+  await page.getByRole("button", { name: "发送给 Papo" }).click();
+  await expect(page.locator(".chat-bubble.user", { hasText: "照片已收到" })).toBeVisible();
   const uploadedLength = await page.evaluate(() => Number(window.localStorage.getItem("papo:lastImageUploadLength") ?? 0));
   expect(uploadedLength).toBeGreaterThan(64);
   expect(uploadedLength).toBeLessThanOrEqual(3_500_000);
@@ -914,6 +919,44 @@ async function installMockApi(page: Page) {
           ruleTrace: ["route=curious_candidate"]
         }
       });
+      return;
+    }
+
+    if (path === "/api/profiles/demo/turns" && route.request().method() === "POST") {
+      const requestBody = safePostJson(route) as { turnId: string; requestId: string; channel: "button" | "curious"; segments: Array<{ id: string; label: string; content?: string; kind: "text" | "image_summary" | "audio_observation"; batchId?: string; dataUrl?: string }> };
+      if (await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:captureImageUploadBytes") === "1")) {
+        const imageLength = requestBody.segments.find((segment) => segment.kind === "image_summary")?.dataUrl?.length ?? 0;
+        await route.request().frame().page().evaluate((length) => window.localStorage.setItem("papo:lastImageUploadLength", String(length)), imageLength);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 80));
+      const at = new Date().toISOString();
+      const messages = requestBody.segments.map((segment, index) => ({
+        id: `${requestBody.turnId}-message-${index}`,
+        at,
+        role: "user" as const,
+        channel: requestBody.channel,
+        text: segment.kind === "text" ? segment.content ?? "" : `${segment.label}：${segment.kind === "image_summary" ? "照片已收到，正在理解" : "录音已收到，正在转写"}`,
+        displayText: segment.kind === "text" ? undefined : segment.kind === "image_summary" ? "照片已收到，正在理解" : "录音已收到，正在转写",
+        sourceId: segment.id,
+        turnId: requestBody.turnId,
+        requestId: requestBody.requestId,
+        relatedMemoryIds: [],
+        modality: segment.kind,
+        batchId: segment.batchId,
+        attachments: []
+      }));
+      const job = {
+        id: `${requestBody.turnId}-cognition`, turnId: requestBody.turnId, requestId: requestBody.requestId,
+        type: requestBody.segments.some((segment) => segment.kind === "image_summary") ? "image_understanding" : "cognition",
+        stage: requestBody.segments.some((segment) => segment.kind !== "text") ? "sensing" : "cognition",
+        status: "running", attempt: 1, maxAttempts: 3, retryable: true, createdAt: at, updatedAt: at, sourceIds: [requestBody.turnId]
+      };
+      profile = { ...profile, conversation: [...messages, ...profile.conversation], jobs: [job, ...(profile.jobs ?? [])] };
+      await json(route, {
+        profile,
+        turn: { id: requestBody.turnId, requestId: requestBody.requestId, channel: requestBody.channel, status: "running", createdAt: at, updatedAt: at, inputMessageIds: messages.map((message) => message.id), jobIds: [job.id], segments: requestBody.segments },
+        jobs: [job]
+      }, 202);
       return;
     }
 

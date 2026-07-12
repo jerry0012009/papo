@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
+import { updateClientDocument } from "../core/client-document";
 import { audioObservationPreview, imageSummaryPreview } from "../core/display-text";
 import { applyPetTouchState, isDogStateCheckDue, refreshDogStateIfDue } from "../core/dog-states";
 import { isDreamingDue, recordDreamingFailure, semanticDreamMemories } from "../core/dreaming";
@@ -14,13 +15,15 @@ import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { createModelProvider, type ImageReference, type ModelProvider } from "../core/provider";
 import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
 import { wakeCreature } from "../core/rhythm";
-import type { ActionCardRecord, ActionResult, CaptureResult, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationPlan, IllustrationRecord, MediaAttachment, MessageCognitionTrace, PetIdentityProfile, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
+import { clampState, deriveMood } from "../core/state";
+import type { ActionCardRecord, ActionResult, CaptureResult, ConversationJobRecord, ConversationTurnRecord, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationPlan, IllustrationRecord, MediaAttachment, MessageCognitionTrace, PetIdentityProfile, PlannedAction, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
 import { createHermesBridge, type HermesBridge } from "./hermes";
 import { JsonDeviceAuthService, type DeviceAuthService } from "./device-auth";
 import { NativeIngestQueue, type NativeIngestPayload } from "./native-ingest-queue";
-import { markMemoriesPending, queueMemoryEnrichment } from "./memory-enrichment";
+import { enrichMemoryExperience, markMemoriesPending, queueMemoryEnrichment } from "./memory-enrichment";
 import { createWebPushService, PushNotifyingProfileStore, type WebPushService } from "./push";
 import { JsonProfileStore, type ProfileStore } from "./store";
+import { PersistentTurnWorker } from "./turn-worker";
 
 const createProfileSchema = z.object({
   userId: z.string().min(3).max(40).regex(/^[a-zA-Z0-9_-]+$/).optional(),
@@ -48,6 +51,27 @@ const updateActionCardSchema = z.object({
 
 const buttonSchema = z.object({
   text: z.string().min(1).max(4000)
+});
+
+const turnIdSchema = z.string().min(8).max(100).regex(/^[a-zA-Z0-9_-]+$/);
+const asyncTurnSchema = z.object({
+  turnId: turnIdSchema,
+  requestId: turnIdSchema,
+  channel: z.enum(["button", "curious"]),
+  segments: z.array(z.object({
+    id: turnIdSchema,
+    kind: z.enum(["text", "image_summary", "audio_observation"]),
+    label: z.string().min(1).max(80),
+    content: z.string().max(4000).optional(),
+    dataUrl: z.string().max(24_000_000).optional(),
+    auditOnly: z.boolean().optional(),
+    observedAt: z.string().datetime().optional(),
+    batchId: z.string().min(1).max(100).optional(),
+    location: z.lazy(() => locationSchema).optional()
+  }).superRefine((segment, context) => {
+    if (segment.kind === "text" && !segment.content?.trim()) context.addIssue({ code: "custom", message: "Text is empty" });
+    if (segment.kind !== "text" && !segment.dataUrl) context.addIssue({ code: "custom", message: "Media data is missing" });
+  })).min(1).max(12)
 });
 
 const petTouchSchema = z.object({
@@ -172,6 +196,7 @@ export function createApp(input: {
   nativeIngest?: { directory?: string; intervalMs?: number; autoStart?: boolean };
   proactive?: { enabled?: boolean; intervalMs?: number };
   hermes?: { enabled?: boolean; bridge?: HermesBridge };
+  turns?: { autoStart?: boolean; concurrency?: number; intervalMs?: number };
 } = {}) {
   const push = input.push ?? createWebPushService();
   const deviceAuth = input.deviceAuth ?? new JsonDeviceAuthService();
@@ -181,6 +206,15 @@ export function createApp(input: {
   const hermesBridge = input.hermes?.bridge ?? (input.hermes?.enabled ? createHermesBridge({ store, provider }) : undefined);
   const app = express();
   const nativeBatchLocks = new Map<string, Promise<void>>();
+
+  const turnWorker = new PersistentTurnWorker({
+    store,
+    concurrency: input.turns?.concurrency ?? 3,
+    intervalMs: input.turns?.intervalMs ?? 250,
+    handle: processConversationJob
+  });
+  app.locals.turnWorker = turnWorker;
+  if (input.turns?.autoStart !== false) void turnWorker.start();
 
   async function persistCuriousCapture(profile: CreatureProfile, segments: StreamSegment[]) {
     markProactiveUserResponse(profile);
@@ -225,6 +259,190 @@ export function createApp(input: {
     queueActionCardGeneration({ store, userId: profile.userId, result, provider });
     queueMemoryEnrichment({ store, userId: profile.userId, memoryIds: enrichedMemoryIds, provider });
     return result;
+  }
+
+  async function processConversationJob(userId: string, job: ConversationJobRecord) {
+    if (job.type === "image_understanding" || job.type === "audio_understanding") {
+      const current = await store.getProfile(userId);
+      const segment = current?.turns?.find((turn) => turn.id === job.turnId)?.segments.find((item) => item.id === job.segmentId);
+      const attachment = segment?.attachments?.[0];
+      if (!current || !segment || !attachment) throw new Error("Turn media source is missing");
+      const dataUrl = await mediaAttachmentDataUrl(attachment);
+      if (!dataUrl) throw new Error("Turn media asset is unreadable");
+      let content = "";
+      let trace: SensingTrace;
+      if (job.type === "image_understanding") {
+        const prompt = `请用中文把这张图片压缩成一段 80 字以内的生活场景摘要，给 Curious Mode 当 image_summary。标签：${segment.label}`;
+        content = (await provider.summarizeImage(dataUrl, prompt)).slice(0, 600).trim();
+        trace = imageSensingTrace(provider, segment.label, content);
+      } else {
+        const prompt = `请直接理解这段音频，写成一段给 Papo 后续注意机制使用的中文生活观察。只描述能直接听见的事实；无法读取只返回 ERROR_AUDIO_UNREADABLE。标签：${segment.label}`;
+        const observation = normalizeAudioObservation((await observeAudioForSensing(provider, dataUrl, prompt)).slice(0, 1200));
+        content = observation.text;
+        trace = audioSensingTrace(provider, segment.label, observation);
+      }
+      await store.updateProfile(userId, (profile) => {
+        const stored = profile.turns?.find((turn) => turn.id === job.turnId)?.segments.find((item) => item.id === job.segmentId);
+        if (!stored) return;
+        stored.content = content;
+        stored.sensingTrace = trace;
+        const message = profile.conversation.find((item) => item.turnId === job.turnId && item.sourceId === job.segmentId);
+        if (message) {
+          message.text = `${stored.label}：${content || (trace.status === "unreadable" ? "音频无法读取" : "没有识别到可用内容")}`;
+          message.displayText = stored.kind === "image_summary" ? "一张照片" : "一段录音";
+          message.sensingTrace = trace;
+        }
+      });
+      return { attachmentIds: [attachment.id] };
+    }
+
+    if (job.type === "cognition") return processCognitionJob(userId, job);
+    if (job.type === "memory_enrichment") return processTurnMemoryEnrichment(userId, job);
+    return processActionJob(userId, job);
+  }
+
+  async function processCognitionJob(userId: string, job: ConversationJobRecord) {
+    const profile = await store.getProfile(userId);
+    const turn = profile?.turns?.find((item) => item.id === job.turnId);
+    if (!profile || !turn) throw new Error("Conversation turn is missing");
+    const existing = profile.conversation.find((message) => message.jobId === job.id && message.role === "papo");
+    if (existing) return { messageId: existing.id };
+    const baseProfile = structuredClone(profile);
+    markProactiveUserResponse(profile);
+    const beforeMemoryIds = activeMemorySignatures(profile);
+    const beforeSemanticIds = semanticRecordIds(profile);
+    const result = turn.channel === "button" && turn.segments.length === 1 && turn.segments[0].kind === "text"
+      ? await runButtonHarness(profile, turn.segments[0].content, provider)
+      : await runCuriousHarness(profile, turn.segments, provider);
+    applyPetProfileActionResults(profile, result);
+    const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
+    const sensingTraces = turn.segments.flatMap((segment) => segment.sensingTrace ? [segment.sensingTrace] : []);
+    const cognitionTrace = captureCognitionTrace(result, provider, turn.channel === "button" ? "button" : "curious_stream", modelRuns, sensingTraces);
+    const reply = appendPapoMessage(profile, {
+      channel: turn.channel,
+      text: result.response,
+      sourceId: `${turn.id}:reply`,
+      turnId: turn.id,
+      jobId: job.id,
+      requestId: turn.requestId,
+      relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
+      cognitionTrace
+    });
+    const enrichedMemoryIds = newActiveMemoryIds(profile, beforeMemoryIds);
+    markMemoriesPending(profile, enrichedMemoryIds);
+    const childJobs = [...plannedConversationJobs(turn, job, result), ...memoryEnrichmentJobs(turn, job, enrichedMemoryIds)];
+    profile.jobs = [...childJobs, ...(profile.jobs ?? [])].filter((item, index, list) => list.findIndex((other) => other.id === item.id) === index).slice(0, 240);
+    turn.jobIds = [...new Set([...turn.jobIds, ...childJobs.map((item) => item.id)])];
+    const saved = await store.updateProfile(userId, (latest) => {
+      commitCognitionOwnedRecords(latest, baseProfile, profile, result, reply, childJobs, job);
+    });
+    if (!saved) throw new Error("Profile disappeared before cognition commit");
+    result.profile = saved;
+    turnWorker.wake();
+    return {
+      messageId: reply?.id,
+      episodeIds: result.episodes.map((episode) => episode.id),
+      memoryIds: enrichedMemoryIds,
+      memorySourceIds: [turn.id, job.id]
+    };
+  }
+
+  async function processTurnMemoryEnrichment(userId: string, job: ConversationJobRecord) {
+    const memoryId = job.sourceIds.find((id) => id.startsWith("ltm_"));
+    const snapshot = await store.getProfile(userId);
+    const memory = snapshot?.longTermMemories.find((item) => item.id === memoryId && item.weight > 0);
+    if (!snapshot || !memory) return { memoryDecision: "skipped_duplicate" as const, memoryReason: "Memory no longer exists", memorySourceIds: job.sourceIds };
+    await enrichMemoryExperience(snapshot, memory, provider);
+    await updateClientDocument(snapshot, provider, [memory.id]).catch(() => false);
+    const saved = await store.updateProfile(userId, (latest) => {
+      const target = latest.longTermMemories.find((item) => item.id === memory.id && item.weight > 0);
+      if (!target) return;
+      target.shortTitle = memory.shortTitle;
+      target.narrative = memory.narrative;
+      target.visual = memory.visual ? { ...memory.visual, turnId: job.turnId, jobId: job.id, sourceIds: [...new Set([...(memory.visual.sourceIds ?? []), job.turnId, job.id, memory.id])] } : undefined;
+      target.visualPrompt = memory.visualPrompt;
+      target.visualStatus = memory.visualStatus;
+      target.visualError = memory.visualError;
+      target.visualUpdatedAt = memory.visualUpdatedAt;
+      if ((snapshot.clientDocument?.revision ?? 0) > (latest.clientDocument?.revision ?? 0)) latest.clientDocument = snapshot.clientDocument;
+    });
+    if (!saved) throw new Error("Profile disappeared before memory enrichment commit");
+    return { memoryIds: [memory.id], memorySourceIds: [...new Set([job.turnId, job.id, memory.id])], memoryDecision: "created" as const, memoryReason: "Primary cognition approved this long-term memory; presentation was enriched idempotently" };
+  }
+
+  async function processActionJob(userId: string, job: ConversationJobRecord) {
+    const profile = await store.getProfile(userId);
+    if (!profile || !job.event || !job.action) throw new Error("Background action source is missing");
+    const existing = profile.conversation.find((message) => message.jobId === job.id && message.role === "papo");
+    if (existing) return {
+      messageId: existing.id,
+      attachmentIds: existing.attachments?.map((item) => item.id),
+      memoryDecision: "skipped_duplicate" as const,
+      memoryReason: "This job output was already committed"
+    };
+    const baseIllustrationIds = new Set((profile.illustrations ?? []).map((item) => item.id));
+    const baseActionCardIds = new Set((profile.actionCards ?? []).map((item) => item.id));
+    const baseHermesTaskIds = new Set((profile.hermes.tasks ?? []).map((item) => item.id));
+    const event = structuredClone(job.event);
+    event.actionDecision = { ...event.actionDecision, action: job.action.action };
+    event.suggestedAction = job.action.action;
+    event.actionResult = structuredClone(job.action.actionResult);
+    const episode = job.episodeId ? profile.episodes.find((item) => item.id === job.episodeId) : undefined;
+    const result: CaptureResult = { profile, events: [event], episodes: episode ? [structuredClone(episode)] : [], response: "" };
+    let attachments: MediaAttachment[] = [];
+    if (job.type === "illustration") attachments = await executeIllustrationActions(profile, result, provider, "action");
+    if (job.type === "action_card") {
+      attachments = await executeActionCardActions(profile, result, provider, "action");
+      applyActionCardCompletion(profile, result, attachments);
+    }
+    if (job.type === "hermes") {
+      if (!hermesBridge) throw new Error("Hermes is not configured");
+      await hermesBridge.enqueueTasks(profile, result);
+    }
+    const text = job.type === "illustration"
+      ? job.action.actionResult.caption ?? job.action.actionResult.title ?? "画好啦，给你看。"
+      : job.type === "action_card"
+        ? job.action.actionResult.caption ?? job.action.actionResult.title ?? "动作做好啦。"
+        : "已经把这件事交给虾虾继续处理。";
+    const message = attachments.length ? appendPapoMessage(profile, {
+      channel: profile.turns?.find((turn) => turn.id === job.turnId)?.channel ?? "curious",
+      text,
+      sourceId: job.id,
+      turnId: job.turnId,
+      jobId: job.id,
+      requestId: job.requestId,
+      attachments
+    }) : undefined;
+    for (const illustration of profile.illustrations ?? []) if (attachments.some((item) => item.id === illustration.attachment.id)) {
+      illustration.messageId = message?.id;
+      illustration.turnId = job.turnId;
+      illustration.jobId = job.id;
+    }
+    for (const card of profile.actionCards ?? []) if (attachments.some((item) => item.id === card.video.id)) {
+      card.messageId = message?.id;
+      card.turnId = job.turnId;
+      card.jobId = job.id;
+    }
+    const ownedIllustrations = (profile.illustrations ?? []).filter((item) => !baseIllustrationIds.has(item.id));
+    const ownedActionCards = (profile.actionCards ?? []).filter((item) => !baseActionCardIds.has(item.id));
+    const ownedHermesTasks = (profile.hermes.tasks ?? []).filter((item) => !baseHermesTaskIds.has(item.id));
+    const saved = await store.updateProfile(userId, (latest) => {
+      if (message) latest.conversation = mergeOwnedById(latest.conversation, [message]).slice(0, 80);
+      latest.illustrations = mergeOwnedById(latest.illustrations ?? [], ownedIllustrations).slice(0, 30);
+      latest.actionCards = mergeOwnedById(latest.actionCards ?? [], ownedActionCards).slice(0, 30);
+      latest.hermes.tasks = mergeOwnedById(latest.hermes.tasks ?? [], ownedHermesTasks).slice(0, 30);
+      if (attachments.length && job.episodeId) linkActionAttachmentsToMemorySources(latest, job, attachments);
+    });
+    if (!saved) throw new Error("Profile disappeared before action commit");
+    return {
+      messageId: message?.id,
+      attachmentIds: attachments.map((item) => item.id),
+      memorySourceIds: attachments.length ? [...new Set([job.turnId, job.id, ...attachments.map((item) => item.id)])] : undefined,
+      memoryDecision: "skipped_no_new_fact" as const,
+      memoryReason: job.type === "illustration" || job.type === "action_card"
+        ? "Generated media presents facts already evaluated during primary cognition"
+        : "Hermes handoff has no external result to evaluate yet"
+    };
   }
 
   async function processNativeBatch(userId: string, body: NativeIngestPayload) {
@@ -354,7 +572,7 @@ export function createApp(input: {
   app.get("/api/assets/:filename", async (req, res, next) => {
     try {
       const filename = req.params.filename;
-      if (!/^(img|vid)_[a-f0-9]{24}\.(png|jpg|webp|mp4)$/.test(filename)) throw new HttpError(404, "Asset not found");
+      if (!/^(img|vid|aud)_[a-f0-9]{24}\.(png|jpg|webp|mp4|webm|wav|mp3|m4a|ogg|aac)$/.test(filename)) throw new HttpError(404, "Asset not found");
       res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
       res.sendFile(path.join(imageAssetDir(), filename));
     } catch (error) {
@@ -531,6 +749,114 @@ export function createApp(input: {
       const dogState = applyPetTouchState(profile, body.action);
       await store.saveProfile(profile);
       res.json({ profile: publicProfile(profile), dogState, applied: Boolean(dogState) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/profiles/:userId/turns", async (req, res, next) => {
+    try {
+      await requireProfile(store, req.params.userId, req);
+      const body = asyncTurnSchema.parse(req.body);
+      const existing = (await store.getProfile(req.params.userId))?.turns?.find((turn) => turn.id === body.turnId || turn.requestId === body.requestId);
+      if (existing) {
+        const profile = await requireExistingProfile(store, req.params.userId);
+        res.json({ profile: publicProfile(profile), turn: existing, jobs: (profile.jobs ?? []).filter((job) => job.turnId === existing.id), duplicate: true });
+        return;
+      }
+      const segments: StreamSegment[] = [];
+      for (const inputSegment of body.segments) {
+        let attachments: MediaAttachment[] = [];
+        if (inputSegment.kind === "image_summary" && inputSegment.dataUrl) {
+          attachments = [{ ...(await saveImageAsset(inputSegment.dataUrl, inputSegment.label)), generatedBy: "user_upload", observedAt: inputSegment.observedAt, location: inputSegment.location, turnId: body.turnId }];
+        }
+        if (inputSegment.kind === "audio_observation" && inputSegment.dataUrl) {
+          attachments = [{ ...(await saveAudioAsset(inputSegment.dataUrl, inputSegment.label)), generatedBy: "user_upload", observedAt: inputSegment.observedAt, location: inputSegment.location, turnId: body.turnId }];
+        }
+        segments.push({
+          id: inputSegment.id,
+          kind: inputSegment.kind,
+          label: inputSegment.label,
+          content: inputSegment.content?.trim() ?? "",
+          auditOnly: inputSegment.auditOnly,
+          observedAt: inputSegment.observedAt,
+          batchId: inputSegment.batchId,
+          location: inputSegment.location,
+          attachments
+        });
+      }
+      const now = new Date().toISOString();
+      const sensingJobs = segments.filter((segment) => segment.kind !== "text").map((segment): ConversationJobRecord => ({
+        id: `${body.turnId}-${segment.kind === "image_summary" ? "vision" : "audio"}-${segment.id}`,
+        turnId: body.turnId,
+        requestId: body.requestId,
+        type: segment.kind === "image_summary" ? "image_understanding" : "audio_understanding",
+        stage: "sensing",
+        status: "queued",
+        attempt: 0,
+        maxAttempts: 3,
+        retryable: true,
+        createdAt: now,
+        updatedAt: now,
+        sourceIds: [body.turnId, segment.id, ...(segment.attachments ?? []).map((item) => item.id)],
+        segmentId: segment.id
+      }));
+      const cognitionJob: ConversationJobRecord = {
+        id: `${body.turnId}-cognition`,
+        turnId: body.turnId,
+        requestId: body.requestId,
+        type: "cognition",
+        stage: "cognition",
+        status: "queued",
+        attempt: 0,
+        maxAttempts: 3,
+        retryable: true,
+        createdAt: now,
+        updatedAt: now,
+        dependsOn: sensingJobs.map((job) => job.id),
+        sourceIds: [body.turnId, ...segments.map((segment) => segment.id)]
+      };
+      const inputMessageIds: string[] = [];
+      const saved = await store.updateProfile(req.params.userId, (profile) => {
+        const duplicate = profile.turns?.find((turn) => turn.id === body.turnId || turn.requestId === body.requestId);
+        if (duplicate) return;
+        markProactiveUserResponse(profile, now);
+        for (const segment of segments) {
+          const placeholder = segment.kind === "text" ? segment.content : segment.kind === "image_summary" ? "照片已收到，正在理解" : "录音已收到，正在转写";
+          const message = appendInputMessage(profile, {
+            channel: body.channel,
+            role: "user",
+            text: segment.kind === "text" ? segment.content : `${segment.label}：${placeholder}`,
+            displayText: segment.kind === "text" ? undefined : placeholder,
+            sourceId: segment.id,
+            turnId: body.turnId,
+            requestId: body.requestId,
+            modality: segment.kind,
+            batchId: segment.batchId,
+            observedAt: segment.observedAt,
+            location: segment.location,
+            attachments: segment.attachments
+          });
+          if (message) inputMessageIds.push(message.id);
+        }
+        const turn: ConversationTurnRecord = {
+          id: body.turnId,
+          requestId: body.requestId,
+          channel: body.channel,
+          status: "queued",
+          createdAt: now,
+          updatedAt: now,
+          inputMessageIds,
+          jobIds: [...sensingJobs.map((job) => job.id), cognitionJob.id],
+          segments
+        };
+        profile.turns = [turn, ...(profile.turns ?? [])].slice(0, 80);
+        profile.jobs = [...sensingJobs, cognitionJob, ...(profile.jobs ?? [])].slice(0, 240);
+      });
+      if (!saved) throw new HttpError(404, "Profile not found");
+      const turn = saved.turns?.find((item) => item.id === body.turnId || item.requestId === body.requestId);
+      turnWorker.wake();
+      res.status(202).json({ profile: publicProfile(saved), turn, jobs: (saved.jobs ?? []).filter((job) => job.turnId === turn?.id), duplicate: turn?.id !== body.turnId });
     } catch (error) {
       next(error);
     }
@@ -777,14 +1103,13 @@ export function createApp(input: {
         throw new HttpError(401, "Password is incorrect");
       }
       const nextPassword = body.newPassword?.trim();
-      if (nextPassword) {
-        profile.password = nextPassword;
-      } else {
-        delete profile.password;
-      }
-      await store.saveProfile(profile);
+      const saved = await store.updateProfile(profile.userId, (current) => {
+        if (nextPassword) current.password = nextPassword;
+        else delete current.password;
+      });
+      if (!saved) throw new HttpError(404, "Profile not found");
       await deviceAuth.revokeAll(profile.userId);
-      res.json({ profile: publicProfile(profile) });
+      res.json({ profile: publicProfile(saved) });
     } catch (error) {
       next(error);
     }
@@ -811,6 +1136,24 @@ export function createApp(input: {
   }
 
   return app;
+}
+
+function linkActionAttachmentsToMemorySources(profile: CreatureProfile, job: ConversationJobRecord, attachments: MediaAttachment[]) {
+  const sourceIds = [...new Set([job.turnId, job.id, ...job.sourceIds, ...attachments.map((item) => item.id)])];
+  const linked = attachments.map((attachment) => ({
+    ...attachment,
+    turnId: job.turnId,
+    jobId: job.id,
+    sourceIds: [...new Set([...(attachment.sourceIds ?? []), ...sourceIds])]
+  }));
+  const episode = profile.episodes.find((item) => item.id === job.episodeId);
+  if (episode) episode.attachments = mergeOwnedById(episode.attachments ?? [], linked);
+  for (const candidate of profile.memoryCandidates.filter((item) => item.sourceEpisodeId === job.episodeId)) {
+    candidate.attachments = mergeOwnedById(candidate.attachments ?? [], linked);
+  }
+  for (const memory of profile.longTermMemories.filter((item) => item.sourceEpisodeId === job.episodeId)) {
+    memory.attachments = mergeOwnedById(memory.attachments ?? [], linked);
+  }
 }
 
 async function observeAudioForSensing(provider: ModelProvider, dataUrl: string, prompt: string) {
@@ -969,6 +1312,25 @@ async function saveImageAsset(dataUrl: string, label: string): Promise<MediaAtta
     mime: parsed.mime,
     url: `/api/assets/${filename}`,
     createdAt: now,
+    sizeBytes: parsed.buffer.byteLength
+  };
+}
+
+async function saveAudioAsset(dataUrl: string, label: string): Promise<MediaAttachment> {
+  const parsed = parseAudioDataUrl(dataUrl);
+  const hash = createHash("sha256").update(parsed.buffer).digest("hex");
+  const id = `aud_${hash.slice(0, 24)}`;
+  const filename = `${id}.${parsed.extension}`;
+  const dir = imageAssetDir();
+  await mkdir(dir, { recursive: true });
+  await writeFile(path.join(dir, filename), parsed.buffer);
+  return {
+    id,
+    kind: "audio",
+    label: label.trim() || "录音",
+    mime: parsed.mime,
+    url: `/api/assets/${filename}`,
+    createdAt: new Date().toISOString(),
     sizeBytes: parsed.buffer.byteLength
   };
 }
@@ -1995,6 +2357,19 @@ async function imageAttachmentDataUrl(image: MediaAttachment) {
   }
 }
 
+async function mediaAttachmentDataUrl(attachment: MediaAttachment) {
+  if (attachment.kind === "image") return imageAttachmentDataUrl(attachment);
+  if (attachment.kind !== "audio") return undefined;
+  const match = attachment.url.match(/^\/api\/assets\/(aud_[a-f0-9]{24}\.(?:webm|wav|mp3|m4a|ogg|aac))$/);
+  if (!match) return undefined;
+  try {
+    const buffer = await readFile(path.join(imageAssetDir(), match[1]));
+    return `data:${attachment.mime};base64,${buffer.toString("base64")}`;
+  } catch {
+    return undefined;
+  }
+}
+
 function parseImageDataUrl(dataUrl: string): { mime: "image/png" | "image/jpeg" | "image/webp"; extension: "png" | "jpg" | "webp"; buffer: Buffer } {
   const match = dataUrl.match(/^data:(image\/(?:png|jpe?g|webp));base64,(.+)$/);
   if (!match) throw new HttpError(400, "Invalid image data URL");
@@ -2004,6 +2379,14 @@ function parseImageDataUrl(dataUrl: string): { mime: "image/png" | "image/jpeg" 
   const buffer = Buffer.from(match[2], "base64");
   if (!buffer.byteLength) throw new HttpError(400, "Empty image asset");
   return { mime, extension, buffer };
+}
+
+function parseAudioDataUrl(dataUrl: string): { mime: "audio/webm" | "audio/wav" | "audio/mpeg" | "audio/mp4" | "audio/ogg" | "audio/aac"; extension: "webm" | "wav" | "mp3" | "m4a" | "ogg" | "aac"; buffer: Buffer } {
+  const match = dataUrl.match(/^data:(audio\/(?:webm|wav|mpeg|mp4|ogg|aac))(?:;[^,]+)?;base64,(.+)$/);
+  if (!match) throw new HttpError(400, "Invalid audio data");
+  const mime = match[1] as "audio/webm" | "audio/wav" | "audio/mpeg" | "audio/mp4" | "audio/ogg" | "audio/aac";
+  const extension = ({ "audio/webm": "webm", "audio/wav": "wav", "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/ogg": "ogg", "audio/aac": "aac" } as const)[mime];
+  return { mime, extension, buffer: Buffer.from(match[2], "base64") };
 }
 
 function parseVideoDataUrl(dataUrl: string): { buffer: Buffer } {
@@ -2056,6 +2439,120 @@ function publicProfile(profile: CreatureProfile): CreatureProfile {
 
 function publicCaptureResult(result: CaptureResult, providerKind: string) {
   return { ...result, profile: publicProfile(result.profile), provider: providerKind };
+}
+
+function plannedConversationJobs(turn: ConversationTurnRecord, parent: ConversationJobRecord, result: CaptureResult): ConversationJobRecord[] {
+  const now = new Date().toISOString();
+  const jobs: ConversationJobRecord[] = [];
+  for (const event of result.events) {
+    const actions: PlannedAction[] = [
+      ...(event.backgroundActions ?? []),
+      ...(["generate_illustration", "generate_action_card", "use_hermes"].includes(event.actionDecision.action) && event.actionResult
+        ? [{ action: event.actionDecision.action, actionResult: event.actionResult } as PlannedAction]
+        : [])
+    ];
+    for (const [index, action] of actions.entries()) {
+      const type = action.action === "generate_illustration" ? "illustration" : action.action === "generate_action_card" ? "action_card" : action.action === "use_hermes" ? "hermes" : undefined;
+      if (!type) continue;
+      const id = `${turn.id}-${type}-${event.id}-${index}`;
+      jobs.push({
+        id,
+        turnId: turn.id,
+        requestId: turn.requestId,
+        type,
+        stage: "action",
+        status: "queued",
+        attempt: 0,
+        maxAttempts: 3,
+        retryable: true,
+        createdAt: now,
+        updatedAt: now,
+        dependsOn: [parent.id],
+        sourceIds: [...new Set([turn.id, parent.id, event.id, event.triggerSegmentId, ...(action.actionResult.sourceIds ?? [])].filter(Boolean) as string[])],
+        eventId: event.id,
+        event: structuredClone(event),
+        episodeId: result.episodes.find((episode) => episode.sourceSegmentId === event.triggerSegmentId || episode.sourceBatchId === event.triggerBatchId)?.id,
+        action: structuredClone(action)
+      });
+    }
+  }
+  return jobs;
+}
+
+function memoryEnrichmentJobs(turn: ConversationTurnRecord, parent: ConversationJobRecord, memoryIds: string[]): ConversationJobRecord[] {
+  const now = new Date().toISOString();
+  return [...new Set(memoryIds)].map((memoryId) => ({
+    id: `${turn.id}-memory-${memoryId}`,
+    turnId: turn.id,
+    requestId: turn.requestId,
+    type: "memory_enrichment" as const,
+    stage: "action" as const,
+    status: "queued" as const,
+    attempt: 0,
+    maxAttempts: 3,
+    retryable: true,
+    createdAt: now,
+    updatedAt: now,
+    dependsOn: [parent.id],
+    sourceIds: [turn.id, parent.id, memoryId]
+  }));
+}
+
+function commitCognitionOwnedRecords(
+  latest: CreatureProfile,
+  base: CreatureProfile,
+  computed: CreatureProfile,
+  result: CaptureResult,
+  reply: CreatureProfile["conversation"][number] | undefined,
+  childJobs: ConversationJobRecord[],
+  parentJob: ConversationJobRecord
+) {
+  const ownedEpisodeIds = new Set(result.episodes.map((item) => item.id));
+  const ownedCandidateIds = new Set((result.memoryCandidates ?? []).map((item) => item.id));
+  const baseMemoryIds = new Set(base.longTermMemories.map((item) => item.id));
+  const ownedMemories = computed.longTermMemories.filter((item) => !baseMemoryIds.has(item.id) || ownedEpisodeIds.has(item.sourceEpisodeId ?? ""));
+  const baseStateChangeKeys = new Set(base.stateChanges.map((item) => `${item.at}\u0000${item.reason}`));
+  const ownedStateChanges = computed.stateChanges.filter((item) => !baseStateChangeKeys.has(`${item.at}\u0000${item.reason}`));
+  const stateDelta = stateDeltaBetween(base.state, computed.state);
+  latest.state = applyOwnedStateDelta(latest.state, stateDelta);
+  latest.stateChanges = mergeOwnedByKey(latest.stateChanges, ownedStateChanges, (item) => `${item.at}\u0000${item.reason}`).slice(0, 80);
+  latest.episodes = mergeOwnedById(latest.episodes, computed.episodes.filter((item) => ownedEpisodeIds.has(item.id))).slice(0, 80);
+  latest.memoryCandidates = mergeOwnedById(latest.memoryCandidates, computed.memoryCandidates.filter((item) => ownedCandidateIds.has(item.id))).slice(0, 80);
+  latest.longTermMemories = mergeOwnedById(latest.longTermMemories, ownedMemories).slice(0, 80);
+  const baseSemanticIds = new Set(base.semanticBrainHistory.map((item) => item.id));
+  latest.semanticBrainHistory = mergeOwnedById(latest.semanticBrainHistory, computed.semanticBrainHistory.filter((item) => !baseSemanticIds.has(item.id))).slice(0, 30);
+  if (reply) latest.conversation = mergeOwnedById(latest.conversation, [reply]).slice(0, 80);
+  latest.jobs = mergeOwnedById(latest.jobs ?? [], childJobs).slice(0, 240);
+  const turn = latest.turns?.find((item) => item.id === parentJob.turnId);
+  if (turn) turn.jobIds = [...new Set([...turn.jobIds, ...childJobs.map((item) => item.id)])];
+  if (computed.petProfile.updatedAt !== base.petProfile.updatedAt) latest.petProfile = computed.petProfile;
+  latest.lastSeenAt = maxIso(latest.lastSeenAt, computed.lastSeenAt);
+}
+
+function mergeOwnedById<T extends { id: string }>(current: T[], owned: T[]) {
+  const ownedIds = new Set(owned.map((item) => item.id));
+  return [...owned, ...current.filter((item) => !ownedIds.has(item.id))];
+}
+
+function mergeOwnedByKey<T>(current: T[], owned: T[], keyOf: (item: T) => string) {
+  const ownedIds = new Set(owned.map(keyOf));
+  return [...owned, ...current.filter((item) => !ownedIds.has(keyOf(item)))];
+}
+
+function stateDeltaBetween(before: CreatureProfile["state"], after: CreatureProfile["state"]) {
+  const keys = ["curiosity", "attachment", "energy", "arousal", "safety", "confidence"] as const;
+  return Object.fromEntries(keys.map((key) => [key, after[key] - before[key]])) as Record<typeof keys[number], number>;
+}
+
+function applyOwnedStateDelta(current: CreatureProfile["state"], delta: ReturnType<typeof stateDeltaBetween>) {
+  const next = clampState({ ...current });
+  for (const key of Object.keys(delta) as Array<keyof typeof delta>) next[key] = Math.max(0, Math.min(100, Math.round(next[key] + delta[key])));
+  next.mood = deriveMood(next);
+  return next;
+}
+
+function maxIso(left: string, right: string) {
+  return Date.parse(right) > Date.parse(left) ? right : left;
 }
 
 function feedbackInputText(kind: string, content?: string) {
@@ -2134,6 +2631,7 @@ function captureCognitionTrace(
         reason: event.reason,
         visibleReply: event.id === result.events[0]?.id ? result.response : undefined,
         actionResult: event.actionResult,
+        backgroundActions: event.backgroundActions,
         stateDeltas: event.actionStateDeltas,
         episodeKept: Boolean(episode),
         memoryCandidateKept,

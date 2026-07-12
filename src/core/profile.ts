@@ -31,6 +31,8 @@ export function createCreatureProfile(input: {
     dreamHistory: [],
     semanticBrainHistory: [],
     conversation: [],
+    turns: [],
+    jobs: [],
     proactive: initialProactiveState(now),
     readState: {},
     hermes: { sessionName: hermesSessionName(userId), tasks: [] },
@@ -66,6 +68,27 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.dreamHistory ??= [];
   profile.semanticBrainHistory ??= [];
   profile.conversation ??= [];
+  profile.turns ??= [];
+  profile.jobs ??= [];
+  profile.turns = profile.turns.map((turn) => ({
+    ...turn,
+    status: turn.status ?? "queued",
+    inputMessageIds: turn.inputMessageIds ?? [],
+    jobIds: turn.jobIds ?? [],
+    segments: turn.segments ?? [],
+    updatedAt: turn.updatedAt ?? turn.createdAt
+  })).slice(0, 80);
+  profile.jobs = profile.jobs.map((job) => ({
+    ...job,
+    status: job.status ?? "queued",
+    stage: job.stage ?? "cognition",
+    attempt: Math.max(0, job.attempt ?? 0),
+    maxAttempts: Math.max(1, job.maxAttempts ?? 3),
+    retryable: job.retryable ?? true,
+    sourceIds: job.sourceIds ?? [],
+    dependsOn: job.dependsOn ?? [],
+    updatedAt: job.updatedAt ?? job.createdAt
+  })).slice(0, 240);
   profile.proactive ??= initialProactiveState(new Date().toISOString());
   profile.readState ??= {};
   profile.hermes ??= { tasks: [] };
