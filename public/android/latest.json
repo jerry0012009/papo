@@ -1,7 +1,7 @@
 {
-  "versionName": "0.4.12",
-  "versionCode": 18,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.12-5a3c1726.apk",
+  "versionName": "0.4.13",
+  "versionCode": 19,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.13.apk",
   "publishedAt": "2026-07-12T16:48:00.000Z",
   "notes": [
     "待确认记忆重构为清晰的记忆收件箱，标题、正文、暂存原因、来源和决策不再挤在旧式大卡片中",

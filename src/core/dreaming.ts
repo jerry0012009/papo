@@ -272,7 +272,7 @@ function newestDreamAt(profile: CreatureProfile) {
 function buildDreamPrompt(profile: CreatureProfile, force: boolean) {
   return `请作为 Papo 的 dreaming 记忆整理脑，整理长期记忆和候选记忆。
 
-规则只负责执行你返回的合法操作；你负责判断是否需要整理、如何合并、保留、放下、升级，以及重要记忆是否影响 Papo 当下状态。
+规则只负责执行你返回的合法操作；你负责判断是否需要整理、如何合并、保留、忘记、升级，以及重要记忆是否影响 Papo 当下状态。
 不要根据关键词机械合并；只在语义上确实重复、互补、过时、太碎或已经稳定时操作。
 如果不需要整理，返回 shouldDream=false 和空 operations。
 所有自然语言字段用中文。只返回严格 JSON object，不要 Markdown。
@@ -280,7 +280,7 @@ function buildDreamPrompt(profile: CreatureProfile, force: boolean) {
 可用操作：
 - update_memory：改写一条长期记忆。
 - merge_memories：把 sourceIds 中重复/互补的长期记忆合并到 targetId；被合并来源会降权为 0。
-- dismiss_candidate：放下不值得继续保留的候选。
+- dismiss_candidate：忘记不值得继续保留的候选。
 - promote_candidate：把候选升级为长期记忆。
 - adjust_state：重要记忆整合后对 Papo 状态产生小幅影响；每项 -10 到 10。
 

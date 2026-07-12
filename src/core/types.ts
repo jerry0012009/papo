@@ -547,6 +547,9 @@ export interface FeedbackRecord {
   targetSnapshot?: FeedbackTargetSnapshot;
   inputText?: string;
   inputModality?: SegmentKind | "button";
+  forgetBatchId?: string;
+  storageChanged?: boolean;
+  storagePurged?: boolean;
   effect: string;
   learningNote: string;
   responseAction?: FeedbackResponseAction;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { appendPapoMessage } from "./conversation";
 import { clampPolicy } from "./drive";
 import { makeId } from "./ids";
 import { adjustMemoryWeight, forgetMemory, memoryShortTitle, mergeAttachments, normalizeSharedMemoryText, promoteMemoryCandidate, upsertLongTermMemory } from "./memory";
@@ -137,9 +138,54 @@ export function applyFeedback(
   if (targetEpisode) targetEpisode.feedback.push(input.kind);
   if (targetCandidate) record.memoryCandidateIds = [targetCandidate.id];
   const forgetResult = input.kind === "forget" ? forgetMemory(profile, input.targetId) : undefined;
-  void forgetResult;
+  if (forgetResult) {
+    record.storageChanged = forgetResult.changed;
+    record.storagePurged = forgetResult.purged;
+  }
 
   return record;
+}
+
+const FORGET_BATCH_WINDOW_MS = 60_000;
+const FORGET_BATCH_SOURCE_PREFIX = "forget_batch:";
+
+export function recordExplicitForgetConfirmation(
+  profile: CreatureProfile,
+  feedback: FeedbackRecord,
+  now = feedback.at
+) {
+  feedback.responseAction = "quiet";
+  feedback.replyText = undefined;
+  feedback.learningNote = "用户通过明确操作要求忘记所选内容。";
+  feedback.effect = feedback.storagePurged ? "所选内容已彻底删除。" : feedback.storageChanged ? "所选内容已忘记。" : "所选内容此前已被忘记。";
+
+  const nowMs = Date.parse(now);
+  const activeMessage = profile.conversation.find((message) => {
+    if (message.role !== "papo" || message.channel !== "feedback" || !message.sourceId?.startsWith(FORGET_BATCH_SOURCE_PREFIX)) return false;
+    const startedAt = Date.parse(message.at);
+    return Number.isFinite(nowMs) && Number.isFinite(startedAt) && nowMs >= startedAt && nowMs - startedAt < FORGET_BATCH_WINDOW_MS;
+  });
+  const batchId = activeMessage?.sourceId?.slice(FORGET_BATCH_SOURCE_PREFIX.length) || makeId("forget_batch");
+  feedback.forgetBatchId = batchId;
+
+  const targetKeys = new Set(
+    profile.feedbackHistory
+      .filter((item) => item.kind === "forget" && item.forgetBatchId === batchId && item.storageChanged !== false)
+      .map((item) => item.targetId || item.id)
+  );
+  const count = Math.max(1, targetKeys.size);
+  const text = `已忘记 ${count} 条内容 ✓`;
+  if (activeMessage) {
+    activeMessage.text = text;
+    activeMessage.relatedMemoryIds = [];
+    return activeMessage;
+  }
+  return appendPapoMessage(profile, {
+    channel: "feedback",
+    text,
+    sourceId: `${FORGET_BATCH_SOURCE_PREFIX}${batchId}`,
+    at: now
+  });
 }
 
 export async function semanticReflectFeedback(
@@ -601,14 +647,14 @@ memoryOperation 使用口径：
 - promote_candidate：用户明确要求把某条候选记忆长期留下，或反馈文本表明这条候选值得成为长期记忆。必须给 text 和 kind。
 - update_memory：用户纠正、补充或改写某条长期记忆。可以给 text、kind、tags、weight。
 - update_candidate：用户纠正、补充或改写某条候选记忆，但还不一定长期保存。可以给 text、kind、tags、weight；weight 会落到 candidate confidence。
-- dismiss_target：用户通过文本/语音表达这件事不该留、不要再提、放下它。显式 forget 按钮已经会先执行一次存储层放下；你可以继续用 dismiss_target 表示语义上也应该放下。
+- dismiss_target：用户通过文本/语音表达这件事不该留、不要再提、忘记它。显式 forget 按钮已经会先执行一次存储层忘记；你可以继续用 dismiss_target 表示语义上也应该忘记。
 - none：反馈只是在教 Papo 以后怎么回应，或者只是轻微鼓励/安抚，不需要改记忆。
 - 即使 feedback.inputText 为空，feedback.kind 也代表用户的明确按钮反馈。
   - kind=remember 表示用户希望这件事被记住或从 episode 进入长期记忆。
   - kind=important 表示用户认为这条记忆更重要，通常应提高目标权重，必要时调整记忆文字或标签。
   - kind=remind 表示用户希望以后能被这件事提醒或回到这件事上，通常应考虑 future_review、open_question、标签或 consolidatedBecause 的调整；不要编造具体提醒时间。
   - kind=correct 表示用户正在把目标记忆、候选或经历改准。target.type="memory" 时必须使用 update_memory；target.type="candidate" 时使用 update_candidate 或 promote_candidate；target.type="episode" 时使用 promote_episode。
-  - kind=forget 表示用户要求放下目标。
+  - kind=forget 表示用户要求忘记目标。
 - 当前系统还没有定时通知调度器。kind=remind 的 replyText 不能承诺“以后会提醒你”“到时通知你”，只能说 Papo 会把这件事放得更靠前、之后更容易想起或一起回到这件事。
 
 你不能：
@@ -620,7 +666,7 @@ memoryOperation 使用口径：
 - promote_candidate 只能用于 target.type="candidate"。
 - update_memory 只能用于 target.type="memory"。
 - update_candidate 只能用于 target.type="candidate"。
-- 如果 target.unavailableAfterStorageOperation=true，说明按钮操作已经让目标不在当前存储里；不要使用 update_memory、promote_episode、promote_candidate 或 update_candidate。只能使用 none 或 dismiss_target，并在 effect 里准确说明目标已经被放下或当前无可修改对象。
+- 如果 target.unavailableAfterStorageOperation=true，说明按钮操作已经让目标不在当前存储里；不要使用 update_memory、promote_episode、promote_candidate 或 update_candidate。只能使用 none 或 dismiss_target，并在 effect 里准确说明目标已经被忘记或当前无可修改对象。
 - 如果 target 带 attachments，说明这条经历或记忆有原始图片资产；当你把 episode 提升为长期记忆或改写记忆时，要结合图片内容、用户补充和可用时间地点，不要把照片当成一句普通文本。
 - 当 target.type="episode" 且用户要求 remember、important、remind 或 correct 时，如果需要产生或修改长期记忆，必须使用 memoryOperation.type="promote_episode"；即使你认为是在“更新记忆文字”，也不能对 episode 目标返回 update_memory。
 - 当 target.type="candidate" 且用户要求 remember 或 important 时，如果你判断应该长期留下，使用 memoryOperation.type="promote_candidate"；如果只是改准候选但继续等待，使用 update_candidate。

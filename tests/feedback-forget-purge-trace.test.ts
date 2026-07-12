@@ -17,8 +17,7 @@ profile.longTermMemories.unshift({
 });
 await store.saveProfile(profile);
 
-let promptSawDeletedTarget = false;
-let promptWarnedUnavailableTarget = false;
+let modelCalls = 0;
 const provider: ModelProvider = {
   kind: "mimo",
   name: "Forget purge provider",
@@ -29,15 +28,8 @@ const provider: ModelProvider = {
     return "";
   },
   async generateJson(prompt) {
-    promptSawDeletedTarget = prompt.includes("游泳馆人太多") && prompt.includes("unavailableAfterStorageOperation");
-    promptWarnedUnavailableTarget = prompt.includes("不要使用 update_memory") && prompt.includes("当前无可修改对象");
-    return {
-      responseAction: "quiet",
-      learningNote: "用户再次要求放下这条已经降权的长期记忆，Papo 应该尊重这次彻底删除。",
-      effect: "这条长期记忆已经从存储中删除，反馈反思记录了用户的放下意图。",
-      memoryOperation: { type: "update_memory", text: "这条已经被删除的记忆不应再保留。", kind: "habit" },
-      trace: ["saw pre-delete target snapshot", "model returned impossible update"]
-    };
+    modelCalls += 1;
+    throw new Error(`forget button should not invoke the model: ${prompt.slice(0, 20)}`);
   },
   async summarizeImage() {
     return "";
@@ -67,17 +59,16 @@ try {
   });
   const payload = await response.json();
   assert.equal(response.status, 200, JSON.stringify(payload));
-  assert.equal(promptSawDeletedTarget, true, "feedback model should see the pre-delete target snapshot");
-  assert.equal(promptWarnedUnavailableTarget, true, "feedback prompt should tell the model not to update unavailable targets");
+  assert.equal(modelCalls, 0, "explicit forget should be a deterministic storage operation");
 
   const current = await store.getProfile("forget-purge-user");
   assert.equal(current?.longTermMemories.some((memory) => memory.id === "ltm_drop"), false);
   assert.equal(current?.feedbackHistory[0]?.targetSnapshot?.text?.includes("游泳馆人太多"), true);
-  assert.equal(current?.conversation.some((message) => message.role === "papo" && message.channel === "feedback"), false);
-
-  const feedbackInput = current?.conversation.find((message) => message.role === "user" && message.channel === "feedback");
-  assert.equal(feedbackInput?.cognitionTrace?.feedbackDecision?.memoryChanges[0]?.operation, "purged");
-  assert.equal(feedbackInput?.cognitionTrace?.feedbackDecision?.effect.includes("删除"), true);
+  assert.equal(current?.conversation.some((message) => message.role === "user" && message.channel === "feedback"), false);
+  const confirmation = current?.conversation.find((message) => message.role === "papo" && message.channel === "feedback");
+  assert.equal(confirmation?.text, "已忘记 1 条内容 ✓");
+  assert.equal(current?.feedbackHistory[0]?.storagePurged, true);
+  assert.ok(current?.feedbackHistory[0]?.forgetBatchId);
   console.log(JSON.stringify({ ok: true }, null, 2));
 } finally {
   server.close();

@@ -764,9 +764,9 @@ test("memory feedback shows a pending state while the request is in flight", asy
   const memoryCard = page.locator(".memory-detail#memory-mem-1");
   await expect(memoryCard).toBeVisible();
 
-  await memoryCard.getByRole("button", { name: "放下" }).click();
+  await memoryCard.getByRole("button", { name: "忘记" }).click();
   await expect(memoryCard.getByRole("button", { name: "处理中" })).toBeVisible();
-  await expect(memoryCard.getByRole("button", { name: /放下|彻底忘掉/ })).toBeVisible({ timeout: 2_000 });
+  await expect(memoryCard.getByRole("button", { name: /忘记|彻底删除/ })).toBeVisible({ timeout: 2_000 });
 });
 
 test("profile memory links deep-link, focus, and survive refresh", async ({ page }, testInfo) => {
@@ -815,7 +815,7 @@ test("wide desktop uses a scan-friendly memory archive and local trace controls"
   await expect(candidateCards.nth(1).getByRole("heading", { name: "界面像真正的co" })).toBeVisible();
   await expect(candidateCards.nth(1).locator(".candidate-memory-placeholder")).toBeVisible();
   await expect(candidateCards.nth(0).getByRole("button", { name: "留下这段记忆" })).toBeVisible();
-  await expect(candidateCards.nth(0).getByRole("button", { name: "这次不留下" })).toBeVisible();
+  await expect(candidateCards.nth(0).getByRole("button", { name: "忘记" })).toBeVisible();
   await page.screenshot({ path: testInfo.outputPath(`memory-candidate-inbox-${testInfo.project.name}.png`), fullPage: true });
   const first = await candidateCards.nth(0).boundingBox();
   const second = await candidateCards.nth(1).boundingBox();
@@ -856,7 +856,7 @@ test("candidate memory inbox keeps visual hierarchy with and without artwork", a
   await expect(candidates.nth(1).locator(".candidate-memory-placeholder")).toBeVisible();
   await expect(candidates.nth(0).getByText("Papo 为什么暂存")).toBeVisible();
   await expect(candidates.nth(0).getByRole("button", { name: "留下这段记忆" })).toBeVisible();
-  await expect(candidates.nth(0).getByRole("button", { name: "这次不留下" })).toBeVisible();
+  await expect(candidates.nth(0).getByRole("button", { name: "忘记" })).toBeVisible();
   await expectInViewport(page, candidates.nth(0));
   await page.screenshot({ path: testInfo.outputPath(`memory-candidate-inbox-${testInfo.project.name}.png`), fullPage: true });
 });
@@ -901,6 +901,44 @@ test("action card thumbnails render their persisted cover instead of a gray vide
   const thumbnail = page.getByRole("button", { name: "播放视频：有封面的动作卡" });
   await expect(thumbnail.locator("img")).toHaveAttribute("src", /pets\/register\/shiba\.jpg/);
   await expect(thumbnail.locator("video")).toHaveCount(0);
+});
+
+test("chat and memory video attachments reuse action-card covers and completed drafts stop pending notices", async ({ page }) => {
+  const cover = { id: "img-shared-cover", kind: "image", label: "动作首帧", mime: "image/jpeg", url: "/pets/register/shiba.jpg", createdAt: now };
+  const video = { id: "vid-shared-action", kind: "video", label: "共享动作卡", mime: "video/mp4", url: "/pets/register/golden-retriever.mp4", createdAt: now };
+  const draftDecision = {
+    eventId: "event-shared-action", sourceLabel: "你刚说的话", sourceText: "做动作卡", action: "generate_action_card",
+    semanticSource: "llm", noticed: "动作请求", reason: "执行动作", stateDeltas: [], episodeKept: true, memoryCandidateKept: false,
+    relatedMemoryIds: ["mem-1"], decisionTrace: [], actionResult: { kind: "action_card_draft", title: "共享动作卡", prompt: "model prompt" }
+  };
+  const override = {
+    actionCards: [{ id: video.id, createdAt: now, title: "共享动作卡", prompt: "test", durationSeconds: 4, cover, video, sourceIds: [], actionEventId: "event-shared-action", turnId: "turn-shared-action", jobId: "job-shared-action", providerKind: "generic", providerName: "test" }],
+    jobs: [{ id: "job-shared-action", turnId: "turn-shared-action", requestId: "turn-shared-action", type: "action_card", stage: "action", status: "completed", attempt: 1, maxAttempts: 3, retryable: false, createdAt: now, updatedAt: now, completedAt: now, sourceIds: [], eventId: "event-shared-action" }],
+    conversation: [{ id: "msg-shared-action", at: now, role: "papo", channel: "button", text: "动作做好了", turnId: "turn-shared-action", relatedMemoryIds: ["mem-1"], attachments: [video], cognitionTrace: { ...makeTrace(), eventDecisions: [draftDecision] } }],
+    longTermMemories: [{ id: "mem-1", createdAt: now, kind: "relationship", text: "一起做过动作卡", weight: 80, tags: [], attachments: [video] }]
+  };
+  await page.addInitScript((value) => window.localStorage.setItem("papo:testProfileOverride", JSON.stringify(value)), override);
+
+  await page.goto("/");
+  await expect(page.getByText(/正在让 Papo 动起来/)).toHaveCount(0);
+  await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
+  const chatVideo = page.getByRole("button", { name: "播放视频：共享动作卡" });
+  await expect(chatVideo.locator("img")).toHaveAttribute("src", /pets\/register\/shiba\.jpg/);
+  await expect(chatVideo.locator("video")).toHaveCount(0);
+
+  await page.locator(".nav").getByRole("button", { name: /记忆/ }).click();
+  await page.getByRole("button", { name: /查看记忆/ }).click();
+  const memoryVideo = page.getByRole("button", { name: "播放视频：共享动作卡" });
+  await expect(memoryVideo.locator("img")).toHaveAttribute("src", /pets\/register\/shiba\.jpg/);
+  await expect(memoryVideo.locator("video")).toHaveCount(0);
+});
+
+test("action-card pending notice follows durable job status", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("papo:testProfileOverride", JSON.stringify({
+    jobs: [{ id: "job-active-action", turnId: "turn-active-action", requestId: "turn-active-action", type: "action_card", stage: "action", status: "running", attempt: 1, maxAttempts: 3, retryable: true, createdAt: "2026-07-07T12:00:00.000Z", updatedAt: "2026-07-07T12:00:00.000Z", sourceIds: [] }]
+  })));
+  await page.goto("/");
+  await expect(page.getByText(/正在让 Papo 动起来/)).toBeVisible();
 });
 
 async function installMockApi(page: Page) {

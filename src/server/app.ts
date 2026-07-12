@@ -10,7 +10,7 @@ import { audioObservationPreview, imageSummaryPreview } from "../core/display-te
 import { applyPetTouchState, isDogStateCheckDue, refreshDogStateIfDue } from "../core/dog-states";
 import { isDreamingDue, recordDreamingFailure, semanticDreamMemories } from "../core/dreaming";
 import { semanticDecideEmergence } from "../core/emergence";
-import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
+import { applyFeedback, recordExplicitForgetConfirmation, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { enqueueMemoryEnrichmentJob, MEMORY_VISUAL_POLICY_VERSION, upsertLongTermMemory } from "../core/memory";
 import { createModelProvider, type ImageReference, type ModelProvider } from "../core/provider";
@@ -1163,8 +1163,20 @@ export function createApp(input: {
 
   app.post("/api/profiles/:userId/feedback", async (req, res, next) => {
     try {
-      const profile = await requireProfile(store, req.params.userId, req);
+      await requireProfile(store, req.params.userId, req);
       const body = feedbackSchema.parse(req.body);
+      if (body.kind === "forget" && !body.content?.trim()) {
+        let feedback: FeedbackRecord | undefined;
+        const profile = await store.updateProfile(req.params.userId, (latest) => {
+          markProactiveUserResponse(latest, new Date().toISOString());
+          feedback = applyFeedback(latest, body);
+          recordExplicitForgetConfirmation(latest, feedback);
+        });
+        if (!profile || !feedback) throw new HttpError(404, "Profile not found");
+        res.json({ profile: publicProfile(profile), feedback });
+        return;
+      }
+      const profile = await requireProfile(store, req.params.userId, req);
       markProactiveUserResponse(profile, new Date().toISOString());
       const targetBefore = feedbackTargetSnapshot(profile, body.targetId);
       const feedback = applyFeedback(profile, body);
@@ -2916,7 +2928,7 @@ function feedbackInputText(kind: string, content?: string) {
     important: "重要",
     remind: "提醒",
     correct: "改准",
-    forget: "放下"
+    forget: "忘记"
   }[kind] ?? kind;
   const note = content?.trim();
   return note ? `${label}：${note}` : label;

@@ -287,7 +287,7 @@ export function App() {
       window.removeEventListener("papo:open-memory", handleMemoryLink);
     };
   }, [openMemory]);
-  const pendingActionCards = useMemo(() => countPendingActionCards(profile), [profile?.conversation, profile?.emergenceHistory]);
+  const pendingActionCards = useMemo(() => countPendingActionCards(profile), [profile?.jobs, profile?.actionCards, profile?.conversation, profile?.emergenceHistory]);
   const pendingPetMotions = profile ? petProfileFor(profile).initialMotion?.status === "pending" : false;
 
   useEffect(() => {
@@ -1962,7 +1962,7 @@ function PapoGuidePoster({ creatureName }: { creatureName: string }) {
     },
     {
       title: "你教它，它会变",
-      text: "重要、忘掉、反馈和改准会影响记忆权重、性格倾向和之后的回应方式。"
+      text: "重要、忘记、反馈和改准会影响记忆权重、性格倾向和之后的回应方式。"
     },
     {
       title: "多脑协同",
@@ -1970,7 +1970,7 @@ function PapoGuidePoster({ creatureName }: { creatureName: string }) {
     },
     {
       title: "隐私优先",
-      text: "你可以给账号加密码；敏感内容进模型前会被遮蔽，记忆也能被放下或彻底忘掉。"
+      text: "你可以给账号加密码；敏感内容进模型前会被遮蔽，也可以随时忘记不想保留的记忆。"
     }
   ];
 
@@ -2835,7 +2835,7 @@ function ChatBubble({ message, profile }: { message: ConversationMessage; profil
         {message.cognitionTrace || message.sensingTrace ? <DeveloperTrace trace={message.cognitionTrace} sensingTrace={message.sensingTrace} profile={profile} /> : null}
       </div>
       <p>{text}</p>
-      <AttachmentStrip attachments={message.attachments} />
+      <AttachmentStrip attachments={message.attachments} profile={profile} />
       {message.observedAt || message.location ? (
         <small>
           {[
@@ -2887,8 +2887,8 @@ function companionSessionSummary(audioCount: number, usefulAudioCount: number, t
   return parts.join(" · ") || "已听过";
 }
 
-function AttachmentStrip({ attachments }: { attachments?: NonNullable<StreamSegment["attachments"]> }) {
-  const mediaItems = (attachments ?? []).filter((attachment) => attachment.kind === "image" || attachment.kind === "video").map((attachment) => attachmentMediaItem(attachment));
+function AttachmentStrip({ attachments, profile }: { attachments?: NonNullable<StreamSegment["attachments"]>; profile: CreatureProfile }) {
+  const mediaItems = (attachments ?? []).filter((attachment) => attachment.kind === "image" || attachment.kind === "video").map((attachment) => attachmentMediaItem(attachment, attachment.label, actionCardCoverForAttachment(attachment, profile)));
   if (!mediaItems.length) return null;
   return (
     <div className="attachment-strip">
@@ -2897,14 +2897,22 @@ function AttachmentStrip({ attachments }: { attachments?: NonNullable<StreamSegm
   );
 }
 
-function attachmentMediaItem(attachment: MediaAttachment, title = attachment.label): MediaViewerItem {
+function attachmentMediaItem(attachment: MediaAttachment, title = attachment.label, poster?: string): MediaViewerItem {
   return {
     id: attachment.id,
     kind: attachment.kind === "video" ? "video" : "image",
     src: resolveAssetUrl(attachment.url),
     title,
-    mime: attachment.mime
+    mime: attachment.mime,
+    poster
   };
+}
+
+function actionCardCoverForAttachment(attachment: MediaAttachment, profile: CreatureProfile) {
+  if (attachment.kind !== "video") return undefined;
+  const card = (profile.actionCards ?? []).find((item) => item.video.id === attachment.id)
+    ?? (attachment.jobId ? (profile.actionCards ?? []).find((item) => item.jobId === attachment.jobId) : undefined);
+  return card?.cover ? resolveAssetUrl(card.cover.url) : undefined;
 }
 
 function illustrationMediaItem(item: NonNullable<CreatureProfile["illustrations"]>[number]): MediaViewerItem {
@@ -3001,7 +3009,7 @@ function DeveloperTraceBody({ trace, sensingTraces, profile }: { trace?: Convers
                 </TraceBlock>
                 <TraceBlock title={`2. 行动 · ${actionLabel(event.action)}`}>
                   <p>{event.visibleReply ? `说出口：${event.visibleReply}` : "这一步没有外显回复。"}</p>
-                  <ActionResultView result={event.actionResult} />
+                  <ActionResultView result={event.actionResult} profile={profile} />
                   <TraceList items={actionStateDeltaItems(event.stateDeltas ?? [])} />
                   <TraceList items={actionTraceItems(event.decisionTrace)} />
                 </TraceBlock>
@@ -3222,7 +3230,7 @@ function RelatedMemories({ ids, profile }: { ids: string[]; profile: CreaturePro
   );
 }
 
-function ActionResultView({ result }: { result?: ActionResult }) {
+function ActionResultView({ result, profile }: { result?: ActionResult; profile: CreatureProfile }) {
   if (!result || result.kind === "none" || result.kind === "visible_reply") return null;
   if (result.kind === "memory_intent") {
     return (
@@ -3293,7 +3301,7 @@ function ActionResultView({ result }: { result?: ActionResult }) {
           </div>
         ) : null}
         {result.sourceIds?.length ? <small>基于 {result.sourceIds.length} 条真实素材</small> : null}
-        {result.attachment ? <AttachmentStrip attachments={[result.attachment]} /> : null}
+        {result.attachment ? <AttachmentStrip attachments={[result.attachment]} profile={profile} /> : null}
       </div>
     );
   }
@@ -3307,7 +3315,7 @@ function ActionResultView({ result }: { result?: ActionResult }) {
         {result.style ? <small>风格：{result.style}</small> : null}
         {result.durationSeconds ? <small>时长：{result.durationSeconds} 秒</small> : null}
         {result.sourceIds?.length ? <small>基于 {result.sourceIds.length} 条真实素材</small> : null}
-        {result.videoAttachment ? <AttachmentStrip attachments={[result.videoAttachment]} /> : null}
+        {result.videoAttachment ? <AttachmentStrip attachments={[result.videoAttachment]} profile={profile} /> : null}
       </div>
     );
   }
@@ -3363,7 +3371,7 @@ function feedbackKindLabel(kind: string) {
     important: "用户标记这件事很重要",
     remind: "用户希望以后提醒",
     correct: "用户修正这条记忆",
-    forget: "用户要求放下"
+    forget: "用户要求忘记"
   };
   return labels[kind] ?? kind;
 }
@@ -3623,20 +3631,20 @@ function MemoryDetail(props: {
       <section className="memory-detail-story">
         <span>{props.profile.creatureName} 记得</span>
         <p>{displayText}</p>
-        <AttachmentStrip attachments={memory.attachments} />
+        <AttachmentStrip attachments={memory.attachments} profile={props.profile} />
       </section>
 
       {sourceEpisode ? (
         <section className="memory-detail-source">
           <span>那时发生的事</span>
           <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(props.profile, sourceEpisode))}</p>
-          <AttachmentStrip attachments={sourceEpisode.attachments} />
+          <AttachmentStrip attachments={sourceEpisode.attachments} profile={props.profile} />
           {episodePapoLine(sourceEpisode) ? <small>{props.profile.creatureName} 当时说：{episodePapoLine(sourceEpisode)}</small> : null}
         </section>
       ) : null}
 
       <section className="memory-detail-maintenance">
-        <div className="memory-detail-maintenance-head"><span>维护这段记忆</span><small>只有你可以修改或放下</small></div>
+        <div className="memory-detail-maintenance-head"><span>维护这段记忆</span><small>只有你可以修改或忘记</small></div>
         {props.editing ? (
           <div className="memory-detail-editor">
             <textarea value={props.draft} onChange={(event) => props.onDraftChange(event.target.value)} rows={5} />
@@ -3647,7 +3655,7 @@ function MemoryDetail(props: {
             <button type="button" onClick={props.onStartEdit}><MessageCircle size={16} />改准</button>
             <button type="button" onClick={() => props.onFeedback("important", memory.id, undefined, "button")} disabled={props.busy || isFeedbackPending(props.feedbackPendingKey, "important", memory.id)}><Save size={16} />{isFeedbackPending(props.feedbackPendingKey, "important", memory.id) ? "处理中" : "很重要"}</button>
             <button type="button" onClick={() => props.onFeedback("remind", memory.id, undefined, "button")} disabled={props.busy || isFeedbackPending(props.feedbackPendingKey, "remind", memory.id)}><Lightbulb size={16} />{isFeedbackPending(props.feedbackPendingKey, "remind", memory.id) ? "处理中" : "提醒我"}</button>
-            <button type="button" onClick={() => props.onFeedback("forget", memory.id)} disabled={props.busy || isFeedbackPending(props.feedbackPendingKey, "forget", memory.id)}><RefreshCcw size={16} />{isFeedbackPending(props.feedbackPendingKey, "forget", memory.id) ? "处理中" : memory.weight <= 0 ? "彻底忘掉" : "放下"}</button>
+            <button type="button" onClick={() => props.onFeedback("forget", memory.id)} disabled={props.busy || isFeedbackPending(props.feedbackPendingKey, "forget", memory.id)}><RefreshCcw size={16} />{isFeedbackPending(props.feedbackPendingKey, "forget", memory.id) ? "处理中" : memory.weight <= 0 ? "彻底删除" : "忘记"}</button>
           </div>
         )}
         <MemoryFeedbackBox targetId={memory.id} creatureName={props.profile.creatureName} onFeedback={props.onFeedback} onObserveFeedbackAudio={props.onObserveFeedbackAudio} pending={isFeedbackPending(props.feedbackPendingKey, "continue", memory.id)} />
@@ -3697,7 +3705,7 @@ function MemoryCandidateCard(props: {
           <details className="candidate-memory-source">
             <summary>查看原始经历</summary>
             {sourceEpisode ? <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(props.profile, sourceEpisode))}</p> : null}
-            <AttachmentStrip attachments={props.candidate.attachments?.filter((attachment) => attachment.id !== image?.id)} />
+            <AttachmentStrip attachments={props.candidate.attachments?.filter((attachment) => attachment.id !== image?.id)} profile={props.profile} />
           </details>
         ) : null}
         <div className="candidate-memory-actions">
@@ -3705,7 +3713,7 @@ function MemoryCandidateCard(props: {
             <Check size={17} />{pendingRemember ? "正在留下" : "留下这段记忆"}
           </button>
           <button type="button" onClick={() => props.onFeedback("forget", props.candidate.id, undefined, "button")} disabled={pendingForget}>
-            <X size={17} />{pendingForget ? "正在处理" : "这次不留下"}
+            <X size={17} />{pendingForget ? "正在处理" : "忘记"}
           </button>
           <button className="candidate-important-button" type="button" onClick={() => props.onFeedback("important", props.candidate.id, undefined, "button")} disabled={pendingImportant}>
             <Lightbulb size={16} />{pendingImportant ? "正在标记" : "标为重要"}
@@ -3742,7 +3750,7 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
           <p>{displayText}</p>
         </details>
       ) : null}
-      <AttachmentStrip attachments={memory.attachments} />
+      <AttachmentStrip attachments={memory.attachments} profile={profile} />
       {sourceEpisode ? (
         <details className="memory-details">
           <summary>详情</summary>
@@ -3750,7 +3758,7 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
             <div>
               <span>你当时说</span>
               <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(profile, sourceEpisode))}</p>
-              <AttachmentStrip attachments={sourceEpisode.attachments} />
+              <AttachmentStrip attachments={sourceEpisode.attachments} profile={profile} />
             </div>
             {episodePapoLine(sourceEpisode) ? (
               <div>
@@ -4706,17 +4714,8 @@ function countUnreadPapoMessages(profile: CreatureProfile | undefined) {
 }
 
 function countPendingActionCards(profile: CreatureProfile | undefined) {
-  const pendingIds = new Set<string>();
-  for (const message of profile?.conversation ?? []) {
-    for (const decision of message.cognitionTrace?.eventDecisions ?? []) {
-      if (decision.action === "generate_action_card" && decision.actionResult?.kind === "action_card_draft") pendingIds.add(`event:${decision.eventId ?? message.id}`);
-    }
-    if (message.cognitionTrace?.emergenceDecision?.actionResult?.kind === "action_card_draft") pendingIds.add(`emergence-message:${message.cognitionTrace.emergenceDecision.emergenceId ?? message.id}`);
-  }
-  for (const emergence of profile?.emergenceHistory ?? []) {
-    if (emergence.actionResult?.kind === "action_card_draft") pendingIds.add(`emergence:${emergence.id}`);
-  }
-  return Math.min(pendingIds.size, 9);
+  if (!profile) return 0;
+  return Math.min((profile.jobs ?? []).filter((job) => job.type === "action_card" && (job.status === "queued" || job.status === "running")).length, 9);
 }
 
 function initialMotionActionCardCount(profile: CreatureProfile | undefined) {

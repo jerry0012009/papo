@@ -2559,9 +2559,11 @@ select {
   background: #111827;
 }
 
-.attachment-video video {
+.attachment-video video,
+.attachment-video > img {
   display: block;
   width: 100%;
+  aspect-ratio: 16 / 10;
   max-height: 260px;
   object-fit: cover;
 }

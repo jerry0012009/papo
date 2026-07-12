@@ -351,6 +351,9 @@ function chooseLatestPetProfile(current: CreatureProfile, incoming: CreatureProf
 
 function purgedTargets(profile: CreatureProfile) {
   const ids = new Set<string>();
+  for (const feedback of profile.feedbackHistory ?? []) {
+    if (feedback.storagePurged && feedback.targetId) ids.add(feedback.targetId);
+  }
   for (const message of profile.conversation ?? []) {
     for (const change of message.cognitionTrace?.feedbackDecision?.memoryChanges ?? []) {
       if (change.operation === "purged") ids.add(change.targetId);
