@@ -16,9 +16,9 @@ globalThis.fetch = (async (url, init) => {
     return new Response(JSON.stringify({
       data: [
         {
-          id: "alibaba/happyhorse-1.1",
-          supported_durations: [3, 5],
-          supported_resolutions: ["720p"],
+          id: "bytedance/seedance-1-5-pro",
+          supported_durations: [4, 5],
+          supported_resolutions: ["480p", "720p"],
           supported_aspect_ratios: ["1:1", "16:9"]
         }
       ]
@@ -27,10 +27,11 @@ globalThis.fetch = (async (url, init) => {
 
   if (href === "https://openrouter.ai/api/v1/videos" && init?.method === "POST") {
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
-    assert.equal(body.model, "alibaba/happyhorse-1.1");
-    assert.equal(body.duration, 5);
-    assert.equal(body.duration_seconds, 5);
-    assert.equal(body.resolution, "720p");
+    assert.equal(body.model, "bytedance/seedance-1-5-pro");
+    assert.equal(body.duration, 4);
+    assert.equal(body.duration_seconds, 4);
+    assert.equal(body.resolution, "480p");
+    assert.equal(body.generate_audio, false);
     assert.equal(body.aspect_ratio, "1:1");
     assert.match(String(body.prompt), /small cat waves/);
     return new Response(JSON.stringify({ id: "job-1", status: "pending" }), {
@@ -64,15 +65,15 @@ try {
     MIMO_API_KEY: "mimo-test-key",
     MIMO_MODEL: "mimo-v2.5-pro",
     OPENROUTER_API_KEY: "openrouter-test-key",
-    OPENROUTER_VIDEO_MODEL: "alibaba/happyhorse-1.1"
+    OPENROUTER_VIDEO_MODEL: "bytedance/seedance-1-5-pro"
   } as NodeJS.ProcessEnv);
 
   assert.equal(provider.kind, "mimo");
   assert.equal(provider.diagnostics?.textProvider, "mimo");
   assert.equal(provider.diagnostics?.videoProvider, "openrouter");
   assert.equal(provider.diagnostics?.videoRoute, "openrouter_videos");
-  const video = await provider.generateVideo?.("small cat waves to the user", { durationSeconds: 12 });
-  assert.equal(video?.model, "alibaba/happyhorse-1.1");
+  const video = await provider.generateVideo?.("small cat waves to the user", { durationSeconds: 4 });
+  assert.equal(video?.model, "bytedance/seedance-1-5-pro");
   assert.equal(video?.mime, "video/mp4");
   assert.match(video?.dataUrl ?? "", /^data:video\/mp4;base64,/);
   assert.deepEqual(calls.map((call) => call.url), [

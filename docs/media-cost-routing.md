@@ -5,12 +5,13 @@ Reviewed on 2026-07-12. Prices are provider list prices and can change.
 ## Current decision
 
 - Keep `google/gemini-3.1-flash-lite-image` for action-card covers. OpenRouter describes it as Google's fastest, most cost-efficient Nano Banana model. Its provider record lists image output at `$0.00003` per image-output token. CloseAI exposes the same Gemini image families but charges an account-tier multiplier, so moving the same model there is not a cost reduction.
-- Keep Happy Horse only as the currently configured video route, with a strict duration budget: default 4 seconds and maximum 5 seconds. Happy Horse supports discrete durations, so a 4-second request may resolve to 3 seconds. OpenRouter lists 720p at `$0.0988/second` and 1080p at `$0.1278/second`.
+- Use OpenRouter `bytedance/seedance-1-5-pro` as the default video route at 480P, four seconds, and `generate_audio=false`. It supports 1:1, first-frame image-to-video and costs `$0.0115296/second` without audio, about `$0.0461` per action card.
+- Keep Happy Horse available only as an explicit rollback model. Happy Horse 1.1 at 720P costs `$0.0988/second`, about 8.6 times the selected Seedance route.
 - Do not select models by keyword or silently degrade quality. Action cards require image-to-video and reference-image support so the approved cover remains the first frame.
 
 ## Lower-cost candidates
 
-The preferred production candidate is Alibaba Model Studio's `wan2.2-i2v-flash`. Its official China pricing lists 480P at `0.10 CNY/video second` and 720P at `0.20 CNY/video second`. It accepts the existing Base64 approved cover, creates an asynchronous task, and returns a temporary video URL that Papo immediately downloads into durable storage. The model produces a fixed five-second video, so a 480P action card is about `0.50 CNY`.
+An optional direct-provider candidate is Alibaba Model Studio's `wan2.2-i2v-flash`. Its official China pricing lists 480P at `0.10 CNY/video second` and 720P at `0.20 CNY/video second`. It accepts the existing Base64 approved cover, creates an asynchronous task, and returns a temporary video URL that Papo immediately downloads into durable storage. The model produces a fixed five-second video, so a 480P action card is about `0.50 CNY`.
 
 Papo now includes this route. Configure:
 
@@ -22,6 +23,15 @@ DASHSCOPE_VIDEO_RESOLUTION=480P
 ```
 
 When `DASHSCOPE_API_KEY` exists and no video provider is explicitly selected, Papo prefers DashScope. Without that credential it keeps the existing OpenRouter route. A failed cheap render does not automatically launch an expensive render in the same attempt.
+
+The OpenRouter account's `/api/v1/videos/models` catalog must be used for video selection; the general catalog omits dedicated video models. Reviewed square first-frame alternatives:
+
+- Seedance 1.5 Pro, 480P no audio: `$0.0115296/second`.
+- Grok Imagine Video, 480P: `$0.05/second` plus `$0.002/image`.
+- Seedance 2.0 Fast, 480P: `$0.0538048/second`.
+- Kling 3.0 Standard, no audio: `$0.084/second`.
+- Happy Horse 1.1, 720P: `$0.0988/second`.
+- Veo 3.1 Lite is `$0.03/second` at 720P without audio, but lacks 1:1 output and does not fit the square action-card contract.
 
 `fal-ai/wan/v2.2-a14b/image-to-video` is a secondary candidate. Its public page lists:
 
@@ -44,6 +54,8 @@ Chinese image candidates are inexpensive (`wan2.2-t2i-flash` and `wanx2.1-imagee
 ## Sources
 
 - OpenRouter Happy Horse pricing and capabilities: https://openrouter.ai/alibaba/happyhorse-1.1
+- OpenRouter Seedance 1.5 Pro pricing and capabilities: https://openrouter.ai/bytedance/seedance-1-5-pro
+- OpenRouter dedicated video catalog API: https://openrouter.ai/api/v1/videos/models
 - OpenRouter Nano Banana 2 Lite pricing and description: https://openrouter.ai/google/gemini-3.1-flash-lite-image
 - OpenRouter model catalog API: https://openrouter.ai/api/v1/models
 - fal Wan 2.2 image-to-video pricing: https://fal.ai/models/fal-ai/wan/v2.2-a14b/image-to-video

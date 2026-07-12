@@ -105,7 +105,7 @@ function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
   const visionModel = merged.OPENROUTER_VISION_MODEL ?? "nex-agi/nex-n2-mini";
   const audioModel = merged.OPENROUTER_AUDIO_MODEL ?? "xiaomi/mimo-v2.5";
   const imageModel = merged.OPENROUTER_IMAGE_MODEL ?? "google/gemini-3.1-flash-lite-image";
-  const videoModel = merged.OPENROUTER_VIDEO_MODEL ?? "alibaba/happyhorse-1.1";
+  const videoModel = merged.OPENROUTER_VIDEO_MODEL ?? "bytedance/seedance-1-5-pro";
   const baseUrl = "https://openrouter.ai/api/v1";
   return openAiCompatibleProvider({
     kind: "openrouter",
@@ -948,7 +948,7 @@ async function callVideoGeneration(
     );
     const duration = supportedDuration(capability, requestedDuration);
     const aspectRatio = supportedAspectRatio(capability, "1:1");
-    const resolution = supportedResolution(capability, "720p");
+    const resolution = supportedResolution(capability, input.kind === "openrouter" ? "480p" : "720p");
     const payload: Record<string, unknown> = {
       model,
       prompt: `${prompt}${videoInput.style ? `\n\nStyle: ${videoInput.style}` : ""}`,
@@ -956,6 +956,7 @@ async function callVideoGeneration(
       duration_seconds: duration,
       aspect_ratio: aspectRatio,
       resolution,
+      generate_audio: false,
       response_format: "url"
     };
     if (videoInput.referenceImage?.dataUrl) {

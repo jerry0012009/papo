@@ -9,6 +9,7 @@
   "OPENROUTER_MODEL": "openai/gpt-5.5",
   "OPENROUTER_VISION_MODEL": "google/gemini-3.1-flash-lite",
   "OPENROUTER_AUDIO_MODEL": "google/gemini-3.1-flash-lite",
+  "OPENROUTER_VIDEO_MODEL": "bytedance/seedance-1-5-pro",
   "PAPO_VIDEO_PROVIDER": "dashscope",
   "DASHSCOPE_API_KEY": "",
   "DASHSCOPE_VIDEO_MODEL": "wan2.2-i2v-flash",

@@ -71,10 +71,11 @@ Provider 配置来自环境变量、`.env`、`papo.config.json` 或 `.papo/provi
 - `OPENROUTER_MODEL`
 - `OPENROUTER_VISION_MODEL`
 - `OPENROUTER_AUDIO_MODEL`
+- `OPENROUTER_VIDEO_MODEL` defaults to `bytedance/seedance-1-5-pro` at 480P, four seconds, without audio for low-cost square action cards.
 - `OPENAI_MODEL`
 - `OPENAI_VISION_MODEL`
 - `OPENAI_AUDIO_TRANSCRIPTION_MODEL`
-- `PAPO_VIDEO_PROVIDER=dashscope` with `DASHSCOPE_API_KEY` uses low-cost `wan2.2-i2v-flash` at 480P by default. Without a DashScope key, the existing OpenRouter video route remains available. See `docs/media-cost-routing.md` for reviewed costs and the quality gate.
+- `PAPO_VIDEO_PROVIDER=dashscope` with `DASHSCOPE_API_KEY` is an optional direct Wan route. Without it, OpenRouter uses the low-cost Seedance default. See `docs/media-cost-routing.md` for reviewed costs and the quality gate.
 
 OpenRouter 音频默认使用已验证的 `xiaomi/mimo-v2.5` multimodal chat route。Generic provider 仍可使用 `/audio/transcriptions` provider route，但那只是供应商兼容路径，不是 Papo 的业务语义。
 
