@@ -67,10 +67,11 @@ const asyncTurnSchema = z.object({
     auditOnly: z.boolean().optional(),
     observedAt: z.string().datetime().optional(),
     batchId: z.string().min(1).max(100).optional(),
-    location: z.lazy(() => locationSchema).optional()
+    location: z.lazy(() => locationSchema).optional(),
+    sensingTrace: z.lazy(() => sensingTraceSchema).optional()
   }).superRefine((segment, context) => {
     if (segment.kind === "text" && !segment.content?.trim()) context.addIssue({ code: "custom", message: "Text is empty" });
-    if (segment.kind !== "text" && !segment.dataUrl) context.addIssue({ code: "custom", message: "Media data is missing" });
+    if (segment.kind !== "text" && !segment.dataUrl && !(segment.content?.trim() && segment.sensingTrace)) context.addIssue({ code: "custom", message: "Media data or sensing result is missing" });
   })).min(1).max(12)
 });
 
@@ -492,11 +493,40 @@ export function createApp(input: {
           sensingTrace
         });
       }
-      await persistCuriousCapture(profile, segments);
+      await persistSensedCompanionTurn(userId, body.batchId, segments);
     } finally {
       release();
       if (nativeBatchLocks.get(lockKey) === tail) nativeBatchLocks.delete(lockKey);
     }
+  }
+
+  async function persistSensedCompanionTurn(userId: string, batchId: string, segments: StreamSegment[]) {
+    const turnId = `turn_native_${batchId.replace(/[^a-zA-Z0-9_-]/g, "_")}`.slice(0, 100);
+    const now = new Date().toISOString();
+    const cognitionJob: ConversationJobRecord = {
+      id: `${turnId}-cognition`, turnId, requestId: turnId, type: "cognition", stage: "cognition", status: "queued",
+      attempt: 0, maxAttempts: 3, retryable: true, createdAt: now, updatedAt: now,
+      sourceIds: [turnId, ...segments.map((segment) => segment.id)]
+    };
+    const saved = await store.updateProfile(userId, (profile) => {
+      if (profile.turns?.some((turn) => turn.id === turnId || turn.requestId === turnId)) return;
+      const inputMessageIds: string[] = [];
+      markProactiveUserResponse(profile, now);
+      for (const segment of segments) {
+        const text = `${segment.label}：${segment.content}`;
+        const message = appendInputMessage(profile, {
+          channel: "curious", role: "world", text, displayText: segmentDisplayText(segment.kind, text), auditOnly: segment.auditOnly,
+          sourceId: segment.id, turnId, requestId: turnId, modality: segment.kind, batchId: segment.batchId,
+          observedAt: segment.observedAt, location: segment.location, attachments: segment.attachments, sensingTrace: segment.sensingTrace
+        });
+        if (message) inputMessageIds.push(message.id);
+      }
+      const turn: ConversationTurnRecord = { id: turnId, requestId: turnId, channel: "curious", status: "queued", createdAt: now, updatedAt: now, inputMessageIds, jobIds: [cognitionJob.id], segments };
+      profile.turns = [turn, ...(profile.turns ?? [])].slice(0, 80);
+      profile.jobs = [cognitionJob, ...(profile.jobs ?? [])].slice(0, 240);
+    });
+    if (!saved) throw new Error("Profile disappeared before companion turn commit");
+    turnWorker.wake();
   }
 
   const nativeIngestQueue = new NativeIngestQueue(
@@ -782,11 +812,12 @@ export function createApp(input: {
           observedAt: inputSegment.observedAt,
           batchId: inputSegment.batchId,
           location: inputSegment.location,
-          attachments
+          attachments,
+          sensingTrace: inputSegment.sensingTrace
         });
       }
       const now = new Date().toISOString();
-      const sensingJobs = segments.filter((segment) => segment.kind !== "text").map((segment): ConversationJobRecord => ({
+      const sensingJobs = segments.filter((segment) => segment.kind !== "text" && !segment.sensingTrace).map((segment): ConversationJobRecord => ({
         id: `${body.turnId}-${segment.kind === "image_summary" ? "vision" : "audio"}-${segment.id}`,
         turnId: body.turnId,
         requestId: body.requestId,
@@ -835,7 +866,8 @@ export function createApp(input: {
             batchId: segment.batchId,
             observedAt: segment.observedAt,
             location: segment.location,
-            attachments: segment.attachments
+            attachments: segment.attachments,
+            sensingTrace: segment.sensingTrace
           });
           if (message) inputMessageIds.push(message.id);
         }

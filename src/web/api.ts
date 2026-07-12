@@ -173,6 +173,8 @@ export interface AsyncTurnSegment {
   observedAt?: string;
   batchId?: string;
   location?: StreamSegment["location"];
+  auditOnly?: boolean;
+  sensingTrace?: SensingTrace;
 }
 
 export async function acceptConversationTurn(userId: string, input: {

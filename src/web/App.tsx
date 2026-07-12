@@ -54,7 +54,6 @@ import {
   acceptConversationTurn,
   buttonCapture,
   createProfile,
-  curiousCapture,
   dreamMemories,
   generateInitialActionCards,
   getProfile,
@@ -1026,9 +1025,26 @@ export function App() {
     liveCaptureQueueRef.current = liveCaptureQueueRef.current.catch(() => undefined).then(async () => {
       const latestProfile = profileRef.current;
       if (!latestProfile) return;
-      const result = await curiousCapture(latestProfile.userId, usefulSegments);
-      profileRef.current = result.profile;
-      setProfile(result.profile);
+      const batchId = usefulSegments[0]?.batchId ?? currentBatchId();
+      const turnId = `turn_live_${batchId.replace(/[^a-zA-Z0-9_-]/g, "_")}`;
+      const accepted = await acceptConversationTurn(latestProfile.userId, {
+        turnId,
+        requestId: turnId,
+        channel: "curious",
+        segments: usefulSegments.map((segment) => ({
+          id: segment.id,
+          kind: segment.kind,
+          label: segment.label,
+          content: segment.content,
+          observedAt: segment.observedAt,
+          batchId: segment.batchId,
+          location: segment.location,
+          auditOnly: segment.auditOnly,
+          sensingTrace: segment.sensingTrace
+        }))
+      });
+      profileRef.current = accepted.profile;
+      setProfile(accepted.profile);
     }).catch((caught) => {
       setError(`${profileRef.current?.creatureName ?? "它"} 刚才整理这一小段时断开了。${errorMessage(caught)}`);
     });

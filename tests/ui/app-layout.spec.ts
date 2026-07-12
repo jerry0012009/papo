@@ -676,6 +676,20 @@ test("companion listening skips a failed audio slice without showing technical a
   await expect(page.locator(".listening-session-status")).toBeVisible();
 });
 
+test("companion browser slices enter the persistent async turn pipeline", async ({ page }) => {
+  await installMockMicrophone(page);
+  await page.addInitScript(() => window.localStorage.setItem("papo:captureCompanionTurn", "1"));
+  await page.goto("/");
+  await startCompanionListening(page);
+  await page.evaluate(() => {
+    (window as unknown as { papoRequestAudioSliceForTest?: (force: boolean) => void }).papoRequestAudioSliceForTest?.(true);
+  });
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("papo:lastCompanionTurn"))).not.toBeNull();
+  const captured = JSON.parse(await page.evaluate(() => window.localStorage.getItem("papo:lastCompanionTurn") ?? "{}")) as { turnId?: string; segments?: Array<{ sensingTrace?: unknown }> };
+  expect(captured.turnId).toMatch(/^turn_live_/);
+  expect(captured.segments?.[0]?.sensingTrace).toBeTruthy();
+});
+
 test("companion stream groups live slices into one readable session card", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("papo:testProfileOverride", JSON.stringify({
@@ -924,6 +938,9 @@ async function installMockApi(page: Page) {
 
     if (path === "/api/profiles/demo/turns" && route.request().method() === "POST") {
       const requestBody = safePostJson(route) as { turnId: string; requestId: string; channel: "button" | "curious"; segments: Array<{ id: string; label: string; content?: string; kind: "text" | "image_summary" | "audio_observation"; batchId?: string; dataUrl?: string }> };
+      if (requestBody.turnId.startsWith("turn_live_") && await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:captureCompanionTurn") === "1")) {
+        await route.request().frame().page().evaluate((body) => window.localStorage.setItem("papo:lastCompanionTurn", JSON.stringify(body)), requestBody);
+      }
       if (await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:captureImageUploadBytes") === "1")) {
         const imageLength = requestBody.segments.find((segment) => segment.kind === "image_summary")?.dataUrl?.length ?? 0;
         await route.request().frame().page().evaluate((length) => window.localStorage.setItem("papo:lastImageUploadLength", String(length)), imageLength);
