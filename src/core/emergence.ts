@@ -200,9 +200,9 @@ function normalizeEmergenceActionResult(suggestion: SemanticEmergenceSuggestion)
 }
 
 function clampDuration(value: unknown) {
-  const numeric = typeof value === "number" ? value : 8;
-  if (!Number.isFinite(numeric)) return 8;
-  return Math.max(4, Math.min(20, Math.round(numeric)));
+  const numeric = typeof value === "number" ? value : 4;
+  if (!Number.isFinite(numeric)) return 4;
+  return Math.max(4, Math.min(5, Math.round(numeric)));
 }
 
 function availableSemanticMemories(profile: CreatureProfile) {

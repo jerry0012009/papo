@@ -28,8 +28,8 @@ globalThis.fetch = (async (url, init) => {
   if (href === "https://openrouter.ai/api/v1/videos" && init?.method === "POST") {
     const body = JSON.parse(String(init.body)) as Record<string, unknown>;
     assert.equal(body.model, "alibaba/happyhorse-1.1");
-    assert.equal(body.duration, 3);
-    assert.equal(body.duration_seconds, 3);
+    assert.equal(body.duration, 5);
+    assert.equal(body.duration_seconds, 5);
     assert.equal(body.resolution, "720p");
     assert.equal(body.aspect_ratio, "1:1");
     assert.match(String(body.prompt), /small cat waves/);
@@ -71,7 +71,7 @@ try {
   assert.equal(provider.diagnostics?.textProvider, "mimo");
   assert.equal(provider.diagnostics?.videoProvider, "openrouter");
   assert.equal(provider.diagnostics?.videoRoute, "openrouter_videos");
-  const video = await provider.generateVideo?.("small cat waves to the user", { durationSeconds: 4 });
+  const video = await provider.generateVideo?.("small cat waves to the user", { durationSeconds: 12 });
   assert.equal(video?.model, "alibaba/happyhorse-1.1");
   assert.equal(video?.mime, "video/mp4");
   assert.match(video?.dataUrl ?? "", /^data:video\/mp4;base64,/);

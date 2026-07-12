@@ -73,7 +73,7 @@ export interface IllustrationPlan {
 export type FeedbackKind = "understood" | "continue" | "not_now" | "remember" | "important" | "remind" | "correct" | "forget";
 export type FeedbackResponseAction = "acknowledge" | "ask_follow_up" | "quiet" | "note_memory";
 export type SegmentKind = "text" | "image_summary" | "audio_observation";
-export type ProviderKind = "mimo" | "openrouter" | "generic";
+export type ProviderKind = "mimo" | "openrouter" | "generic" | "dashscope";
 export type ConversationChannel = "wake" | "button" | "curious" | "feedback" | "emergence";
 
 export interface CreatureState {

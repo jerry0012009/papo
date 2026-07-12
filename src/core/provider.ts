@@ -55,7 +55,7 @@ export interface ProviderDiagnostics {
   imageProvider?: ProviderKind;
   videoProvider?: ProviderKind;
   imageRoute?: "openrouter_images" | "images_generations" | "chat_completions";
-  videoRoute?: "openrouter_videos";
+  videoRoute?: "openrouter_videos" | "dashscope_video_synthesis";
   audioRoute?: "chat_completions" | "audio_transcriptions";
 }
 
@@ -121,6 +121,8 @@ function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
     videoModel,
     imageRoute: "openrouter_images",
     videoRoute: "openrouter_videos",
+    videoDefaultDurationSeconds: videoDurationFromEnv(merged.PAPO_VIDEO_DEFAULT_SECONDS, 4),
+    videoMaxDurationSeconds: videoDurationFromEnv(merged.PAPO_VIDEO_MAX_SECONDS, 5),
     audioRoute: "chat_completions",
     chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
     visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
@@ -143,6 +145,8 @@ function mimoProvider(merged: NodeJS.ProcessEnv): ModelProvider {
     audioModel: merged.MIMO_AUDIO_MODEL ?? merged.MIMO_MODEL ?? "mimo",
     imageModel: merged.MIMO_IMAGE_MODEL ?? merged.MIMO_MODEL ?? "mimo",
     videoModel: merged.MIMO_VIDEO_MODEL,
+    videoDefaultDurationSeconds: videoDurationFromEnv(merged.PAPO_VIDEO_DEFAULT_SECONDS, 4),
+    videoMaxDurationSeconds: videoDurationFromEnv(merged.PAPO_VIDEO_MAX_SECONDS, 5),
     chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
     visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
     audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 90_000),
@@ -169,6 +173,8 @@ function genericProvider(merged: NodeJS.ProcessEnv): ModelProvider {
     audioModel,
     imageModel,
     videoModel: merged.OPENAI_VIDEO_MODEL ?? merged.GENERIC_VIDEO_MODEL,
+    videoDefaultDurationSeconds: videoDurationFromEnv(merged.PAPO_VIDEO_DEFAULT_SECONDS, 4),
+    videoMaxDurationSeconds: videoDurationFromEnv(merged.PAPO_VIDEO_MAX_SECONDS, 5),
     audioRoute,
     chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
     visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
@@ -252,6 +258,18 @@ function longTimeoutFromEnv(env: NodeJS.ProcessEnv, key: string, defaultMs: numb
   return Math.max(30_000, Math.min(900_000, Math.round(value)));
 }
 
+function videoDurationFromEnv(raw: string | undefined, fallback: number) {
+  const value = Number(raw);
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(3, Math.min(20, Math.round(value)));
+}
+
+function pollIntervalFromEnv(raw: string | undefined, fallback: number) {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value <= 0) return fallback;
+  return Math.max(1, Math.min(60_000, Math.round(value)));
+}
+
 function openAiCompatibleProvider(input: {
   kind: ProviderKind;
   name: string;
@@ -267,6 +285,8 @@ function openAiCompatibleProvider(input: {
   videoModel?: string;
   imageRoute?: ProviderDiagnostics["imageRoute"];
   videoRoute?: ProviderDiagnostics["videoRoute"];
+  videoDefaultDurationSeconds?: number;
+  videoMaxDurationSeconds?: number;
   audioRoute?: ProviderDiagnostics["audioRoute"];
   chatTimeoutMs: number;
   visionTimeoutMs: number;
@@ -385,14 +405,101 @@ function imageOverrideProvider(primary: ModelProvider, merged: NodeJS.ProcessEnv
 function videoOverrideProvider(primary: ModelProvider, merged: NodeJS.ProcessEnv) {
   const requested = merged.PAPO_VIDEO_PROVIDER;
   if (requested === "primary") return undefined;
+  if (requested === "dashscope") return dashscopeVideoProvider(merged);
   if (requested) {
     const provider = providerForKind(requested, merged);
     if (provider.kind === primary.kind) return undefined;
     return provider;
   }
   if (primary.diagnostics?.videoProvider) return undefined;
+  if (merged.DASHSCOPE_API_KEY) return dashscopeVideoProvider(merged);
   if (!merged.OPENROUTER_API_KEY) return undefined;
   return openRouterProvider(merged);
+}
+
+function dashscopeVideoProvider(merged: NodeJS.ProcessEnv): ModelProvider {
+  const apiKey = merged.DASHSCOPE_API_KEY;
+  if (!apiKey) throw new Error("PAPO video provider requested DashScope without DASHSCOPE_API_KEY.");
+  const endpoint = (merged.DASHSCOPE_VIDEO_ENDPOINT ?? "https://dashscope.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis").replace(/\/$/, "");
+  const model = merged.DASHSCOPE_VIDEO_MODEL ?? "wan2.2-i2v-flash";
+  const resolution = merged.DASHSCOPE_VIDEO_RESOLUTION ?? "480P";
+  const timeoutMs = longTimeoutFromEnv(merged, "PAPO_VIDEO_TIMEOUT_MS", 480_000);
+  const pollIntervalMs = pollIntervalFromEnv(merged.DASHSCOPE_VIDEO_POLL_MS, 5_000);
+  const unsupported = async () => { throw new Error("DashScope is configured only for Papo video generation"); };
+  return {
+    kind: "dashscope",
+    name: "Alibaba Cloud Model Studio",
+    available: true,
+    usesRealModel: true,
+    diagnostics: {
+      videoProvider: "dashscope",
+      videoModel: model,
+      videoRoute: "dashscope_video_synthesis"
+    },
+    generate: unsupported,
+    generateJson: unsupported,
+    summarizeImage: unsupported,
+    observeAudio: unsupported,
+    generateImage: unsupported,
+    generateVideo: (prompt, input = {}) => callDashscopeVideoGeneration({ endpoint, apiKey, model, resolution, timeoutMs, pollIntervalMs }, prompt, input)
+  };
+}
+
+async function callDashscopeVideoGeneration(
+  config: { endpoint: string; apiKey: string; model: string; resolution: string; timeoutMs: number; pollIntervalMs: number },
+  prompt: string,
+  input: { durationSeconds?: number; style?: string; referenceImage?: ImageReference }
+) {
+  if (!input.referenceImage?.dataUrl) throw new Error("DashScope image-to-video requires an approved cover image");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), config.timeoutMs);
+  try {
+    const response = await fetch(config.endpoint, {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "Content-Type": "application/json",
+        "X-DashScope-Async": "enable"
+      },
+      body: JSON.stringify({
+        model: config.model,
+        input: {
+          prompt: `${prompt}${input.style ? `\n\nStyle: ${input.style}` : ""}`,
+          img_url: input.referenceImage.dataUrl
+        },
+        parameters: {
+          resolution: config.resolution,
+          prompt_extend: true,
+          duration: config.model === "wan2.2-i2v-flash" ? 5 : Math.max(3, Math.min(5, Math.round(input.durationSeconds ?? 4))),
+          watermark: false
+        }
+      })
+    });
+    if (!response.ok) throw new Error(`DashScope video submission failed: ${response.status} ${await responseErrorSummary(response)}`);
+    const created = await response.json() as { output?: { task_id?: string; task_status?: string }; code?: string; message?: string };
+    const taskId = created.output?.task_id;
+    if (!taskId) throw new Error(`DashScope video submission returned no task id (${created.code ?? "unknown"}: ${created.message ?? "empty response"})`);
+    const endpointUrl = new URL(config.endpoint);
+    const taskUrl = new URL(`/api/v1/tasks/${encodeURIComponent(taskId)}`, endpointUrl.origin).toString();
+    while (true) {
+      if (controller.signal.aborted) throw new Error("DashScope video generation timed out");
+      await delay(config.pollIntervalMs);
+      const statusResponse = await fetch(taskUrl, { signal: controller.signal, headers: { Authorization: `Bearer ${config.apiKey}` } });
+      if (!statusResponse.ok) throw new Error(`DashScope video status failed: ${statusResponse.status} ${await responseErrorSummary(statusResponse)}`);
+      const status = await statusResponse.json() as { output?: { task_status?: string; video_url?: string; code?: string; message?: string } };
+      const state = status.output?.task_status?.toUpperCase();
+      if (state === "FAILED" || state === "CANCELED" || state === "UNKNOWN") {
+        throw new Error(`DashScope video generation failed: ${status.output?.code ?? state} ${status.output?.message ?? ""}`.trim());
+      }
+      if (state !== "SUCCEEDED") continue;
+      const videoUrl = status.output?.video_url;
+      if (!videoUrl) throw new Error("DashScope video generation succeeded without a video URL");
+      return videoResultFromRaw(videoUrl, config.model, controller.signal);
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 function audioOverrideProvider(primary: ModelProvider, merged: NodeJS.ProcessEnv) {
@@ -823,7 +930,7 @@ function extractGeneratedImage(message: { images?: Array<{ image_url?: { url?: s
 }
 
 async function callVideoGeneration(
-  input: { videoEndpoint?: string; apiKey?: string; model: string; videoModel?: string; kind: ProviderKind; videoTimeoutMs: number },
+  input: { videoEndpoint?: string; apiKey?: string; model: string; videoModel?: string; kind: ProviderKind; videoTimeoutMs: number; videoDefaultDurationSeconds?: number; videoMaxDurationSeconds?: number },
   prompt: string,
   videoInput: { durationSeconds?: number; style?: string; referenceImage?: ImageReference }
 ) {
@@ -835,7 +942,11 @@ async function callVideoGeneration(
   try {
     const started = Date.now();
     const capability = await videoModelCapability(input, model, controller.signal);
-    const duration = supportedDuration(capability, videoInput.durationSeconds ?? 8);
+    const requestedDuration = Math.min(
+      videoInput.durationSeconds ?? input.videoDefaultDurationSeconds ?? 4,
+      input.videoMaxDurationSeconds ?? 5
+    );
+    const duration = supportedDuration(capability, requestedDuration);
     const aspectRatio = supportedAspectRatio(capability, "1:1");
     const resolution = supportedResolution(capability, "720p");
     const payload: Record<string, unknown> = {

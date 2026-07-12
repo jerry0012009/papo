@@ -132,6 +132,9 @@ test("compact recovery lets the text model author an age-accurate replacement ca
     assert.equal(actionPrimary, 1);
     assert.equal(recoveryPrompts.length, 2);
     assert.ok(newCard);
+    const actionJob = final.jobs?.find((job) => job.type === "action_card" && job.turnId === "turn_revision");
+    assert.equal(actionJob?.maxAttempts, 1, "billable video generation must not retry automatically");
+    assert.equal(actionJob?.retryable, false);
     assert.equal(oldCard?.disabled, true);
     assert.equal(oldCard?.replacedByActionCardId, newCard?.id);
     assert.ok(keyframePrompt.includes(creativePrompt));

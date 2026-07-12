@@ -1,0 +1,52 @@
+# Media cost routing
+
+Reviewed on 2026-07-12. Prices are provider list prices and can change.
+
+## Current decision
+
+- Keep `google/gemini-3.1-flash-lite-image` for action-card covers. OpenRouter describes it as Google's fastest, most cost-efficient Nano Banana model. Its provider record lists image output at `$0.00003` per image-output token. CloseAI exposes the same Gemini image families but charges an account-tier multiplier, so moving the same model there is not a cost reduction.
+- Keep Happy Horse only as the currently configured video route, with a strict duration budget: default 4 seconds and maximum 5 seconds. Happy Horse supports discrete durations, so a 4-second request may resolve to 3 seconds. OpenRouter lists 720p at `$0.0988/second` and 1080p at `$0.1278/second`.
+- Do not select models by keyword or silently degrade quality. Action cards require image-to-video and reference-image support so the approved cover remains the first frame.
+
+## Lower-cost candidates
+
+The preferred production candidate is Alibaba Model Studio's `wan2.2-i2v-flash`. Its official China pricing lists 480P at `0.10 CNY/video second` and 720P at `0.20 CNY/video second`. It accepts the existing Base64 approved cover, creates an asynchronous task, and returns a temporary video URL that Papo immediately downloads into durable storage. The model produces a fixed five-second video, so a 480P action card is about `0.50 CNY`.
+
+Papo now includes this route. Configure:
+
+```dotenv
+PAPO_VIDEO_PROVIDER=dashscope
+DASHSCOPE_API_KEY=...
+DASHSCOPE_VIDEO_MODEL=wan2.2-i2v-flash
+DASHSCOPE_VIDEO_RESOLUTION=480P
+```
+
+When `DASHSCOPE_API_KEY` exists and no video provider is explicitly selected, Papo prefers DashScope. Without that credential it keeps the existing OpenRouter route. A failed cheap render does not automatically launch an expensive render in the same attempt.
+
+`fal-ai/wan/v2.2-a14b/image-to-video` is a secondary candidate. Its public page lists:
+
+- 480p: `$0.04/video second`
+- 580p: `$0.06/video second`
+- 720p: `$0.08/video second`
+
+For the small in-app action-card surface, a 5-second 480p render is about `$0.20`, compared with about `$0.49` for 5-second Happy Horse 720p. It must pass Papo's reference identity, loop continuity, latency, and failure-rate fixture before production routing changes.
+
+Chinese image candidates are inexpensive (`wan2.2-t2i-flash` and `wanx2.1-imageedit` are each listed at `0.14 CNY/image` in China), but they are not enabled yet. The action-card cover may combine the pet avatar, uploaded user media, and historical-card continuity; a real multi-reference A/B benchmark must prove identity retention before replacing Nano Banana Lite.
+
+## Product budget
+
+- Semantic action and emergence normalize action cards to 4-5 seconds.
+- The provider independently enforces `PAPO_VIDEO_DEFAULT_SECONDS` (default `4`) and `PAPO_VIDEO_MAX_SECONDS` (default `5`), so an incorrect model response cannot create an unbounded render.
+- Covers continue to use the low-cost image model because image-to-video quality depends on a stable approved first frame.
+- Video jobs are single-attempt. A timeout can occur after a provider has already started and billed a render, so automatic retries risk duplicate charges. The failure stays visible and a later retry must be explicit.
+- A provider switch requires a deterministic route test plus a small real benchmark set. Unit price alone is insufficient because failed or identity-breaking renders cost more through retries.
+
+## Sources
+
+- OpenRouter Happy Horse pricing and capabilities: https://openrouter.ai/alibaba/happyhorse-1.1
+- OpenRouter Nano Banana 2 Lite pricing and description: https://openrouter.ai/google/gemini-3.1-flash-lite-image
+- OpenRouter model catalog API: https://openrouter.ai/api/v1/models
+- fal Wan 2.2 image-to-video pricing: https://fal.ai/models/fal-ai/wan/v2.2-a14b/image-to-video
+- Alibaba Model Studio model pricing: https://help.aliyun.com/zh/model-studio/model-pricing
+- Alibaba Model Studio first-frame image-to-video API: https://help.aliyun.com/zh/model-studio/image-to-video-api-reference
+- CloseAI pricing tiers: https://www.closeai-asia.com/pricing
