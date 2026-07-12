@@ -241,6 +241,29 @@ test("positive icon requests are rejected even without infographic wording", asy
   await assert.rejects(() => planMemoryVisual(profile, memory("ltm_positive_icons", "一次技术分享"), provider), /forbidden symbols/);
 });
 
+test("invalid long-term visual plans receive one model-authored repair before image generation", async () => {
+  const profile = createCreatureProfile({ userId: "memory-plan-repair", creatureName: "Papo" });
+  let planningCalls = 0;
+  let imageCalls = 0;
+  const provider = providerWith((prompt) => {
+    planningCalls += 1;
+    if (!prompt.includes("上一次返回未通过校验")) return {
+      shortTitle: "讲座", narrative: "我记得这场讲座。", visualMode: "grounded_scene", papoPresence: "absent", visualReason: "错误地假设有照片",
+      imagePrompt: "A warm hand-drawn watercolor lecture scene, visible paper texture, no animals, no text.", relatedMemoryIds: [], needsClientReferences: false
+    };
+    return {
+      shortTitle: "讲座", narrative: "我记得这场讲座。", visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "没有照片，改为生活插画",
+      imagePrompt: "A warm hand-drawn watercolor lecture scene with natural faces, visible paper texture, no animals, no text.", relatedMemoryIds: [], needsClientReferences: false
+    };
+  }, async () => { imageCalls += 1; return { dataUrl: IMAGE, mime: "image/png" }; });
+  provider.generateJsonFallback = provider.generateJson;
+
+  const plan = await planMemoryVisual(profile, memory("ltm_plan_repair", "一次没有照片的讲座"), provider, { requireVisual: true });
+  assert.equal(plan.visualMode, "imaginative_illustration");
+  assert.equal(planningCalls, 2);
+  assert.equal(imageCalls, 0, "planning repair must not spend an image call");
+});
+
 test("persistent memory jobs retry failures and expose a terminal visual error without replacing the old image", async () => {
   const store = new MemoryProfileStore();
   const profile = await store.createProfile({ userId: "memory-retry", creatureName: "Papo" });
@@ -270,6 +293,33 @@ test("persistent memory jobs retry failures and expose a terminal visual error w
   assert.equal(failed?.visual?.id, "stable_old_visual");
   assert.equal(failed?.visualStatus, "failed");
   assert.match(failed?.visualError ?? "", /deterministic memory image failure/);
+  worker.stop();
+});
+
+test("completed memory artwork is committed even when Client.md validation fails", async () => {
+  const store = new MemoryProfileStore();
+  const profile = await store.createProfile({ userId: "memory-client-isolation", creatureName: "Papo" });
+  const created = upsertLongTermMemory(profile, memory("ltm_client_isolation", "一段值得配图的经历"));
+  await store.saveProfile(profile);
+  let imageCalls = 0;
+  const provider = providerWith(() => ({
+    shortTitle: "共同经历", narrative: "我记得这段值得留下的经历。",
+    visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "具体的手绘生活场景",
+    imagePrompt: "A warm hand-drawn watercolor everyday scene with natural faces, visible paper texture, no animals, no text.",
+    relatedMemoryIds: [], needsClientReferences: false
+  }), async () => { imageCalls += 1; return { dataUrl: IMAGE, mime: "image/png" }; });
+  const originalGenerateJson = provider.generateJson.bind(provider);
+  provider.generateJson = async (prompt) => prompt.includes("Client.md 维护脑")
+    ? { facts: [{ dimension: "leisure", text: "x".repeat(181), confidence: 80, sourceIds: [created.memory.id] }] }
+    : originalGenerateJson(prompt);
+  const app = createApp({ store, provider, proactive: { enabled: false }, turns: { autoStart: false }, nativeIngest: { autoStart: false } });
+  const worker = app.locals.turnWorker as PersistentTurnWorker;
+  await worker.start();
+  await waitFor(async () => (await store.getProfile(profile.userId))?.jobs?.find((job) => job.memoryId === created.memory.id)?.status === "completed");
+  const saved = await store.getProfile(profile.userId);
+  assert.equal(imageCalls, 1);
+  assert.equal(saved?.longTermMemories.find((item) => item.id === created.memory.id)?.visualStatus, "ready");
+  assert.equal(saved?.longTermMemories.find((item) => item.id === created.memory.id)?.enrichmentStatus, "completed");
   worker.stop();
 });
 

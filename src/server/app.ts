@@ -418,7 +418,11 @@ export function createApp(input: {
     }
     try {
       await enrichMemoryExperience(snapshot, memory, provider, { throwOnVisualError: true });
-      await updateClientDocument(snapshot, provider, [memory.id]);
+      try {
+        await updateClientDocument(snapshot, provider, [memory.id]);
+      } catch (error) {
+        console.warn(`Client document update skipped after memory artwork completed for ${userId}/${memory.id}: ${error instanceof Error ? error.message : "unknown validation error"}`);
+      }
       memory.enrichedRevision = revision;
       memory.enrichmentStatus = "completed";
       memory.enrichmentError = undefined;

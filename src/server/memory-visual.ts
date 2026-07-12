@@ -23,7 +23,19 @@ export interface MemoryVisualPlan extends z.infer<typeof planSchema> {}
 export async function planMemoryVisual(profile: CreatureProfile, memory: LongTermMemory, provider: ModelProvider, options: { requireVisual?: boolean } = {}) {
   const related = retrieveRelatedMemories(profile, memory);
   const client = clientContextFor(profile, `${memory.text} ${memory.tags.join(" ")}`);
-  const raw = await provider.generateJson<unknown>(memoryVisualPlanPrompt(profile, memory, related, client, options));
+  const prompt = memoryVisualPlanPrompt(profile, memory, related, client, options);
+  let raw: unknown;
+  try {
+    raw = await provider.generateJson<unknown>(prompt);
+    return validateMemoryVisualPlan(raw, related, memory, options);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message.slice(0, 500) : "unknown validation error";
+    raw = await (provider.generateJsonFallback ?? provider.generateJson)(`${prompt}\n\n上一次返回未通过校验：${reason}\n请修正上述具体错误，只返回一份完整、严格合法的 JSON。`);
+    return validateMemoryVisualPlan(raw, related, memory, options);
+  }
+}
+
+function validateMemoryVisualPlan(raw: unknown, related: LongTermMemory[], memory: LongTermMemory, options: { requireVisual?: boolean }) {
   const parsed = planSchema.safeParse(raw);
   if (!parsed.success) throw new Error(`invalid memory visual plan (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   const allowed = new Set(related.map((item) => item.id));
