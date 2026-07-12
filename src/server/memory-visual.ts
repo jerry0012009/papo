@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { clientContextFor } from "../core/client-document";
-import { MEMORY_VISUAL_POLICY_VERSION, memoryShortTitle } from "../core/memory";
+import { MEMORY_VISUAL_POLICY_VERSION, memoryShortTitle, memoryVisualPromptHasForbiddenContent } from "../core/memory";
 import type { ImageReference, ModelProvider } from "../core/provider";
 import type { CreatureProfile, LongTermMemory, MediaAttachment } from "../core/types";
 
@@ -43,6 +43,7 @@ function validatePaintedMemoryPrompt(prompt: string) {
   const incompatibleMedium = /\b(oil[- ]paint(?:ing|ed)?|photorealistic|photo[- ]realistic|3d render(?:ing)?)\b|油画|厚涂|摄影写实|照片级|3D渲染/i;
   if (!paintedMedium.test(prompt)) throw new Error("imaginative_illustration must name a tactile painted medium");
   if (abstractInfographic.test(prompt)) throw new Error("memory image prompt uses forbidden infographic language");
+  if (memoryVisualPromptHasForbiddenContent(prompt)) throw new Error("memory image prompt requests forbidden symbols or readable content");
   if (incompatibleMedium.test(prompt)) throw new Error("memory image prompt uses an incompatible album medium");
 }
 

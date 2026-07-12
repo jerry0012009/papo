@@ -9,10 +9,10 @@ export function memoryVisualNeedsPolicyMigration(memory: LongTermMemory) {
   const version = memory.visualPolicyVersion ?? 1;
   if (version < 4) return true;
   if (version >= MEMORY_VISUAL_POLICY_VERSION) return false;
-  return hasForbiddenVisualContent(memory.visualPrompt ?? "");
+  return memoryVisualPromptHasForbiddenContent(memory.visualPrompt ?? "");
 }
 
-function hasForbiddenVisualContent(prompt: string) {
+export function memoryVisualPromptHasForbiddenContent(prompt: string) {
   const withoutNegativeGuards = prompt
     .replace(/\b(?:no|without|avoid|exclude)\s+(?:any\s+)?(?:readable\s+)?(?:icons?|pictograms?|symbols?|text|letters?|words?|labels?|captions?|typography|infographics?|diagrams?|logos?)(?:\s*(?:,|and|or)\s*(?:no\s+|without\s+)?(?:any\s+)?(?:readable\s+)?(?:icons?|pictograms?|symbols?|text|letters?|words?|labels?|captions?|typography|infographics?|diagrams?|logos?))*\b/gi, "")
     .replace(/(?:无|不要|禁止|不出现|避免)(?:任何)?(?:可读的)?(?:图标|符号|文字|字母|单词|标签|标题|字幕|排版|信息图|示意图|标识)(?:[、，和或]*(?:无|不要|禁止|不出现|避免)?(?:任何)?(?:可读的)?(?:图标|符号|文字|字母|单词|标签|标题|字幕|排版|信息图|示意图|标识))*/g, "");
@@ -95,12 +95,15 @@ export function enqueueMemoryEnrichmentJob(
 export function enqueueCandidateVisualJobs(profile: CreatureProfile, now = new Date().toISOString()) {
   const jobs: ConversationJobRecord[] = [];
   let available = Math.max(0, 2 - (profile.jobs ?? []).filter((job) => job.type === "candidate_visual" && (job.status === "queued" || job.status === "running")).length);
-  const budgetPool = profile.memoryCandidates.filter((candidate) => candidate.status === "candidate").slice(0, 6);
+  const budgetPool = profile.memoryCandidates.filter((candidate) =>
+    candidate.status === "candidate"
+    && candidate.confidence >= 70
+    && !candidate.attachments?.some((attachment) => attachment.kind === "image")
+    && !hasHighPrivacyText(`${candidate.candidateText} ${candidate.privacyReason ?? ""}`)
+  ).slice(0, 6);
   for (const candidate of budgetPool) {
     if (available <= 0) break;
-    if (candidate.status !== "candidate" || candidate.confidence < 70 || candidate.previewVisual || candidate.previewStatus === "not_needed") continue;
-    if (candidate.attachments?.some((attachment) => attachment.kind === "image")) continue;
-    if (hasHighPrivacyText(`${candidate.candidateText} ${candidate.privacyReason ?? ""}`)) continue;
+    if (candidate.previewVisual || candidate.previewStatus === "not_needed") continue;
     const id = `candidate_visual_${safeJobPart(candidate.id)}`;
     if (profile.jobs?.some((job) => job.id === id)) continue;
     const turnId = `candidate_lifecycle_${safeJobPart(candidate.id)}`.slice(0, 100);

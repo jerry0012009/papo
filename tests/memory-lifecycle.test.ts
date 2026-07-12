@@ -209,6 +209,15 @@ test("negative no-icons and no-text guards remain valid visual prompts", async (
   await assert.doesNotReject(() => planMemoryVisual(profile, memory("ltm_negative_guard", "一次自然交流"), provider));
 });
 
+test("positive icon requests are rejected even without infographic wording", async () => {
+  const profile = createCreatureProfile({ userId: "memory-positive-icon-guard", creatureName: "Papo" });
+  const provider = providerWith(() => ({
+    shortTitle: "技术分享", narrative: "我记得这场分享。", visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "手绘活动现场",
+    imagePrompt: "A warm hand-drawn watercolor event scene with friendly technology icons on the screen, visible paper texture, no animals.", relatedMemoryIds: [], needsClientReferences: false
+  }));
+  await assert.rejects(() => planMemoryVisual(profile, memory("ltm_positive_icons", "一次技术分享"), provider), /forbidden symbols/);
+});
+
 test("persistent memory jobs retry failures and expose a terminal visual error without replacing the old image", async () => {
   const store = new MemoryProfileStore();
   const profile = await store.createProfile({ userId: "memory-retry", creatureName: "Papo" });
