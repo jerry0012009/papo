@@ -3,6 +3,7 @@ import { petKindLabel, normalizePetKind } from "./pet-kinds";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import { modelTimeContext } from "./time";
 import type { CreatureProfile, FeedbackRecord, LongTermMemory } from "./types";
+import { projectInputForModel } from "./model-safety";
 
 export function modelPetContext(profile: CreatureProfile, now = new Date().toISOString()) {
   return {
@@ -30,7 +31,7 @@ export function modelConversationContext(profile: CreatureProfile, limit = 10) {
       id: message.id,
       role: message.role,
       channel: message.channel,
-      text: textForModel(message.text, privacyHigh),
+      text: privacyHigh ? textForModel(message.text, true) : projectInputForModel(message.text).text,
       contentHiddenForPrivacy: privacyHigh,
       at: message.at,
       localAt: time.localDateTime,

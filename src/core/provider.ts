@@ -16,10 +16,24 @@ export interface ModelProvider {
   diagnostics?: ProviderDiagnostics;
   generate(prompt: string): Promise<string>;
   generateJson<T>(prompt: string): Promise<T | undefined>;
+  generateJsonFallback?<T>(prompt: string): Promise<T | undefined>;
   summarizeImage(dataUrl: string, prompt: string): Promise<string>;
   observeAudio(dataUrl: string, prompt: string): Promise<string>;
   generateImage(prompt: string, input?: { size?: string; style?: string; references?: ImageReference[] }): Promise<{ dataUrl: string; mime: "image/png" | "image/jpeg" | "image/webp"; model?: string }>;
   generateVideo?(prompt: string, input?: { durationSeconds?: number; style?: string; referenceImage?: ImageReference }): Promise<{ dataUrl: string; mime: "video/mp4"; model?: string; remoteUrl?: string }>;
+}
+
+export class ModelProviderRefusalError extends Error {
+  readonly retryable = false;
+
+  constructor(readonly reason: "safety" | "policy", message = "Model provider declined this request") {
+    super(message);
+    this.name = "ModelProviderRefusalError";
+  }
+}
+
+export function isModelProviderRefusal(error: unknown): error is ModelProviderRefusalError {
+  return error instanceof ModelProviderRefusalError;
 }
 
 export interface ImageReference {
@@ -29,9 +43,11 @@ export interface ImageReference {
 
 export interface ProviderDiagnostics {
   textProvider?: ProviderKind;
+  textFallbackProvider?: ProviderKind;
   visionProvider?: ProviderKind;
   audioProvider?: ProviderKind;
   textModel?: string;
+  textFallbackModel?: string;
   visionModel?: string;
   audioModel?: string;
   imageModel?: string;
@@ -58,7 +74,30 @@ export function createModelProvider(env: NodeJS.ProcessEnv = process.env): Model
   if (!primary && (merged.MIMO_ENDPOINT || merged.MIMO_API_KEY)) primary = mimoProvider(merged);
   if (!primary && (merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY)) primary = genericProvider(merged);
   if (!primary) throw new Error("Papo requires a real model provider; configure OpenRouter, Mimo, or a generic OpenAI-compatible provider.");
-  return withModalityOverrides(primary, merged);
+  const fallback = textFallbackProvider(primary, merged);
+  const textProvider = fallback ? {
+    ...primary,
+    diagnostics: {
+      ...primary.diagnostics,
+      textFallbackProvider: fallback.kind,
+      textFallbackModel: fallback.diagnostics?.textModel
+    },
+    generateJsonFallback: fallback.generateJson.bind(fallback)
+  } : primary;
+  return withModalityOverrides(textProvider, merged);
+}
+
+function textFallbackProvider(primary: ModelProvider, merged: NodeJS.ProcessEnv) {
+  const requested = merged.PAPO_TEXT_FALLBACK_PROVIDER;
+  if (requested === "primary" || requested === "none") return undefined;
+  if (requested) {
+    const fallback = providerForKind(requested, merged);
+    return fallback.kind === primary.kind ? undefined : fallback;
+  }
+  if (primary.kind !== "openrouter" && merged.OPENROUTER_API_KEY) return openRouterProvider(merged);
+  if (primary.kind !== "mimo" && (merged.MIMO_ENDPOINT || merged.MIMO_API_KEY)) return mimoProvider(merged);
+  if (primary.kind !== "generic" && (merged.OPENAI_API_KEY || merged.GENERIC_MODEL_API_KEY)) return genericProvider(merged);
+  return undefined;
 }
 
 function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
@@ -420,10 +459,14 @@ async function callChatCompletions(
     });
 
     if (!response.ok) {
-      throw new Error(`Model provider failed: ${response.status} ${await responseErrorSummary(response)}`);
+      const summary = await responseErrorSummary(response);
+      if (isProviderRefusalText(summary)) throw new ModelProviderRefusalError("safety");
+      throw new Error(`Model provider failed: ${response.status} ${summary}`);
     }
-    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    return { content: data.choices?.[0]?.message?.content ?? "" };
+    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string; refusal?: string } }> };
+    const message = data.choices?.[0]?.message;
+    if (message?.refusal) throw new ModelProviderRefusalError("policy");
+    return { content: message?.content ?? message?.refusal ?? "" };
   } finally {
     clearTimeout(timeout);
   }
@@ -1033,6 +1076,7 @@ async function responseErrorSummary(response: Response) {
 }
 
 function parseJson<T>(text: string): T | undefined {
+  if (isProviderRefusalText(text)) throw new ModelProviderRefusalError("safety");
   const candidates = [text.trim(), ...extractJsonBlocks(text), extractFirstJsonObject(text)].filter((item): item is string => Boolean(item?.trim()));
   for (const candidate of candidates) {
     try {
@@ -1042,6 +1086,10 @@ function parseJson<T>(text: string): T | undefined {
     }
   }
   throw new Error(`Model provider returned invalid JSON content (${jsonDiagnostic(text)})`);
+}
+
+export function isProviderRefusalText(text: string) {
+  return /request (?:was |has been )?rejected|considered high risk|safety (?:policy|filters?)|cannot (?:assist|comply)|unable to comply|内容风险|安全策略|请求被拒绝/i.test(text.trim());
 }
 
 function parseJsonCandidate<T>(candidate: string): T {

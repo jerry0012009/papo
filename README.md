@@ -64,7 +64,7 @@ npm run serve:api
 
 Provider 配置来自环境变量、`.env`、`papo.config.json` 或 `.papo/provider.json`。
 
-`PAPO_PROVIDER` 可显式指定 `openrouter`、`mimo` 或 `generic`。没有显式指定时，按 OpenRouter、Mimo、generic OpenAI-compatible 的顺序选择。
+`PAPO_PROVIDER` 可显式指定 `openrouter`、`mimo` 或 `generic`。没有显式指定时，按 OpenRouter、Mimo、generic OpenAI-compatible 的顺序选择。若主文本供应商明确拒绝请求，Papo 会用中性的结构化任务视图重试，并在已有第二套供应商凭据时自动跨供应商回退。可用 `PAPO_TEXT_FALLBACK_PROVIDER=openrouter|mimo|generic` 显式指定，或设为 `none` 关闭跨供应商回退。
 
 模型可按模态配置：
 

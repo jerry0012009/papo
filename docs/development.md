@@ -69,6 +69,7 @@ The boundary is strict: rules do not judge user meaning or wording. LLM output i
 - Supported real providers: OpenRouter, Mimo, and generic OpenAI-compatible APIs.
 - Provider config comes from environment, `.env`, `papo.config.json`, or `.papo/provider.json`.
 - `PAPO_PROVIDER` may explicitly select `openrouter`, `mimo`, or `generic`.
+- Text-provider refusals are classified separately from malformed JSON. Cognition retries once with a compact structured task view and automatically uses another configured provider when available. Set `PAPO_TEXT_FALLBACK_PROVIDER=openrouter|mimo|generic` to choose it explicitly, or `none` to disable cross-provider fallback. Do not retry the same refusal through the persistent worker.
 - `PAPO_VISION_PROVIDER`, `PAPO_AUDIO_PROVIDER`, `PAPO_IMAGE_PROVIDER`, and `PAPO_VIDEO_PROVIDER` may route sensing or generation to a different real provider than the semantic text brain when one provider is stronger for a modality. If the primary provider has no video endpoint and OpenRouter credentials are available, video generation defaults to OpenRouter so action cards can work without moving the semantic brain.
 - Model ids are configurable per modality.
 - Default semantic models should prefer the strongest available configured model, currently `openai/gpt-5.5` for OpenRouter or `gpt-5.5` for generic.

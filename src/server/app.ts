@@ -14,6 +14,7 @@ import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { enqueueMemoryEnrichmentJob, MEMORY_VISUAL_POLICY_VERSION, upsertLongTermMemory } from "../core/memory";
 import { createModelProvider, type ImageReference, type ModelProvider } from "../core/provider";
+import { explicitUserAge } from "../core/model-safety";
 import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
 import { wakeCreature } from "../core/rhythm";
 import { clampState, deriveMood } from "../core/state";
@@ -560,7 +561,10 @@ export function createApp(input: {
       card.jobId = job.id;
     }
     const ownedIllustrations = (profile.illustrations ?? []).filter((item) => !baseIllustrationIds.has(item.id));
-    const ownedActionCards = (profile.actionCards ?? []).filter((item) => !baseActionCardIds.has(item.id));
+    const ownedActionCards = (profile.actionCards ?? []).filter((item) =>
+      !baseActionCardIds.has(item.id)
+      || (item.replacedByActionCardId && attachments.some((attachment) => attachment.id === item.replacedByActionCardId))
+    );
     const ownedHermesTasks = (profile.hermes.tasks ?? []).filter((item) => !baseHermesTaskIds.has(item.id));
     const saved = await store.updateProfile(userId, (latest) => {
       if (message) latest.conversation = mergeOwnedById(latest.conversation, [message]).slice(0, 80);
@@ -1943,7 +1947,7 @@ async function executeActionCardActions(
   for (const event of result.events) {
     const actionResult = event.actionResult;
     if (event.actionDecision.action !== "generate_action_card" || actionResult?.kind !== "action_card_draft" || !actionResult.prompt?.trim()) continue;
-    const references = await actionCardReferences(profile, event.attachments);
+    const references = await actionCardReferences(profile, event.attachments, actionResult.replacesActionCardId);
     const referenceImage = references[0];
     if (!provider.generateVideo) throw new Error("Video generation provider is not configured");
     const sourceIds = [...new Set([event.id, event.triggerSegmentId, event.triggerBatchId, ...(event.relatedMemoryIds ?? []), ...(event.attachments ?? []).map((item) => item.id), ...(actionResult.sourceIds ?? [])].filter(Boolean) as string[])];
@@ -1991,10 +1995,18 @@ async function executeActionCardActions(
       video,
       sourceIds,
       actionEventId: event.id,
+      replacementForActionCardId: actionResult.replacesActionCardId,
       providerKind: provider.diagnostics?.videoProvider ?? provider.kind,
       providerName: provider.diagnostics?.videoProvider ? `${provider.diagnostics.videoProvider} video` : provider.name,
       model: generated.model ?? provider.diagnostics?.videoModel
     });
+    if (actionResult.replacesActionCardId) {
+      const replaced = profile.actionCards.find((card) => card.id === actionResult.replacesActionCardId);
+      if (replaced) {
+        replaced.disabled = true;
+        replaced.replacedByActionCardId = video.id;
+      }
+    }
     profile.actionCards = profile.actionCards.slice(0, 30);
     attachments.push(video);
   }
@@ -2184,6 +2196,7 @@ function illustrationPrompt(actionResult: ActionResult, event: CaptureResult["ev
 
 function actionCardVideoPrompt(profile: CreatureProfile, actionResult: ActionResult, event: CaptureResult["events"][number], hasReferenceImage: boolean) {
   const identity = petVisualIdentity(profile);
+  const userDepiction = actionCardUserDepiction(event);
   const sourceImages = (event.attachments ?? []).map((item) => `${item.label} ${item.url}`).join("\n");
   return [
     `Create a short looping animated video action card for ${profile.creatureName}, a ${identity.species}.`,
@@ -2193,11 +2206,14 @@ function actionCardVideoPrompt(profile: CreatureProfile, actionResult: ActionRes
     `Personality and habits to express through motion: ${identity.personality} ${identity.habits}`,
     `Visual style: ${identity.visualStyle}`,
     `Motion style: ${identity.motionStyle}`,
+    userDepiction,
     hasReferenceImage ? "The attached image is the approved action-card cover and exact first frame. Animate this image; do not redesign, reinterpret, restyle, or replace the character, background, palette, proportions, or rendering technique." : "Keep the character design consistent with the pet kind and current profile.",
     "Action priority: preserve the action, object, mood, and scene requested by the action model and user moment. Do not replace a specific requested action with a generic idle, wave, ball, or nap action.",
     "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
     "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
-    "No UI, no text labels, no subtitles, no watermark, no extra animals, no human, no props that hide the body. Keep the action readable and cute, with simple loopable motion.",
+    userDepiction
+      ? "No UI, text labels, subtitles, or watermark. Include only the people and animals required by the action-model prompt."
+      : "No UI, no text labels, no subtitles, no watermark, no extra animals, no human, no props that hide the body. Keep the action readable and cute, with simple loopable motion.",
     `Current visible state: ${profile.dogState?.label ?? "陪着用户"} / ${namedCreatureText(profile.dogState?.actionText, profile.creatureName)}`,
     `Moment: ${event.noticed || event.triggerContent}`,
     sourceImages ? `Source image assets:\n${sourceImages}` : "",
@@ -2207,15 +2223,26 @@ function actionCardVideoPrompt(profile: CreatureProfile, actionResult: ActionRes
 
 function actionCardKeyframePrompt(profile: CreatureProfile, actionResult: ActionResult, event: CaptureResult["events"][number], hasReferenceImage: boolean) {
   const identity = petVisualIdentity(profile);
+  const userDepiction = actionCardUserDepiction(event);
   return [
     `Create one square approved cover and exact first frame for ${profile.creatureName}'s action card.`,
     `Character: ${identity.species}. Identity: ${identity.appearance}.`,
     `Authoritative visual style: ${identity.visualStyle}. Match the current profile/avatar image's exact rendering medium, palette, linework or 3D treatment, lighting, facial design, body proportions, and background language. Do not introduce a different art style.`,
     hasReferenceImage ? "The attached current profile/avatar image is the single authoritative character reference. Preserve its identity exactly; change only pose and action setup." : "Use the written profile as the authoritative identity.",
+    actionResult.replacesActionCardId ? "A previous card may also be attached as historical continuity for its activity and relationship. Re-author the user from the confirmed current facts below." : "",
+    userDepiction,
     `Action setup: ${actionResult.prompt}. Moment: ${event.noticed || event.triggerContent}.`,
     "Full body readable, centered, stable scale, clean simple background consistent with the avatar, suitable as both the first and final loop frame.",
-    "Forbidden: character redesign, style transfer, different species, changed coat colors or markings, plush toy, figurine, text, UI, watermark, extra animals or humans."
-  ].join("\n\n");
+    userDepiction
+      ? "Keep the pet identity stable and include only the people and animals required by the action-model prompt. No text, UI, or watermark."
+      : "Forbidden: character redesign, style transfer, different species, changed coat colors or markings, plush toy, figurine, text, UI, watermark, extra animals or humans."
+  ].filter(Boolean).join("\n\n");
+}
+
+function actionCardUserDepiction(event: CaptureResult["events"][number]) {
+  const age = explicitUserAge(event.triggerContent);
+  if (!age || age < 18) return "";
+  return `Confirmed user identity: the depicted user is ${age} years old and an adult. Render age-accurate adult facial features, body proportions, and visual styling. The action model remains responsible for the scene, composition, clothing, and art direction.`;
 }
 
 function namedCreatureText(text: string | undefined, creatureName: string) {
@@ -2593,12 +2620,15 @@ async function illustrationReferences(attachments?: MediaAttachment[]): Promise<
   return references;
 }
 
-async function actionCardReferences(profile: CreatureProfile, attachments?: MediaAttachment[]): Promise<ImageReference[]> {
+async function actionCardReferences(profile: CreatureProfile, attachments?: MediaAttachment[], replacementCardId?: string): Promise<ImageReference[]> {
   const profileReferences = await petProfileVisualReferences(profile);
   const uploaded = await illustrationReferences(attachments);
-  if (profileReferences.length) return [...profileReferences, ...uploaded].slice(0, 4);
+  const previousCard = replacementCardId ? profile.actionCards?.find((card) => card.id === replacementCardId) : undefined;
+  const previousCover = previousCard?.cover ? await imageAttachmentDataUrl(previousCard.cover) : undefined;
+  const historical = previousCover ? [{ dataUrl: previousCover, label: `Historical card activity reference: ${previousCard?.title ?? replacementCardId}` }] : [];
+  if (profileReferences.length) return [...profileReferences, ...uploaded, ...historical].slice(0, 4);
   const character = await generatedPetReference(profile);
-  return [...(character ? [character] : []), ...uploaded].slice(0, 4);
+  return [...(character ? [character] : []), ...uploaded, ...historical].slice(0, 4);
 }
 
 async function petProfileReferences(referenceAttachment?: MediaAttachment): Promise<ImageReference[]> {

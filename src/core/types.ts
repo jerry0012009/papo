@@ -48,6 +48,7 @@ export interface ActionResult {
   attachment?: MediaAttachment;
   videoAttachment?: MediaAttachment;
   durationSeconds?: number;
+  replacesActionCardId?: string;
   petProfile?: Partial<PetIdentityProfile>;
 }
 
@@ -496,6 +497,8 @@ export interface ActionCardRecord {
   actionEventId?: string;
   turnId?: string;
   jobId?: string;
+  replacementForActionCardId?: string;
+  replacedByActionCardId?: string;
   providerKind: ProviderKind;
   providerName: string;
   model?: string;

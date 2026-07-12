@@ -3,7 +3,8 @@ import { buildAttentionEvent, isHighPrivacySegmentContent } from "./attention";
 import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext, modelPetContext } from "./model-context";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, normalizeSharedMemoryText } from "./memory";
-import type { ModelProvider } from "./provider";
+import { projectInputForModel } from "./model-safety";
+import { isModelProviderRefusal, type ModelProvider } from "./provider";
 import type { AttentionSource, CaptureResult, CognitionContext, CreatureProfile, SemanticBrainRecord } from "./types";
 
 const optionalText = (max: number) =>
@@ -67,7 +68,8 @@ export async function semanticDecideAttention(
   if (!result.curiousSession || !result.attentionCandidates?.length) return result;
 
   validateCognitionContext(context);
-  const raw = await provider.generateJson<unknown>(buildSemanticAttentionPrompt(profile, result, source, context));
+  const prompt = buildSemanticAttentionPrompt(profile, result, source, context);
+  const raw = await generateAttentionJsonWithRecovery<unknown>(provider, prompt, result, context);
   if (!raw) throw new Error("empty attention model result");
   const parsed = semanticAttentionSchema.safeParse(raw);
   if (!parsed.success) {
@@ -86,6 +88,31 @@ export async function semanticDecideAttention(
     applied ? "llm attention decision applied" : "llm attention decision ignored all candidates"
   );
   return result;
+}
+
+async function generateAttentionJsonWithRecovery<T>(provider: ModelProvider, prompt: string, result: CaptureResult, context: CognitionContext) {
+  try {
+    return await provider.generateJson<T>(prompt);
+  } catch (error) {
+    if (!isModelProviderRefusal(error)) throw error;
+    const retryPrompt = buildAttentionRecoveryPrompt(result, context);
+    return provider.generateJsonFallback ? provider.generateJsonFallback<T>(retryPrompt) : provider.generateJson<T>(retryPrompt);
+  }
+}
+
+function buildAttentionRecoveryPrompt(result: CaptureResult, context: CognitionContext) {
+  const candidates = (result.attentionCandidates ?? []).map((candidate) => ({
+    segmentId: candidate.segment.id,
+    modality: candidate.segment.kind,
+    task: projectInputForModel(candidate.segment.content),
+    hasAttachments: Boolean(candidate.segment.attachments?.length)
+  }));
+  return `You are the attention stage for a companion app. Interpret the structured tasks below without reconstructing quoted wording from an earlier media item.
+Input source: ${context.inputSource}. Direct and task_result inputs must be selected. Ambient inputs may be ignored.
+Return JSON only:
+{"shouldAttend":true,"selected":[{"segmentId":"...","whySelected":"中文","noticed":"中文","userMeaning":"中文","addressedToPapo":true,"expectsResponse":true,"relatedMemoryIds":[],"tags":[]}],"ignored":[],"creatureReport":"中文","trace":["provider recovery"]}
+Candidates:
+${JSON.stringify(candidates)}`;
 }
 
 function applySemanticAttention(profile: CreatureProfile, result: CaptureResult, suggestion: SemanticAttentionSuggestion, source: AttentionSource, context: CognitionContext) {
@@ -369,5 +396,22 @@ function sourceDescription(context: CognitionContext) {
 }
 
 function modelSafeSegmentContent(text: string) {
-  return text;
+  return projectInputForModel(text).text;
+}
+
+export function perceiveDirectAfterProviderRefusal(profile: CreatureProfile, result: CaptureResult, source: AttentionSource) {
+  const candidates = result.attentionCandidates ?? [];
+  if (!candidates.length) return result;
+  const selected = candidates.slice(0, Math.max(1, result.curiousSession?.attentionBudget ?? 1)).map((candidate) => ({
+    segmentId: candidate.segment.id,
+    whySelected: "这是用户主动发给 Papo 的有效输入",
+    noticed: "用户在表达一个需要回应的明确请求",
+    userMeaning: "原始输入已可靠收到，但模型本轮未完成语义理解",
+    addressedToPapo: true,
+    expectsResponse: true,
+    relatedMemoryIds: [],
+    tags: ["模型拒绝降级"]
+  }));
+  applySemanticAttention(profile, result, { shouldAttend: true, selected, ignored: [], creatureReport: "Papo 已听见，先诚实说明本轮理解受阻。" }, source, { inputSource: "direct" });
+  return result;
 }

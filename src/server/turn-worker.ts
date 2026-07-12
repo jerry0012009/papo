@@ -1,5 +1,6 @@
 import type { ActionKind, CognitionInputSource, ConversationJobRecord, CreatureProfile } from "../core/types";
 import type { ProfileStore } from "./store";
+import { isModelProviderRefusal } from "../core/provider";
 
 export interface TurnJobResult {
   messageId?: string;
@@ -130,10 +131,10 @@ export class PersistentTurnWorker {
         const job = profile.jobs?.find((item) => item.id === jobId);
         if (!job || job.status === "completed") return;
         const now = new Date().toISOString();
-        const retry = job.retryable && job.attempt < job.maxAttempts;
+        const retry = job.retryable && !isModelProviderRefusal(error) && job.attempt < job.maxAttempts;
         job.status = retry ? "queued" : "failed";
         job.updatedAt = now;
-        job.error = error instanceof Error ? error.message.slice(0, 500) : "Unknown background job error";
+        job.error = isModelProviderRefusal(error) ? "模型暂时无法处理这次表达，Papo 已保留你的原话，可以换种说法后继续" : error instanceof Error ? error.message.slice(0, 500) : "Unknown background job error";
         const attempt = [...(job.attemptHistory ?? [])].reverse().find((item) => item.attempt === job.attempt && !item.completedAt);
         if (attempt) {
           attempt.completedAt = now;

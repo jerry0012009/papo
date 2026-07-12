@@ -5,7 +5,8 @@ import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext, modelPetContext } from "./model-context";
 import { clientContextFor } from "./client-document";
 import { normalizeSharedMemoryText } from "./memory";
-import type { ModelProvider } from "./provider";
+import { projectInputForModel } from "./model-safety";
+import { isModelProviderRefusal, type ModelProvider } from "./provider";
 import { applyStateDelta } from "./state";
 import type { ActionResult, CaptureResult, CognitionContext, CreatureProfile, SemanticBrainRecord } from "./types";
 
@@ -50,6 +51,7 @@ const structuredActionResultSchema = z.object({
   caption: optionalText(220),
   style: optionalText(160),
   durationSeconds: z.number().min(4).max(20).optional(),
+  replacesActionCardId: optionalText(120),
   sourceIds: optionalTextArray(10, 120).optional(),
   petProfile: petProfilePatchSchema.optional()
 });
@@ -105,7 +107,15 @@ export async function semanticSelectAction(
   if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for action selection.");
   if (!result.events.length) return result;
 
-  const raw = await provider.generateJson<unknown>(buildSemanticActionPrompt(profile, result, context));
+  const prompt = buildSemanticActionPrompt(profile, result, context);
+  let raw: unknown;
+  try {
+    raw = await provider.generateJson<unknown>(prompt);
+  } catch (error) {
+    if (!isModelProviderRefusal(error)) throw error;
+    const retryPrompt = buildSemanticActionRecoveryPrompt(profile, result, context);
+    raw = provider.generateJsonFallback ? await provider.generateJsonFallback<unknown>(retryPrompt) : await provider.generateJson<unknown>(retryPrompt);
+  }
   if (!raw) throw new Error("empty action model result");
   const parsed = semanticActionSchema.safeParse(raw);
   if (!parsed.success) throw new Error(`invalid action JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
@@ -133,14 +143,14 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
     if (decision.noticed) event.noticed = safeProcessText(decision.noticed, event.noticed) ?? event.noticed;
     if (decision.reason) event.reason = safeProcessText(decision.reason, event.reason) ?? event.reason;
     if (relatedMemoryIds.length) event.relatedMemoryIds = relatedMemoryIds;
-    const actionResult = normalizeActionResult(decision);
+    const actionResult = normalizeActionResult(decision, profile);
     event.actionResult = actionResult;
     event.backgroundActions = (decision.actions ?? []).map((planned) => {
       const actionDecision = { ...decision, action: planned.action, actionResult: planned.actionResult };
-      validatePersistenceDecision(actionDecision);
+      validatePersistenceDecision(actionDecision, profile);
       return {
         action: planned.action,
-        actionResult: normalizeActionResult(actionDecision),
+        actionResult: normalizeActionResult(actionDecision, profile),
         reason: safeProcessText(planned.reason)
       };
     });
@@ -192,7 +202,7 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
         if (episode) episode.creatureResponse = "";
       }
     }
-    validatePersistenceDecision(decision);
+    validatePersistenceDecision(decision, profile);
     if (Object.keys(stateDeltas).length) {
       const change = applyStateDelta(profile, stateDeltas, `llm action ${guarded.action}`, event.createdAt);
       event.actionStateDeltas = stateChangeDeltas(change);
@@ -205,7 +215,7 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
   return applied;
 }
 
-function validatePersistenceDecision(decision: ActionDecisionSuggestion) {
+function validatePersistenceDecision(decision: ActionDecisionSuggestion, profile: CreatureProfile) {
   if (isSilentAction(decision.action) && (decision.shouldReply || decision.reply)) {
     throw new Error("action model selected a quiet/non-speaking action with a visible reply");
   }
@@ -240,6 +250,7 @@ function validatePersistenceDecision(decision: ActionDecisionSuggestion) {
     if (decision.actionResult?.kind !== "action_card_draft") throw new Error("action model selected generate_action_card without an action_card_draft actionResult");
     if (!decision.actionResult.title || !decision.actionResult.prompt) throw new Error("action_card_draft actionResult requires title and prompt");
     if (!decision.reply || decision.shouldReply === false) throw new Error("generate_action_card requires a visible reply so the user knows the action is being made");
+    if (decision.actionResult.replacesActionCardId && !profile.actionCards?.some((card) => card.id === decision.actionResult?.replacesActionCardId && !card.deleted)) throw new Error("action_card_draft replacesActionCardId must reference an existing action card");
   }
   if (decision.action === "update_pet_profile") {
     if (decision.actionResult?.kind !== "pet_profile_update") throw new Error("action model selected update_pet_profile without a pet_profile_update actionResult");
@@ -264,7 +275,7 @@ function isSilentAction(action: ActionDecisionSuggestion["action"]) {
   return ["observe", "quiet", "listen_silently", "continue_own_activity", "defer"].includes(action);
 }
 
-function normalizeActionResult(decision: ActionDecisionSuggestion): ActionResult {
+function normalizeActionResult(decision: ActionDecisionSuggestion, profile: CreatureProfile): ActionResult {
   const raw = decision.actionResult;
   if (decision.action === "draft_reminder") {
     return {
@@ -325,6 +336,7 @@ function normalizeActionResult(decision: ActionDecisionSuggestion): ActionResult
       style: safeProcessText(raw?.style),
       sourceIds: raw?.sourceIds?.map((item) => safeProcessText(item)).filter((item): item is string => Boolean(item)).slice(0, 10),
       durationSeconds: clampDuration(raw?.durationSeconds),
+      replacesActionCardId: validActionCardId(profile, raw?.replacesActionCardId),
       dueText: undefined,
       items: undefined
     };
@@ -478,6 +490,11 @@ function safeExternalText(text?: string) {
   return normalized;
 }
 
+function validActionCardId(profile: CreatureProfile, id?: string) {
+  const value = safeProcessText(id);
+  return value && profile.actionCards?.some((card) => card.id === value && !card.deleted) ? value : undefined;
+}
+
 function safeProcessText(text?: string, previousText?: string) {
   const raw = text?.trim();
   if (!raw) return previousText;
@@ -559,6 +576,8 @@ ${context.companion ? `当前还处于 companion session ${context.companion.ses
 - use_hermes 是外部任务动作。当用户需要实时搜索、查网页/论文/新闻/天气、执行服务器或文件任务、定时发邮件、查询外部系统、长时间研究，且 Papo 内置 LLM 无法可靠完成时使用。必须在 actionResult 里返回 hermes_task，title 写任务标题，text 写给虾虾/Hermes 的清晰任务说明；reply 写 Papo 对用户说出口的短句，例如“我去问问虾虾，稍等哦”。不要把 Hermes 的任务说明直接当成 Papo 对用户说的话。
 - generate_illustration 是图像动作。当用户明确想要图、今天的片段很适合被画下来、或 Papo 想把一段真实回忆变成一张小画时使用。必须在 actionResult 里返回 illustration_draft：title 是图片标题，prompt 是给图像模型的具体绘图提示词，caption 是给用户看的短说明，style 是手绘/漫画/明信片/多分镜等风格建议，sourceIds 是你依据的 episode/memory/segment/attachment id。prompt 应优先使用真实照片附件、真实对话、音频观察和记忆里的事实，不要编造未发生的情节；可以要求“一张图多个分镜”或“像明信片的一幅画”。reply 只写 Papo 对用户说的短句，例如“我想把这件小事画下来给你看。”，不要把 prompt 直接说给用户。
 - generate_action_card 是动作视频卡动作。当用户要求“让它动起来”、要求小动物做动作，或 Papo 根据状态/记忆很适合外显成一个短动作时使用。必须在 actionResult 里返回 action_card_draft：title 是动作卡标题，prompt 是给图像/视频生成流程的具体视觉提示词，caption 是生成后给用户看的短说明，style 是角色一致性、镜头和画风建议，durationSeconds 通常为 10。prompt 必须包含当前小动物的名字、物种、外观一致性、动作、场景、镜头运动，并基于真实上下文；不要把内部提示词直接说给用户。
+- 如果用户是在修订或重做 existing_action_cards 中的旧卡，必须在 actionResult.replacesActionCardId 返回对应真实卡片 id。新卡生成成功后系统才停用旧卡；不能编造 id，也不能在生成前删除旧卡。
+- 涉及用户本人时，必须服从结构化输入中的已确认年龄和身份事实；视觉 prompt 应明确实际年龄、对应人生阶段、体态比例和用户要求的视觉调性。
 - update_pet_profile 是用户养成小动物的动作。当用户说“它应该更像...”“它的性格是...”“它喜欢/习惯...”“以后把它设定成...”这类关于小动物自身设定的话时使用。必须在 actionResult 里返回 pet_profile_update：petProfile 可包含 displaySpecies、appearance、personality、habits、visualStyle、imagePrompt、motionStyle、userGuidance。只写用户确实表达或可由其要求合理提炼的设定，不要编造无关设定；reply 只短短确认 Papo 学会了什么。
 - 不要默认复述整段用户输入；但如果用户明确要求重复、确认原话或询问上一句话，可以自然引用必要原文。
 
@@ -615,7 +634,7 @@ actionResult 是这一步行动真实产出的结构化结果：
 - action=draft_question_list 时，必须返回 {"kind":"question_list_draft","title":"...","items":["..."]}；items 至少一条。
 - action=use_hermes 时，必须返回 {"kind":"hermes_task","title":"...","text":"..."}，title 和 text 必填。
 - action=generate_illustration 时，必须返回 {"kind":"illustration_draft","title":"...","prompt":"...","caption":"...","style":"...","sourceIds":["..."]}，title 和 prompt 必填。caption 是图生成后可展示给用户的短句；sourceIds 必须来自当前事件、附件、episode 或 memory 的真实 id，不能编造。
-- action=generate_action_card 时，必须返回 {"kind":"action_card_draft","title":"...","prompt":"...","caption":"...","style":"...","durationSeconds":10,"sourceIds":["..."]}，title 和 prompt 必填。caption 是动作卡生成后可展示给用户的短句；sourceIds 必须来自当前事件、附件、episode 或 memory 的真实 id，不能编造。
+- action=generate_action_card 时，必须返回 {"kind":"action_card_draft","title":"...","prompt":"...","caption":"...","style":"...","durationSeconds":10,"sourceIds":["..."],"replacesActionCardId":"vid_xxx"}，title 和 prompt 必填。仅在修订旧卡时填写 replacesActionCardId，且必须来自 existing_action_cards；caption 是动作卡生成后可展示给用户的短句；sourceIds 必须来自当前事件、附件、episode 或 memory 的真实 id，不能编造。
 - action=update_pet_profile 时，必须返回 {"kind":"pet_profile_update","text":"...","petProfile":{"appearance":"...","personality":"...","habits":"...","visualStyle":"...","imagePrompt":"...","motionStyle":"...","userGuidance":"..."}}。petProfile 至少一项；不要把用户的生活记忆误写进小动物形象 profile。
 - observe/quiet 应省略 actionResult，或返回 {"kind":"none"}。
 actions 只放可独立后台执行的 use_hermes、generate_illustration、generate_action_card。每项 actionResult 遵守同样字段约束；复合意图必须放在同一条 decision 的 actions 中，不能复制 eventId 创建第二条 decision。后台动作失败不能改变 reply 或主行动的成功结果。
@@ -650,6 +669,9 @@ ${JSON.stringify(modelConversationContext(profile))}
 recent_feedback:
 ${JSON.stringify(modelFeedbackContext(profile.feedbackHistory))}
 
+existing_action_cards:
+${JSON.stringify((profile.actionCards ?? []).filter((card) => !card.deleted).slice(0, 12).map((card) => ({ id: card.id, title: card.title, caption: card.caption, disabled: card.disabled, sourceIds: card.sourceIds })))}
+
 events:
 ${JSON.stringify(result.events.map((event) => ({
   id: event.id,
@@ -680,5 +702,30 @@ ${JSON.stringify(result.events.map((event) => ({
 }
 
 function modelSafeEventContent(text: string) {
-  return text;
+  return projectInputForModel(text).text;
+}
+
+function buildSemanticActionRecoveryPrompt(profile: CreatureProfile, result: CaptureResult, context: CognitionContext) {
+  const events = result.events.map((event) => ({
+    id: event.id,
+    source: context.inputSource,
+    task: projectInputForModel(event.triggerContent),
+    noticed: projectInputForModel(event.noticed).text,
+    attachments: (event.attachments ?? []).map((attachment) => ({ id: attachment.id, kind: attachment.kind, label: attachment.label }))
+  }));
+  const cards = (profile.actionCards ?? []).filter((card) => !card.deleted).slice(0, 12).map((card) => ({
+    id: card.id,
+    title: card.title,
+    caption: card.caption,
+    disabled: card.disabled
+  }));
+  return `You are the action-planning stage for Papo. Use the structured task facts as authoritative. The user-facing reply and all creative media prompts must be written by you, not copied from a template.
+Return JSON only with one decision per event. A decision has: eventId, action, shouldCreateEpisode, shouldConsiderMemory, shouldReply, reply, visibleReaction, reason, and actionResult. Independent work belongs in actions[].
+For a media revision, choose generate_action_card or a visible reply plus a generate_action_card background action. Its actionResult must be {"kind":"action_card_draft","title":"...","prompt":"a detailed creative prompt authored from the task facts","caption":"...","style":"...","durationSeconds":10,"sourceIds":["real ids"],"replacesActionCardId":"an existing card id"}. Preserve the confirmed identity facts. Only use a replacement id from existing_action_cards.
+Pet:
+${JSON.stringify(modelPetContext(profile))}
+Existing action cards:
+${JSON.stringify(cards)}
+Events:
+${JSON.stringify(events)}`;
 }

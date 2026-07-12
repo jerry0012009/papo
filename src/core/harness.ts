@@ -1,9 +1,9 @@
 import { handleButtonCapture, handleCuriousStream } from "./attention";
 import { makeId } from "./ids";
 import { applyMemoryWritePolicies, enqueueCandidateVisualJobs, upsertLongTermMemory } from "./memory";
-import type { ModelProvider } from "./provider";
+import { isModelProviderRefusal, type ModelProvider } from "./provider";
 import { semanticSelectAction } from "./semantic-action";
-import { semanticDecideAttention } from "./semantic-attention";
+import { perceiveDirectAfterProviderRefusal, semanticDecideAttention } from "./semantic-attention";
 import { semanticDecideMemory } from "./semantic-memory";
 import type { CaptureResult, CognitionContext, CreatureProfile, SemanticBrainRecord, StreamSegment } from "./types";
 
@@ -49,17 +49,38 @@ async function enrichWithSemanticBrain(
     result.harnessTrace = [...trace, "sense: no content candidates"];
     return result;
   }
-  await semanticDecideAttention(profile, result, provider, source, context);
+  try {
+    await semanticDecideAttention(profile, result, provider, source, context);
+  } catch (error) {
+    if (!isModelProviderRefusal(error) || context.inputSource !== "direct") throw error;
+    perceiveDirectAfterProviderRefusal(profile, result, source);
+    applyDirectRefusalFallback(result, "attention");
+  }
   if (!result.events.length) {
     result.harnessTrace = [...trace, "semantic: llm ignored all candidates"];
     recordSemanticBrainRun(profile, provider, source, "applied", "llm attention decision ignored all candidates");
     return result;
   }
   clearRuleVisibleDrafts(result);
-  await semanticSelectAction(profile, result, provider, source, context);
+  try {
+    await semanticSelectAction(profile, result, provider, source, context);
+  } catch (error) {
+    if (!isModelProviderRefusal(error) || context.inputSource !== "direct") throw error;
+    applyDirectRefusalFallback(result, "action");
+  }
   ensureVisibleOutputContract(result);
   if (result.memoryCandidates?.length) {
-    await semanticDecideMemory(profile, result.memoryCandidates, provider, context);
+    try {
+      await semanticDecideMemory(profile, result.memoryCandidates, provider, context);
+    } catch (error) {
+      if (!isModelProviderRefusal(error)) throw error;
+      for (const candidate of result.memoryCandidates) {
+        candidate.status = "dismissed";
+        candidate.writePolicy = "do_not_save";
+        candidate.whyConsolidate = "模型本轮未能完成长期价值判断，保留原始对话但不自动写入长期记忆";
+      }
+      result.harnessTrace = [...(result.harnessTrace ?? []), "memory: provider_refusal_skipped"];
+    }
     if (context.inputSource === "task_result") mergeTaskResultMemoryOwnership(profile, result, context);
     const promoted = applyMemoryWritePolicies(profile, result.memoryCandidates);
     enqueueCandidateVisualJobs(profile);
@@ -70,6 +91,15 @@ async function enrichWithSemanticBrain(
   result.harnessTrace = [...trace, "semantic: llm cognition applied"];
   recordSemanticBrainRun(profile, provider, source, "applied", "llm cognition applied");
   return result;
+}
+
+function applyDirectRefusalFallback(result: CaptureResult, stage: "attention" | "action") {
+  for (const event of result.events) {
+    event.actionDecision = { action: "respond", confidence: 1, reason: "模型供应商拒绝后使用可靠接收降级", blockedActions: [], safetyNotes: [], ruleTrace: ["fallback=provider_refusal"] };
+    event.semanticSource = "rules";
+  }
+  result.response = "我已经收到并保留了你的原话，但这次没能把后续处理完成。你可以继续和我说话，这条消息不会丢失。";
+  result.harnessTrace = [...(result.harnessTrace ?? []), `${stage}: provider_refusal_fallback`];
 }
 
 function mergeTaskResultMemoryOwnership(profile: CreatureProfile, result: CaptureResult, context: CognitionContext) {
