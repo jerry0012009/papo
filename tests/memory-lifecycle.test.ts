@@ -86,6 +86,32 @@ test("candidate preview backfill is capped and dismissal drops the retained prev
   assert.equal(first.previewStatus, "not_needed");
 });
 
+test("promoted candidate preview failure falls back to durable memory enrichment", async () => {
+  const store = new MemoryProfileStore();
+  const profile = await store.createProfile({ userId: "candidate-preview-fallback", creatureName: "Papo" });
+  profile.episodes.push({ id: "episode_fallback", createdAt: "2026-07-12T10:00:00.000Z", source: "button", inputSummary: "一次候选经历", noticed: "一次候选经历", creatureResponse: "", memoryCandidateIds: ["candidate_fallback"], weight: 70, tags: [] });
+  profile.memoryCandidates.push({ id: "candidate_fallback", createdAt: "2026-07-12T10:00:00.000Z", candidateText: "我记得一次候选经历", shortTitle: "候选经历", memoryKind: "long_theme", confidence: 80, sourceEpisodeId: "episode_fallback", whyConsolidate: "值得留下", writePolicy: "wait_feedback", decayPolicy: "stable", status: "candidate", tags: [] });
+  enqueueCandidateVisualJobs(profile);
+  const promoted = promoteMemoryCandidate(profile, "candidate_fallback");
+  assert.ok(promoted);
+  await store.saveProfile(profile);
+  let imageAttempts = 0;
+  const provider = providerWith(() => ({ shortTitle: "候选经历", narrative: "我记得这次经历。", visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "手绘生活场景", imagePrompt: "A warm hand-drawn watercolor everyday scene with natural simplified faces, visible paper texture, no animals, no text.", relatedMemoryIds: [], needsClientReferences: false }), async () => {
+    imageAttempts += 1;
+    if (imageAttempts <= 2) throw new Error("candidate preview fails twice");
+    return { dataUrl: IMAGE, mime: "image/png" };
+  });
+  const app = createApp({ store, provider, proactive: { enabled: false }, turns: { autoStart: false }, nativeIngest: { autoStart: false } });
+  const worker = app.locals.turnWorker as PersistentTurnWorker;
+  await worker.start();
+  await waitFor(async () => (await store.getProfile(profile.userId))?.longTermMemories.find((memory) => memory.id === promoted?.id)?.visualStatus === "ready");
+  const saved = await store.getProfile(profile.userId);
+  assert.equal(imageAttempts, 3);
+  assert.equal(saved?.jobs?.find((job) => job.type === "candidate_visual")?.status, "failed");
+  assert.equal(saved?.jobs?.find((job) => job.type === "memory_enrichment" && job.memoryId === promoted?.id)?.status, "completed");
+  worker.stop();
+});
+
 test("visual planning avoids fake grounding and only adds Papo when required", async () => {
   const profile = createCreatureProfile({ userId: "memory-visual-policy", creatureName: "Papo" });
   profile.petProfile.avatarImage = attachment("papo_reference", "Papo reference");

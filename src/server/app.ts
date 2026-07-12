@@ -12,7 +12,7 @@ import { isDreamingDue, recordDreamingFailure, semanticDreamMemories } from "../
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
-import { MEMORY_VISUAL_POLICY_VERSION, upsertLongTermMemory } from "../core/memory";
+import { enqueueMemoryEnrichmentJob, MEMORY_VISUAL_POLICY_VERSION, upsertLongTermMemory } from "../core/memory";
 import { createModelProvider, type ImageReference, type ModelProvider } from "../core/provider";
 import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
 import { wakeCreature } from "../core/rhythm";
@@ -483,11 +483,18 @@ export function createApp(input: {
       return { attachmentIds: preview.previewVisual ? [preview.previewVisual.id] : [], memorySourceIds: [job.id, candidate.id] };
     } catch (error) {
       await store.updateProfile(userId, (latest) => {
-        const target = latest.memoryCandidates.find((item) => item.id === candidate.id && item.status === "candidate");
+        const target = latest.memoryCandidates.find((item) => item.id === candidate.id);
         if (!target) return;
         target.previewStatus = "failed";
         target.previewError = error instanceof Error ? error.message.slice(0, 300) : "Unknown candidate preview error";
         target.previewUpdatedAt = new Date().toISOString();
+        if (target.status !== "promoted" || job.attempt < job.maxAttempts) return;
+        const memory = latest.longTermMemories.find((item) => item.sourceEpisodeId === target.sourceEpisodeId && item.weight > 0);
+        if (!memory) return;
+        memory.enrichmentStatus = "pending";
+        memory.visualStatus = memory.visual ? "ready" : "pending";
+        memory.enrichmentError = undefined;
+        enqueueMemoryEnrichmentJob(latest, memory, { sourceIds: [job.id, target.id] });
       });
       throw error;
     }
