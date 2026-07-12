@@ -172,6 +172,29 @@ test("legacy symbolic covers migrate once while retaining their old image", () =
   assert.equal(migrated.contentRevision, 2, "policy migration must not increment on every normalization");
 });
 
+test("legacy long-term memories without artwork migrate once into durable low-cost enrichment", () => {
+  const profile = createCreatureProfile({ userId: "memory-thumbnail-backfill", creatureName: "Papo" });
+  profile.longTermMemories.push({
+    ...memory("ltm_missing_thumbnail", "一次值得长期留下的共同经历"),
+    visualMode: "no_visual",
+    visualStatus: "not_needed",
+    visualPolicyVersion: 5,
+    contentRevision: 1,
+    enrichedRevision: 1,
+    enrichmentStatus: "completed"
+  });
+
+  normalizeCreatureProfile(profile);
+  const migrated = profile.longTermMemories[0];
+  assert.equal(migrated.contentRevision, 2);
+  assert.equal(migrated.enrichmentStatus, "pending");
+  assert.equal(profile.jobs?.filter((job) => job.memoryId === migrated.id && job.memoryRevision === 2).length, 1);
+
+  normalizeCreatureProfile(profile);
+  assert.equal(migrated.contentRevision, 2);
+  assert.equal(profile.jobs?.filter((job) => job.memoryId === migrated.id && job.memoryRevision === 2).length, 1);
+});
+
 test("legacy Papo mascot covers also migrate into the shared hand-drawn album style", () => {
   const profile = createCreatureProfile({ userId: "memory-papo-style-migration", creatureName: "Papo" });
   profile.longTermMemories.push({

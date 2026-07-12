@@ -15,10 +15,10 @@ export async function enrichMemoryExperience(
   profile: CreatureProfile,
   memory: LongTermMemory,
   provider: ModelProvider,
-  options: { throwOnVisualError?: boolean } = {}
+  options: { throwOnVisualError?: boolean; requireVisual?: boolean } = {}
 ) {
   const previousVisual = memory.visual;
-  const plan = await planMemoryVisual(profile, memory, provider);
+  const plan = await planMemoryVisual(profile, memory, provider, { requireVisual: options.requireVisual ?? true });
   applyMemoryVisualPlan(memory, plan);
   if (plan.visualMode === "no_visual") {
     memory.visual = undefined;
@@ -64,7 +64,7 @@ export async function createCandidateVisualPreview(profile: CreatureProfile, can
     tags: candidate.tags,
     attachments: candidate.attachments ?? []
   };
-  await enrichMemoryExperience(profile, memory, provider, { throwOnVisualError: true });
+  await enrichMemoryExperience(profile, memory, provider, { throwOnVisualError: true, requireVisual: false });
   return {
     previewVisual: memory.visual,
     previewStatus: memory.visualStatus === "ready" ? "ready" as const : memory.visualStatus === "not_needed" ? "not_needed" as const : "failed" as const,

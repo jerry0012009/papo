@@ -54,6 +54,8 @@ const updateActionCardSchema = z.object({
   deleted: z.boolean().optional()
 });
 
+const dismissJobSchema = z.object({ dismissed: z.literal(true) });
+
 const buttonSchema = z.object({
   text: z.string().min(1).max(4000)
 });
@@ -1304,6 +1306,22 @@ export function createApp(input: {
       if (body.deleted !== undefined) card.deleted = body.deleted;
       await store.saveProfile(profile);
       res.json({ profile: publicProfile(profile), actionCard: card });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch("/api/profiles/:userId/jobs/:jobId", async (req, res, next) => {
+    try {
+      await requireProfile(store, req.params.userId, req);
+      dismissJobSchema.parse(req.body);
+      const saved = await store.updateProfile(req.params.userId, (profile) => {
+        const job = profile.jobs?.find((item) => item.id === req.params.jobId);
+        if (!job || job.status !== "failed") throw new HttpError(404, "Failed job not found");
+        job.dismissedAt = new Date().toISOString();
+      });
+      if (!saved) throw new HttpError(404, "Profile not found");
+      res.json({ profile: publicProfile(saved) });
     } catch (error) {
       next(error);
     }

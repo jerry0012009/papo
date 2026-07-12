@@ -874,6 +874,35 @@ test("memory lifecycle failures never appear as chat reply failures", async ({ p
   await expect(page.getByText(/回复失败：provider unavailable/)).toHaveCount(0);
 });
 
+test("chat job failures can be dismissed and remain dismissed", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("papo:testProfileOverride", JSON.stringify({
+    jobs: [
+      { id: "reply-failed", turnId: "turn-failed", requestId: "turn-failed", type: "cognition", stage: "cognition", status: "failed", attempt: 3, maxAttempts: 3, retryable: true, createdAt: "2026-07-07T12:00:00.000Z", updatedAt: "2026-07-07T12:00:00.000Z", sourceIds: ["turn-failed"], error: "provider unavailable" }
+    ]
+  })));
+  await page.goto("/");
+  await page.locator(".nav").getByRole("button", { name: /对话/ }).click();
+  await expect(page.getByText(/回复失败：provider unavailable/)).toBeVisible();
+  await page.getByRole("button", { name: "关闭失败提示" }).click();
+  await expect(page.getByText(/回复失败：provider unavailable/)).toHaveCount(0);
+});
+
+test("action card thumbnails render their persisted cover instead of a gray video frame", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("papo:testProfileOverride", JSON.stringify({
+    actionCards: [{
+      id: "vid-covered-action", createdAt: "2026-07-07T12:00:00.000Z", title: "有封面的动作卡", prompt: "test", durationSeconds: 8,
+      sourceIds: [], providerKind: "generic", providerName: "test",
+      cover: { id: "img-action-cover", kind: "image", label: "动作首帧", mime: "image/jpeg", url: "/pets/register/shiba.jpg", createdAt: "2026-07-07T12:00:00.000Z" },
+      video: { id: "vid-covered-action", kind: "video", label: "有封面的动作卡", mime: "video/mp4", url: "/pets/register/golden-retriever.mp4", createdAt: "2026-07-07T12:00:00.000Z" }
+    }]
+  })));
+  await page.goto("/");
+  await page.getByRole("button", { name: "Papo 动过" }).click();
+  const thumbnail = page.getByRole("button", { name: "播放视频：有封面的动作卡" });
+  await expect(thumbnail.locator("img")).toHaveAttribute("src", /pets\/register\/shiba\.jpg/);
+  await expect(thumbnail.locator("video")).toHaveCount(0);
+});
+
 async function installMockApi(page: Page) {
   let profile = makeProfile();
 
@@ -916,6 +945,13 @@ async function installMockApi(page: Page) {
           card.id === cardId ? { ...card, ...requestBody } : card
         )
       };
+      await json(route, { profile });
+      return;
+    }
+
+    if (path.startsWith("/api/profiles/demo/jobs/") && route.request().method() === "PATCH") {
+      const jobId = path.split("/").at(-1);
+      profile = { ...profile, jobs: (profile.jobs ?? []).map((job) => job.id === jobId ? { ...job, dismissedAt: now } : job) };
       await json(route, { profile });
       return;
     }

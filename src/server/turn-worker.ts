@@ -63,9 +63,11 @@ export class PersistentTurnWorker {
     if (capacity <= 0) return;
     const summaries = await this.input.store.listProfiles();
     const candidates: Array<{ userId: string; job: ConversationJobRecord }> = [];
+    let lifecycleRunning = false;
     for (const summary of summaries) {
       const profile = await this.input.store.getProfile(summary.userId);
       if (!profile) continue;
+      if ((profile.jobs ?? []).some((job) => isLifecycleMediaJob(job) && job.status === "running")) lifecycleRunning = true;
       for (const job of profile.jobs ?? []) {
         if (job.status !== "queued" || this.inFlight.has(job.id)) continue;
         const dependencies = (job.dependsOn ?? []).map((id) => profile.jobs?.find((item) => item.id === id));
@@ -74,13 +76,16 @@ export class PersistentTurnWorker {
         candidates.push({ userId: summary.userId, job });
       }
     }
-    candidates.sort((left, right) => Date.parse(left.job.createdAt) - Date.parse(right.job.createdAt));
+    candidates.sort((left, right) => jobPriority(left.job) - jobPriority(right.job) || Date.parse(left.job.createdAt) - Date.parse(right.job.createdAt));
     const selected: typeof candidates = [];
     const cognitionUsers = new Set<string>();
+    let lifecycleSelected = lifecycleRunning;
     for (const candidate of candidates) {
       if (candidate.job.type === "cognition" && cognitionUsers.has(candidate.userId)) continue;
+      if (isLifecycleMediaJob(candidate.job) && lifecycleSelected) continue;
       selected.push(candidate);
       if (candidate.job.type === "cognition") cognitionUsers.add(candidate.userId);
+      if (isLifecycleMediaJob(candidate.job)) lifecycleSelected = true;
       if (selected.length >= capacity) break;
     }
     for (const candidate of selected) void this.run(candidate.userId, candidate.job.id);
@@ -166,6 +171,14 @@ export class PersistentTurnWorker {
       });
     }
   }
+}
+
+function isLifecycleMediaJob(job: ConversationJobRecord) {
+  return job.type === "memory_enrichment" || job.type === "candidate_visual";
+}
+
+function jobPriority(job: ConversationJobRecord) {
+  return isLifecycleMediaJob(job) ? 1 : 0;
 }
 
 function compareJobs(left: ConversationJobRecord, right: ConversationJobRecord) {

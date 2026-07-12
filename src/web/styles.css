@@ -89,6 +89,24 @@ body {
   color: var(--coral);
 }
 
+.conversation-work.failed > span:nth-child(2) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.conversation-work.failed > button {
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: currentColor;
+  background: transparent;
+}
+
 @keyframes papo-working {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-3px); }
@@ -1662,7 +1680,9 @@ select {
 }
 
 .action-card-media video,
-.action-card-admin-media video {
+.action-card-admin-media video,
+.action-card-media > img,
+.action-card-admin-media > img {
   display: block;
   width: 100%;
   aspect-ratio: 1;

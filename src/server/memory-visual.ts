@@ -20,14 +20,15 @@ const planSchema = z.object({
 
 export interface MemoryVisualPlan extends z.infer<typeof planSchema> {}
 
-export async function planMemoryVisual(profile: CreatureProfile, memory: LongTermMemory, provider: ModelProvider) {
+export async function planMemoryVisual(profile: CreatureProfile, memory: LongTermMemory, provider: ModelProvider, options: { requireVisual?: boolean } = {}) {
   const related = retrieveRelatedMemories(profile, memory);
   const client = clientContextFor(profile, `${memory.text} ${memory.tags.join(" ")}`);
-  const raw = await provider.generateJson<unknown>(memoryVisualPlanPrompt(profile, memory, related, client));
+  const raw = await provider.generateJson<unknown>(memoryVisualPlanPrompt(profile, memory, related, client, options));
   const parsed = planSchema.safeParse(raw);
   if (!parsed.success) throw new Error(`invalid memory visual plan (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   const allowed = new Set(related.map((item) => item.id));
   const plan = { ...parsed.data, relatedMemoryIds: parsed.data.relatedMemoryIds.filter((id) => allowed.has(id)) };
+  if (options.requireVisual && plan.visualMode === "no_visual") throw new Error("long-term memory requires a concrete album illustration");
   const hasGrounding = Boolean(memory.attachments?.some((item) => item.kind === "image"));
   if (plan.visualMode === "grounded_scene" && !hasGrounding) throw new Error("grounded_scene requires a real image attachment");
   if (plan.visualMode !== "no_visual") validatePaintedMemoryPrompt(plan.imagePrompt ?? "");
@@ -103,13 +104,14 @@ function overlap(left: Set<string>, right: Set<string>) {
   return matched / Math.max(1, Math.min(left.size, right.size));
 }
 
-function memoryVisualPlanPrompt(profile: CreatureProfile, memory: LongTermMemory, related: LongTermMemory[], client: ReturnType<typeof clientContextFor>) {
+function memoryVisualPlanPrompt(profile: CreatureProfile, memory: LongTermMemory, related: LongTermMemory[], client: ReturnType<typeof clientContextFor>, options: { requireVisual?: boolean }) {
   const name = profile.clientDocument?.preferredName?.trim() || "你";
   const feedback = profile.feedbackHistory
     .filter((item) => item.targetId === memory.id && item.inputText?.trim())
     .slice(0, 5)
     .map((item) => ({ id: item.id, inputText: item.inputText, effect: item.effect }));
   return `你是 ${profile.creatureName} 的共同回忆编辑和视觉导演，也是生活画面导演。先整理 narrative，再判断这段记忆是否有一个值得被看见的具体画面。图片必须像小动物亲眼看到的生活，或像小动物在画纸上想象的生活；禁止做通用 AI 信息图、商业封面或概念图。
+${options.requireVisual ? "- 这是已经正式留下的长期记忆，相册需要缩略图；必须选择 grounded_scene 或 imaginative_illustration，并生成一个克制、具体、不虚构事实的生活画面，不能选择 no_visual。" : "- 这是尚未确认的候选内容；若内容不适合花费预算生成预览，可以选择 no_visual。"}
 
 写作要求：
 - narrative 使用 ${profile.creatureName} 这个小动物观察者的第一人称视角，像它带着理解和感情在回想共同经历。

@@ -725,6 +725,7 @@ export interface ConversationJobRecord {
   candidateId?: string;
   action?: PlannedAction;
   error?: string;
+  dismissedAt?: string;
   attemptHistory?: Array<{
     attempt: number;
     startedAt: string;

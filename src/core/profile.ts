@@ -184,11 +184,9 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
     memory.attachments ??= [];
     memory.shortTitle = memoryShortTitle(memory.narrative ?? memory.text, memory.shortTitle);
     memory.contentRevision = Math.max(1, memory.contentRevision ?? 1);
-    const migrateAbstractCover = memory.weight > 0
-      && memory.visualMode !== "no_visual"
-      && memoryVisualNeedsPolicyMigration(memory);
+    const migrateVisual = memory.weight > 0 && memoryVisualNeedsPolicyMigration(memory);
     memory.visualPolicyVersion = MEMORY_VISUAL_POLICY_VERSION;
-    if (migrateAbstractCover) {
+    if (migrateVisual) {
       memory.contentRevision += 1;
       memory.enrichmentStatus = "pending";
       memory.enrichmentError = undefined;

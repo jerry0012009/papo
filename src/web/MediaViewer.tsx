@@ -97,6 +97,11 @@ export function MediaThumbnail(props: { item: MediaViewerItem; items?: MediaView
     <button type="button" className={props.className} onClick={() => openMedia(items, index)} aria-label={`${props.item.kind === "video" ? "播放视频" : "查看图片"}：${props.item.title}`}>
       {props.children ?? (props.item.kind === "image" ? (
         <img src={props.item.src} alt={props.item.title} loading="lazy" />
+      ) : props.item.poster ? (
+        <>
+          <img src={props.item.poster} alt={props.item.title} loading="lazy" />
+          <span className="media-thumbnail-play"><Play size={18} fill="currentColor" /></span>
+        </>
       ) : (
         <>
           <video src={props.item.src} poster={props.item.poster} muted playsInline preload="metadata" />

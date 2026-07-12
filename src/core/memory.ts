@@ -3,12 +3,13 @@ import { hasHighPrivacyText } from "./privacy";
 import { summarizeText } from "./text";
 import type { AttentionEvent, ConversationJobRecord, CreatureProfile, EpisodeMemory, LongTermMemory, MemoryCandidate } from "./types";
 
-export const MEMORY_VISUAL_POLICY_VERSION = 5;
+export const MEMORY_VISUAL_POLICY_VERSION = 6;
 
 export function memoryVisualNeedsPolicyMigration(memory: LongTermMemory) {
   const version = memory.visualPolicyVersion ?? 1;
   if (version < 4) return true;
   if (version >= MEMORY_VISUAL_POLICY_VERSION) return false;
+  if (!memory.visual || memory.visualStatus === "not_needed" || memory.visualStatus === "failed") return true;
   return memoryVisualPromptHasForbiddenContent(memory.visualPrompt ?? "");
 }
 

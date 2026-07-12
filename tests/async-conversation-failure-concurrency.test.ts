@@ -68,6 +68,15 @@ try {
   assert.equal(final?.jobs?.find((job) => job.turnId === "turn_failed_illustration" && job.type === "illustration")?.error?.includes("deterministic illustration failure"), true);
   assert.equal(final?.jobs?.find((job) => job.turnId === "turn_failed_illustration" && job.type === "illustration")?.attemptHistory?.length, 3);
   assert.equal(final?.jobs?.find((job) => job.turnId === "turn_failed_illustration" && job.type === "illustration")?.attemptHistory?.every((attempt) => attempt.error?.includes("deterministic illustration failure")), true);
+  const failedJob = final?.jobs?.find((job) => job.turnId === "turn_failed_illustration" && job.type === "illustration");
+  assert.ok(failedJob);
+  const dismissResponse = await fetch(`${base}/api/profiles/failure-user/jobs/${failedJob.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ dismissed: true }) });
+  assert.equal(dismissResponse.status, 200);
+  const dismissed = await store.getProfile("failure-user");
+  const dismissedJob = dismissed?.jobs?.find((job) => job.id === failedJob.id);
+  assert.ok(dismissedJob?.dismissedAt, "failure dismissal must persist across profile reloads");
+  assert.equal(dismissedJob?.status, "failed", "dismissing UI feedback must retain the failed audit state");
+  assert.equal(dismissedJob?.attemptHistory?.length, 3);
 } finally {
   worker.stop();
   server.close();

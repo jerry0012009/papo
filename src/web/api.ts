@@ -288,6 +288,15 @@ export async function updateActionCard(userId: string, cardId: string, input: { 
   return data.profile;
 }
 
+export async function dismissConversationJob(userId: string, jobId: string): Promise<CreatureProfile> {
+  const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/jobs/${jobId}`, {
+    method: "PATCH",
+    headers: profileJsonHeaders(userId),
+    body: JSON.stringify({ dismissed: true })
+  });
+  return data.profile;
+}
+
 export function makeSegment(id: string, kind: SegmentKind, label: string, content: string, extra: Partial<StreamSegment> = {}): StreamSegment {
   return { id, kind, label, content, ...extra };
 }

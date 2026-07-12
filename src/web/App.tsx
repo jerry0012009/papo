@@ -55,6 +55,7 @@ import {
   buttonCapture,
   createProfile,
   dreamMemories,
+  dismissConversationJob,
   generateInitialActionCards,
   getProfile,
   registerCompanionSession,
@@ -1445,6 +1446,7 @@ export function App() {
                 quickRecordingElapsed={quickRecordingElapsed}
                 onStartListening={openListeningDurationPicker}
                 onStopListening={stopListening}
+                onDismissJob={async (jobId) => setProfile(await dismissConversationJob(profile.userId, jobId))}
               />
             ) : null}
             {tab === "memory" ? <MemoryView profile={profile} targetMemoryId={targetMemoryId} onOpenMemory={openMemory} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} onDream={runDreaming} busy={busy} feedbackPendingKey={feedbackPendingKey} /> : null}
@@ -2551,6 +2553,7 @@ function ChatView(props: {
   quickRecordingElapsed: number;
   onStartListening: () => void;
   onStopListening: () => void;
+  onDismissJob: (jobId: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState("");
   const [submittingMoment, setSubmittingMoment] = useState(false);
@@ -2669,7 +2672,7 @@ function ChatView(props: {
         ) : (
           <p className="muted">还没有对话。第一件小事会从这里开始。</p>
         )}
-        <ConversationWorkIndicator profile={props.profile} />
+        <ConversationWorkIndicator profile={props.profile} onDismissJob={props.onDismissJob} />
         <div ref={threadEndRef} aria-hidden="true" />
       </section>
       <div className="chat-composer" ref={composerRef}>
@@ -4642,10 +4645,10 @@ function HermesTaskNotice({ profile }: { profile: CreatureProfile }) {
   );
 }
 
-function ConversationWorkIndicator({ profile }: { profile: CreatureProfile }) {
+function ConversationWorkIndicator({ profile, onDismissJob }: { profile: CreatureProfile; onDismissJob: (jobId: string) => Promise<void> }) {
   const conversationJobs = (profile.jobs ?? []).filter((job) => job.type !== "memory_enrichment" && job.type !== "candidate_visual");
   const active = conversationJobs.filter((job) => job.status === "queued" || job.status === "running");
-  const failed = conversationJobs.filter((job) => job.status === "failed").slice(0, 2);
+  const failed = conversationJobs.filter((job) => job.status === "failed" && !job.dismissedAt).slice(0, 2);
   if (!active.length && !failed.length) return null;
   const byTurn = new Map<string, typeof active>();
   for (const job of active) byTurn.set(job.turnId, [...(byTurn.get(job.turnId) ?? []), job]);
@@ -4668,6 +4671,7 @@ function ConversationWorkIndicator({ profile }: { profile: CreatureProfile }) {
         <div className="conversation-work failed" key={job.id}>
           <span className="working-pet" aria-hidden="true"><X size={16} /></span>
           <span>{job.type === "illustration" ? "画画" : job.type === "action_card" ? "动作制作" : job.stage === "sensing" ? "媒体理解" : "回复"}失败：{job.error ?? "可以继续发送消息"}</span>
+          <button type="button" aria-label="关闭失败提示" onClick={() => void onDismissJob(job.id)}><X size={15} /></button>
         </div>
       ))}
     </div>
