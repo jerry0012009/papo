@@ -26,11 +26,20 @@ await store.saveProfile(target);
 
 const provider = createModelProvider();
 assert.equal(provider.usesRealModel, true, "real model provider is not configured");
-const result = await runCompanionSessionSweep(store, provider, new Date(Date.now() + 10 * 60_000).toISOString());
+const now = new Date(Date.now() + 10 * 60_000).toISOString();
+const results = [];
+for (let pass = 0; pass < 8; pass += 1) {
+  results.push(await runCompanionSessionSweep(store, provider, now));
+  const current = await store.getProfile(clone.userId);
+  const pending = current?.companionSessions?.some((session) => session.observations.some((item) => item.assignmentStatus === "pending" || item.assignmentStatus === "processing"));
+  const unfinished = current?.companionSessions?.some((session) => session.status !== "completed");
+  if (!pending && !unfinished) break;
+}
 const completed = await store.getProfile(clone.userId);
 const lectureSession = completed?.companionSessions?.find((session) => session.id === "native-1783841575079");
-assert.equal(lectureSession?.status, "completed", JSON.stringify({ result, sessions: completed?.companionSessions }));
-assert.ok(lectureSession.memoryId, "the real lecture should create one integrated memory");
-const memory = completed?.longTermMemories.find((item) => item.id === lectureSession.memoryId);
+assert.equal(lectureSession?.status, "completed", JSON.stringify({ results, sessions: completed?.companionSessions }));
+const rememberedEvent = lectureSession.events?.find((event) => event.memoryId && (event.kind === "lecture" || event.kind === "meeting"));
+assert.ok(rememberedEvent?.memoryId, "the real lecture/meeting event should create one integrated memory");
+const memory = completed?.longTermMemories.find((item) => item.id === rememberedEvent.memoryId);
 assert.ok(memory?.text.trim());
-console.log(JSON.stringify({ result, session: { title: lectureSession.title, kind: lectureSession.kind, summary: lectureSession.summary }, memory: memory.text }, null, 2));
+console.log(JSON.stringify({ results, session: { summary: lectureSession.summary, events: lectureSession.events }, memory: memory.text }, null, 2));

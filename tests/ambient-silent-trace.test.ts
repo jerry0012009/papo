@@ -5,13 +5,22 @@ import type { ModelProvider } from "../src/core/provider";
 import { MemoryProfileStore } from "../src/server/store";
 import type { PersistentTurnWorker } from "../src/server/turn-worker";
 
-test("selected ambient input keeps trace and episode when Action listens silently", async () => {
+test("selected companion input keeps trace while event aggregation owns the episode", async () => {
   const store = new MemoryProfileStore();
   await store.createProfile({ userId: "ambient-silent", creatureName: "Papo" });
   const provider: ModelProvider = {
     kind: "generic", name: "Ambient silent provider", available: true, usesRealModel: true,
     async generate() { return ""; },
     async generateJson(prompt) {
+      if (prompt.includes("连续生活事件归属脑")) {
+        return {
+          assignments: [{
+            segmentId: "live-lecture-001-audio", role: "scene_evidence", transition: "start", eventKind: "lecture", eventTitle: "产品讲座",
+            observationSummary: "讲者说明产品定位和目标用户", updatedEventSummary: "讲者说明产品定位和目标用户", importantFacts: ["产品定位和目标用户"], reason: "讲座刚开始"
+          }],
+          currentContext: { activity: "正在听讲座", rollingSummary: "讲者说明产品定位和目标用户", importantContent: ["产品定位和目标用户"], recentUserNotes: [] }
+        };
+      }
       if (prompt.includes("注意决策脑")) {
         const segmentId = [...prompt.matchAll(/"segmentId":"([^"]+)"/g)].at(-1)?.[1];
         return { selected: [{ segmentId, whySelected: "讲座内容可用于会后整理", noticed: "听到讲者解释产品定位", userMeaning: "用户正在安静听讲座", addressedToPapo: false, expectsResponse: false, relatedMemoryIds: [], tags: ["讲座"] }], ignored: [] };
@@ -56,9 +65,10 @@ test("selected ambient input keeps trace and episode when Action listens silentl
     const input = profile?.conversation.find((message) => message.turnId === "turn_live_lecture_001" && message.role === "user");
     assert.equal(profile?.conversation.some((message) => message.turnId === "turn_live_lecture_001" && message.role === "papo"), false);
     assert.equal(input?.cognitionTrace?.eventDecisions?.[0]?.action, "listen_silently");
-    assert.equal(input?.cognitionTrace?.eventDecisions?.[0]?.episodeKept, true);
+    assert.equal(input?.cognitionTrace?.eventDecisions?.[0]?.episodeKept, false);
     assert.equal(input?.cognitionTrace?.attentionDecision?.selected[0]?.whySelected, "讲座内容可用于会后整理");
-    assert.equal(profile?.episodes.some((episode) => episode.sourceSegmentId === "live-lecture-001-audio"), true);
+    assert.equal(profile?.episodes.some((episode) => episode.sourceSegmentId === "live-lecture-001-audio"), false);
+    assert.equal(profile?.companionSessions?.[0].events?.[0].sourceSegmentIds.includes("live-lecture-001-audio"), true);
     const job = profile?.jobs?.find((item) => item.id === "turn_live_lecture_001-cognition");
     assert.equal(job?.result?.cognition?.attention, "selected");
     assert.deepEqual(job?.result?.cognition?.actions, ["listen_silently"]);

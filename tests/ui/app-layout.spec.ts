@@ -551,7 +551,7 @@ test("photo upload during companion mode waits for explicit submit", async ({ pa
 
   await page.getByRole("button", { name: "发送给 Papo" }).click();
   await expect(page.locator(".staged-segment.image_summary")).toHaveCount(0);
-  await expect(page.locator(".chat-bubble.user", { hasText: "照片已收到" })).toBeVisible();
+  await expect(page.locator(".companion-session", { hasText: "照片已收到" })).toBeVisible();
   await expect(page.locator(".conversation-work")).toContainText(/正在看照片|正在理解和回复/);
 });
 
@@ -685,9 +685,25 @@ test("companion browser slices enter the persistent async turn pipeline", async 
     (window as unknown as { papoRequestAudioSliceForTest?: (force: boolean) => void }).papoRequestAudioSliceForTest?.(true);
   });
   await expect.poll(() => page.evaluate(() => window.localStorage.getItem("papo:lastCompanionTurn"))).not.toBeNull();
-  const captured = JSON.parse(await page.evaluate(() => window.localStorage.getItem("papo:lastCompanionTurn") ?? "{}")) as { turnId?: string; segments?: Array<{ sensingTrace?: unknown }> };
+  const captured = JSON.parse(await page.evaluate(() => window.localStorage.getItem("papo:lastCompanionTurn") ?? "{}")) as { turnId?: string; segments?: Array<{ sensingTrace?: unknown; companionSessionId?: string; batchId?: string }> };
   expect(captured.turnId).toMatch(/^turn_live_/);
   expect(captured.segments?.[0]?.sensingTrace).toBeTruthy();
+  expect(captured.segments?.[0]?.companionSessionId).toMatch(/^live-/);
+  expect(captured.segments?.[0]?.batchId?.startsWith(captured.segments?.[0]?.companionSessionId ?? "missing")).toBe(true);
+});
+
+test("text sent during companionship carries the active session context", async ({ page }) => {
+  await installMockMicrophone(page);
+  await page.addInitScript(() => window.localStorage.setItem("papo:captureCompanionTurn", "1"));
+  await page.goto("/");
+  await startCompanionListening(page);
+  await page.getByPlaceholder("告诉 Papo...").fill("接下来我要听讲座");
+  await page.getByRole("button", { name: "发送给 Papo" }).click();
+  await expect.poll(() => page.evaluate(() => window.localStorage.getItem("papo:lastCompanionTurn"))).not.toBeNull();
+  const captured = JSON.parse(await page.evaluate(() => window.localStorage.getItem("papo:lastCompanionTurn") ?? "{}")) as { segments?: Array<{ content?: string; companionSessionId?: string }> };
+  expect(captured.segments?.[0]?.content).toBe("接下来我要听讲座");
+  expect(captured.segments?.[0]?.companionSessionId).toMatch(/^live-/);
+  await expect(page.getByPlaceholder("告诉 Papo...")).toBeEnabled();
 });
 
 test("companion stream groups live slices into one readable session card", async ({ page }) => {
@@ -937,8 +953,8 @@ async function installMockApi(page: Page) {
     }
 
     if (path === "/api/profiles/demo/turns" && route.request().method() === "POST") {
-      const requestBody = safePostJson(route) as { turnId: string; requestId: string; channel: "button" | "curious"; segments: Array<{ id: string; label: string; content?: string; kind: "text" | "image_summary" | "audio_observation"; batchId?: string; dataUrl?: string }> };
-      if (requestBody.turnId.startsWith("turn_live_") && await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:captureCompanionTurn") === "1")) {
+      const requestBody = safePostJson(route) as { turnId: string; requestId: string; channel: "button" | "curious"; segments: Array<{ id: string; label: string; content?: string; kind: "text" | "image_summary" | "audio_observation"; batchId?: string; companionSessionId?: string; dataUrl?: string }> };
+      if (requestBody.segments.some((segment) => segment.companionSessionId) && await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:captureCompanionTurn") === "1")) {
         await route.request().frame().page().evaluate((body) => window.localStorage.setItem("papo:lastCompanionTurn", JSON.stringify(body)), requestBody);
       }
       if (await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:captureImageUploadBytes") === "1")) {

@@ -5,6 +5,13 @@ export interface CognitionContext {
   taskId?: string;
   sourceEventId?: string;
   sourceEpisodeId?: string;
+  companion?: {
+    sessionId: string;
+    currentEventId?: string;
+    currentContext: string;
+    recentUserNotes: string[];
+    recentObservationSummaries: string[];
+  };
 }
 export type ActionKind =
   | "observe"
@@ -131,6 +138,7 @@ export interface StreamSegment {
   position?: number;
   observedAt?: string;
   batchId?: string;
+  companionSessionId?: string;
   location?: {
     latitude: number;
     longitude: number;
@@ -714,18 +722,36 @@ export interface ConversationTurnRecord {
 export interface CompanionSessionRecord {
   id: string;
   startedAt: string;
+  endedAt?: string;
   lastObservedAt: string;
   updatedAt: string;
   status: "active" | "consolidating" | "completed" | "failed";
   sourceTurnIds: string[];
   sourceSegmentIds: string[];
+  currentEventId?: string;
+  currentContext?: {
+    activity?: string;
+    rollingSummary: string;
+    importantContent: string[];
+    recentUserNotes: string[];
+    updatedAt: string;
+  };
   observations: Array<{
     segmentId: string;
     observedAt: string;
     modality: SegmentKind;
     status: SensingTrace["status"];
     content: string;
+    sourceTurnId?: string;
+    role?: "scene_evidence" | "context_setting" | "context_note" | "noise";
+    assignmentStatus?: "pending" | "processing" | "assigned" | "ignored" | "failed";
+    transition?: "continue" | "start" | "switch" | "pause" | "resume" | "end" | "unrelated";
+    eventId?: string;
+    summary?: string;
+    assignmentReason?: string;
+    processedAt?: string;
   }>;
+  events?: CompanionEventRecord[];
   episodeId?: string;
   memoryId?: string;
   messageId?: string;
@@ -733,6 +759,29 @@ export interface CompanionSessionRecord {
   title?: string;
   kind?: "lecture" | "meeting" | "conversation" | "ambient";
   consolidatedAt?: string;
+  error?: string;
+}
+
+export interface CompanionEventRecord {
+  id: string;
+  sessionId: string;
+  status: "active" | "paused" | "consolidating" | "completed";
+  kind: "lecture" | "meeting" | "conversation" | "meal" | "travel" | "activity" | "ambient" | "other";
+  title: string;
+  startedAt: string;
+  lastObservedAt: string;
+  endedAt?: string;
+  updatedAt: string;
+  summary: string;
+  importantContent: string[];
+  sourceTurnIds: string[];
+  sourceSegmentIds: string[];
+  revision: number;
+  consolidatedRevision?: number;
+  consolidatedAt?: string;
+  episodeId?: string;
+  memoryId?: string;
+  messageId?: string;
   error?: string;
 }
 

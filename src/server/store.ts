@@ -148,7 +148,22 @@ function mergeCompanionSession(left: NonNullable<CreatureProfile["companionSessi
     ...chosen,
     sourceTurnIds: unique([...(left.sourceTurnIds ?? []), ...(right.sourceTurnIds ?? [])]),
     sourceSegmentIds: unique([...(left.sourceSegmentIds ?? []), ...(right.sourceSegmentIds ?? [])]),
-    observations: mergeSessionObservations(left.observations ?? [], right.observations ?? [])
+    observations: mergeSessionObservations(left.observations ?? [], right.observations ?? []),
+    events: mergeById(left.events ?? [], right.events ?? [], "updatedAt", mergeCompanionEvent)
+  };
+}
+
+function mergeCompanionEvent(
+  left: NonNullable<NonNullable<CreatureProfile["companionSessions"]>[number]["events"]>[number],
+  right: NonNullable<NonNullable<CreatureProfile["companionSessions"]>[number]["events"]>[number]
+) {
+  const chosen = timestamp(right.updatedAt) >= timestamp(left.updatedAt) ? right : left;
+  return {
+    ...left,
+    ...chosen,
+    sourceTurnIds: unique([...(left.sourceTurnIds ?? []), ...(right.sourceTurnIds ?? [])]),
+    sourceSegmentIds: unique([...(left.sourceSegmentIds ?? []), ...(right.sourceSegmentIds ?? [])]),
+    importantContent: unique([...(left.importantContent ?? []), ...(right.importantContent ?? [])]).slice(-24)
   };
 }
 
@@ -157,7 +172,12 @@ function mergeSessionObservations(
   right: NonNullable<CreatureProfile["companionSessions"]>[number]["observations"]
 ) {
   const byId = new Map(left.map((item) => [item.segmentId, item]));
-  for (const item of right) byId.set(item.segmentId, item);
+  for (const item of right) {
+    const existing = byId.get(item.segmentId);
+    if (!existing || timestamp(item.processedAt ?? item.observedAt) >= timestamp(existing.processedAt ?? existing.observedAt)) {
+      byId.set(item.segmentId, { ...existing, ...item });
+    }
+  }
   return [...byId.values()].sort((a, b) => timestamp(a.observedAt) - timestamp(b.observedAt));
 }
 

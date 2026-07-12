@@ -29,6 +29,16 @@ const provider: ModelProvider = {
     return "";
   },
   async generateJson(prompt) {
+    if (prompt.includes("连续生活事件归属脑")) {
+      const segmentIds = [...new Set([...prompt.matchAll(/"segmentId":"([^"]+)"/g)].map((match) => match[1]))];
+      return {
+        assignments: segmentIds.map((segmentId, index) => ({
+          segmentId, role: "scene_evidence", transition: index ? "continue" : "start", eventKind: "activity", eventTitle: "桌边工作",
+          observationSummary: "用户在桌边，声音显示工作已经结束", updatedEventSummary: "用户在桌边，声音显示工作已经结束", importantFacts: ["工作已经结束"], reason: "同一时刻的画面与声音"
+        })),
+        currentContext: { activity: "桌边工作结束", rollingSummary: "用户在桌边，声音显示工作已经结束", importantContent: ["工作已经结束"], recentUserNotes: [] }
+      };
+    }
     if (!prompt.includes("注意决策脑")) throw new Error("action model should not run when all native segments are ignored");
     const segmentIds = [...new Set([...prompt.matchAll(/"segmentId":"([^"]+)"/g)].map((match) => match[1]))];
     assert.ok(segmentIds.length >= 2);
@@ -86,6 +96,7 @@ try {
   const url = `${baseUrl}/api/profiles/native-listening-user/listening/native-batch`;
   const body = {
     batchId: "native-1783700000000-001",
+    companionSessionId: "native-1783700000000",
     observedAt: "2026-07-10T18:30:30.000Z",
     cameraFacing: "front",
     audioDataUrl: `data:audio/mp4;base64,${Buffer.from("mock m4a data".repeat(8)).toString("base64")}`,
@@ -121,6 +132,9 @@ try {
   assert.match(audioInput?.sensingTrace?.retainedAudio?.id ?? "", /^tmpaud_/);
   assert.equal(audioInput?.sensingTrace?.attempts, 2, "unreadable native audio should retry once before settling");
   assert.equal(audioInput?.cognitionTrace?.modelRuns.some((run) => run.stage === "attention"), true, "silent/ignored native turns must retain cognition trace on their input");
+  assert.equal(current.companionSessions?.length, 1);
+  assert.equal(current.companionSessions?.[0].id, body.companionSessionId);
+  assert.equal(current.companionSessions?.[0].events?.[0].sourceSegmentIds.length, 2);
 
   const retry = await fetch(url, {
     method: "POST",

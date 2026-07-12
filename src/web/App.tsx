@@ -57,6 +57,8 @@ import {
   dreamMemories,
   generateInitialActionCards,
   getProfile,
+  registerCompanionSession,
+  endCompanionSession,
   loginProfile,
   makeSegment,
   markPapoRead,
@@ -290,7 +292,10 @@ export function App() {
       if (event.event === "batch-uploaded") {
         void getProfile(profile.userId).then(setProfile).catch(() => undefined);
       }
-      if (event.event === "completed" || event.event === "stopped") clearNativeListeningUi();
+      if (event.event === "completed" || event.event === "stopped") {
+        markActiveCompanionSessionEnded();
+        clearNativeListeningUi();
+      }
       if (event.event === "error") {
         setError(nativeListeningError(event.error));
         void refreshStatus();
@@ -472,7 +477,15 @@ export function App() {
     const turnId = retryTurnRef.current?.signature === signature ? retryTurnRef.current.turnId : clientTurnId();
     retryTurnRef.current = { signature, turnId };
     const segments = [
-      ...(cleanText ? [{ id: `${turnId}-text`, kind: "text" as const, label: listening ? "你补充的话" : "你刚说的话", content: cleanText, observedAt: new Date().toISOString() }] : []),
+      ...(cleanText ? [{
+        id: `${turnId}-text`,
+        kind: "text" as const,
+        label: listening ? "你补充的话" : "你刚说的话",
+        content: cleanText,
+        observedAt: new Date().toISOString(),
+        batchId: listening ? currentBatchId() : undefined,
+        companionSessionId: listening ? currentCompanionSessionId() : undefined
+      }] : []),
       ...readySegments.map((segment, index) => ({
         id: `${turnId}-media-${index}`,
         kind: segment.kind,
@@ -480,6 +493,8 @@ export function App() {
         content: segment.content || undefined,
         dataUrl: segment.uploadDataUrl,
         observedAt: segment.observedAt,
+        batchId: segment.batchId,
+        companionSessionId: listening ? currentCompanionSessionId() : segment.companionSessionId,
         location: segment.location
       }))
     ];
@@ -781,6 +796,7 @@ export function App() {
           cameraFacing
         });
         applyNativeListeningStatus(status);
+        void registerCompanionSession(profile.userId, `native-${status.startedAt}`, new Date(status.startedAt).toISOString()).catch(() => undefined);
       } catch (caught) {
         setError(nativeListeningError(caught instanceof Error ? caught.message : String(caught)));
       }
@@ -837,6 +853,10 @@ export function App() {
     lastAudioSliceRequestAtRef.current = 0;
     lastCameraCaptureAtRef.current = 0;
     listeningStartedAtRef.current = Date.now();
+    if (profile) {
+      const sessionId = `live-${new Date(listeningStartedAtRef.current).toISOString()}`;
+      void registerCompanionSession(profile.userId, sessionId, new Date(listeningStartedAtRef.current).toISOString()).catch(() => undefined);
+    }
     listeningDurationMsRef.current = durationMs;
     listeningModeRef.current = mode;
     setListeningDurationMs(durationMs);
@@ -904,6 +924,7 @@ export function App() {
   }
 
   function stopListening() {
+    markActiveCompanionSessionEnded();
     if (nativeListeningActiveRef.current) {
       nativeListeningActiveRef.current = false;
       void stopNativeListening().catch((caught) => setError(nativeListeningError(errorMessage(caught))));
@@ -1038,6 +1059,7 @@ export function App() {
           content: segment.content,
           observedAt: segment.observedAt,
           batchId: segment.batchId,
+          companionSessionId: segment.companionSessionId,
           location: segment.location,
           auditOnly: segment.auditOnly,
           sensingTrace: segment.sensingTrace
@@ -1118,8 +1140,24 @@ export function App() {
       ...segment,
       position: segment.position ?? index + 1,
       observedAt: segment.observedAt ?? new Date().toISOString(),
-      batchId: segment.batchId ?? currentBatchId()
+      batchId: segment.batchId ?? currentBatchId(),
+      companionSessionId: segment.companionSessionId ?? currentCompanionSessionId()
     };
+  }
+
+  function currentCompanionSessionId() {
+    const startedAt = listeningStartedAtRef.current;
+    if (!startedAt) return undefined;
+    return nativeListeningActiveRef.current
+      ? `native-${startedAt}`
+      : `live-${new Date(startedAt).toISOString()}`;
+  }
+
+  function markActiveCompanionSessionEnded() {
+    const sessionId = currentCompanionSessionId();
+    const userId = profileRef.current?.userId;
+    if (!sessionId || !userId) return;
+    void endCompanionSession(userId, sessionId).catch(() => undefined);
   }
 
   function currentBatchId(nowMs = Date.now()) {

@@ -25,7 +25,7 @@ import { createWebPushService, PushNotifyingProfileStore, type WebPushService } 
 import { JsonProfileStore, type ProfileStore } from "./store";
 import { PersistentTurnWorker } from "./turn-worker";
 import { TransientAudioStore, type RetainedAudioAsset } from "./transient-audio";
-import { collectCompanionTurn, runCompanionSessionSweep } from "./companion-session";
+import { collectCompanionTurn, companionCognitionContext, processCompanionTurnContext, runCompanionSessionSweep } from "./companion-session";
 
 const createProfileSchema = z.object({
   userId: z.string().min(3).max(40).regex(/^[a-zA-Z0-9_-]+$/).optional(),
@@ -69,6 +69,7 @@ const asyncTurnSchema = z.object({
     auditOnly: z.boolean().optional(),
     observedAt: z.string().datetime().optional(),
     batchId: z.string().min(1).max(100).optional(),
+    companionSessionId: z.string().min(1).max(100).optional(),
     location: z.lazy(() => locationSchema).optional(),
     sensingTrace: z.lazy(() => sensingTraceSchema).optional()
   }).superRefine((segment, context) => {
@@ -135,6 +136,7 @@ const curiousSchema = z.object({
         auditOnly: z.boolean().optional(),
         observedAt: z.string().datetime().optional(),
         batchId: z.string().min(1).max(80).optional(),
+        companionSessionId: z.string().min(1).max(100).optional(),
         location: locationSchema.optional(),
         attachments: z.array(mediaAttachmentSchema).max(6).optional(),
         sensingTrace: sensingTraceSchema.optional()
@@ -156,11 +158,21 @@ const audioObservationSchema = z.object({
 
 const nativeListeningBatchSchema = z.object({
   batchId: z.string().min(1).max(80),
+  companionSessionId: z.string().min(1).max(100).optional(),
   observedAt: z.string().datetime(),
   audioDataUrl: audioDataUrlSchema().optional(),
   imageDataUrl: imageDataUrlSchema().optional(),
   cameraFacing: z.enum(["front", "back"]).optional()
 }).refine((body) => Boolean(body.audioDataUrl || body.imageDataUrl), { message: "Native listening batch is empty" });
+
+const companionSessionSchema = z.object({
+  id: z.string().min(8).max(100).regex(/^[a-zA-Z0-9:._-]+$/),
+  startedAt: z.string().datetime()
+});
+
+const endCompanionSessionSchema = z.object({
+  endedAt: z.string().datetime()
+});
 
 const feedbackSchema = z.object({
   kind: z.enum(["understood", "continue", "not_now", "remember", "important", "remind", "correct", "forget"]),
@@ -314,6 +326,9 @@ export function createApp(input: {
   }
 
   async function processCognitionJob(userId: string, job: ConversationJobRecord) {
+    await processCompanionTurnContext(store, provider, userId, job.turnId).catch((error) => {
+      console.warn("Companion context update deferred to background sweep", { userId, turnId: job.turnId, error: error instanceof Error ? error.message : String(error) });
+    });
     const profile = await store.getProfile(userId);
     const turn = profile?.turns?.find((item) => item.id === job.turnId);
     if (!profile || !turn) throw new Error("Conversation turn is missing");
@@ -323,7 +338,10 @@ export function createApp(input: {
     markProactiveUserResponse(profile);
     const beforeMemoryIds = activeMemorySignatures(profile);
     const beforeSemanticIds = semanticRecordIds(profile);
-    const cognitionContext = { inputSource: isAmbientTurn(turn) ? "ambient" as const : "direct" as const };
+    const cognitionContext = {
+      inputSource: isAmbientTurn(turn) ? "ambient" as const : "direct" as const,
+      companion: companionCognitionContext(profile, turn.id)
+    };
     const result = turn.channel === "button" && turn.segments.length === 1 && turn.segments[0].kind === "text"
       ? await runButtonHarness(profile, turn.segments[0].content, provider, new Date().toISOString(), cognitionContext)
       : await runCuriousHarness(profile, turn.segments, provider, new Date().toISOString(), cognitionContext);
@@ -497,6 +515,7 @@ export function createApp(input: {
           auditOnly: sensingTrace.status !== "content",
           observedAt: body.observedAt,
           batchId: body.batchId,
+          companionSessionId: body.companionSessionId,
           sensingTrace
         });
       }
@@ -513,6 +532,7 @@ export function createApp(input: {
           auditOnly: !summary,
           observedAt: body.observedAt,
           batchId: body.batchId,
+          companionSessionId: body.companionSessionId,
           sensingTrace
         });
       }
@@ -836,6 +856,7 @@ export function createApp(input: {
           auditOnly: inputSegment.auditOnly,
           observedAt: inputSegment.observedAt,
           batchId: inputSegment.batchId,
+          companionSessionId: inputSegment.companionSessionId,
           location: inputSegment.location,
           attachments,
           sensingTrace: inputSegment.sensingTrace
@@ -909,7 +930,7 @@ export function createApp(input: {
         };
         profile.turns = [turn, ...(profile.turns ?? [])].slice(0, 80);
         profile.jobs = [...sensingJobs, cognitionJob, ...(profile.jobs ?? [])].slice(0, 240);
-        collectCompanionTurn(profile, turn.id, segments.filter((segment) => Boolean(segment.sensingTrace)));
+        collectCompanionTurn(profile, turn.id, segments);
       });
       if (!saved) throw new HttpError(404, "Profile not found");
       const turn = saved.turns?.find((item) => item.id === body.turnId || item.requestId === body.requestId);
@@ -984,6 +1005,49 @@ export function createApp(input: {
       }
       const queued = await nativeIngestQueue.enqueue(req.params.userId, body);
       res.status(202).json({ ...queued, batchId: body.batchId });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/profiles/:userId/companion-sessions", async (req, res, next) => {
+    try {
+      await requireProfile(store, req.params.userId, req);
+      const body = companionSessionSchema.parse(req.body);
+      const saved = await store.updateProfile(req.params.userId, (profile) => {
+        if (profile.companionSessions?.some((session) => session.id === body.id)) return;
+        profile.companionSessions = [{
+          id: body.id,
+          startedAt: body.startedAt,
+          lastObservedAt: body.startedAt,
+          updatedAt: body.startedAt,
+          status: "active" as const,
+          sourceTurnIds: [],
+          sourceSegmentIds: [],
+          currentContext: { rollingSummary: "", importantContent: [], recentUserNotes: [], updatedAt: body.startedAt },
+          observations: [],
+          events: []
+        }, ...(profile.companionSessions ?? [])].slice(0, 40);
+      });
+      if (!saved) throw new HttpError(404, "Profile not found");
+      res.status(201).json({ profile: publicProfile(saved), session: saved.companionSessions?.find((item) => item.id === body.id) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch("/api/profiles/:userId/companion-sessions/:sessionId/end", async (req, res, next) => {
+    try {
+      await requireProfile(store, req.params.userId, req);
+      const body = endCompanionSessionSchema.parse(req.body);
+      const saved = await store.updateProfile(req.params.userId, (profile) => {
+        const session = profile.companionSessions?.find((item) => item.id === req.params.sessionId);
+        if (!session) return;
+        session.endedAt = session.endedAt && Date.parse(session.endedAt) <= Date.parse(body.endedAt) ? session.endedAt : body.endedAt;
+        session.updatedAt = body.endedAt;
+      });
+      if (!saved) throw new HttpError(404, "Profile not found");
+      res.json({ profile: publicProfile(saved), session: saved.companionSessions?.find((item) => item.id === req.params.sessionId) });
     } catch (error) {
       next(error);
     }

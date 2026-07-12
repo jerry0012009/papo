@@ -313,6 +313,11 @@ ${JSON.stringify(profile.state)}
 current_policy:
 ${JSON.stringify(profile.policyProfile)}
 
+companion_continuity_context:
+${JSON.stringify(context.companion ?? null)}
+
+陪伴上下文用于理解片段属于什么持续场景，但不替代 Attention：即使决定不回应，场景归属器仍会独立更新事件。
+
 recent_memories:
 ${JSON.stringify(modelMemoryContext(profile.longTermMemories))}
 

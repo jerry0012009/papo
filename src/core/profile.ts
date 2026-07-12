@@ -72,14 +72,60 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.turns ??= [];
   profile.jobs ??= [];
   profile.companionSessions ??= [];
-  profile.companionSessions = profile.companionSessions.map((session) => ({
-    ...session,
-    status: session.status ?? "active",
-    updatedAt: session.updatedAt ?? session.lastObservedAt ?? session.startedAt,
-    sourceTurnIds: session.sourceTurnIds ?? [],
-    sourceSegmentIds: session.sourceSegmentIds ?? [],
-    observations: session.observations ?? []
-  })).slice(0, 40);
+  profile.companionSessions = profile.companionSessions.map((session) => {
+    const updatedAt = session.updatedAt ?? session.lastObservedAt ?? session.startedAt;
+    const legacyEventId = `${session.id}:legacy-event`;
+    const hasLegacyResult = Boolean(session.episodeId || session.memoryId || session.messageId);
+    const events = (session.events?.length ? session.events : hasLegacyResult ? [{
+      id: legacyEventId,
+      sessionId: session.id,
+      status: "completed" as const,
+      kind: session.kind ?? "other" as const,
+      title: session.title ?? "连续陪伴事件",
+      startedAt: session.startedAt,
+      lastObservedAt: session.lastObservedAt,
+      endedAt: session.lastObservedAt,
+      updatedAt,
+      summary: session.summary ?? "已从旧版陪伴会话迁移。",
+      importantContent: [],
+      sourceTurnIds: session.sourceTurnIds ?? [],
+      sourceSegmentIds: session.sourceSegmentIds ?? [],
+      revision: 1,
+      consolidatedRevision: 1,
+      consolidatedAt: session.consolidatedAt ?? updatedAt,
+      episodeId: session.episodeId,
+      memoryId: session.memoryId,
+      messageId: session.messageId
+    }] : []).map((event) => ({
+      ...event,
+      status: event.status === "consolidating" && Date.now() - Date.parse(event.updatedAt) > 10 * 60_000 ? "completed" as const : event.status,
+      importantContent: event.importantContent ?? [],
+      sourceTurnIds: event.sourceTurnIds ?? [],
+      sourceSegmentIds: event.sourceSegmentIds ?? [],
+      revision: Math.max(1, event.revision ?? 1)
+    }));
+    return {
+      ...session,
+      status: session.status ?? "active",
+      updatedAt,
+      sourceTurnIds: session.sourceTurnIds ?? [],
+      sourceSegmentIds: session.sourceSegmentIds ?? [],
+      currentContext: session.currentContext ?? {
+        rollingSummary: session.summary ?? "",
+        importantContent: [],
+        recentUserNotes: [],
+        updatedAt
+      },
+      observations: (session.observations ?? []).map((observation) => ({
+        ...observation,
+        assignmentStatus: observation.assignmentStatus === "processing" && Date.now() - Date.parse(observation.processedAt ?? updatedAt) > 10 * 60_000
+          ? "pending" as const
+          : observation.assignmentStatus ?? (hasLegacyResult ? "assigned" as const : "pending" as const),
+        eventId: observation.eventId ?? (hasLegacyResult ? legacyEventId : undefined)
+      })),
+      events
+    };
+  }).slice(0, 40);
   profile.turns = profile.turns.map((turn) => ({
     ...turn,
     status: turn.status ?? "queued",

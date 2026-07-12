@@ -1,15 +1,15 @@
 {
-  "versionName": "0.4.7",
-  "versionCode": 13,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.7.apk",
-  "publishedAt": "2026-07-12T08:28:00.000Z",
+  "versionName": "0.4.8",
+  "versionCode": 14,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.8.apk",
+  "publishedAt": "2026-07-12T09:32:14.000Z",
   "notes": [
-    "陪伴录音无法读取时自动重试，并保留可审计的感知与认知原因",
-    "原始陪伴音频使用私有临时存储，手机、服务端队列和调试副本均在 24 小时后清理",
-    "安静陪听不再删除已注意到的经历，静默回合也会保存 Attention 与 Action trace",
-    "连续讲座或会议在结束后整合前后片段，形成一条总结回复、episode 和长期记忆",
-    "区分 direct、ambient 与 task_result，并完善 Hermes 结果和主动媒体的提交边界"
+    "一次陪伴会话可识别并分别维护多个连续、切换、暂停和恢复的生活事件",
+    "陪伴中的文字、照片、环境音频和定时画面共享稳定 session 上下文",
+    "讲座等持续事件在结束后形成一条完整 episode，需要时再形成一条长期记忆",
+    "无关噪音不会污染当前事件，后续补充会修订原事件与记忆而不是重复创建",
+    "显式记录陪伴开始和结束，并支持服务重启后的事件归属与整理恢复"
   ],
-  "sha256": "be1131ffd7369ff7c0952270416485f860fcf5404eb92791cb47e4a4df529ac4",
-  "size": 22794692
+  "sha256": "59d05c541e9bfae00e371d628930238eb7dd71f56753753a954474136d5c6eaa",
+  "size": 22795312
 }

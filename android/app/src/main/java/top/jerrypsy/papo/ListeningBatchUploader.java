@@ -52,6 +52,7 @@ final class ListeningBatchUploader {
     ) throws Exception {
         JSONObject metadata = new JSONObject();
         metadata.put("batchId", batchId);
+        metadata.put("companionSessionId", companionSessionId(batchId));
         metadata.put("observedAt", observedAt);
         metadata.put("cameraFacing", cameraFacing == null ? "" : cameraFacing);
         metadata.put("audioFile", audioFile != null && audioFile.exists() ? audioFile.getName() : "");
@@ -123,6 +124,8 @@ final class ListeningBatchUploader {
 
         JSONObject body = new JSONObject();
         body.put("batchId", metadata.getString("batchId"));
+        String companionSessionId = metadata.optString("companionSessionId", companionSessionId(metadata.getString("batchId")));
+        if (!companionSessionId.isEmpty()) body.put("companionSessionId", companionSessionId);
         body.put("observedAt", metadata.getString("observedAt"));
         String facing = metadata.optString("cameraFacing");
         if (!facing.isEmpty()) body.put("cameraFacing", facing);
@@ -203,5 +206,10 @@ final class ListeningBatchUploader {
 
     private static String safeBatchId(String batchId) {
         return batchId.replaceAll("[^a-zA-Z0-9._-]", "_");
+    }
+
+    private static String companionSessionId(String batchId) {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("^(native-[0-9]+)(?:-camera)?-[0-9]{1,4}$").matcher(batchId);
+        return matcher.matches() ? matcher.group(1) : "";
     }
 }

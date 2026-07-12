@@ -3,14 +3,36 @@ import test from "node:test";
 import { createCreatureProfile } from "../src/core/profile";
 import type { ModelProvider } from "../src/core/provider";
 import type { StreamSegment } from "../src/core/types";
-import { collectCompanionTurn, runCompanionSessionSweep } from "../src/server/companion-session";
+import { collectCompanionTurn, processCompanionTurnContext, runCompanionSessionSweep } from "../src/server/companion-session";
 import { MemoryProfileStore } from "../src/server/store";
 
-test("a 15 minute lecture becomes one integrated memory independent of per-slice Attention", async () => {
+function segment(id: string, content: string, observedAt: string): StreamSegment {
+  return {
+    id,
+    kind: "audio_observation",
+    label: "后台听到的声音",
+    content,
+    observedAt,
+    batchId: `native-lecture-${id}`,
+    companionSessionId: "native-lecture",
+    sensingTrace: {
+      at: observedAt,
+      modality: "audio",
+      label: "后台听到的声音",
+      provider: "fake",
+      semanticSource: "llm",
+      status: "content",
+      decision: "content",
+      observation: content,
+      ruleTrace: []
+    }
+  };
+}
+
+test("a 15 minute lecture is tracked continuously and becomes one revisable memory", async () => {
   const store = new MemoryProfileStore();
   const profile = createCreatureProfile({ userId: "lecture-user", creatureName: "Papo", now: "2026-07-12T10:00:00.000Z" });
-  profile.conversation.unshift({ id: "msg-goal", at: "2026-07-12T09:59:00.000Z", role: "user", channel: "button", text: "我在听讲座，你安静陪我，结束后整理核心内容。", relatedMemoryIds: [] });
-  const observations = [
+  const contents = [
     "讲者先介绍产品面向海外来华用户，核心问题是中文在真实生活场景中难以使用。",
     "产品用打车、点餐等场景让用户通过语音和文字与 AI 互动，并纠正发音。",
     "当前已经完成 MVP，并邀请了一批海外用户试用，早期反馈较好。",
@@ -18,45 +40,88 @@ test("a 15 minute lecture becomes one integrated memory independent of per-slice
     "团队计划七月底发布 iOS 和 Android，并在积累真实反馈后继续调整。",
     "讲者最后提出当前最需要的是海外推广和投流资源。"
   ];
-  observations.forEach((content, index) => {
+  contents.forEach((content, index) => {
     const observedAt = new Date(Date.parse("2026-07-12T10:00:00.000Z") + index * 3 * 60_000).toISOString();
-    const segment: StreamSegment = { id: `native-lecture-001:${index}`, kind: "audio_observation", label: "后台听到的声音", content, observedAt, batchId: `native-lecture-${String(index + 1).padStart(3, "0")}`, sensingTrace: { at: observedAt, modality: "audio", label: "后台听到的声音", provider: "fake", semanticSource: "llm", status: "content", decision: "content", observation: content, ruleTrace: [] } };
-    collectCompanionTurn(profile, `turn-native-lecture-${index}`, [segment]);
+    collectCompanionTurn(profile, `turn-${index}`, [segment(String(index + 1), content, observedAt)]);
   });
-  const actual = await store.createProfile({ userId: "lecture-user", creatureName: "Papo" });
-  Object.assign(actual, profile);
-  await store.saveProfile(actual);
+  const stored = await store.createProfile({ userId: profile.userId, creatureName: "Papo" });
+  Object.assign(stored, profile);
+  await store.saveProfile(stored);
 
   let consolidationCalls = 0;
   const provider: ModelProvider = {
-    kind: "generic", name: "Lecture consolidation provider", available: true, usesRealModel: true, diagnostics: { textModel: "fake-session" },
+    kind: "generic", name: "continuous event fake", available: true, usesRealModel: true,
     async generate() { return ""; },
     async generateJson(prompt) {
+      if (prompt.includes("连续生活事件归属脑")) {
+        const observations = contents.map((content, index) => ({
+          segmentId: String(index + 1),
+          role: "scene_evidence",
+          transition: index ? "continue" : "start",
+          eventKind: "lecture",
+          eventTitle: "海外中文产品路演",
+          observationSummary: content,
+          updatedEventSummary: contents.slice(0, index + 1).join(" "),
+          importantFacts: [content],
+          reason: index ? "主题和讲者脉络持续一致" : "连续讲座开始"
+        }));
+        return { assignments: observations, currentContext: { activity: "正在听产品路演", rollingSummary: contents.join(" "), importantContent: contents, recentUserNotes: [] } };
+      }
       consolidationCalls += 1;
-      assert.match(prompt, /所有 sensing 成功的片段/);
-      for (const observation of observations) assert.match(prompt, new RegExp(observation.slice(0, 12)));
-      return { kind: "lecture", title: "海外中文产品路演", summary: "讲座介绍了一款帮助海外用户在真实来华场景中学习和使用中文的 AI 产品，包括场景对话、发音纠正、MVP 验证、订阅与机构合作模式、七月底双端上线计划，以及海外推广资源需求。", shouldRemember: true, memoryText: "我陪你听完了一场海外中文学习产品路演：产品用打车、点餐等真实场景提供 AI 语音文字互动和发音纠正，已完成 MVP 并获得早期海外用户反馈，计划七月底上线 iOS/Android，以免费版和 Pro 订阅为主并探索 B 端合作，目前最需要海外推广与投流资源。", importanceReason: "完整讲座包含产品定位、验证、商业模式、时间计划和资源需求，值得以后回顾。", tags: ["路演", "AI", "中文学习", "海外推广"] };
+      assert.match(prompt, /只整理给定 event/);
+      for (const content of contents) assert.match(prompt, new RegExp(content.slice(0, 12)));
+      return {
+        kind: "lecture", title: "海外中文产品路演",
+        summary: "讲座介绍了海外中文场景学习产品的定位、MVP、商业模式、上线计划和推广需求。",
+        shouldRemember: true,
+        memoryText: consolidationCalls === 1
+          ? "我陪你听完海外中文产品路演：产品已完成 MVP，计划七月底上线双端，以订阅和机构合作商业化，目前需要海外推广资源。"
+          : "我陪你听完并补充整理了海外中文产品路演：产品已完成 MVP，计划七月底上线双端，以订阅和机构合作商业化，目前需要海外推广资源；会后还补充了首批试点数据。",
+        importanceReason: "完整讲座包含产品定位、验证、商业模式和后续计划。",
+        tags: ["路演", "AI", "中文学习"]
+      };
     },
     async summarizeImage() { return ""; },
     async observeAudio() { return ""; },
     async generateImage() { throw new Error("not used"); }
   };
 
-  const result = await runCompanionSessionSweep(store, provider, "2026-07-12T10:20:00.000Z");
-  assert.deepEqual(result, { checked: 1, completed: 1, failed: 0 });
-  let saved = await store.getProfile("lecture-user");
-  assert.equal(saved?.companionSessions?.length, 1);
-  assert.equal(saved?.companionSessions?.[0].status, "completed");
-  assert.equal(saved?.episodes.filter((episode) => episode.sourceBatchId === "native-lecture").length, 1);
-  assert.equal(saved?.longTermMemories.filter((memory) => memory.id.startsWith("ltm_session_")).length, 1);
-  assert.match(saved?.longTermMemories.find((memory) => memory.id.startsWith("ltm_session_"))?.text ?? "", /MVP/);
-  assert.equal(saved?.conversation.filter((message) => message.id.startsWith("msg_session_")).length, 1);
-  assert.match(saved?.conversation.find((message) => message.id.startsWith("msg_session_"))?.text ?? "", /从头到尾整理好了/);
+  const first = await runCompanionSessionSweep(store, provider, "2026-07-12T10:20:00.000Z");
+  assert.deepEqual(first, { checked: 2, completed: 1, failed: 0 });
+  let saved = await store.getProfile(profile.userId);
+  const event = saved?.companionSessions?.[0].events?.[0];
+  assert.equal(event?.status, "completed");
+  assert.equal(event?.sourceSegmentIds.length, 6);
+  assert.equal(saved?.episodes.filter((episode) => episode.id.startsWith("episode_companion_event_")).length, 1);
+  assert.equal(saved?.longTermMemories.filter((memory) => memory.id.startsWith("ltm_companion_event_")).length, 1);
+  assert.equal(saved?.conversation.filter((message) => message.id.startsWith("msg_companion_event_")).length, 1);
 
+  const supplement = segment("7", "会后补充：首批试点将覆盖三个海外社群。", "2026-07-12T10:25:00.000Z");
+  collectCompanionTurn(saved!, "turn-7", [supplement]);
+  await store.saveProfile(saved!);
+  const existingEventId = event!.id;
+  provider.generateJson = async (prompt) => {
+    if (prompt.includes("连续生活事件归属脑")) return {
+      assignments: [{
+        segmentId: "7", role: "context_note", transition: "resume", targetEventId: existingEventId,
+        eventKind: "lecture", eventTitle: "海外中文产品路演", observationSummary: supplement.content,
+        updatedEventSummary: `${event!.summary} ${supplement.content}`, importantFacts: [supplement.content], reason: "这是同一场路演的会后补充"
+      }],
+      currentContext: { activity: "路演会后补充", rollingSummary: supplement.content, importantContent: [supplement.content], recentUserNotes: [] }
+    };
+    consolidationCalls += 1;
+    return {
+      kind: "lecture", title: "海外中文产品路演", summary: "路演及会后补充已完整整理。", shouldRemember: true,
+      memoryText: "我陪你听完海外中文产品路演，内容覆盖产品定位、MVP、商业化和推广需求；会后补充首批试点覆盖三个海外社群。",
+      importanceReason: "原事件获得了有价值的会后补充。", tags: ["路演", "试点"]
+    };
+  };
+  await processCompanionTurnContext(store, provider, profile.userId, "turn-7");
   const second = await runCompanionSessionSweep(store, provider, "2026-07-12T10:30:00.000Z");
-  saved = await store.getProfile("lecture-user");
-  assert.deepEqual(second, { checked: 0, completed: 0, failed: 0 });
-  assert.equal(consolidationCalls, 1);
-  assert.equal(saved?.longTermMemories.filter((memory) => memory.id.startsWith("ltm_session_")).length, 1);
-  assert.equal(saved?.conversation.filter((message) => message.id.startsWith("msg_session_")).length, 1);
+  saved = await store.getProfile(profile.userId);
+  assert.equal(second.completed, 1);
+  assert.equal(saved?.companionSessions?.[0].events?.length, 1);
+  assert.equal(saved?.longTermMemories.filter((memory) => memory.id.startsWith("ltm_companion_event_")).length, 1);
+  assert.match(saved?.longTermMemories.find((memory) => memory.id.startsWith("ltm_companion_event_"))?.text ?? "", /三个海外社群/);
+  assert.equal(saved?.conversation.filter((message) => message.id.startsWith("msg_companion_event_")).length, 1);
 });

@@ -392,6 +392,14 @@ function applyPersistenceDecision(
   event: CaptureResult["events"][number]
 ) {
   if (!episode) return;
+  if (context.inputSource === "ambient" && context.companion) {
+    removeEpisodeAndCandidates(profile, result, episode.id);
+    event.decisionTrace = [
+      ...(event.decisionTrace ?? []),
+      `guardrail: companion observation belongs to session ${context.companion.sessionId}; event consolidation owns episode and memory creation`
+    ];
+    return;
+  }
   if (!decision.shouldCreateEpisode) {
     if (context.inputSource === "ambient") {
       removeMemoryCandidatesForEpisode(profile, result, episode.id);
@@ -523,6 +531,7 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - update_pet_profile：当用户在对话里明确教 Papo 自己的小动物外观、性格、习惯、行为偏好或形象设定时，更新小动物 profile。
 
 当前认知来源是 ${context.inputSource}${context.taskId ? `，taskId=${context.taskId}` : ""}。
+${context.companion ? `当前还处于 companion session ${context.companion.sessionId}；连续场景上下文是：${JSON.stringify(context.companion)}。行动可以保持安静，但不要误以为安静会停止场景理解。` : ""}
 每个 event 只能返回一条 decision。decision.action 是主要对话/记忆动作，reply 是可以立刻显示的主回复；如同一请求还需要画图、动作卡或 Hermes，在 actions 数组中同时返回 0..N 个后台动作。不要为同一 event 重复 decision，也不要为了后台动作牺牲快速文字回答。例如“回答问题并画一幅图”应使用 action=respond、reply=直接回答、actions=[generate_illustration]。
 
 护栏会再次校验：
@@ -545,7 +554,7 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - task_result 默认必须进入可见转述、追问或任务更新；结合原请求与结果判断，不得作为环境背景静默丢弃。
 - task_result 必须 shouldCreateEpisode=true，使结果 episode 可通过 taskId/parentEpisodeId 追溯原任务；是否考虑长期记忆仍独立判断。
 - 普通碎碎念应保留 episode，但 shouldConsiderMemory=false；只有稳定偏好、重要经历、持续情绪或明确要求记住才考虑长期记忆。
-- ambient 是连续陪伴流：Attention 已选中的片段即使选择 listen_silently，也应 shouldCreateEpisode=true、shouldConsiderMemory=false，让它能并入会话总结；默认不要逐片回复。只有明确呼唤、紧急风险或用户明确要求实时反馈时才外显回复。
+- ambient 是连续陪伴流：普通片段默认 shouldConsiderMemory=false，持续事件由独立的 companion event 聚合器在事件结束时统一创建 episode/Memory，不能逐片形成长期记忆；默认不要逐片回复。只有明确呼唤、紧急风险或用户明确要求实时反馈时才外显回复。
 - draft_reminder 和 draft_question_list 是有结构化产物的动作，不能只写 reply。必须在 actionResult 里返回草稿内容；reply 是 Papo 对用户说出口的自然短回应。
 - use_hermes 是外部任务动作。当用户需要实时搜索、查网页/论文/新闻/天气、执行服务器或文件任务、定时发邮件、查询外部系统、长时间研究，且 Papo 内置 LLM 无法可靠完成时使用。必须在 actionResult 里返回 hermes_task，title 写任务标题，text 写给虾虾/Hermes 的清晰任务说明；reply 写 Papo 对用户说出口的短句，例如“我去问问虾虾，稍等哦”。不要把 Hermes 的任务说明直接当成 Papo 对用户说的话。
 - generate_illustration 是图像动作。当用户明确想要图、今天的片段很适合被画下来、或 Papo 想把一段真实回忆变成一张小画时使用。必须在 actionResult 里返回 illustration_draft：title 是图片标题，prompt 是给图像模型的具体绘图提示词，caption 是给用户看的短说明，style 是手绘/漫画/明信片/多分镜等风格建议，sourceIds 是你依据的 episode/memory/segment/attachment id。prompt 应优先使用真实照片附件、真实对话、音频观察和记忆里的事实，不要编造未发生的情节；可以要求“一张图多个分镜”或“像明信片的一幅画”。reply 只写 Papo 对用户说的短句，例如“我想把这件小事画下来给你看。”，不要把 prompt 直接说给用户。

@@ -100,6 +100,22 @@ export async function getProfile(userId: string): Promise<CreatureProfile> {
   return data.profile;
 }
 
+export async function registerCompanionSession(userId: string, id: string, startedAt: string) {
+  return request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/companion-sessions`, {
+    method: "POST",
+    headers: profileJsonHeaders(userId),
+    body: JSON.stringify({ id, startedAt })
+  });
+}
+
+export async function endCompanionSession(userId: string, sessionId: string, endedAt = new Date().toISOString()) {
+  return request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/companion-sessions/${encodeURIComponent(sessionId)}/end`, {
+    method: "PATCH",
+    headers: profileJsonHeaders(userId),
+    body: JSON.stringify({ endedAt })
+  });
+}
+
 export async function markPapoRead(userId: string, lastReadPapoMessageId?: string): Promise<CreatureProfile> {
   const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/read-state`, {
     method: "PATCH",
@@ -172,6 +188,7 @@ export interface AsyncTurnSegment {
   dataUrl?: string;
   observedAt?: string;
   batchId?: string;
+  companionSessionId?: string;
   location?: StreamSegment["location"];
   auditOnly?: boolean;
   sensingTrace?: SensingTrace;

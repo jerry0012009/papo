@@ -3,6 +3,7 @@ import path from "node:path";
 
 export interface NativeIngestPayload {
   batchId: string;
+  companionSessionId?: string;
   observedAt: string;
   cameraFacing?: "front" | "back";
   audioDataUrl?: string;
