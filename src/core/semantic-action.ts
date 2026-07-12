@@ -7,9 +7,9 @@ import { clientContextFor } from "./client-document";
 import { normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
 import { applyStateDelta } from "./state";
-import type { ActionResult, CaptureResult, CreatureProfile, SemanticBrainRecord } from "./types";
+import type { ActionResult, CaptureResult, CognitionContext, CreatureProfile, SemanticBrainRecord } from "./types";
 
-const actionSchema = z.enum(["observe", "respond", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list", "use_hermes", "generate_illustration", "generate_action_card", "update_pet_profile"]);
+const actionSchema = z.enum(["observe", "respond", "acknowledge", "listen_silently", "continue_own_activity", "defer", "ask", "save_episode", "save_long_term", "recall", "review", "quiet", "draft_reminder", "draft_question_list", "use_hermes", "generate_illustration", "generate_action_card", "update_pet_profile"]);
 const backgroundActionSchema = z.enum(["use_hermes", "generate_illustration", "generate_action_card"]);
 const actionResultKindSchema = z.enum(["none", "visible_reply", "memory_intent", "reminder_draft", "question_list_draft", "hermes_task", "illustration_draft", "action_card_draft", "pet_profile_update"]);
 const stateDeltaSchema = z
@@ -99,22 +99,23 @@ export async function semanticSelectAction(
   profile: CreatureProfile,
   result: CaptureResult,
   provider: ModelProvider,
-  source: SemanticBrainRecord["source"]
+  source: SemanticBrainRecord["source"],
+  context: CognitionContext = { inputSource: source === "button" ? "direct" : "ambient" }
 ): Promise<CaptureResult> {
   if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for action selection.");
   if (!result.events.length) return result;
 
-  const raw = await provider.generateJson<unknown>(buildSemanticActionPrompt(profile, result));
+  const raw = await provider.generateJson<unknown>(buildSemanticActionPrompt(profile, result, context));
   if (!raw) throw new Error("empty action model result");
   const parsed = semanticActionSchema.safeParse(raw);
   if (!parsed.success) throw new Error(`invalid action JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
-  const applied = applySemanticAction(profile, result, parsed.data);
+  const applied = applySemanticAction(profile, result, parsed.data, context);
   if (applied <= 0) throw new Error("action model did not select any known event");
   recordActionSemanticRun(profile, provider, source, applied);
   return result;
 }
 
-function applySemanticAction(profile: CreatureProfile, result: CaptureResult, suggestion: SemanticActionSuggestion) {
+function applySemanticAction(profile: CreatureProfile, result: CaptureResult, suggestion: SemanticActionSuggestion, context: CognitionContext) {
   const eventById = new Map(result.events.map((event) => [event.id, event]));
   const episodeByEventId = new Map(result.events.map((event, index) => [event.id, result.episodes[index]]));
   let applied = 0;
@@ -123,6 +124,7 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
     const event = eventById.get(decision.eventId);
     if (!event) continue;
 
+    validateSourceAction(event, decision, context);
     const guarded = guardActionDecision(event, profile, decision.action);
     const relatedMemoryIds = validRelatedMemoryIds(profile, decision.relatedMemoryIds);
     const stateDeltas = cleanStateDeltas(decision.stateDeltas);
@@ -196,7 +198,7 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
       event.actionStateDeltas = stateChangeDeltas(change);
       if (episode) episode.stateSnapshot = structuredClone(profile.state);
     }
-    applyPersistenceDecision(profile, result, episode, decision);
+    applyPersistenceDecision(profile, result, episode, decision, context, event);
     applied += 1;
   }
 
@@ -204,7 +206,7 @@ function applySemanticAction(profile: CreatureProfile, result: CaptureResult, su
 }
 
 function validatePersistenceDecision(decision: ActionDecisionSuggestion) {
-  if ((decision.action === "observe" || decision.action === "quiet") && (decision.shouldReply || decision.reply)) {
+  if (isSilentAction(decision.action) && (decision.shouldReply || decision.reply)) {
     throw new Error("action model selected a quiet/non-speaking action with a visible reply");
   }
   if (decision.shouldConsiderMemory && !decision.shouldCreateEpisode) {
@@ -244,6 +246,22 @@ function validatePersistenceDecision(decision: ActionDecisionSuggestion) {
     if (!decision.actionResult.petProfile || !Object.keys(decision.actionResult.petProfile).length) throw new Error("pet_profile_update actionResult requires petProfile fields");
     if (!decision.reply || decision.shouldReply === false) throw new Error("update_pet_profile requires a visible reply so the user knows Papo learned the profile change");
   }
+}
+
+function validateSourceAction(event: CaptureResult["events"][number], decision: ActionDecisionSuggestion, context: CognitionContext) {
+  if (context.inputSource === "direct" && event.expectsResponse && isSilentAction(decision.action)) {
+    throw new Error("direct input that expects a response cannot select a silent action");
+  }
+  if (context.inputSource === "task_result" && isSilentAction(decision.action)) {
+    throw new Error("task_result must be summarized, relayed, followed up, or update its task");
+  }
+  if (context.inputSource === "task_result" && !decision.shouldCreateEpisode) {
+    throw new Error("task_result must keep a result episode linked to its source task");
+  }
+}
+
+function isSilentAction(action: ActionDecisionSuggestion["action"]) {
+  return ["observe", "quiet", "listen_silently", "continue_own_activity", "defer"].includes(action);
 }
 
 function normalizeActionResult(decision: ActionDecisionSuggestion): ActionResult {
@@ -369,10 +387,19 @@ function applyPersistenceDecision(
   profile: CreatureProfile,
   result: CaptureResult,
   episode: CaptureResult["episodes"][number] | undefined,
-  decision: ActionDecisionSuggestion
+  decision: ActionDecisionSuggestion,
+  context: CognitionContext,
+  event: CaptureResult["events"][number]
 ) {
   if (!episode) return;
   if (!decision.shouldCreateEpisode) {
+    if (context.inputSource === "ambient") {
+      removeMemoryCandidatesForEpisode(profile, result, episode.id);
+      event.decisionTrace = [...(event.decisionTrace ?? []), "guardrail: selected ambient input keeps an episode even when the action is silent"];
+      episode.decisionTrace = event.decisionTrace;
+      episode.memoryCandidateIds = [];
+      return;
+    }
     removeEpisodeAndCandidates(profile, result, episode.id);
     return;
   }
@@ -471,7 +498,7 @@ function recordActionSemanticRun(profile: CreatureProfile, provider: ModelProvid
   profile.semanticBrainHistory = profile.semanticBrainHistory.slice(0, 30);
 }
 
-function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResult) {
+function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResult, context: CognitionContext) {
   return `请作为 Papo 的行动选择脑，为已经被注意到的事件选择下一步动作。
 
 系统提供可选动作和护栏。你负责判断此刻最自然的小动物行动：
@@ -482,7 +509,12 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - save_long_term：建议长期记住。
 - recall：带着旧记忆回应。
 - review：陪用户整理/复盘。
-- quiet：安静陪着。
+- acknowledge：用动作、表情或一句很短的反馈轻量回应。
+- listen_silently：确实听见并陪伴，但不产生可见回复。
+- observe：继续观察用户状态。
+- continue_own_activity：Papo 继续当前正在做的事情，不产生可见回复。
+- defer：当前不回应，但保留后续主动提及的可能。
+- quiet：旧数据兼容动作；新决策优先使用 listen_silently。
 - draft_reminder：形成提醒草稿。
 - draft_question_list：形成问题清单草稿。
 - use_hermes：把 Papo 自己无法完成、但外部 Hermes/虾虾可能能完成的任务交出去。
@@ -490,6 +522,7 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - generate_action_card：把当前小动物做某个具体动作生成一张动作关键帧，并渲染成 10 秒左右可播放动作卡。
 - update_pet_profile：当用户在对话里明确教 Papo 自己的小动物外观、性格、习惯、行为偏好或形象设定时，更新小动物 profile。
 
+当前认知来源是 ${context.inputSource}${context.taskId ? `，taskId=${context.taskId}` : ""}。
 每个 event 只能返回一条 decision。decision.action 是主要对话/记忆动作，reply 是可以立刻显示的主回复；如同一请求还需要画图、动作卡或 Hermes，在 actions 数组中同时返回 0..N 个后台动作。不要为同一 event 重复 decision，也不要为了后台动作牺牲快速文字回答。例如“回答问题并画一幅图”应使用 action=respond、reply=直接回答、actions=[generate_illustration]。
 
 护栏会再次校验：
@@ -507,7 +540,12 @@ function buildSemanticActionPrompt(profile: CreatureProfile, result: CaptureResu
 - 如果输入来自 image_summary 或事件带 attachments，说明用户主动给 Papo 看了照片，且原始图片资产可作为记忆的一部分被回看。照片通常是用户认为重要、想分享或想让 Papo 形成情景记忆的素材；除非图片摘要重复、无意义、不可用、明显只是误触或不适合保存，否则应倾向 shouldCreateEpisode=true，并在图片内容或用户说明值得日后回看时 shouldConsiderMemory=true。
 - 对带图片的事件形成 memoryCandidateText 时，要覆盖图片可见内容、用户给的说明、照片时间和地点；不要只写“用户上传了一张照片”。
 - 如果你只是想当下陪用户聊一句，不要把它送进记忆候选；如果这段输入没有可用生活信息，也可以选择不说话。
-- observe 和 quiet 表示不说话，不能同时填写 reply 或 shouldReply=true；如果要说话，请选择 respond、ask、recall、review、draft_reminder 或 draft_question_list。
+- listen_silently、observe、continue_own_activity、defer 和旧 quiet 都是合法处理结果，表示不说话，不能同时填写 reply 或 shouldReply=true。
+- direct 中 expectsResponse=true 表示明确提问、呼唤、求助或任务请求，必须 reply/acknowledge/execute，不得选择静默动作。expectsResponse=false 的碎碎念、情绪记录可以 listen_silently，但这不等于 Attention 忽略。
+- task_result 默认必须进入可见转述、追问或任务更新；结合原请求与结果判断，不得作为环境背景静默丢弃。
+- task_result 必须 shouldCreateEpisode=true，使结果 episode 可通过 taskId/parentEpisodeId 追溯原任务；是否考虑长期记忆仍独立判断。
+- 普通碎碎念应保留 episode，但 shouldConsiderMemory=false；只有稳定偏好、重要经历、持续情绪或明确要求记住才考虑长期记忆。
+- ambient 是连续陪伴流：Attention 已选中的片段即使选择 listen_silently，也应 shouldCreateEpisode=true、shouldConsiderMemory=false，让它能并入会话总结；默认不要逐片回复。只有明确呼唤、紧急风险或用户明确要求实时反馈时才外显回复。
 - draft_reminder 和 draft_question_list 是有结构化产物的动作，不能只写 reply。必须在 actionResult 里返回草稿内容；reply 是 Papo 对用户说出口的自然短回应。
 - use_hermes 是外部任务动作。当用户需要实时搜索、查网页/论文/新闻/天气、执行服务器或文件任务、定时发邮件、查询外部系统、长时间研究，且 Papo 内置 LLM 无法可靠完成时使用。必须在 actionResult 里返回 hermes_task，title 写任务标题，text 写给虾虾/Hermes 的清晰任务说明；reply 写 Papo 对用户说出口的短句，例如“我去问问虾虾，稍等哦”。不要把 Hermes 的任务说明直接当成 Papo 对用户说的话。
 - generate_illustration 是图像动作。当用户明确想要图、今天的片段很适合被画下来、或 Papo 想把一段真实回忆变成一张小画时使用。必须在 actionResult 里返回 illustration_draft：title 是图片标题，prompt 是给图像模型的具体绘图提示词，caption 是给用户看的短说明，style 是手绘/漫画/明信片/多分镜等风格建议，sourceIds 是你依据的 episode/memory/segment/attachment id。prompt 应优先使用真实照片附件、真实对话、音频观察和记忆里的事实，不要编造未发生的情节；可以要求“一张图多个分镜”或“像明信片的一幅画”。reply 只写 Papo 对用户说的短句，例如“我想把这件小事画下来给你看。”，不要把 prompt 直接说给用户。
@@ -575,7 +613,7 @@ actions 只放可独立后台执行的 use_hermes、generate_illustration、gene
 shouldCreateEpisode 决定这次是否应该留下为一条经历。
 shouldConsiderMemory 决定这次是否进入后续记忆判断；只有值得被之后记住、反馈、回忆或整理的事件才为 true。shouldConsiderMemory=true 时 shouldCreateEpisode 必须为 true。
 如果 action 是 save_episode 或 save_long_term，shouldCreateEpisode 必须为 true；如果 action 是 save_long_term，shouldConsiderMemory 必须为 true。
-如果 action 是 observe 或 quiet，shouldReply 必须为 false 或省略，reply 必须省略。
+如果 action 是 listen_silently、observe、continue_own_activity、defer 或 quiet，shouldReply 必须为 false 或省略，reply 必须省略。
 如果 action 是 use_hermes，shouldReply 必须为 true，reply 必须是给用户看的短回复，actionResult.text 才是给 Hermes 的任务。
 如果 action 是 generate_illustration，shouldReply 必须为 true，reply 必须是给用户看的短回复，actionResult.prompt 才是给图像模型的提示词。
 如果 action 是 generate_action_card，shouldReply 必须为 true，reply 必须是给用户看的短回复，actionResult.prompt 才是给媒体生成流程的提示词。

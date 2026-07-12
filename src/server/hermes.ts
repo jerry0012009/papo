@@ -4,8 +4,9 @@ import { ChannelType, Client, GatewayIntentBits, type GuildTextBasedChannel, typ
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
 import { runCuriousHarness } from "../core/harness";
 import { makeId } from "../core/ids";
+import { createEpisodeFromEvent } from "../core/memory";
 import type { ModelProvider } from "../core/provider";
-import type { CaptureResult, CreatureProfile, HermesTaskRecord, MessageCognitionTrace, SemanticBrainRecord, StreamSegment } from "../core/types";
+import type { CaptureResult, CognitionContext, ConversationJobRecord, ConversationTurnRecord, CreatureProfile, HermesTaskRecord, MessageCognitionTrace, PlannedAction, SemanticBrainRecord, StreamSegment } from "../core/types";
 import { loadServerEnv } from "./env";
 import type { ProfileStore } from "./store";
 
@@ -371,6 +372,12 @@ function hermesTasksFromResult(profile: CreatureProfile, result: CaptureResult):
   for (const event of result.events) {
     const actionResult = event.actionResult;
     if (event.actionDecision.action !== "use_hermes" || actionResult?.kind !== "hermes_task" || !actionResult.text?.trim()) continue;
+    let sourceEpisode = result.episodes.find((episode) => episode.sourceSegmentId === event.triggerSegmentId || episode.sourceBatchId === event.triggerBatchId);
+    if (!sourceEpisode) {
+      sourceEpisode = createEpisodeFromEvent(event, result.response, now);
+      result.episodes.push(sourceEpisode);
+      profile.episodes.unshift(sourceEpisode);
+    }
     const task: HermesTaskRecord = {
       id: makeId("hermes_task"),
       createdAt: now,
@@ -378,7 +385,8 @@ function hermesTasksFromResult(profile: CreatureProfile, result: CaptureResult):
       status: "pending",
       task: actionResult.text.trim(),
       title: actionResult.title?.trim(),
-      sourceEventId: event.id
+      sourceEventId: event.id,
+      sourceEpisodeId: sourceEpisode?.id
     };
     actionResult.hermesTaskId = task.id;
     tasks.push(task);
@@ -431,23 +439,43 @@ async function processHermesReplyWithProvider(
   sourceId = makeId("hermes_source")
 ) {
   const now = new Date().toISOString();
+  const task = taskId ? profile.hermes.tasks.find((item) => item.id === taskId) : latestOpenHermesTask(profile);
+  if (!task) throw new Error("Hermes result does not match an open task");
+  if (task.status === "completed" && task.resultMessageId) return;
+  const baseProfile = structuredClone(profile);
+  const sourceEpisode = task.sourceEpisodeId
+    ? profile.episodes.find((episode) => episode.id === task.sourceEpisodeId)
+    : profile.episodes.find((episode) => episode.actionResult?.hermesTaskId === task.id || episode.actionResult?.sourceIds?.includes(task.id))
+      ?? createLegacyHermesOrigin(profile, task, now);
+  if (!task.sourceEventId || !sourceEpisode) throw new Error("Hermes task is missing its source event or episode");
+  task.sourceEpisodeId = sourceEpisode.id;
+  const context: CognitionContext = {
+    inputSource: "task_result",
+    taskId: task.id,
+    sourceEventId: task.sourceEventId,
+    sourceEpisodeId: sourceEpisode.id
+  };
   const segment: StreamSegment = {
     id: makeId("hermes"),
     kind: "text",
     label: "虾虾的回复",
     content,
     observedAt: now,
-    batchId: `hermes-${sourceId}`
+    batchId: `hermes-${task.id}-${sourceId}`
   };
   const beforeSemanticIds = semanticRecordIds(profile);
-  const result = await runCuriousHarness(profile, [segment], provider, now);
+  const result = await runCuriousHarness(profile, [segment], provider, now, context);
+  const resultTurnId = `turn_hermes_${task.id}`.slice(0, 100);
+  const followUpJobs = taskResultJobs(resultTurnId, result, now);
   const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
   const cognitionTrace = captureCognitionTrace(result, provider, "curious_stream", modelRuns);
-  appendInputMessage(profile, {
+  const inputMessage = appendInputMessage(profile, {
     channel: "curious",
     role: "world",
     text: `${segment.label}：${segment.content}`,
     sourceId: segment.id,
+    turnId: resultTurnId,
+    requestId: resultTurnId,
     modality: "text",
     batchId: segment.batchId,
     observedAt: segment.observedAt,
@@ -457,16 +485,156 @@ async function processHermesReplyWithProvider(
     channel: "curious",
     text: result.response,
     sourceId: result.episodes[0]?.id ?? result.events[0]?.id ?? segment.id,
+    turnId: resultTurnId,
+    requestId: resultTurnId,
     relatedMemoryIds: result.events.flatMap((event) => event.relatedMemoryIds),
     cognitionTrace
   });
-  const task = taskId ? profile.hermes.tasks.find((item) => item.id === taskId) : latestOpenHermesTask(profile);
-  if (task) {
-    task.status = "completed";
-    task.resultMessageId = papoMessage?.id;
-    task.updatedAt = now;
+  const resultEpisode = result.episodes[0];
+  task.status = "completed";
+  task.resultMessageId = papoMessage?.id;
+  task.resultEpisodeId = resultEpisode?.id;
+  task.resultText = content.slice(0, 4_000);
+  task.updatedAt = now;
+  sourceEpisode.creatureResponse = result.response;
+  sourceEpisode.actionResult = {
+    ...(sourceEpisode.actionResult ?? { kind: "hermes_task" }),
+    hermesTaskId: task.id,
+    sourceIds: [...new Set([...(sourceEpisode.actionResult?.sourceIds ?? []), task.id, task.sourceEventId, sourceEpisode.id, resultEpisode?.id].filter(Boolean) as string[])]
+  };
+  const resultTurn: ConversationTurnRecord = {
+    id: resultTurnId,
+    requestId: resultTurnId,
+    channel: "curious",
+    status: followUpJobs.length ? "queued" : "completed",
+    createdAt: now,
+    updatedAt: now,
+    completedAt: followUpJobs.length ? undefined : now,
+    inputMessageIds: inputMessage ? [inputMessage.id] : [],
+    jobIds: followUpJobs.map((job) => job.id),
+    segments: [segment]
+  };
+  const resultEpisodeIds = new Set(result.episodes.map((episode) => episode.id));
+  const resultCandidateIds = new Set((result.memoryCandidates ?? []).map((candidate) => candidate.id));
+  const baseMemoryIds = new Set(baseProfile.longTermMemories.map((memory) => memory.id));
+  const ownedMemories = profile.longTermMemories.filter((memory) => !baseMemoryIds.has(memory.id) || memory.sourceEpisodeId === sourceEpisode.id);
+  const baseSemanticIds = new Set(baseProfile.semanticBrainHistory.map((record) => record.id));
+  const baseStateChangeKeys = new Set(baseProfile.stateChanges.map((change) => `${change.at}\u0000${change.reason}`));
+  const ownedStateChanges = profile.stateChanges.filter((change) => !baseStateChangeKeys.has(`${change.at}\u0000${change.reason}`));
+  const stateDelta = cognitionStateDelta(baseProfile, profile);
+  const saved = await store.updateProfile(profile.userId, (latest) => {
+    latest.state = applyCognitionStateDelta(latest, stateDelta);
+    latest.stateChanges = mergeByOwnedKey(latest.stateChanges, ownedStateChanges, (change) => `${change.at}\u0000${change.reason}`).slice(0, 80);
+    latest.episodes = mergeByOwnedId(latest.episodes, [sourceEpisode, ...result.episodes.filter((episode) => resultEpisodeIds.has(episode.id))]).slice(0, 80);
+    latest.memoryCandidates = mergeByOwnedId(latest.memoryCandidates, profile.memoryCandidates.filter((candidate) => resultCandidateIds.has(candidate.id))).slice(0, 80);
+    latest.longTermMemories = mergeByOwnedId(latest.longTermMemories, ownedMemories).slice(0, 80);
+    latest.semanticBrainHistory = mergeByOwnedId(latest.semanticBrainHistory, profile.semanticBrainHistory.filter((record) => !baseSemanticIds.has(record.id))).slice(0, 30);
+    latest.conversation = mergeByOwnedId(latest.conversation, [inputMessage, papoMessage].filter((message): message is NonNullable<typeof message> => Boolean(message))).slice(0, 80);
+    latest.hermes.tasks = mergeByOwnedId(latest.hermes.tasks, [task]).slice(0, 30);
+    latest.turns = mergeByOwnedId(latest.turns ?? [], [resultTurn]).slice(0, 80);
+    latest.jobs = mergeByOwnedId(latest.jobs ?? [], followUpJobs).slice(0, 240);
+    latest.hermes.sessionId = profile.hermes.sessionId ?? latest.hermes.sessionId;
+    latest.hermes.sessionName = profile.hermes.sessionName ?? latest.hermes.sessionName;
+  });
+  if (!saved) throw new Error("Profile disappeared before Hermes result commit");
+}
+
+function taskResultJobs(turnId: string, result: CaptureResult, now: string): ConversationJobRecord[] {
+  const jobs: ConversationJobRecord[] = [];
+  for (const event of result.events) {
+    const actions: PlannedAction[] = [
+      ...(event.backgroundActions ?? []),
+      ...(["generate_illustration", "generate_action_card", "use_hermes"].includes(event.actionDecision.action) && event.actionResult
+        ? [{ action: event.actionDecision.action, actionResult: event.actionResult } as PlannedAction]
+        : [])
+    ];
+    for (const [index, action] of actions.entries()) {
+      const type = action.action === "generate_illustration" ? "illustration" : action.action === "generate_action_card" ? "action_card" : action.action === "use_hermes" ? "hermes" : undefined;
+      if (!type) continue;
+      const episode = result.episodes.find((item) => item.sourceSegmentId === event.triggerSegmentId || item.sourceBatchId === event.triggerBatchId);
+      jobs.push({
+        id: `${turnId}-${type}-${event.id}-${index}`,
+        turnId,
+        requestId: turnId,
+        type,
+        stage: "action",
+        status: "queued",
+        attempt: 0,
+        maxAttempts: 3,
+        retryable: true,
+        createdAt: now,
+        updatedAt: now,
+        sourceIds: [...new Set([turnId, event.sourceTaskId, event.id, event.triggerSegmentId, episode?.id, ...(action.actionResult.sourceIds ?? [])].filter(Boolean) as string[])],
+        eventId: event.id,
+        event: structuredClone(event),
+        episodeId: episode?.id,
+        action: structuredClone(action)
+      });
+    }
   }
-  await store.saveProfile(profile);
+  return jobs;
+}
+
+function mergeByOwnedId<T extends { id: string }>(current: T[], owned: T[]) {
+  const ids = new Set(owned.map((item) => item.id));
+  return [...owned, ...current.filter((item) => !ids.has(item.id))];
+}
+
+function mergeByOwnedKey<T>(current: T[], owned: T[], keyOf: (item: T) => string) {
+  const ids = new Set(owned.map(keyOf));
+  return [...owned, ...current.filter((item) => !ids.has(keyOf(item)))];
+}
+
+function cognitionStateDelta(before: CreatureProfile, after: CreatureProfile) {
+  const keys = ["curiosity", "attachment", "energy", "arousal", "safety", "confidence"] as const;
+  return Object.fromEntries(keys.map((key) => [key, after.state[key] - before.state[key]])) as Record<typeof keys[number], number>;
+}
+
+function applyCognitionStateDelta(profile: CreatureProfile, delta: ReturnType<typeof cognitionStateDelta>) {
+  const state = structuredClone(profile.state);
+  for (const key of Object.keys(delta) as Array<keyof typeof delta>) state[key] = Math.max(0, Math.min(100, Math.round(state[key] + delta[key])));
+  state.mood = state.energy < 30 ? "tired" : state.safety > 74 ? "careful" : state.attachment > 70 ? "attached" : state.confidence > 70 && state.energy > 55 ? "bright" : state.arousal < 36 ? "calm" : "curious";
+  return state;
+}
+
+function createLegacyHermesOrigin(profile: CreatureProfile, task: HermesTaskRecord, now: string) {
+  task.sourceEventId ??= `hermes_origin_${task.id}`;
+  const episodeId = `episode_${task.id}`;
+  const existing = profile.episodes.find((episode) => episode.id === episodeId);
+  if (existing) return existing;
+  const episode = {
+    id: episodeId,
+    createdAt: task.createdAt || now,
+    source: "button" as const,
+    cognitionSource: "direct" as const,
+    sourceTaskId: task.id,
+    inputSummary: task.task,
+    noticed: "这是升级前交给 Hermes 的原始任务请求。",
+    possibleIntent: "等待外部任务结果",
+    importanceReason: "由旧 Hermes task 恢复原请求来源。",
+    relatedMemoryIds: [],
+    stateSnapshot: structuredClone(profile.state),
+    creatureResponse: "",
+    feedback: [],
+    promotedToLongTerm: false,
+    memoryCandidateIds: [],
+    actionDecision: {
+      action: "use_hermes" as const,
+      confidence: 100,
+      reason: "legacy Hermes task origin recovery",
+      blockedActions: [],
+      safetyNotes: [],
+      llmSuggestedAction: "use_hermes" as const,
+      ruleTrace: ["migration=legacy_hermes_task_origin"]
+    },
+    actionResult: { kind: "hermes_task" as const, title: task.title, text: task.task, hermesTaskId: task.id, sourceIds: [task.id] },
+    creatureExperience: { earReason: "", actionFeeling: "", saveFeeling: "" },
+    weight: 40,
+    tags: ["Hermes", "迁移"],
+    decisionTrace: ["migration: restored source episode from durable Hermes task"]
+  };
+  profile.episodes.unshift(episode);
+  return episode;
 }
 
 async function checkHermesTimeouts(store: ProfileStore, now: string) {
@@ -517,6 +685,12 @@ function captureCognitionTrace(
     model: provider.diagnostics?.textModel,
     modelRuns,
     harnessTrace: result.harnessTrace,
+    attentionDecision: result.curiousSession ? {
+      attentionBudget: result.curiousSession.attentionBudget,
+      selected: result.curiousSession.selected,
+      ignored: result.curiousSession.ignored,
+      creatureReport: result.curiousSession.creatureReport
+    } : undefined,
     eventDecisions: result.events.map((event) => {
       const episode = result.episodes.find((item) => item.sourceSegmentId === event.triggerSegmentId);
       const memoryCandidateKept = Boolean(result.memoryCandidates?.some((candidate) => candidate.sourceEpisodeId === episode?.id));

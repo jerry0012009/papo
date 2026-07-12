@@ -5,7 +5,7 @@ import { clientContextFor } from "./client-document";
 import { memoryShortTitle, normalizeSharedMemoryText, toCreatureMemoryVoice } from "./memory";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
-import type { CreatureProfile, MemoryCandidate } from "./types";
+import type { CognitionContext, CreatureProfile, MemoryCandidate } from "./types";
 
 const memoryKindSchema = z.enum(["user_preference", "long_theme", "creature_self_memory", "safety_rule", "future_review", "relationship", "habit", "open_question"]);
 const writePolicySchema = z.enum(["auto", "ask_user", "wait_feedback", "do_not_save"]);
@@ -53,12 +53,17 @@ const semanticMemorySchema = z.object({
 
 type SemanticMemorySuggestion = z.infer<typeof semanticMemorySchema>;
 
-export async function semanticDecideMemory(profile: CreatureProfile, candidates: MemoryCandidate[], provider: ModelProvider): Promise<MemoryCandidate[]> {
+export async function semanticDecideMemory(
+  profile: CreatureProfile,
+  candidates: MemoryCandidate[],
+  provider: ModelProvider,
+  context: CognitionContext = { inputSource: "direct" }
+): Promise<MemoryCandidate[]> {
   const activeCandidates = candidates.filter((candidate) => candidate.status === "candidate");
   if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for memory decisions.");
   if (!activeCandidates.length) return candidates;
 
-  const raw = await provider.generateJson<unknown>(buildSemanticMemoryPrompt(profile, activeCandidates));
+  const raw = await provider.generateJson<unknown>(buildSemanticMemoryPrompt(profile, activeCandidates, context));
   if (!raw) throw new Error("empty memory model result");
   const parsed = semanticMemorySchema.safeParse(raw);
   if (!parsed.success) throw new Error(`invalid memory JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
@@ -140,9 +145,14 @@ function recordMemorySemanticRun(profile: CreatureProfile, provider: ModelProvid
   profile.semanticBrainHistory = profile.semanticBrainHistory.slice(0, 30);
 }
 
-function buildSemanticMemoryPrompt(profile: CreatureProfile, candidates: MemoryCandidate[]) {
+function buildSemanticMemoryPrompt(profile: CreatureProfile, candidates: MemoryCandidate[], context: CognitionContext) {
   const episodesById = new Map(profile.episodes.map((episode) => [episode.id, episode]));
+  const originalEpisode = context.sourceEpisodeId ? episodesById.get(context.sourceEpisodeId) : undefined;
+  const originalTask = context.taskId ? profile.hermes.tasks.find((task) => task.id === context.taskId) : undefined;
   return `请作为 Papo 的记忆决策脑，在这次真实互动形成的候选记忆上做具体判断。
+
+当前认知来源：${context.inputSource}${context.taskId ? `，taskId=${context.taskId}` : ""}。
+${context.inputSource === "task_result" ? "这是外部任务结果。必须结合原请求与返回结果判断，优先更新原 episode 对应的候选/记忆，不要把请求和结果各写成一条重复长期记忆。" : ""}
 
 候选里的 sourceMaterial 只是用户原始材料或行动脑给出的草稿，不是系统结论。
 initialMemoryKind、initialConfidence、initialWritePolicy 是存储结构占位，不代表规则已经判断过这件事。
@@ -222,6 +232,20 @@ ${JSON.stringify(modelConversationContext(profile))}
 
 recent_feedback:
 ${JSON.stringify(modelFeedbackContext(profile.feedbackHistory))}
+
+task_result_origin:
+${JSON.stringify(context.inputSource === "task_result" ? {
+  taskId: context.taskId,
+  task: originalTask?.task,
+  sourceEventId: context.sourceEventId,
+  sourceEpisode: originalEpisode ? {
+    id: originalEpisode.id,
+    inputSummary: originalEpisode.inputSummary,
+    possibleIntent: originalEpisode.possibleIntent,
+    creatureResponse: originalEpisode.creatureResponse,
+    existingMemory: profile.longTermMemories.find((memory) => memory.sourceEpisodeId === originalEpisode.id && memory.weight > 0)
+  } : undefined
+} : undefined)}
 
 candidates:
 ${JSON.stringify(candidates.map((candidate) => {

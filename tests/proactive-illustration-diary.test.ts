@@ -87,6 +87,9 @@ const provider: ModelProvider = {
     return "";
   },
   async generateImage(prompt) {
+    const persistedBeforeMedia = await store.getProfile("diary-user");
+    assert.ok(persistedBeforeMedia?.emergenceHistory.some((item) => item.message.includes("泳池")), "emergence must be persisted before media starts");
+    assert.ok(persistedBeforeMedia?.conversation.some((item) => item.channel === "emergence" && item.text.includes("泳池")), "emergence conversation must be persisted before media starts");
     imagePrompt = prompt;
     return {
       dataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
@@ -112,5 +115,6 @@ const message = current?.conversation.find((item) => item.channel === "emergence
 assert.ok(message?.attachments?.[0]?.url, "proactive diary message should carry illustration attachment");
 assert.equal(message.cognitionTrace?.emergenceDecision?.actionResult?.kind, "illustration");
 assert.equal(message.cognitionTrace?.emergenceDecision?.actionResult?.plan?.summary.includes("泳池"), true);
+assert.equal(current?.semanticBrainHistory.filter((run) => run.stage === "memory").length ?? 0, 0, "media completion must not execute Memory");
 
 console.log(JSON.stringify({ ok: true, image: message.attachments[0].url }, null, 2));

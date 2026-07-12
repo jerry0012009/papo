@@ -45,7 +45,10 @@ const provider: ModelProvider = {
   },
   async observeAudio() {
     audioCalls += 1;
-    await audioGate;
+    if (audioCalls === 1) {
+      await audioGate;
+      return "ERROR_AUDIO_UNREADABLE";
+    }
     return "能听见有人说今天工作已经结束。";
   },
   async generateImage() {
@@ -63,7 +66,7 @@ const app = createApp({
   store,
   provider,
   deviceAuth,
-  nativeIngest: { directory: path.join(tempDir, "native-ingest"), intervalMs: 10, autoStart: false },
+  nativeIngest: { directory: path.join(tempDir, "native-ingest"), intervalMs: 10, autoStart: false, audioDirectory: path.join(tempDir, "transient-audio"), audioRetentionMs: 24 * 60 * 60_000 },
   proactive: { enabled: false },
   hermes: { enabled: false }
 });
@@ -105,7 +108,7 @@ try {
 
   await waitFor(async () => {
     const current = await store.getProfile("native-listening-user");
-    return current?.conversation.filter((message) => message.batchId === body.batchId).length === 2;
+    return current?.turns?.find((turn) => turn.id.includes(body.batchId))?.status === "completed";
   });
 
   const current = await store.getProfile("native-listening-user");
@@ -114,6 +117,10 @@ try {
   assert.equal(nativeInputs.length, 2);
   assert.deepEqual(new Set(nativeInputs.map((message) => message.sourceId)), new Set([`${body.batchId}:audio`, `${body.batchId}:image`]));
   assert.equal(nativeInputs.every((message) => message.attachments?.length === 0), true, "periodic camera frames must not persist raw images");
+  const audioInput = nativeInputs.find((message) => message.modality === "audio_observation");
+  assert.match(audioInput?.sensingTrace?.retainedAudio?.id ?? "", /^tmpaud_/);
+  assert.equal(audioInput?.sensingTrace?.attempts, 2, "unreadable native audio should retry once before settling");
+  assert.equal(audioInput?.cognitionTrace?.modelRuns.some((run) => run.stage === "attention"), true, "silent/ignored native turns must retain cognition trace on their input");
 
   const retry = await fetch(url, {
     method: "POST",
@@ -123,7 +130,7 @@ try {
   const retryPayload = await retry.json();
   assert.equal(retry.status, 200);
   assert.equal(retryPayload.duplicate, true);
-  assert.equal(audioCalls, 1);
+  assert.equal(audioCalls, 2);
   assert.equal(imageCalls, 1);
 
   const unauthorized = await fetch(url, {
@@ -140,6 +147,7 @@ try {
   assert.equal(passwordlessUnauthorized.status, 401, "native ingest must never fall back to passwordless profile access");
   console.log(JSON.stringify({ ok: true, batchId: body.batchId }, null, 2));
 } finally {
+  app.locals.transientAudioStore.stop();
   server.close();
   await rm(tempDir, { recursive: true, force: true });
 }

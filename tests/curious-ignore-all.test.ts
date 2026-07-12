@@ -82,6 +82,7 @@ try {
   assert.ok(input);
   assert.equal(input.cognitionTrace?.modelRuns.some((run) => run.stage === "attention" && /ignored all/.test(run.message)), true);
   assert.equal(input.cognitionTrace?.harnessTrace.includes("semantic: llm ignored all candidates"), true);
+  assert.equal(input.cognitionTrace?.attentionDecision?.ignored[0]?.whyIgnored.includes("背景噪音"), true);
   console.log(JSON.stringify({ ok: true }, null, 2));
 } finally {
   server.close();

@@ -105,7 +105,7 @@ const provider: ModelProvider = {
             emotionalTone: "平静",
             reason: "任务完成。",
             stateDeltas: { confidence: 1 },
-            shouldCreateEpisode: false,
+            shouldCreateEpisode: true,
             shouldConsiderMemory: false,
             shouldReply: true,
             reply: "虾虾回来了。"

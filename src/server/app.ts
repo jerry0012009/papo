@@ -24,6 +24,8 @@ import { enrichMemoryExperience, markMemoriesPending, queueMemoryEnrichment } fr
 import { createWebPushService, PushNotifyingProfileStore, type WebPushService } from "./push";
 import { JsonProfileStore, type ProfileStore } from "./store";
 import { PersistentTurnWorker } from "./turn-worker";
+import { TransientAudioStore, type RetainedAudioAsset } from "./transient-audio";
+import { collectCompanionTurn, runCompanionSessionSweep } from "./companion-session";
 
 const createProfileSchema = z.object({
   userId: z.string().min(3).max(40).regex(/^[a-zA-Z0-9_-]+$/).optional(),
@@ -194,7 +196,7 @@ export function createApp(input: {
   provider?: ModelProvider;
   push?: WebPushService;
   deviceAuth?: DeviceAuthService;
-  nativeIngest?: { directory?: string; intervalMs?: number; autoStart?: boolean };
+  nativeIngest?: { directory?: string; intervalMs?: number; autoStart?: boolean; audioDirectory?: string; audioRetentionMs?: number; audioCleanupIntervalMs?: number };
   proactive?: { enabled?: boolean; intervalMs?: number };
   hermes?: { enabled?: boolean; bridge?: HermesBridge };
   turns?: { autoStart?: boolean; concurrency?: number; intervalMs?: number };
@@ -207,6 +209,13 @@ export function createApp(input: {
   const hermesBridge = input.hermes?.bridge ?? (input.hermes?.enabled ? createHermesBridge({ store, provider }) : undefined);
   const app = express();
   const nativeBatchLocks = new Map<string, Promise<void>>();
+  const transientAudioStore = new TransientAudioStore(
+    input.nativeIngest?.audioDirectory,
+    input.nativeIngest?.audioRetentionMs,
+    input.nativeIngest?.audioCleanupIntervalMs
+  );
+  transientAudioStore.start();
+  app.locals.transientAudioStore = transientAudioStore;
 
   const turnWorker = new PersistentTurnWorker({
     store,
@@ -221,7 +230,7 @@ export function createApp(input: {
     markProactiveUserResponse(profile);
     const beforeMemoryIds = activeMemorySignatures(profile);
     const beforeSemanticIds = semanticRecordIds(profile);
-    const result = await runCuriousHarness(profile, segments, provider);
+    const result = await runCuriousHarness(profile, segments, provider, new Date().toISOString(), { inputSource: "ambient" });
     await hermesBridge?.enqueueTasks(profile, result);
     applyPetProfileActionResults(profile, result);
     const illustrationAttachments = await executeIllustrationActions(profile, result, provider, "action");
@@ -287,6 +296,8 @@ export function createApp(input: {
         if (!stored) return;
         stored.content = content;
         stored.sensingTrace = trace;
+        const turn = profile.turns?.find((item) => item.id === job.turnId);
+        if (turn) collectCompanionTurn(profile, turn.id, [stored]);
         const message = profile.conversation.find((item) => item.turnId === job.turnId && item.sourceId === job.segmentId);
         if (message) {
           message.text = `${stored.label}：${content || (trace.status === "unreadable" ? "音频无法读取" : "没有识别到可用内容")}`;
@@ -312,13 +323,16 @@ export function createApp(input: {
     markProactiveUserResponse(profile);
     const beforeMemoryIds = activeMemorySignatures(profile);
     const beforeSemanticIds = semanticRecordIds(profile);
+    const cognitionContext = { inputSource: isAmbientTurn(turn) ? "ambient" as const : "direct" as const };
     const result = turn.channel === "button" && turn.segments.length === 1 && turn.segments[0].kind === "text"
-      ? await runButtonHarness(profile, turn.segments[0].content, provider)
-      : await runCuriousHarness(profile, turn.segments, provider);
+      ? await runButtonHarness(profile, turn.segments[0].content, provider, new Date().toISOString(), cognitionContext)
+      : await runCuriousHarness(profile, turn.segments, provider, new Date().toISOString(), cognitionContext);
     applyPetProfileActionResults(profile, result);
     const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
     const sensingTraces = turn.segments.flatMap((segment) => segment.sensingTrace ? [segment.sensingTrace] : []);
     const cognitionTrace = captureCognitionTrace(result, provider, turn.channel === "button" ? "button" : "curious_stream", modelRuns, sensingTraces);
+    const inputMessages = profile.conversation.filter((message) => turn.inputMessageIds.includes(message.id));
+    for (const message of inputMessages) message.cognitionTrace = cognitionTrace;
     const reply = appendPapoMessage(profile, {
       channel: turn.channel,
       text: result.response,
@@ -335,7 +349,7 @@ export function createApp(input: {
     profile.jobs = [...childJobs, ...(profile.jobs ?? [])].filter((item, index, list) => list.findIndex((other) => other.id === item.id) === index).slice(0, 240);
     turn.jobIds = [...new Set([...turn.jobIds, ...childJobs.map((item) => item.id)])];
     const saved = await store.updateProfile(userId, (latest) => {
-      commitCognitionOwnedRecords(latest, baseProfile, profile, result, reply, childJobs, job);
+      commitCognitionOwnedRecords(latest, baseProfile, profile, result, inputMessages, reply, childJobs, job);
     });
     if (!saved) throw new Error("Profile disappeared before cognition commit");
     result.profile = saved;
@@ -344,7 +358,14 @@ export function createApp(input: {
       messageId: reply?.id,
       episodeIds: result.episodes.map((episode) => episode.id),
       memoryIds: enrichedMemoryIds,
-      memorySourceIds: [turn.id, job.id]
+      memorySourceIds: [turn.id, job.id],
+      cognition: {
+        inputSource: cognitionContext.inputSource,
+        attention: result.events.length ? "selected" as const : "ignored" as const,
+        actions: result.events.map((event) => event.actionDecision.action),
+        visibleReply: Boolean(reply),
+        episodeIds: result.episodes.map((episode) => episode.id)
+      }
     };
   }
 
@@ -463,9 +484,11 @@ export function createApp(input: {
 
       const segments: StreamSegment[] = [];
       if (body.audioDataUrl) {
+        const retainedAudio = await transientAudioStore.save(userId, body.batchId, body.audioDataUrl, new Date());
         const prompt = `请直接理解这段音频，写成一段给 Papo 后续注意机制使用的中文生活观察。只描述能直接听见的事实、明确听清的说话内容、环境声类型或正在发生的事；不能猜测人声、文字、看不见的物体、身份或原因，不能把非语音声音当成说话；不确定就写“不确定的声音”。最多 400 字；如果没有可用生活信息，返回空文本。如果你无法读取或处理这段音频，只返回 ERROR_AUDIO_UNREADABLE。标签：Android 后台倾听`;
-        const observation = normalizeAudioObservation((await observeAudioForSensing(provider, body.audioDataUrl, prompt)).slice(0, 1200));
-        const sensingTrace = audioSensingTrace(provider, "Android 后台倾听", observation);
+        const sensed = await observeAudioWithUnreadableRetry(provider, body.audioDataUrl, prompt);
+        const observation = sensed.observation;
+        const sensingTrace = audioSensingTrace(provider, "Android 后台倾听", observation, { attempts: sensed.attempts, retainedAudio });
         segments.push({
           id: `${body.batchId}:audio`,
           kind: "audio_observation",
@@ -524,6 +547,7 @@ export function createApp(input: {
       const turn: ConversationTurnRecord = { id: turnId, requestId: turnId, channel: "curious", status: "queued", createdAt: now, updatedAt: now, inputMessageIds, jobIds: [cognitionJob.id], segments };
       profile.turns = [turn, ...(profile.turns ?? [])].slice(0, 80);
       profile.jobs = [cognitionJob, ...(profile.jobs ?? [])].slice(0, 240);
+      collectCompanionTurn(profile, turnId, segments);
     });
     if (!saved) throw new Error("Profile disappeared before companion turn commit");
     turnWorker.wake();
@@ -532,7 +556,8 @@ export function createApp(input: {
   const nativeIngestQueue = new NativeIngestQueue(
     processNativeBatch,
     input.nativeIngest?.directory,
-    input.nativeIngest?.intervalMs
+    input.nativeIngest?.intervalMs,
+    input.nativeIngest?.audioRetentionMs
   );
   if (input.nativeIngest?.autoStart !== false) nativeIngestQueue.start();
 
@@ -884,6 +909,7 @@ export function createApp(input: {
         };
         profile.turns = [turn, ...(profile.turns ?? [])].slice(0, 80);
         profile.jobs = [...sensingJobs, cognitionJob, ...(profile.jobs ?? [])].slice(0, 240);
+        collectCompanionTurn(profile, turn.id, segments.filter((segment) => Boolean(segment.sensingTrace)));
       });
       if (!saved) throw new HttpError(404, "Profile not found");
       const turn = saved.turns?.find((item) => item.id === body.turnId || item.requestId === body.requestId);
@@ -1104,7 +1130,8 @@ export function createApp(input: {
         cognitionTrace
       });
       await store.saveProfile(profile);
-      queueEmergenceActionCardGeneration({ store, userId: profile.userId, emergence, provider });
+      void queueEmergenceIllustrationGeneration({ store, userId: profile.userId, emergence, provider });
+      void queueEmergenceActionCardGeneration({ store, userId: profile.userId, emergence, provider });
       res.json({ profile: publicProfile(profile), emergence: { ...emergence, cognitionTrace } });
     } catch (error) {
       next(error);
@@ -1211,6 +1238,7 @@ export function startProactiveEmergenceLoop(store: ProfileStore, provider: Model
       await runAutomaticDreamingSweep(store, provider);
       await runDogStateSweep(store, provider);
       await hermesBridge?.checkTimeouts();
+      await runCompanionSessionSweep(store, provider);
       await runProactiveEmergenceSweep(store, provider);
     } catch (error) {
       console.error("Background cognition sweep failed", error);
@@ -1294,7 +1322,6 @@ export async function runProactiveEmergenceSweep(store: ProfileStore, provider: 
     const beforeSemanticIds = semanticRecordIds(profile);
     try {
       const emergence = await semanticDecideEmergence(profile, provider, now, { delivery: "proactive" });
-      const emergenceAttachments = await executeEmergenceIllustration(profile, emergence, provider, now);
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const cognitionTrace = emergenceCognitionTrace(emergence, provider, modelRuns);
       settleProactiveEmergence(profile, emergence, now);
@@ -1304,16 +1331,19 @@ export async function runProactiveEmergenceSweep(store: ProfileStore, provider: 
           text: emergence.text,
           sourceId: emergence.id,
           relatedMemoryIds: emergence.relatedMemoryIds,
-          attachments: emergenceAttachments,
+          attachments: [],
           cognitionTrace,
           at: now
         });
-        queueEmergenceActionCardGeneration({ store, userId: profile.userId, emergence, provider });
         active += 1;
       } else {
         quiet += 1;
       }
       await store.saveProfile(profile);
+      await Promise.all([
+        queueEmergenceIllustrationGeneration({ store, userId: profile.userId, emergence, provider }),
+        queueEmergenceActionCardGeneration({ store, userId: profile.userId, emergence, provider })
+      ]);
     } catch (error) {
       console.error(`Proactive emergence failed for ${summary.userId}`, error);
       deferProactiveEmergence(profile, now, 30);
@@ -1618,19 +1648,64 @@ function queueEmergenceActionCardGeneration(input: {
   emergence: EmergenceRecord & { text: string; memoryId?: string };
   provider: ModelProvider;
 }) {
-  if (input.emergence.actionResult?.kind !== "action_card_draft" || !input.emergence.actionResult.prompt?.trim()) return;
-  void (async () => {
+  if (input.emergence.actionResult?.kind !== "action_card_draft" || !input.emergence.actionResult.prompt?.trim()) return Promise.resolve();
+  return (async () => {
     try {
       const profile = await input.store.getProfile(input.userId);
       if (!profile) return;
-      const attachments = await executeEmergenceActionCard(profile, input.emergence, input.provider, new Date().toISOString());
+      const storedEmergence = profile.emergenceHistory.find((item) => item.id === input.emergence.id);
+      if (!storedEmergence || storedEmergence.actionResult?.kind !== "action_card_draft") return;
+      const attachments = await executeEmergenceActionCard(profile, storedEmergence as EmergenceRecord & { text: string }, input.provider, new Date().toISOString());
       if (!attachments.length) return;
-      applyEmergenceActionCardCompletion(profile, input.emergence, attachments);
-      await input.store.saveProfile(profile);
+      applyEmergenceActionCardCompletion(profile, storedEmergence, attachments);
+      const created = (profile.actionCards ?? []).find((card) => attachments.some((attachment) => attachment.id === card.video.id));
+      await input.store.updateProfile(input.userId, (latest) => {
+        if (created) latest.actionCards = mergeOwnedById(latest.actionCards ?? [], [created]).slice(0, 30);
+        patchEmergenceMedia(latest, storedEmergence, attachments);
+      });
     } catch (error) {
       console.error(`Emergence action card generation failed for ${input.userId}`, error);
     }
   })();
+}
+
+function queueEmergenceIllustrationGeneration(input: {
+  store: ProfileStore;
+  userId: string;
+  emergence: EmergenceRecord & { text: string; memoryId?: string };
+  provider: ModelProvider;
+}) {
+  if (input.emergence.actionResult?.kind !== "illustration_draft" || !input.emergence.actionResult.prompt?.trim()) return Promise.resolve();
+  return (async () => {
+    try {
+      const profile = await input.store.getProfile(input.userId);
+      const storedEmergence = profile?.emergenceHistory.find((item) => item.id === input.emergence.id);
+      if (!profile || !storedEmergence || storedEmergence.actionResult?.kind !== "illustration_draft") return;
+      const attachments = await executeEmergenceIllustration(profile, storedEmergence as EmergenceRecord & { text: string }, input.provider, new Date().toISOString());
+      if (!attachments.length) return;
+      const created = (profile.illustrations ?? []).find((illustration) => attachments.some((attachment) => attachment.id === illustration.attachment.id));
+      await input.store.updateProfile(input.userId, (latest) => {
+        if (created) latest.illustrations = mergeOwnedById(latest.illustrations ?? [], [created]).slice(0, 30);
+        patchEmergenceMedia(latest, storedEmergence, attachments);
+      });
+    } catch (error) {
+      console.error(`Emergence illustration generation failed for ${input.userId}`, error);
+    }
+  })();
+}
+
+function patchEmergenceMedia(profile: CreatureProfile, computed: EmergenceRecord, attachments: MediaAttachment[]) {
+  const emergence = profile.emergenceHistory.find((item) => item.id === computed.id);
+  if (emergence) emergence.actionResult = computed.actionResult;
+  const message = profile.conversation.find((item) => item.sourceId === computed.id && item.role === "papo");
+  if (message) {
+    message.attachments = mergeAttachmentsById(message.attachments ?? [], attachments);
+    if (message.cognitionTrace?.emergenceDecision) message.cognitionTrace.emergenceDecision.actionResult = computed.actionResult;
+  }
+}
+
+function mergeAttachmentsById(current: MediaAttachment[], incoming: MediaAttachment[]) {
+  return [...incoming, ...current].filter((item, index, list) => list.findIndex((other) => other.id === item.id) === index);
 }
 
 function applyActionCardCompletion(profile: CreatureProfile, result: CaptureResult, attachments: MediaAttachment[]) {
@@ -2511,6 +2586,10 @@ function plannedConversationJobs(turn: ConversationTurnRecord, parent: Conversat
   return jobs;
 }
 
+function isAmbientTurn(turn: ConversationTurnRecord) {
+  return turn.id.startsWith("turn_live_") || turn.id.startsWith("turn_native_");
+}
+
 function memoryEnrichmentJobs(turn: ConversationTurnRecord, parent: ConversationJobRecord, memoryIds: string[]): ConversationJobRecord[] {
   const now = new Date().toISOString();
   return [...new Set(memoryIds)].map((memoryId) => ({
@@ -2535,6 +2614,7 @@ function commitCognitionOwnedRecords(
   base: CreatureProfile,
   computed: CreatureProfile,
   result: CaptureResult,
+  inputMessages: CreatureProfile["conversation"],
   reply: CreatureProfile["conversation"][number] | undefined,
   childJobs: ConversationJobRecord[],
   parentJob: ConversationJobRecord
@@ -2553,6 +2633,7 @@ function commitCognitionOwnedRecords(
   latest.longTermMemories = mergeOwnedById(latest.longTermMemories, ownedMemories).slice(0, 80);
   const baseSemanticIds = new Set(base.semanticBrainHistory.map((item) => item.id));
   latest.semanticBrainHistory = mergeOwnedById(latest.semanticBrainHistory, computed.semanticBrainHistory.filter((item) => !baseSemanticIds.has(item.id))).slice(0, 30);
+  latest.conversation = mergeOwnedById(latest.conversation, inputMessages).slice(0, 80);
   if (reply) latest.conversation = mergeOwnedById(latest.conversation, [reply]).slice(0, 80);
   latest.jobs = mergeOwnedById(latest.jobs ?? [], childJobs).slice(0, 240);
   const turn = latest.turns?.find((item) => item.id === parentJob.turnId);
@@ -2650,6 +2731,12 @@ function captureCognitionTrace(
     sensingTraces,
     modelRuns,
     harnessTrace: result.harnessTrace ?? [],
+    attentionDecision: result.curiousSession ? {
+      attentionBudget: result.curiousSession.attentionBudget,
+      selected: result.curiousSession.selected,
+      ignored: result.curiousSession.ignored,
+      creatureReport: result.curiousSession.creatureReport
+    } : undefined,
     eventDecisions: result.events.map((event) => {
       const episode = result.episodes.find((item) => item.sourceSegmentId === event.triggerSegmentId || item.id === event.triggerSegmentId);
       const memoryCandidateKept = Boolean(episode && (result.memoryCandidates ?? []).some((candidate) => candidate.sourceEpisodeId === episode.id));
@@ -2922,9 +3009,9 @@ function normalizeAudioObservation(text: string) {
 }
 
 function nativeAudioAuditSummary(status: SensingTrace["status"]) {
-  if (status === "unreadable") return "这 30 秒的后台录音没有整理出可用内容。";
-  if (status === "empty") return "这 30 秒里没有听到需要继续处理的内容。";
-  return "这 30 秒里没有形成需要继续处理的声音线索。";
+  if (status === "unreadable") return "这段后台录音没有整理出可用内容。";
+  if (status === "empty") return "这段后台录音里没有听到需要继续处理的内容。";
+  return "这段后台录音里没有形成需要继续处理的声音线索。";
 }
 
 function isEmptyAudioObservation(text: string) {
@@ -2946,11 +3033,12 @@ function isEmptyAudioObservation(text: string) {
 function audioSensingTrace(
   provider: ModelProvider,
   label: string,
-  observation: ReturnType<typeof normalizeAudioObservation>
+  observation: ReturnType<typeof normalizeAudioObservation>,
+  options: { attempts?: number; retainedAudio?: RetainedAudioAsset } = {}
 ): SensingTrace {
   const status: SensingTrace["status"] = observation.text ? "content" : observation.unreadable ? "unreadable" : "empty";
   const decision = observation.text
-    ? "音频模型读到了可用的生活信息；规则把它作为 audio_observation 放入当前 30 秒批次，交给注意 LLM 决定是否继续处理。"
+    ? "音频模型读到了可用的生活信息；规则把它作为 audio_observation 放入当前录音切片，交给注意 LLM 决定是否继续处理。"
     : observation.unreadable
       ? "音频模型没有读出可用生活信息或认为音频不可读；规则只结算这段音频，不把它伪造成对话事件。"
       : "音频模型判断这段没有可用生活信息；规则只结算这段音频，不进入注意、行动或记忆流程。";
@@ -2965,12 +3053,26 @@ function audioSensingTrace(
     status,
     decision,
     observation: observation.text || undefined,
+    attempts: options.attempts ?? 1,
+    errorKind: status === "unreadable" ? "unreadable" : status === "empty" ? "empty" : undefined,
+    retainedAudio: options.retainedAudio,
     ruleTrace: [
       "sensing: call audio-capable model",
       `status=${status}`,
+      `attempts=${options.attempts ?? 1}`,
+      options.retainedAudio ? `retained_audio=${options.retainedAudio.id}` : "retained_audio=none",
       observation.text ? "route=curious_candidate" : "route=settle_audio_batch_only"
     ]
   };
+}
+
+async function observeAudioWithUnreadableRetry(provider: ModelProvider, dataUrl: string, prompt: string) {
+  let observation = { text: "", unreadable: true };
+  for (let attempts = 1; attempts <= 2; attempts += 1) {
+    observation = normalizeAudioObservation((await observeAudioForSensing(provider, dataUrl, prompt)).slice(0, 1200));
+    if (!observation.unreadable || attempts === 2) return { observation, attempts };
+  }
+  return { observation, attempts: 2 };
 }
 
 function imageSensingTrace(provider: ModelProvider, label: string, summary: string): SensingTrace {
@@ -2986,7 +3088,7 @@ function imageSensingTrace(provider: ModelProvider, label: string, summary: stri
     semanticSource: "llm",
     status,
     decision: observation
-      ? "视觉模型读到了可用的图片信息；规则把它作为 image_summary 放入当前事件或 30 秒批次，交给注意 LLM 决定是否继续处理。"
+      ? "视觉模型读到了可用的图片信息；规则把它作为 image_summary 放入当前事件或陪伴批次，交给注意 LLM 决定是否继续处理。"
       : "视觉模型没有读到可用图片信息；规则不把它伪造成对话事件，也不进入注意、行动或记忆流程。",
     observation: observation || undefined,
     ruleTrace: [

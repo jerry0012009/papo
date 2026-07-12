@@ -27,6 +27,7 @@ import java.util.concurrent.TimeUnit;
 
 final class ListeningBatchUploader {
     private static final String WORK_NAME = "papo-listening-upload";
+    private static final long MEDIA_RETENTION_MS = 24L * 60L * 60L * 1000L;
     private static final Object UPLOAD_LOCK = new Object();
 
     private ListeningBatchUploader() {}
@@ -75,6 +76,10 @@ final class ListeningBatchUploader {
             Arrays.sort(batches, Comparator.comparing(File::getName));
             for (File batch : batches) {
                 try {
+                    if (System.currentTimeMillis() - batch.lastModified() >= MEDIA_RETENTION_MS) {
+                        deleteBatchFiles(context, batch);
+                        continue;
+                    }
                     if (!uploadOne(context, config, batch)) return false;
                 } catch (Exception error) {
                     return false;
@@ -159,6 +164,19 @@ final class ListeningBatchUploader {
         if (name == null || name.isEmpty() || name.contains("/") || name.contains("\\")) return null;
         File file = new File(queueDir(context), name);
         return file.exists() && file.length() > 0 ? file : null;
+    }
+
+    private static void deleteBatchFiles(Context context, File metadataFile) {
+        try {
+            JSONObject metadata = new JSONObject(new String(readFile(metadataFile), StandardCharsets.UTF_8));
+            File audioFile = fileFromMetadata(context, metadata.optString("audioFile"));
+            File imageFile = fileFromMetadata(context, metadata.optString("imageFile"));
+            if (audioFile != null) audioFile.delete();
+            if (imageFile != null) imageFile.delete();
+        } catch (Exception ignored) {
+            // Invalid metadata cannot be uploaded safely; remove its marker below.
+        }
+        metadataFile.delete();
     }
 
     private static String encodeFile(File file) throws Exception {

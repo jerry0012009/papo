@@ -1,15 +1,15 @@
 {
-  "versionName": "0.4.6",
-  "versionCode": 12,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.6.apk",
-  "publishedAt": "2026-07-12T06:03:21.000Z",
+  "versionName": "0.4.7",
+  "versionCode": 13,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.7.apk",
+  "publishedAt": "2026-07-12T08:28:00.000Z",
   "notes": [
-    "文字、照片和录音发送后立即进入对话，输入框无需等待后台认知完成",
-    "照片理解、音频转写、回答、插画和外部任务使用可恢复的异步回合任务",
-    "回答问题与制作插画可同时规划，文字先回复，插画完成后再加入原回合",
-    "后台状态按回合显示；子任务失败不吞输入，也不阻塞继续发送下一条",
-    "陪伴模式的网页分段和 Android 后台批次统一进入持久化异步认知队列"
+    "陪伴录音无法读取时自动重试，并保留可审计的感知与认知原因",
+    "原始陪伴音频使用私有临时存储，手机、服务端队列和调试副本均在 24 小时后清理",
+    "安静陪听不再删除已注意到的经历，静默回合也会保存 Attention 与 Action trace",
+    "连续讲座或会议在结束后整合前后片段，形成一条总结回复、episode 和长期记忆",
+    "区分 direct、ambient 与 task_result，并完善 Hermes 结果和主动媒体的提交边界"
   ],
-  "sha256": "fbe7d7b442a3bdd22d7f532de5c842e9cf3bfdfdd897565d3b85b9b30299600e",
-  "size": 22794532
+  "sha256": "be1131ffd7369ff7c0952270416485f860fcf5404eb92791cb47e4a4df529ac4",
+  "size": 22794692
 }

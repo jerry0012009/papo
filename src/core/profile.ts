@@ -33,6 +33,7 @@ export function createCreatureProfile(input: {
     conversation: [],
     turns: [],
     jobs: [],
+    companionSessions: [],
     proactive: initialProactiveState(now),
     readState: {},
     hermes: { sessionName: hermesSessionName(userId), tasks: [] },
@@ -70,6 +71,15 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.conversation ??= [];
   profile.turns ??= [];
   profile.jobs ??= [];
+  profile.companionSessions ??= [];
+  profile.companionSessions = profile.companionSessions.map((session) => ({
+    ...session,
+    status: session.status ?? "active",
+    updatedAt: session.updatedAt ?? session.lastObservedAt ?? session.startedAt,
+    sourceTurnIds: session.sourceTurnIds ?? [],
+    sourceSegmentIds: session.sourceSegmentIds ?? [],
+    observations: session.observations ?? []
+  })).slice(0, 40);
   profile.turns = profile.turns.map((turn) => ({
     ...turn,
     status: turn.status ?? "queued",

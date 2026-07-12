@@ -4,7 +4,7 @@ import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext, modelPetContext } from "./model-context";
 import { createEpisodeFromEvent, createMemoryCandidateFromEpisode, normalizeSharedMemoryText } from "./memory";
 import type { ModelProvider } from "./provider";
-import type { AttentionSource, CaptureResult, CreatureProfile, SemanticBrainRecord } from "./types";
+import type { AttentionSource, CaptureResult, CognitionContext, CreatureProfile, SemanticBrainRecord } from "./types";
 
 const optionalText = (max: number) =>
   z.preprocess((value) => cleanOptionalText(value, max), z.string().min(1).optional());
@@ -32,6 +32,8 @@ const semanticAttentionSchema = z.object({
         noticed: optionalText(260),
         userMeaning: optionalText(360),
         memoryRelation: optionalText(360),
+        addressedToPapo: z.boolean().optional(),
+        expectsResponse: z.boolean().optional(),
         relatedMemoryIds: optionalTextArray(6, 80),
         tags: optionalTextArray(10, 40)
       })
@@ -58,20 +60,22 @@ export async function semanticDecideAttention(
   profile: CreatureProfile,
   result: CaptureResult,
   provider: ModelProvider,
-  source: AttentionSource
+  source: AttentionSource,
+  context: CognitionContext = { inputSource: source === "button" ? "direct" : "ambient" }
 ): Promise<CaptureResult> {
   if (!provider.usesRealModel) throw new Error("Papo requires a real model provider for attention.");
   if (!result.curiousSession || !result.attentionCandidates?.length) return result;
 
-  const raw = await provider.generateJson<unknown>(buildSemanticAttentionPrompt(profile, result, source));
+  validateCognitionContext(context);
+  const raw = await provider.generateJson<unknown>(buildSemanticAttentionPrompt(profile, result, source, context));
   if (!raw) throw new Error("empty attention model result");
   const parsed = semanticAttentionSchema.safeParse(raw);
   if (!parsed.success) {
     throw new Error(`invalid attention JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   }
-  const applied = applySemanticAttention(profile, result, parsed.data, source);
+  const applied = applySemanticAttention(profile, result, parsed.data, source, context);
   if (!applied && parsed.data.shouldAttend !== false) {
-    if (source !== "curious_stream") throw new Error("attention model did not select any valid segment");
+    if (context.inputSource !== "ambient") throw new Error(`${context.inputSource} attention did not perceive a valid input`);
     clearCuriousAttentionResult(profile, result, parsed.data);
   }
   recordAttentionSemanticRun(
@@ -84,7 +88,7 @@ export async function semanticDecideAttention(
   return result;
 }
 
-function applySemanticAttention(profile: CreatureProfile, result: CaptureResult, suggestion: SemanticAttentionSuggestion, source: AttentionSource) {
+function applySemanticAttention(profile: CreatureProfile, result: CaptureResult, suggestion: SemanticAttentionSuggestion, source: AttentionSource, context: CognitionContext) {
   const session = result.curiousSession;
   const candidates = result.attentionCandidates;
   if (!session || !candidates?.length) return false;
@@ -96,6 +100,7 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
     .slice(0, session.attentionBudget);
 
   if (suggestion.shouldAttend === false) {
+    if (context.inputSource !== "ambient") throw new Error(`${context.inputSource} input cannot be discarded by attention`);
     clearCuriousAttentionResult(profile, result, suggestion);
     return false;
   }
@@ -131,6 +136,12 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
       score: candidate.score,
       now
     });
+    event.cognitionSource = context.inputSource;
+    event.addressedToPapo = decision?.addressedToPapo ?? context.inputSource === "task_result";
+    event.expectsResponse = decision?.expectsResponse ?? context.inputSource === "task_result";
+    event.sourceTaskId = context.taskId;
+    event.sourceEventId = context.sourceEventId;
+    event.sourceEpisodeId = context.sourceEpisodeId;
     event.noticed = safeCreatureText(decision?.noticed) ?? event.noticed;
     event.reason = safeCreatureText(decision?.userMeaning) ?? event.reason;
     event.relatedMemoryIds = validRelatedMemoryIds(profile, decision?.relatedMemoryIds);
@@ -141,6 +152,10 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
       "llm: selected this segment for attention",
       `noticed=${event.noticed}`,
       `user_meaning=${event.reason}`,
+      `cognition_source=${context.inputSource}`,
+      `addressed_to_papo=${event.addressedToPapo}`,
+      `expects_response=${event.expectsResponse}`,
+      decision?.expectsResponse === undefined ? "compatibility: expectsResponse omitted by model" : "guardrail: expectsResponse explicitly classified",
       decision?.memoryRelation ? `memory_relation=${safeCreatureText(decision.memoryRelation) ?? "not_shown"}` : "memory_relation=not_provided",
       `guardrail: attention_budget=${session.attentionBudget}`
     ];
@@ -241,10 +256,11 @@ function recordAttentionSemanticRun(
   profile.semanticBrainHistory = profile.semanticBrainHistory.slice(0, 30);
 }
 
-function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureResult, source: AttentionSource) {
+function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureResult, source: AttentionSource, context: CognitionContext) {
   return `请作为 Papo 的注意决策脑，从这一组真实输入片段里决定 Papo 此刻要认真回应哪几段。
 
-输入来源：${source === "button" ? "用户主动发来的一条直接消息" : "持续陪伴/多模态信息流的一组片段"}。
+认知输入来源：${context.inputSource}。
+${sourceDescription(context)}
 系统已经整理了候选片段和注意预算。你负责具体判断：
 - 哪些段值得注意。
 - 哪些段应该暂时略过。
@@ -252,8 +268,11 @@ function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureR
 - 注意到的核心内容是什么。
 - 这段内容对用户可能意味着什么。
 - 它是否自然关联到 recent_memories 里的旧记忆。
-- 如果都只是背景声、空白、误触或没有可用生活信息，可以 shouldAttend=false。
-- 用户主动发来的直接消息通常值得注意；但仍由你判断是否只是误触、空白或无需进入后续 cognition。
+- 只有 ambient 可以因为全是背景声、空白或没有可用生活信息而 shouldAttend=false。
+- direct 是用户主动发送：除空白、损坏、明确重复或明确误触外，必须 selected，不能用 Attention 代替 Action 做“安静陪伴”。
+- task_result 必须 selected，并依据 taskId 和原 event/episode 理解它是任务结果，不得当成无来源环境输入。
+- 对每个 selected 判断 addressedToPapo 和 expectsResponse。明确提问、呼唤、求助、请求执行时 expectsResponse 必须为 true；碎碎念或情绪记录可为 false。
+- Attention 只判断感知、含义、情绪、呼唤关系、记忆关系和隐私，不决定最终是否说话；是否回应由下一阶段 Action 决定。
 - 如果候选带 attachments，说明原始图片资产仍然可被长期回看；不要只把它当一段普通文字摘要。图片摘要、用户补充、拍摄/上传时间和地点一起构成这次输入。
 - JSON 字段名保持示例格式；所有自然语言字段值必须用中文。
 
@@ -274,6 +293,8 @@ function buildSemanticAttentionPrompt(profile: CreatureProfile, result: CaptureR
     "whySelected":"...",
     "noticed":"...",
     "userMeaning":"...",
+    "addressedToPapo":true,
+    "expectsResponse":true,
     "memoryRelation":"...",
     "relatedMemoryIds":["ltm_xxx"],
     "tags":["..."]
@@ -327,6 +348,19 @@ ${JSON.stringify((result.attentionCandidates ?? []).map((candidate) => ({
   privacyRisk: candidate.score.privacyRisk
 })))}
 `;
+}
+
+function validateCognitionContext(context: CognitionContext) {
+  if (context.inputSource !== "task_result") return;
+  if (!context.taskId || !context.sourceEventId || !context.sourceEpisodeId) {
+    throw new Error("task_result cognition requires taskId, sourceEventId, and sourceEpisodeId");
+  }
+}
+
+function sourceDescription(context: CognitionContext) {
+  if (context.inputSource === "direct") return "这是用户主动发送给 Papo 的文字、图片或语音。";
+  if (context.inputSource === "ambient") return "这是陪伴模式持续观察到的环境音频、画面或场景片段。";
+  return `这是外部任务回流。taskId=${context.taskId}，原 event=${context.sourceEventId}，原 episode=${context.sourceEpisodeId}。`;
 }
 
 function modelSafeSegmentContent(text: string) {

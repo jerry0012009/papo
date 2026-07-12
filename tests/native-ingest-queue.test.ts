@@ -13,7 +13,7 @@ const queue = new NativeIngestQueue(async (_userId, payload) => {
     throw new Error("temporary provider failure");
   }
   processed.push(payload.batchId);
-}, directory, 5);
+}, directory, 5, 500);
 
 try {
   await queue.enqueue("user", { batchId: "batch-001", observedAt: new Date().toISOString(), audioDataUrl: "data:audio/mp4;base64,QQ==" });
@@ -27,6 +27,9 @@ try {
   assert.equal(firstAttempts, 1);
   assert.deepEqual(processed, ["batch-002"], "a failed job must not block the next eligible job");
   assert.deepEqual((await readdir(directory)).filter((name) => name.endsWith(".json")).length, 1);
+  await new Promise((resolve) => setTimeout(resolve, 520));
+  await queue.tick();
+  assert.deepEqual((await readdir(directory)).filter((name) => name.endsWith(".json")).length, 0, "expired raw native payloads must be removed even when processing keeps failing");
   console.log(JSON.stringify({ ok: true, processed }));
 } finally {
   queue.stop();

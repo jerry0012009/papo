@@ -122,6 +122,7 @@ function mergeCreatureProfiles(current: CreatureProfile, incoming: CreatureProfi
     conversation: mergeById(current.conversation, incoming.conversation, "at").slice(0, 80),
     turns: mergeById(current.turns ?? [], incoming.turns ?? [], "updatedAt", mergeTurn).slice(0, 80),
     jobs: mergeById(current.jobs ?? [], incoming.jobs ?? [], "updatedAt", mergeJob).slice(0, 240),
+    companionSessions: mergeById(current.companionSessions ?? [], incoming.companionSessions ?? [], "updatedAt", mergeCompanionSession).slice(0, 40),
     illustrations: mergeById(current.illustrations ?? [], incoming.illustrations ?? [], "createdAt").slice(0, 30),
     actionCards: mergeById(current.actionCards ?? [], incoming.actionCards ?? [], "createdAt").slice(0, 30),
     clientDocument: chooseLatestClientDocument(current, incoming),
@@ -138,6 +139,26 @@ function mergeCreatureProfiles(current: CreatureProfile, incoming: CreatureProfi
     }
   });
   return merged;
+}
+
+function mergeCompanionSession(left: NonNullable<CreatureProfile["companionSessions"]>[number], right: NonNullable<CreatureProfile["companionSessions"]>[number]) {
+  const chosen = timestamp(right.updatedAt) >= timestamp(left.updatedAt) ? right : left;
+  return {
+    ...left,
+    ...chosen,
+    sourceTurnIds: unique([...(left.sourceTurnIds ?? []), ...(right.sourceTurnIds ?? [])]),
+    sourceSegmentIds: unique([...(left.sourceSegmentIds ?? []), ...(right.sourceSegmentIds ?? [])]),
+    observations: mergeSessionObservations(left.observations ?? [], right.observations ?? [])
+  };
+}
+
+function mergeSessionObservations(
+  left: NonNullable<CreatureProfile["companionSessions"]>[number]["observations"],
+  right: NonNullable<CreatureProfile["companionSessions"]>[number]["observations"]
+) {
+  const byId = new Map(left.map((item) => [item.segmentId, item]));
+  for (const item of right) byId.set(item.segmentId, item);
+  return [...byId.values()].sort((a, b) => timestamp(a.observedAt) - timestamp(b.observedAt));
 }
 
 function mergeTurn(left: NonNullable<CreatureProfile["turns"]>[number], right: NonNullable<CreatureProfile["turns"]>[number]) {

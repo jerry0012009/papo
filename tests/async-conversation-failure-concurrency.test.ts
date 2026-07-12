@@ -66,6 +66,8 @@ try {
   assert.equal(final?.conversation.some((message) => message.turnId === "turn_failed_illustration" && message.role === "papo" && message.text.includes("文字回答")), true);
   assert.equal(final?.conversation.some((message) => message.turnId === "turn_after_failure" && message.role === "papo"), true);
   assert.equal(final?.jobs?.find((job) => job.turnId === "turn_failed_illustration" && job.type === "illustration")?.error?.includes("deterministic illustration failure"), true);
+  assert.equal(final?.jobs?.find((job) => job.turnId === "turn_failed_illustration" && job.type === "illustration")?.attemptHistory?.length, 3);
+  assert.equal(final?.jobs?.find((job) => job.turnId === "turn_failed_illustration" && job.type === "illustration")?.attemptHistory?.every((attempt) => attempt.error?.includes("deterministic illustration failure")), true);
 } finally {
   worker.stop();
   server.close();

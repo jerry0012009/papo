@@ -1,7 +1,18 @@
 export type AttentionSource = "button" | "curious_stream";
+export type CognitionInputSource = "direct" | "ambient" | "task_result";
+export interface CognitionContext {
+  inputSource: CognitionInputSource;
+  taskId?: string;
+  sourceEventId?: string;
+  sourceEpisodeId?: string;
+}
 export type ActionKind =
   | "observe"
   | "respond"
+  | "acknowledge"
+  | "listen_silently"
+  | "continue_own_activity"
+  | "defer"
   | "ask"
   | "save_episode"
   | "save_long_term"
@@ -181,6 +192,14 @@ export interface SensingTrace {
   status: "content" | "empty" | "unreadable";
   decision: string;
   observation?: string;
+  attempts?: number;
+  errorKind?: "unreadable" | "empty" | "provider_error" | "decode_error";
+  retainedAudio?: {
+    id: string;
+    mime: string;
+    sizeBytes: number;
+    retainedUntil: string;
+  };
   ruleTrace: string[];
 }
 
@@ -240,6 +259,12 @@ export interface CuriousSessionAudit {
 export interface AttentionEvent {
   id: string;
   source: AttentionSource;
+  cognitionSource?: CognitionInputSource;
+  addressedToPapo?: boolean;
+  expectsResponse?: boolean;
+  sourceTaskId?: string;
+  sourceEventId?: string;
+  sourceEpisodeId?: string;
   triggerSegmentId?: string;
   triggerBatchId?: string;
   triggerObservedAt?: string;
@@ -270,6 +295,10 @@ export interface EpisodeMemory {
   id: string;
   createdAt: string;
   source: AttentionSource;
+  cognitionSource?: CognitionInputSource;
+  sourceTaskId?: string;
+  parentEventId?: string;
+  parentEpisodeId?: string;
   sourceSegmentId?: string;
   sourceBatchId?: string;
   sourceObservedAt?: string;
@@ -368,8 +397,11 @@ export interface HermesTaskRecord {
   sessionName?: string;
   sentMessageId?: string;
   sourceEventId?: string;
+  sourceEpisodeId?: string;
   sourceMessageId?: string;
   resultMessageId?: string;
+  resultEpisodeId?: string;
+  resultText?: string;
   error?: string;
 }
 
@@ -497,7 +529,7 @@ export interface WakeEvent {
 export interface SemanticBrainRecord {
   id: string;
   at: string;
-  source: AttentionSource | "memory" | "feedback" | "emergence" | "dreaming" | "dog_state";
+  source: AttentionSource | "memory" | "feedback" | "emergence" | "dreaming" | "dog_state" | "companion_session";
   stage?: "attention" | "action" | "memory" | "feedback" | "emergence" | "dreaming" | "harness" | "dog_state";
   providerKind: ProviderKind;
   providerName: string;
@@ -516,6 +548,12 @@ export interface MessageCognitionTrace {
   sensingTraces?: SensingTrace[];
   modelRuns: SemanticBrainRecord[];
   harnessTrace?: string[];
+  attentionDecision?: {
+    attentionBudget: number;
+    selected: CuriousSessionAudit["selected"];
+    ignored: CuriousSessionAudit["ignored"];
+    creatureReport: string;
+  };
   eventDecisions?: Array<{
     eventId: string;
     sourceLabel: string;
@@ -635,6 +673,12 @@ export interface ConversationJobRecord {
   episodeId?: string;
   action?: PlannedAction;
   error?: string;
+  attemptHistory?: Array<{
+    attempt: number;
+    startedAt: string;
+    completedAt?: string;
+    error?: string;
+  }>;
   result?: {
     messageId?: string;
     attachmentIds?: string[];
@@ -643,6 +687,13 @@ export interface ConversationJobRecord {
     memorySourceIds?: string[];
     memoryDecision?: "created" | "skipped_no_new_fact" | "skipped_duplicate";
     memoryReason?: string;
+    cognition?: {
+      inputSource: CognitionInputSource;
+      attention: "selected" | "ignored";
+      actions: ActionKind[];
+      visibleReply: boolean;
+      episodeIds: string[];
+    };
   };
 }
 
@@ -657,6 +708,31 @@ export interface ConversationTurnRecord {
   inputMessageIds: string[];
   jobIds: string[];
   segments: StreamSegment[];
+  error?: string;
+}
+
+export interface CompanionSessionRecord {
+  id: string;
+  startedAt: string;
+  lastObservedAt: string;
+  updatedAt: string;
+  status: "active" | "consolidating" | "completed" | "failed";
+  sourceTurnIds: string[];
+  sourceSegmentIds: string[];
+  observations: Array<{
+    segmentId: string;
+    observedAt: string;
+    modality: SegmentKind;
+    status: SensingTrace["status"];
+    content: string;
+  }>;
+  episodeId?: string;
+  memoryId?: string;
+  messageId?: string;
+  summary?: string;
+  title?: string;
+  kind?: "lecture" | "meeting" | "conversation" | "ambient";
+  consolidatedAt?: string;
   error?: string;
 }
 
@@ -682,6 +758,7 @@ export interface CreatureProfile {
   conversation: CreatureMessage[];
   turns?: ConversationTurnRecord[];
   jobs?: ConversationJobRecord[];
+  companionSessions?: CompanionSessionRecord[];
   proactive: ProactiveEmergenceState;
   readState: ReadState;
   hermes: HermesProfileState;

@@ -28,7 +28,8 @@ export class NativeIngestQueue {
   constructor(
     private readonly processJob: (userId: string, payload: NativeIngestPayload) => Promise<void>,
     private readonly directory = path.join(process.cwd(), "data", "native-ingest"),
-    private readonly intervalMs = 90_000
+    private readonly intervalMs = 90_000,
+    private readonly retentionMs = 24 * 60 * 60_000
   ) {}
 
   async enqueue(userId: string, payload: NativeIngestPayload) {
@@ -83,7 +84,12 @@ export class NativeIngestQueue {
       for (const name of names) {
         const filePath = path.join(this.directory, name);
         try {
-          jobs.push({ filePath, job: JSON.parse(await readFile(filePath, "utf8")) as NativeIngestJob });
+          const job = JSON.parse(await readFile(filePath, "utf8")) as NativeIngestJob;
+          if (now - Date.parse(job.queuedAt) >= this.retentionMs) {
+            await rm(filePath, { force: true });
+            continue;
+          }
+          jobs.push({ filePath, job });
         } catch {
           await rm(filePath, { force: true });
         }

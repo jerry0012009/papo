@@ -1,4 +1,4 @@
-import type { ConversationJobRecord, CreatureProfile } from "../core/types";
+import type { ActionKind, CognitionInputSource, ConversationJobRecord, CreatureProfile } from "../core/types";
 import type { ProfileStore } from "./store";
 
 export interface TurnJobResult {
@@ -9,6 +9,13 @@ export interface TurnJobResult {
   memorySourceIds?: string[];
   memoryDecision?: "created" | "skipped_no_new_fact" | "skipped_duplicate";
   memoryReason?: string;
+  cognition?: {
+    inputSource: CognitionInputSource;
+    attention: "selected" | "ignored";
+    actions: ActionKind[];
+    visibleReply: boolean;
+    episodeIds: string[];
+  };
 }
 
 export class PersistentTurnWorker {
@@ -95,6 +102,7 @@ export class PersistentTurnWorker {
         job.attempt += 1;
         job.startedAt = now;
         job.updatedAt = now;
+        job.attemptHistory = [...(job.attemptHistory ?? []), { attempt: job.attempt, startedAt: now }].slice(-8);
         const turn = profile.turns?.find((item) => item.id === job.turnId);
         if (turn && turn.status === "queued") {
           turn.status = "running";
@@ -112,6 +120,8 @@ export class PersistentTurnWorker {
         job.completedAt = now;
         job.updatedAt = now;
         job.error = undefined;
+        const attempt = [...(job.attemptHistory ?? [])].reverse().find((item) => item.attempt === job.attempt && !item.completedAt);
+        if (attempt) attempt.completedAt = now;
         if (result) job.result = { ...job.result, ...result };
         settleTurn(profile, job.turnId, now);
       });
@@ -124,6 +134,11 @@ export class PersistentTurnWorker {
         job.status = retry ? "queued" : "failed";
         job.updatedAt = now;
         job.error = error instanceof Error ? error.message.slice(0, 500) : "Unknown background job error";
+        const attempt = [...(job.attemptHistory ?? [])].reverse().find((item) => item.attempt === job.attempt && !item.completedAt);
+        if (attempt) {
+          attempt.completedAt = now;
+          attempt.error = job.error;
+        }
         settleTurn(profile, job.turnId, now);
       });
     } finally {
