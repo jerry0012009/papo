@@ -61,19 +61,16 @@ export class PersistentTurnWorker {
   private async schedule() {
     const capacity = Math.max(1, this.input.concurrency ?? 3) - this.inFlight.size;
     if (capacity <= 0) return;
-    const summaries = await this.input.store.listProfiles();
     const candidates: Array<{ userId: string; job: ConversationJobRecord }> = [];
     let lifecycleRunning = false;
-    for (const summary of summaries) {
-      const profile = await this.input.store.getProfile(summary.userId);
-      if (!profile) continue;
+    for (const profile of await this.input.store.listProfileSnapshots()) {
       if ((profile.jobs ?? []).some((job) => isLifecycleMediaJob(job) && job.status === "running")) lifecycleRunning = true;
       for (const job of profile.jobs ?? []) {
         if (job.status !== "queued" || this.inFlight.has(job.id)) continue;
         const dependencies = (job.dependsOn ?? []).map((id) => profile.jobs?.find((item) => item.id === id));
         if (dependencies.some((dependency) => !dependency || (dependency.status !== "completed" && dependency.status !== "failed"))) continue;
         if (job.type === "cognition" && (profile.jobs ?? []).some((other) => other.id !== job.id && other.type === "cognition" && other.status === "running")) continue;
-        candidates.push({ userId: summary.userId, job });
+        candidates.push({ userId: profile.userId, job });
       }
     }
     candidates.sort((left, right) => jobPriority(left.job) - jobPriority(right.job) || Date.parse(left.job.createdAt) - Date.parse(right.job.createdAt));

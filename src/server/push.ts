@@ -161,6 +161,10 @@ export class PushNotifyingProfileStore implements ProfileStore {
     return this.inner.listProfiles();
   }
 
+  async listProfileSnapshots() {
+    return (await this.inner.listProfileSnapshots()).map((profile) => structuredClone(profile));
+  }
+
   async getProfile(userId: string) {
     const profile = await this.inner.getProfile(userId);
     return profile ? structuredClone(profile) : undefined;

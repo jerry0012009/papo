@@ -5,6 +5,7 @@ import type { CreatureProfile, EpisodeMemory, HermesTaskRecord, LongTermMemory, 
 
 export interface ProfileStore {
   listProfiles(): Promise<Array<{ userId: string; creatureName: string; createdAt: string }>>;
+  listProfileSnapshots(): Promise<CreatureProfile[]>;
   getProfile(userId: string): Promise<CreatureProfile | undefined>;
   saveProfile(profile: CreatureProfile): Promise<void>;
   updateProfile(userId: string, update: (profile: CreatureProfile) => void | CreatureProfile | Promise<void | CreatureProfile>): Promise<CreatureProfile | undefined>;
@@ -27,6 +28,11 @@ export class JsonProfileStore implements ProfileStore {
       creatureName: profile.creatureName,
       createdAt: profile.createdAt
     }));
+  }
+
+  async listProfileSnapshots() {
+    const data = await this.read();
+    return Object.values(data.profiles).map((profile) => normalizeCreatureProfile(profile));
   }
 
   async getProfile(userId: string) {
@@ -380,6 +386,10 @@ export class MemoryProfileStore implements ProfileStore {
       creatureName: profile.creatureName,
       createdAt: profile.createdAt
     }));
+  }
+
+  async listProfileSnapshots() {
+    return [...this.profiles.values()].map((profile) => normalizeCreatureProfile(structuredClone(profile)));
   }
 
   async getProfile(userId: string) {

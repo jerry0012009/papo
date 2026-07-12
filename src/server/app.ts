@@ -255,7 +255,7 @@ export function createApp(input: {
   const turnWorker = new PersistentTurnWorker({
     store,
     concurrency: input.turns?.concurrency ?? 3,
-    intervalMs: input.turns?.intervalMs ?? 250,
+    intervalMs: input.turns?.intervalMs ?? 1_000,
     handle: processConversationJob
   });
   app.locals.turnWorker = turnWorker;
