@@ -89,6 +89,9 @@ import {
   LIVE_LISTENING_DEFAULT_MS,
   shouldSuppressForcedAudioSlice
 } from "./live-listening";
+
+type ActionCardDisplayMode = "disabled" | "static" | "dynamic";
+type ActionCardUpdate = { displayMode?: ActionCardDisplayMode; disabled?: boolean; deleted?: boolean };
 import {
   clearNativeListeningCredentials,
   getNativeListeningStatus,
@@ -523,7 +526,7 @@ export function App() {
     setProfile(next);
   }
 
-  async function changeActionCard(cardId: string, input: { disabled?: boolean; deleted?: boolean }) {
+  async function changeActionCard(cardId: string, input: ActionCardUpdate) {
     if (!profile) return;
     await run(async () => {
       const next = await updateActionCard(profile.userId, cardId, input);
@@ -1629,19 +1632,21 @@ function HomeView(props: {
   onGoCurious: () => void;
   onGoChat: () => void;
   onPetTouch: (action: PetInteractionAction) => void;
-  onUpdateActionCard: (cardId: string, input: { disabled?: boolean; deleted?: boolean }) => void;
+  onUpdateActionCard: (cardId: string, input: ActionCardUpdate) => void;
 }) {
   const latestReply = props.unreadPapoCount ? latestVisiblePapoReply(props.profile) : "";
   const actionLine = papoVisibleActionLine(props.profile);
   const [activeMotion, setActiveMotion] = useState<HomeMotion | undefined>();
   const touchActions = petTouchActions(props.profile);
-  const actionCards = (props.profile.actionCards ?? []).filter((card) => !card.deleted && !card.disabled).slice(0, 6);
+  const actionCards = (props.profile.actionCards ?? []).filter((card) => !card.deleted && actionCardDisplayMode(card) !== "disabled").slice(0, 6);
   const motionItems: HomeMotion[] = [
     ...touchActions.map((item) => ({ kind: "pet" as const, ...item })),
     ...actionCards.map((card) => ({ kind: "card" as const, cardId: card.id }))
   ];
-  const visibleAction = activeMotion?.kind === "pet" ? activeMotion.action : generatedPetActionFromState(props.profile.dogState);
-  const activeCard = activeMotion?.kind === "card" ? actionCards.find((card) => card.id === activeMotion.cardId) : undefined;
+  const defaultCard = matchingHomeActionCard(props.profile, actionCards);
+  const effectiveMotion: HomeMotion | undefined = activeMotion ?? (defaultCard ? { kind: "card", cardId: defaultCard.id } : undefined);
+  const visibleAction = effectiveMotion?.kind === "pet" ? effectiveMotion.action : generatedPetActionFromState(props.profile.dogState);
+  const activeCard = effectiveMotion?.kind === "card" ? actionCards.find((card) => card.id === effectiveMotion.cardId) : undefined;
   useEffect(() => {
     setActiveMotion(undefined);
   }, [props.profile.userId, props.profile.petKind, props.profile.actionCards?.length]);
@@ -1656,15 +1661,15 @@ function HomeView(props: {
           </div>
         </div>
         <div className="home-avatar-wrap">
-          {activeCard ? <MediaThumbnail item={actionCardMediaItem(activeCard)} className="pet-touch-button home-action-card-viewer"><ActionCardAvatar card={activeCard} /></MediaThumbnail> : <button
+          {activeCard ? <button className="pet-touch-button home-action-card-viewer" type="button" aria-label={`切换 ${props.profile.creatureName} 动作`} title="换一个当下动作" onClick={() => setActiveMotion(nextHomeMotion(effectiveMotion, motionItems, visibleAction))}><ActionCardAvatar card={activeCard} mode={actionCardDisplayMode(activeCard)} /></button> : <button
             className="pet-touch-button"
             type="button"
             aria-label={`戳戳 ${props.profile.creatureName}`}
             title="戳戳它，换个小动作"
             onClick={() => {
               let foundIndex = -1;
-              if (activeMotion?.kind === "pet") foundIndex = motionItems.findIndex((item) => item.kind === "pet" && item.action === activeMotion.action);
-              else if (activeMotion?.kind === "card") foundIndex = motionItems.findIndex((item) => item.kind === "card" && item.cardId === activeMotion.cardId);
+              if (effectiveMotion?.kind === "pet") foundIndex = motionItems.findIndex((item) => item.kind === "pet" && item.action === effectiveMotion.action);
+              else if (effectiveMotion?.kind === "card") foundIndex = motionItems.findIndex((item) => item.kind === "card" && item.cardId === effectiveMotion.cardId);
               else foundIndex = motionItems.findIndex((item) => item.kind === "pet" && item.action === visibleAction);
               const currentIndex = Math.max(0, foundIndex);
               const nextMotion = motionItems[(currentIndex + 1) % motionItems.length];
@@ -1672,12 +1677,12 @@ function HomeView(props: {
               if (nextMotion?.kind === "pet") props.onPetTouch(nextMotion.action);
             }}
           >
-            <AvatarPreview petKind={props.profile.petKind} petProfile={petProfileFor(props.profile)} state={props.profile.state} dogState={props.profile.dogState} interactionAction={activeMotion?.kind === "pet" ? activeMotion.action : undefined} />
+            <AvatarPreview petKind={props.profile.petKind} petProfile={petProfileFor(props.profile)} state={props.profile.state} dogState={props.profile.dogState} interactionAction={effectiveMotion?.kind === "pet" ? effectiveMotion.action : undefined} />
           </button>}
         </div>
         <div className="home-speech">
           <h2>{props.profile.creatureName}</h2>
-          <p>{activeCard ? namedCreatureText(activeCard.caption || activeCard.title, props.profile.creatureName) : activeMotion?.kind === "pet" ? activeMotion.text : latestReply || actionLine}</p>
+          <p>{activeCard ? actionCardStatusText(activeCard, props.profile) : effectiveMotion?.kind === "pet" ? effectiveMotion.text : latestReply || actionLine}</p>
         </div>
       </section>
       <aside className="home-side">
@@ -1719,7 +1724,7 @@ function CompanionPanel(props: {
   onGoProfile: () => void;
   onAskEmergence: () => void;
   onToggleListening: () => void;
-  onUpdateActionCard: (cardId: string, input: { disabled?: boolean; deleted?: boolean }) => void;
+  onUpdateActionCard: (cardId: string, input: ActionCardUpdate) => void;
 }) {
   const latestReply = props.unreadPapoCount ? latestVisiblePapoReply(props.profile) : "";
   return (
@@ -1779,7 +1784,7 @@ function CompanionPanel(props: {
 }
 
 function HomeActionCardsPeek({ profile, compact = false }: { profile: CreatureProfile; compact?: boolean }) {
-  const cards = (profile.actionCards ?? []).filter((card) => !card.deleted && !card.disabled).slice(0, 6);
+  const cards = (profile.actionCards ?? []).filter((card) => !card.deleted && actionCardDisplayMode(card) !== "disabled").slice(0, 6);
   if (!cards.length) return null;
   const latest = cards[0];
   return (
@@ -2083,10 +2088,12 @@ function GeneratedPetAvatar({ petKind, dogState, idle = false, interactionAction
   );
 }
 
-function ActionCardAvatar({ card }: { card: NonNullable<CreatureProfile["actionCards"]>[number] }) {
+function ActionCardAvatar({ card, mode = "dynamic" }: { card: NonNullable<CreatureProfile["actionCards"]>[number]; mode?: ActionCardDisplayMode }) {
   return (
     <div className="action-card-avatar" aria-label={card.title}>
-      <video src={resolveAssetUrl(card.video.url)} poster={card.cover ? resolveAssetUrl(card.cover.url) : undefined} autoPlay loop muted playsInline preload="metadata" />
+      {mode === "static" && card.cover
+        ? <img src={resolveAssetUrl(card.cover.url)} alt="" />
+        : <video src={resolveAssetUrl(card.video.url)} poster={card.cover ? resolveAssetUrl(card.cover.url) : undefined} autoPlay loop muted playsInline preload="metadata" />}
     </div>
   );
 }
@@ -2260,7 +2267,7 @@ function ShibaAvatar({ state, dogState, idle = false }: { state?: CreatureState;
   );
 }
 
-function HomeBrainPeek({ profile, compact = false, onUpdateActionCard }: { profile: CreatureProfile; compact?: boolean; onUpdateActionCard?: (cardId: string, input: { disabled?: boolean; deleted?: boolean }) => void }) {
+function HomeBrainPeek({ profile, compact = false, onUpdateActionCard }: { profile: CreatureProfile; compact?: boolean; onUpdateActionCard?: (cardId: string, input: ActionCardUpdate) => void }) {
   return (
     <Dialog.Root>
       <Dialog.Trigger asChild>
@@ -2287,7 +2294,7 @@ function HomeBrainPeek({ profile, compact = false, onUpdateActionCard }: { profi
   );
 }
 
-function StatePolicySnapshot({ profile, onUpdateActionCard }: { profile: CreatureProfile; onUpdateActionCard?: (cardId: string, input: { disabled?: boolean; deleted?: boolean }) => void }) {
+function StatePolicySnapshot({ profile, onUpdateActionCard }: { profile: CreatureProfile; onUpdateActionCard?: (cardId: string, input: ActionCardUpdate) => void }) {
   const state = profile.state;
   const policy = profile.policyProfile;
   const petProfile = petProfileFor(profile);
@@ -2352,16 +2359,14 @@ function StatePolicySnapshot({ profile, onUpdateActionCard }: { profile: Creatur
           <strong>动作卡</strong>
           <div className="action-card-admin-list">
             {actionCards.map((card) => (
-              <article className={card.disabled ? "action-card-admin disabled" : "action-card-admin"} key={card.id}>
+              <article className={`action-card-admin mode-${actionCardDisplayMode(card)}`} key={card.id}>
                 <MediaThumbnail item={actionCardMediaItem(card)} className="action-card-admin-media" />
                 <div>
                   <b>{namedCreatureText(card.title, profile.creatureName) || card.title}</b>
                   {card.caption ? <small>{namedCreatureText(card.caption, profile.creatureName) || card.caption}</small> : null}
                   <small>{formatPapoDateTime(card.createdAt)} · {card.model ?? card.providerName}</small>
+                  <ActionCardModeControl card={card} onChange={(displayMode) => onUpdateActionCard?.(card.id, { displayMode })} />
                   <div className="action-card-controls">
-                    <button type="button" onClick={() => onUpdateActionCard?.(card.id, { disabled: !card.disabled })}>
-                      {card.disabled ? "启用" : "禁用"}
-                    </button>
                     <button type="button" onClick={() => onUpdateActionCard?.(card.id, { deleted: true })}>
                       删除
                     </button>
@@ -2925,6 +2930,44 @@ function actionCardMediaItem(card: NonNullable<CreatureProfile["actionCards"]>[n
     kind: "video",
     poster: card.cover ? resolveAssetUrl(card.cover.url) : undefined
   };
+}
+
+function actionCardDisplayMode(card: NonNullable<CreatureProfile["actionCards"]>[number]): ActionCardDisplayMode {
+  return card.displayMode ?? (card.disabled ? "disabled" : "dynamic");
+}
+
+function actionCardStatusText(card: NonNullable<CreatureProfile["actionCards"]>[number], profile: CreatureProfile) {
+  return namedCreatureText(card.statusText || card.caption || card.title, profile.creatureName);
+}
+
+function matchingHomeActionCard(profile: CreatureProfile, cards: NonNullable<CreatureProfile["actionCards"]>) {
+  return cards.find((card) => card.stateId === profile.dogState.id)
+    ?? cards.find((card) => card.stateId && dogStateById(profile, card.stateId)?.animation === profile.dogState.animation);
+}
+
+function dogStateById(profile: CreatureProfile, id: string) {
+  return [profile.dogState, ...(profile.dogStateHistory ?? [])].find((state) => state.id === id);
+}
+
+function nextHomeMotion(current: HomeMotion | undefined, items: HomeMotion[], fallbackAction: PetInteractionAction) {
+  if (!items.length) return undefined;
+  const currentIndex = current?.kind === "card"
+    ? items.findIndex((item) => item.kind === "card" && item.cardId === current.cardId)
+    : items.findIndex((item) => item.kind === "pet" && item.action === (current?.kind === "pet" ? current.action : fallbackAction));
+  return items[(Math.max(0, currentIndex) + 1) % items.length];
+}
+
+function ActionCardModeControl({ card, onChange }: { card: NonNullable<CreatureProfile["actionCards"]>[number]; onChange: (mode: ActionCardDisplayMode) => void }) {
+  const mode = actionCardDisplayMode(card);
+  return (
+    <div className="action-card-mode-control" role="group" aria-label={`${card.title} 首页展示方式`}>
+      {(["disabled", "static", "dynamic"] as const).map((value) => (
+        <button type="button" className={mode === value ? "active" : ""} aria-pressed={mode === value} onClick={() => onChange(value)} key={value}>
+          {value === "disabled" ? "停用" : value === "static" ? "静态" : "动态"}
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function DeveloperTrace({ trace, sensingTrace, profile }: { trace?: ConversationMessage["cognitionTrace"]; sensingTrace?: SensingTrace; profile: CreatureProfile }) {
@@ -3885,7 +3928,7 @@ function ProfileView(props: {
   onGenerateInitialActionCards: (guidance?: string) => Promise<void>;
   onGoMemory: (memoryId?: string) => void;
   onGoChat: () => void;
-  onUpdateActionCard: (cardId: string, input: { disabled?: boolean; deleted?: boolean }) => void;
+  onUpdateActionCard: (cardId: string, input: ActionCardUpdate) => void;
 }) {
   const petProfile = petProfileFor(props.profile);
   const initialMotionCount = initialMotionActionCardCount(props.profile);
@@ -4061,7 +4104,7 @@ function ProfileView(props: {
           <span>画过</span>
         </a>
         <a href="#my-actions">
-          <strong>{allActionCards.filter((card) => !card.disabled).length}</strong>
+          <strong>{allActionCards.filter((card) => actionCardDisplayMode(card) !== "disabled").length}</strong>
           <span>动作卡</span>
         </a>
       </section>
@@ -4081,17 +4124,15 @@ function ProfileView(props: {
       </section>
 
       <section className="profile-content-section" id="my-actions">
-        <ProfileSectionHeading icon={Play} title="动作卡" meta={`${allActionCards.filter((card) => !card.disabled).length} 个可用`} />
+        <ProfileSectionHeading icon={Play} title="动作卡" meta={`${allActionCards.filter((card) => actionCardDisplayMode(card) !== "disabled").length} 个可用`} />
         {actionCards.length ? (
           <div className="profile-action-rail">
             {actionCards.map((card) => (
-              <article className={card.disabled ? "profile-action-item disabled" : "profile-action-item"} key={card.id}>
+              <article className={`profile-action-item mode-${actionCardDisplayMode(card)}`} key={card.id}>
                 <ActionCardCover card={card} profile={props.profile} />
                 <div>
                   <strong>{namedCreatureText(card.title, props.profile.creatureName) || card.title}</strong>
-                  <button type="button" onClick={() => props.onUpdateActionCard(card.id, { disabled: !card.disabled })}>
-                    {card.disabled ? "启用" : "停用"}
-                  </button>
+                  <ActionCardModeControl card={card} onChange={(displayMode) => props.onUpdateActionCard(card.id, { displayMode })} />
                 </div>
               </article>
             ))}

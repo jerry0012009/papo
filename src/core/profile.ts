@@ -167,7 +167,11 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.actionCards = profile.actionCards.slice(0, 30);
   profile.petProfile = normalizePetProfile(profile.petProfile, profile.petKind);
   profile.clientDocument = normalizeClientDocument(profile.clientDocument, profile.createdAt);
-  for (const card of profile.actionCards) card.cover ??= profile.petProfile.avatarImage;
+  for (const card of profile.actionCards) {
+    card.cover ??= profile.petProfile.avatarImage;
+    card.displayMode ??= card.disabled ? "disabled" : "dynamic";
+    card.disabled = card.displayMode === "disabled";
+  }
   profile.dogState = normalizeDogState(profile.dogState, new Date().toISOString());
   profile.dogStateHistory ??= [];
   profile.dogStateHistory = profile.dogStateHistory.map((state) => normalizeDogState(state, state.selectedAt)).slice(0, 40);

@@ -61,6 +61,8 @@ const provider: ModelProvider = {
               caption: "吉祥追着蝴蝶动起来了。",
               style: "cute commercial pet animation, soft light, gentle camera",
               durationSeconds: 8,
+              stateId: "curious_peek",
+              statusText: "吉祥在花丛边追着小蝴蝶。",
               sourceIds: ["chat-text-action-card"]
             },
             memoryTags: ["动作卡"]
@@ -132,7 +134,7 @@ try {
   assert.match(videoPrompt, /living digital pet/);
   assert.match(videoPrompt, /first frame and final frame should match/i);
   assert.match(videoPrompt, /Forbidden look: stuffed animal, plush toy/);
-  assert.match(videoPrompt, /approved action-card cover and exact first frame/i);
+  assert.match(videoPrompt, /FIRST-FRAME IDENTITY LOCK/i);
   assert.match(keyframePrompt, /authoritative visual style/i);
   assert.match(keyframePrompt, /profile\/avatar image is the single authoritative/i);
   assert.match(videoReference, /^data:image\/png;base64,/);
@@ -144,6 +146,22 @@ try {
   assert.equal(current?.actionCards?.[0]?.video.id, papoMessage.attachments[0].id);
   assert.equal(current?.actionCards?.[0]?.cover?.kind, "image");
   assert.equal(current?.actionCards?.[0]?.title, "吉祥抓蝴蝶");
+  assert.equal(current?.actionCards?.[0]?.displayMode, "dynamic");
+  assert.equal(current?.actionCards?.[0]?.stateId, "curious_peek");
+  assert.equal(current?.actionCards?.[0]?.statusText, "吉祥在花丛边追着小蝴蝶");
+  assert.equal(current?.dogState.id, "curious_peek");
+
+  for (const displayMode of ["static", "disabled", "dynamic"] as const) {
+    const update = await fetch(`http://127.0.0.1:${address.port}/api/profiles/action-card-user/action-cards/${current?.actionCards?.[0]?.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ displayMode })
+    });
+    const updatePayload = await update.json();
+    assert.equal(update.status, 200, JSON.stringify(updatePayload));
+    assert.equal(updatePayload.actionCard.displayMode, displayMode);
+    assert.equal(updatePayload.actionCard.disabled, displayMode === "disabled");
+  }
   console.log(JSON.stringify({ ok: true, video: papoMessage.attachments[0].url }, null, 2));
 } finally {
   server.close();

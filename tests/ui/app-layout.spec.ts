@@ -62,8 +62,8 @@ test("home developer panel opens and closes without overflowing", async ({ page 
   await expect(panel).toContainText("状态");
   await expect(panel).toContainText("动作卡");
   await expect(panel.locator("video")).toBeVisible();
-  await panel.getByRole("button", { name: "禁用" }).click();
-  await expect(panel.locator(".action-card-admin.disabled")).toBeVisible();
+  await panel.getByRole("button", { name: "停用" }).click();
+  await expect(panel.locator(".action-card-admin.mode-disabled")).toBeVisible();
   await expect(panel).toContainText("最近状态日记");
   await expect(panel).toContainText("悄悄看你");
   await expectInViewport(page, panel);
@@ -291,10 +291,12 @@ test("my tab organizes content, companion settings, and account settings", async
   await actionItem.getByRole("button", { name: /播放视频/ }).click();
   await expect(page.getByRole("dialog", { name: /播放视频/ })).toBeVisible();
   await page.getByRole("button", { name: "关闭媒体" }).click();
+  await actionItem.getByRole("button", { name: "静态" }).click();
+  await expect(actionItem).toHaveClass(/mode-static/);
   await actionItem.getByRole("button", { name: "停用" }).click();
-  await expect(actionItem).toHaveClass(/disabled/);
-  await actionItem.getByRole("button", { name: "启用" }).click();
-  await expect(actionItem).not.toHaveClass(/disabled/);
+  await expect(actionItem).toHaveClass(/mode-disabled/);
+  await actionItem.getByRole("button", { name: "动态" }).click();
+  await expect(actionItem).toHaveClass(/mode-dynamic/);
 
   await hub.getByRole("button", { name: "Papo 设置" }).click();
   await expect(hub.getByText("设备与服务")).toBeVisible();
@@ -941,6 +943,26 @@ test("action-card pending notice follows durable job status", async ({ page }) =
   await expect(page.getByText(/正在让 Papo 动起来/)).toBeVisible();
 });
 
+test("home binds current state text to matching static and dynamic action cards", async ({ page }) => {
+  const cover = { id: "img-state-cover", kind: "image", label: "状态首帧", mime: "image/jpeg", url: "/pets/register/shiba.jpg", createdAt: now };
+  const video = { id: "vid-state-card", kind: "video", label: "悄悄看你", mime: "video/mp4", url: "/pets/register/golden-retriever.mp4", createdAt: now };
+  await page.addInitScript((value) => window.localStorage.setItem("papo:testProfileOverride", JSON.stringify(value)), {
+    actionCards: [{ id: video.id, createdAt: now, title: "悄悄看你", caption: "旧卡片说明", statusText: "Papo 从窗边探出脑袋，正悄悄看着你。", stateId: "curious_peek", displayMode: "static", prompt: "test", durationSeconds: 4, cover, video, sourceIds: [], providerKind: "generic", providerName: "test" }]
+  });
+  await page.goto("/");
+  const stage = page.locator(".home-stage");
+  await expect(stage.getByText("Papo 从窗边探出脑袋，正悄悄看着你。")).toBeVisible();
+  await expect(stage.locator(".action-card-avatar img")).toBeVisible();
+  await expect(stage.locator(".action-card-avatar video")).toHaveCount(0);
+
+  await stage.getByRole("button", { name: "小眼睛" }).click();
+  const panel = page.getByRole("dialog", { name: /Papo 状态/ });
+  await panel.getByRole("button", { name: "动态" }).click();
+  await page.getByRole("button", { name: "收起小眼睛" }).click();
+  await expect(stage.locator(".action-card-avatar video")).toBeVisible();
+  await expect(stage.getByText("Papo 从窗边探出脑袋，正悄悄看着你。")).toBeVisible();
+});
+
 async function installMockApi(page: Page) {
   let profile = makeProfile();
 
@@ -976,11 +998,11 @@ async function installMockApi(page: Page) {
 
     if (path.startsWith("/api/profiles/demo/action-cards/") && route.request().method() === "PATCH") {
       const cardId = path.split("/").at(-1);
-      const requestBody = safePostJson(route) as { disabled?: boolean; deleted?: boolean };
+      const requestBody = safePostJson(route) as { displayMode?: "disabled" | "static" | "dynamic"; disabled?: boolean; deleted?: boolean };
       profile = {
         ...profile,
         actionCards: (profile.actionCards ?? []).map((card) =>
-          card.id === cardId ? { ...card, ...requestBody } : card
+          card.id === cardId ? { ...card, ...requestBody, disabled: requestBody.displayMode ? requestBody.displayMode === "disabled" : requestBody.disabled ?? card.disabled } : card
         )
       };
       await json(route, { profile });

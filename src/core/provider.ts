@@ -483,7 +483,7 @@ async function callDashscopeVideoGeneration(
         },
         parameters: {
           resolution: config.resolution,
-          prompt_extend: true,
+          prompt_extend: false,
           duration: config.model === "wan2.2-i2v-flash" ? 5 : Math.max(3, Math.min(5, Math.round(input.durationSeconds ?? 4))),
           watermark: false
         }
@@ -948,6 +948,7 @@ async function callVideoGeneration(
   videoInput: { durationSeconds?: number; style?: string; referenceImage?: ImageReference }
 ) {
   if (!input.videoEndpoint) throw new Error("Video generation endpoint is not configured");
+  if (!videoInput.referenceImage?.dataUrl) throw new Error("Action-card image-to-video requires an approved cover image");
   const model = input.videoModel ?? input.model;
   if (!model) throw new Error("Video generation model is not configured");
   const controller = new AbortController();
@@ -972,10 +973,8 @@ async function callVideoGeneration(
       generate_audio: false,
       response_format: "url"
     };
-    if (videoInput.referenceImage?.dataUrl) {
-      payload.image_url = videoInput.referenceImage.dataUrl;
-      payload.input_image = videoInput.referenceImage.dataUrl;
-    }
+    payload.image_url = videoInput.referenceImage.dataUrl;
+    payload.input_image = videoInput.referenceImage.dataUrl;
     const response = await fetch(input.videoEndpoint, {
       method: "POST",
       signal: controller.signal,

@@ -188,7 +188,8 @@ export async function refreshDogStateIfDue(
     throw new Error("invalid dog state model result");
   }
 
-  const selected = DOG_STATE_CATALOG.find((item) => item.id === parsed.data.stateId);
+  const selectableStates = selectableDogStates(profile);
+  const selected = selectableStates.find((item) => item.id === parsed.data.stateId);
   if (!selected) {
     recordDogStateRun(profile, provider, now, "invalid", `dog state model selected unknown state: ${parsed.data.stateId}`);
     throw new Error(`unknown dog state: ${parsed.data.stateId}`);
@@ -201,6 +202,25 @@ export async function refreshDogStateIfDue(
   profile.dogStateHistory = profile.dogStateHistory.slice(0, 40);
   recordDogStateRun(profile, provider, now, "applied", `llm selected dog state ${selected.id}`);
   return next;
+}
+
+export function applyActionCardState(profile: CreatureProfile, stateId: string | undefined, now = new Date().toISOString()) {
+  if (!stateId) return undefined;
+  const selected = DOG_STATE_CATALOG.find((item) => item.id === stateId);
+  if (!selected) return undefined;
+  const next = dogStateFromCatalog(selected, now, "action_card", "新动作卡完成后，首页状态与这张卡的画面和文字保持一致。", DOG_STATE_CHECK_INTERVAL_MINUTES);
+  profile.dogState = next;
+  profile.dogStateHistory.unshift(next);
+  profile.dogStateHistory = profile.dogStateHistory.slice(0, 40);
+  return next;
+}
+
+function selectableDogStates(profile: CreatureProfile) {
+  const enabledStateIds = new Set((profile.actionCards ?? [])
+    .filter((card) => !card.deleted && (card.displayMode ?? (card.disabled ? "disabled" : "dynamic")) !== "disabled" && card.stateId)
+    .map((card) => card.stateId));
+  const represented = DOG_STATE_CATALOG.filter((state) => enabledStateIds.has(state.id));
+  return represented.length ? represented : DOG_STATE_CATALOG;
 }
 
 export function applyPetTouchState(profile: CreatureProfile, action: PetTouchAction, now = new Date().toISOString()) {
@@ -272,6 +292,7 @@ function recordDogStateRun(profile: CreatureProfile, provider: ModelProvider, no
 }
 
 function buildDogStatePrompt(profile: CreatureProfile, now: string) {
+  const selectableStates = selectableDogStates(profile);
   return `请作为 Papo 的外显状态选择脑，从 dog_state_catalog 中选择 Papo 接下来 1 小时左右在界面上呈现的状态。
 
 目标：
@@ -280,7 +301,7 @@ function buildDogStatePrompt(profile: CreatureProfile, now: string) {
 - 根据 pet_context 里的小动物类型、北京时间/配置时区、最近对话、长期记忆、当前状态和性格倾向，选一个自然的小动物外显状态。
 - catalog 是通用动作语义库，部分 visualPrompt 仍以 Shiba 为默认参考；如果 pet_context 不是柴犬，要把动作理解为对应小动物的外显行为，不要在 reason 里把它说成小狗或柴犬。
 - 如果用户刚互动较多，可以更贴近、听着、等待；如果长时间无互动，可以晒太阳、睡觉、玩球、看窗外等。
-- 必须从 catalog 里选择已有 stateId，不能新造。
+- 必须从本次提供的 catalog 里选择已有 stateId，不能新造。有动作卡时 catalog 会收敛为用户已启用的静态/动态卡所代表的状态，选择结果将直接决定首页画面与文字。
 - nextCheckMinutes 通常 60；如果状态很短可以 30-45，如果适合久一点可以 90-120。
 
 返回严格 JSON：
@@ -308,7 +329,7 @@ recent_conversation_newest_first:
 ${JSON.stringify(modelConversationContext(profile, 8))}
 
 dog_state_catalog:
-${JSON.stringify(DOG_STATE_CATALOG.map((item) => ({
+${JSON.stringify(selectableStates.map((item) => ({
   id: item.id,
   label: item.label,
   actionText: item.actionText,

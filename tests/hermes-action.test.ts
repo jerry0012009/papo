@@ -65,7 +65,8 @@ const provider: ModelProvider = {
       };
     }
     if (prompt.includes("行动选择脑")) {
-      const eventId = prompt.match(/"id":"([^"]+)"/)?.[1];
+      const events = JSON.parse(prompt.match(/events:\n(\[[\s\S]*?\])\n/)?.[1] ?? "[]") as Array<{ id?: string }>;
+      const eventId = events[0]?.id;
       assert.ok(eventId, "action prompt should include an event id");
       return {
         decisions: [

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DOG_STATE_CATALOG } from "./dog-states";
 import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelPetContext } from "./model-context";
 import { toCreatureMemoryVoice } from "./memory";
@@ -45,6 +46,8 @@ const semanticEmergenceSchema = z
         caption: optionalText(220),
         style: optionalText(160),
         durationSeconds: z.number().min(4).max(20).optional(),
+        stateId: optionalText(80),
+        statusText: optionalText(220),
         sourceIds: z.array(z.string().min(1).max(120)).max(12).optional()
       })
       .optional(),
@@ -52,6 +55,9 @@ const semanticEmergenceSchema = z
   })
   .refine((value) => !value.shouldEmerge || Boolean(value.memoryId && value.driveSource && value.whyNow && value.message), {
     message: "emergence requires memoryId, driveSource, whyNow, and message"
+  })
+  .refine((value) => !value.actionCardDraft || Boolean(value.actionCardDraft.title && value.actionCardDraft.prompt && value.actionCardDraft.stateId && value.actionCardDraft.statusText), {
+    message: "emergence action card requires title, prompt, stateId, and statusText"
   });
 
 type SemanticEmergenceSuggestion = z.infer<typeof semanticEmergenceSchema>;
@@ -184,6 +190,8 @@ function normalizeEmergenceActionResult(suggestion: SemanticEmergenceSuggestion)
       caption: safeCreatureText(actionCard.caption),
       style: actionCard.style?.trim(),
       durationSeconds: clampDuration(actionCard.durationSeconds),
+      stateId: DOG_STATE_CATALOG.some((state) => state.id === actionCard.stateId) ? actionCard.stateId : undefined,
+      statusText: safeCreatureText(actionCard.statusText),
       sourceIds: actionCard.sourceIds?.slice(0, 12)
     };
   }
@@ -322,7 +330,7 @@ ${JSON.stringify(eveningDiary)}
 - 如果 delivery=proactive，这不是用户手动碰一下 Papo，而是后台 30 分钟节律触发的一次主动判断。你可以选择安静，很多时候安静是更自然的；如果要主动说话，应短、轻、不催促。
 - proactive_context.pendingUnansweredMessages 表示此前主动消息还没收到用户回应。数值越高越应该克制；规则会负责未回应上限和下次触发时间，你负责判断此刻是否真的值得开口。
 - evening_diary_context.eligible=true 表示现在处于本地 19:00-24:00，且今天还没有发过“观察日记”插画。此时你可以选择安静、普通浮现，或返回 illustrationDraft 让 Papo 画一张今天的观察日记。是否画由你决定；如果画，应基于今天真实发生的 episode、对话、音频观察、照片附件和记忆，优先使用真实照片素材中的内容，不要编造今天没有发生的事情。
-- 如果某条记忆、当前状态或用户最近表达很适合让小动物“动一下”，可以返回 actionCardDraft 生成动作视频卡。例如出门、追蝴蝶、伸懒腰、打招呼、趴下陪着、带着玩具靠近。actionCardDraft 的 prompt 要写给视频模型，必须包含小动物名字、物种、具体动作、场景、镜头运动和角色一致性；不要把 prompt 写进 message。
+- 如果某条记忆、当前状态或用户最近表达很适合让小动物“动一下”，可以返回 actionCardDraft 生成动作视频卡。例如出门、追蝴蝶、伸懒腰、打招呼、趴下陪着、带着玩具靠近。actionCardDraft 的 prompt 要写给视频模型，必须包含小动物名字、物种、具体动作、场景、镜头运动和角色一致性；stateId 必须来自 dog_state_catalog，statusText 是首页与视频同步显示的状态句；不要把 prompt 写进 message。
 - illustrationDraft 和 actionCardDraft 同一次最多返回一个；如果只是该说一句话，不要生成媒体。
 - 观察日记优先画成 3-6 格的手绘多格漫画，而不是单张照片式画面；它应该像“Papo 今天看到的你的一天”，把当天几个真实片段串起来。只有当天素材非常单一时，才退成单幅明信片式画面。
 
@@ -361,6 +369,8 @@ JSON 字段名保持示例格式；枚举字段值必须使用示例里的英文
     "caption": "...",
     "style": "cute commercial pet animation, gentle camera, consistent character",
     "durationSeconds": 8,
+    "stateId": "dog_state_catalog 中的 id",
+    "statusText": "与视频画面同步的当下状态句",
     "sourceIds": ["episode_xxx", "img_xxx"]
   },
   "trace": ["..."]
@@ -371,6 +381,9 @@ JSON 字段名保持示例格式；枚举字段值必须使用示例里的英文
 
 now:
 ${now}
+
+dog_state_catalog:
+${JSON.stringify(DOG_STATE_CATALOG.map((state) => ({ id: state.id, label: state.label, actionText: state.actionText, animation: state.animation, tags: state.tags })))}
 
 pet_context:
 ${JSON.stringify(modelPetContext(profile, now))}

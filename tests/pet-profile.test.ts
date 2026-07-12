@@ -30,7 +30,9 @@ const provider: ModelProvider = {
           caption: "它轻轻探头看你。",
           prompt: "吉祥保持灰白英短形象，轻轻探头看向镜头。",
           style: "looping natural digital pet animation",
-          durationSeconds: 8
+          durationSeconds: 8,
+          stateId: "curious_peek",
+          statusText: "吉祥轻轻探头看着你。"
         }
       };
     }

@@ -93,7 +93,7 @@ test("compact recovery lets the text model author an age-accurate replacement ca
       }
       if (prompt.includes("action-planning stage")) {
         const events = JSON.parse(prompt.match(/Events:\n([\s\S]+)$/)?.[1] ?? "[]") as Array<{ id: string }>;
-        return { decisions: [{ eventId: events[0].id, action: "generate_action_card", reason: "用户明确要求修订旧动作卡", stateDeltas: {}, shouldCreateEpisode: true, shouldConsiderMemory: false, shouldReply: true, reply: "我会按你真实的成年形象重新做这张动作卡。", actionResult: { kind: "action_card_draft", title: "和 Papo 一起踢球", prompt: creativePrompt, caption: "这次是更符合你的足球时光。", style: "mature sports editorial illustration", durationSeconds: 8, replacesActionCardId: oldCardId, sourceIds: [events[0].id] } }] };
+        return { decisions: [{ eventId: events[0].id, action: "generate_action_card", reason: "用户明确要求修订旧动作卡", stateDeltas: {}, shouldCreateEpisode: true, shouldConsiderMemory: false, shouldReply: true, reply: "我会按你真实的成年形象重新做这张动作卡。", actionResult: { kind: "action_card_draft", title: "和 Papo 一起踢球", prompt: creativePrompt, caption: "这次是更符合你的足球时光。", style: "mature sports editorial illustration", durationSeconds: 8, stateId: "ball_ready", statusText: "Papo 正和你在球场上踢球。", replacesActionCardId: oldCardId, sourceIds: [events[0].id] } }] };
       }
       throw new Error(`unexpected recovery prompt: ${prompt.slice(0, 80)}`);
     },
@@ -165,7 +165,7 @@ test("a failed replacement job leaves the existing card active", async () => {
       }
       if (prompt.includes("行动选择脑")) {
         const events = JSON.parse(prompt.match(/events:\n(\[[\s\S]*?\])\n/)?.[1] ?? "[]") as Array<{ id: string }>;
-        return { decisions: [{ eventId: events[0].id, action: "generate_action_card", reason: "修订", stateDeltas: {}, shouldCreateEpisode: false, shouldConsiderMemory: false, shouldReply: true, reply: "我来重做。", actionResult: { kind: "action_card_draft", title: "新卡", prompt: "creative prompt from the action model", replacesActionCardId: oldCardId } }] };
+        return { decisions: [{ eventId: events[0].id, action: "generate_action_card", reason: "修订", stateDeltas: {}, shouldCreateEpisode: false, shouldConsiderMemory: false, shouldReply: true, reply: "我来重做。", actionResult: { kind: "action_card_draft", title: "新卡", prompt: "creative prompt from the action model", stateId: "ball_ready", statusText: "Papo 正在球场上活动。", replacesActionCardId: oldCardId } }] };
       }
       throw new Error("unexpected prompt");
     }),
@@ -185,7 +185,8 @@ test("a failed replacement job leaves the existing card active", async () => {
       return profile?.jobs?.some((job) => job.type === "action_card" && job.status === "failed") ? profile : undefined;
     });
     const oldCard = final.actionCards?.find((card) => card.id === oldCardId);
-    assert.equal(oldCard?.disabled, undefined);
+    assert.equal(oldCard?.disabled, false);
+    assert.equal(oldCard?.displayMode, "dynamic");
     assert.equal(oldCard?.replacedByActionCardId, undefined);
     assert.equal(final.actionCards?.length, 1);
   } finally {

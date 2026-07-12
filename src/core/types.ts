@@ -49,6 +49,8 @@ export interface ActionResult {
   videoAttachment?: MediaAttachment;
   durationSeconds?: number;
   replacesActionCardId?: string;
+  stateId?: string;
+  statusText?: string;
   petProfile?: Partial<PetIdentityProfile>;
 }
 
@@ -95,7 +97,7 @@ export interface DogInteractionState {
   animation: "idle" | "wag" | "bounce" | "sniff" | "nap" | "stretch" | "play" | "listen" | "peek" | "sun";
   reason: string;
   nextCheckAt: string;
-  selectedBy: "seed" | "llm" | "touch";
+  selectedBy: "seed" | "llm" | "touch" | "action_card";
 }
 
 export interface FeedbackPolicyProfile {
@@ -502,6 +504,9 @@ export interface ActionCardRecord {
   providerKind: ProviderKind;
   providerName: string;
   model?: string;
+  displayMode?: "disabled" | "static" | "dynamic";
+  stateId?: string;
+  statusText?: string;
   disabled?: boolean;
   deleted?: boolean;
 }

@@ -279,7 +279,7 @@ export async function generateInitialActionCards(userId: string, guidance?: stri
   return data.profile;
 }
 
-export async function updateActionCard(userId: string, cardId: string, input: { disabled?: boolean; deleted?: boolean }): Promise<CreatureProfile> {
+export async function updateActionCard(userId: string, cardId: string, input: { displayMode?: "disabled" | "static" | "dynamic"; disabled?: boolean; deleted?: boolean }): Promise<CreatureProfile> {
   const data = await request<{ profile: CreatureProfile }>(`/api/profiles/${userId}/action-cards/${cardId}`, {
     method: "PATCH",
     headers: profileJsonHeaders(userId),

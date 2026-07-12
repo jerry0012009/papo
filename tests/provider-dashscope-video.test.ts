@@ -24,7 +24,7 @@ globalThis.fetch = (async (url, init) => {
     assert.equal(body.model, "wan2.2-i2v-flash");
     assert.match(body.input.prompt, /Papo waves/);
     assert.match(body.input.img_url, /^data:image\/png;base64,/);
-    assert.deepEqual(body.parameters, { resolution: "480P", prompt_extend: true, duration: 5, watermark: false });
+    assert.deepEqual(body.parameters, { resolution: "480P", prompt_extend: false, duration: 5, watermark: false });
     return Response.json({ output: { task_id: "dash-task-1", task_status: "PENDING" }, request_id: "req-1" });
   }
   if (href === "https://dashscope.aliyuncs.com/api/v1/tasks/dash-task-1") {

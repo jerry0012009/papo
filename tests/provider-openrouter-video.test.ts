@@ -33,6 +33,8 @@ globalThis.fetch = (async (url, init) => {
     assert.equal(body.resolution, "480p");
     assert.equal(body.generate_audio, false);
     assert.equal(body.aspect_ratio, "1:1");
+    assert.equal(body.image_url, "data:image/png;base64,AAAA");
+    assert.equal(body.input_image, "data:image/png;base64,AAAA");
     assert.match(String(body.prompt), /small cat waves/);
     return new Response(JSON.stringify({ id: "job-1", status: "pending" }), {
       status: 200,
@@ -72,7 +74,7 @@ try {
   assert.equal(provider.diagnostics?.textProvider, "mimo");
   assert.equal(provider.diagnostics?.videoProvider, "openrouter");
   assert.equal(provider.diagnostics?.videoRoute, "openrouter_videos");
-  const video = await provider.generateVideo?.("small cat waves to the user", { durationSeconds: 4 });
+  const video = await provider.generateVideo?.("small cat waves to the user", { durationSeconds: 4, referenceImage: { dataUrl: "data:image/png;base64,AAAA", label: "approved cover" } });
   assert.equal(video?.model, "bytedance/seedance-1-5-pro");
   assert.equal(video?.mime, "video/mp4");
   assert.match(video?.dataUrl ?? "", /^data:video\/mp4;base64,/);

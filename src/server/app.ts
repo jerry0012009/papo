@@ -7,7 +7,7 @@ import { z } from "zod";
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
 import { updateClientDocument } from "../core/client-document";
 import { audioObservationPreview, imageSummaryPreview } from "../core/display-text";
-import { applyPetTouchState, isDogStateCheckDue, refreshDogStateIfDue } from "../core/dog-states";
+import { applyActionCardState, applyPetTouchState, DOG_STATE_CATALOG, isDogStateCheckDue, refreshDogStateIfDue } from "../core/dog-states";
 import { isDreamingDue, recordDreamingFailure, semanticDreamMemories } from "../core/dreaming";
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, recordExplicitForgetConfirmation, semanticReflectFeedback } from "../core/feedback";
@@ -50,6 +50,7 @@ const updateProfileSchema = z.object({
 }).refine((body) => body.creatureName !== undefined, { message: "No profile fields to update" });
 
 const updateActionCardSchema = z.object({
+  displayMode: z.enum(["disabled", "static", "dynamic"]).optional(),
   disabled: z.boolean().optional(),
   deleted: z.boolean().optional()
 });
@@ -1323,7 +1324,13 @@ export function createApp(input: {
       const body = updateActionCardSchema.parse(req.body);
       const card = profile.actionCards?.find((item) => item.id === req.params.cardId);
       if (!card) throw new HttpError(404, "Action card not found");
-      if (body.disabled !== undefined) card.disabled = body.disabled;
+      if (body.displayMode !== undefined) {
+        card.displayMode = body.displayMode;
+        card.disabled = body.displayMode === "disabled";
+      } else if (body.disabled !== undefined) {
+        card.disabled = body.disabled;
+        card.displayMode = body.disabled ? "disabled" : "dynamic";
+      }
       if (body.deleted !== undefined) card.deleted = body.deleted;
       await store.saveProfile(profile);
       res.json({ profile: publicProfile(profile), actionCard: card });
@@ -1816,9 +1823,13 @@ function queueInitialPetMotionGeneration(input: {
         sourceIds,
         providerKind: input.provider.diagnostics?.videoProvider ?? input.provider.kind,
         providerName: input.provider.diagnostics?.videoProvider ? `${input.provider.diagnostics.videoProvider} video` : input.provider.name,
-        model: generated.model ?? input.provider.diagnostics?.videoModel
+        model: generated.model ?? input.provider.diagnostics?.videoModel,
+        displayMode: "dynamic",
+        stateId: card.stateId,
+        statusText: card.statusText
       };
       profile.actionCards = [created, ...(profile.actionCards ?? [])].slice(0, 30);
+      applyActionCardState(profile, created.stateId, created.createdAt);
       profile.petProfile.initialMotion = {
         status: "ready",
         requestedAt: profile.petProfile.initialMotion?.requestedAt,
@@ -2039,12 +2050,17 @@ async function executeActionCardActions(
       replacementForActionCardId: actionResult.replacesActionCardId,
       providerKind: provider.diagnostics?.videoProvider ?? provider.kind,
       providerName: provider.diagnostics?.videoProvider ? `${provider.diagnostics.videoProvider} video` : provider.name,
-      model: generated.model ?? provider.diagnostics?.videoModel
+      model: generated.model ?? provider.diagnostics?.videoModel,
+      displayMode: "dynamic",
+      stateId: actionResult.stateId,
+      statusText: actionResult.statusText
     });
+    applyActionCardState(profile, actionResult.stateId, now);
     if (actionResult.replacesActionCardId) {
       const replaced = profile.actionCards.find((card) => card.id === actionResult.replacesActionCardId);
       if (replaced) {
         replaced.disabled = true;
+        replaced.displayMode = "disabled";
         replaced.replacedByActionCardId = video.id;
       }
     }
@@ -2114,8 +2130,12 @@ async function executeEmergenceActionCard(
     emergenceId: emergence.id,
     providerKind: provider.diagnostics?.videoProvider ?? provider.kind,
     providerName: provider.diagnostics?.videoProvider ? `${provider.diagnostics.videoProvider} video` : provider.name,
-    model: generated.model ?? provider.diagnostics?.videoModel
+    model: generated.model ?? provider.diagnostics?.videoModel,
+    displayMode: "dynamic",
+    stateId: actionResult.stateId,
+    statusText: actionResult.statusText
   });
+  applyActionCardState(profile, actionResult.stateId, now);
   profile.actionCards = profile.actionCards.slice(0, 30);
   return [video];
 }
@@ -2248,7 +2268,7 @@ function actionCardVideoPrompt(profile: CreatureProfile, actionResult: ActionRes
     `Visual style: ${identity.visualStyle}`,
     `Motion style: ${identity.motionStyle}`,
     userDepiction,
-    hasReferenceImage ? "The attached image is the approved action-card cover and exact first frame. Animate this image; do not redesign, reinterpret, restyle, or replace the character, background, palette, proportions, or rendering technique." : "Keep the character design consistent with the pet kind and current profile.",
+    hasReferenceImage ? "FIRST-FRAME IDENTITY LOCK: the attached approved cover is exact frame 0. Preserve that frame's pixels, identity, face, coat markings, body proportions, composition, background, palette, lighting, and rendering technique. Add only the smallest local motion needed for the action. Do not redraw, redesign, reinterpret, restyle, replace, or regenerate the character." : "Keep the character design consistent with the pet kind and current profile.",
     "Action priority: preserve the action, object, mood, and scene requested by the action model and user moment. Do not replace a specific requested action with a generic idle, wave, ball, or nap action.",
     "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
     "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
@@ -2299,7 +2319,7 @@ function actionCardVideoPromptForEmergence(profile: CreatureProfile, actionResul
     `Keep the pet identity consistent: ${identity.appearance}`,
     `Personality and habits to express through motion: ${identity.personality} ${identity.habits}`,
     `Visual and motion style: ${identity.visualStyle} ${identity.motionStyle}`,
-    hasReferenceImage ? "The attached image is the approved action-card cover and exact first frame. Animate it without redesigning or restyling the character or scene." : "",
+    hasReferenceImage ? "FIRST-FRAME IDENTITY LOCK: use the attached cover as exact frame 0 and add only minimal local motion. Preserve the character, face, markings, proportions, composition, background, palette, lighting, and rendering technique without redraw or restyle." : "",
     "Action priority: preserve the action, object, mood, and scene requested by the emergence/action model. Do not replace a specific requested action with a generic idle, wave, ball, or nap action.",
     "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
     "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
@@ -2415,12 +2435,15 @@ async function planInitialPetMotionCard(profile: CreatureProfile, provider: Mode
       caption: z.string().min(1).max(220).optional(),
       prompt: z.string().min(1).max(1200),
       style: z.string().min(1).max(240).optional(),
-      durationSeconds: z.number().min(4).max(20).optional()
+      durationSeconds: z.number().min(4).max(20).optional(),
+      stateId: z.string().min(1).max(80),
+      statusText: z.string().min(1).max(220)
     })
   });
   const parsed = schema.safeParse(raw);
   if (!parsed.success) throw new Error(`invalid initial motion plan JSON (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   const card = parsed.data.card;
+  if (!DOG_STATE_CATALOG.some((state) => state.id === card.stateId)) throw new Error(`initial motion selected unknown stateId: ${card.stateId}`);
   return { ...card, durationSeconds: Math.max(4, Math.min(20, Math.round(card.durationSeconds ?? 8))) };
 }
 
@@ -2442,6 +2465,7 @@ function buildInitialPetMotionPlanPrompt(profile: CreatureProfile, guidance?: st
 - 必须保持同一个角色外观，不要创造新角色。
 - 必须明确这是“真实动物/当前数字形象的动作视频”，不是玩具、毛绒公仔、摆件或产品模型。
 - 要求动作用固定镜头、全身可见、首尾姿态尽量一致，适合无缝循环。
+- 必须从 dog_state_catalog 选择与动作最相符的 stateId，并写一句与画面同步的 statusText；不要把生成过程当状态。
 
 pet_profile:
 ${JSON.stringify({
@@ -2450,6 +2474,7 @@ ${JSON.stringify({
   petProfile: profile.petProfile,
   dogState: profile.dogState,
   existingInitialMotions: existing,
+  dogStateCatalog: DOG_STATE_CATALOG.map((state) => ({ id: state.id, label: state.label, actionText: state.actionText, animation: state.animation, tags: state.tags })),
   userMotionGuidance: userMotionGuidance || "未提供"
 })}
 
@@ -2461,6 +2486,8 @@ ${JSON.stringify({
     "caption":"这张动作卡发生了什么，一句话",
     "prompt":"视频画面提示词。必须先写用户指定动作；再写同一只小动物的 profile 外观和画风；最后写镜头、循环、禁止玩具感等约束",
     "style":"视觉风格。优先对齐 petProfile.visualStyle 和 reference/avatar photo，不要另起风格",
+    "stateId":"dog_state_catalog 中与动作最相符的 id",
+    "statusText":"首页显示的当下状态句，必须准确描述这张卡里的动作",
     "durationSeconds":8
   }
 }`;
@@ -2475,7 +2502,7 @@ function buildInitialMotionVideoPrompt(profile: CreatureProfile, card: { title: 
     `Character identity: ${identity.appearance}`,
     `Personality/habits: ${identity.personality} ${identity.habits}`,
     `Motion style: ${identity.motionStyle}`,
-    hasReferenceImage ? "The attached image is the approved cover and exact first frame for this action. Animate it directly. Do not redesign, reinterpret or restyle the character, background, palette, proportions, lighting, or rendering technique." : "Use the written profile as strict grounding for character identity.",
+    hasReferenceImage ? "FIRST-FRAME IDENTITY LOCK: the attached image is the approved cover and exact frame 0. Preserve the same pixels and composition at frame 0. Animate it directly with minimal local motion only. Do not redraw, redesign, reinterpret, restyle, replace, or regenerate the character, face, markings, body proportions, background, palette, lighting, or rendering technique." : "Use the written profile as strict grounding for character identity.",
     "Action priority: preserve the action, object, mood, and scene requested in the action direction. Do not replace a user-requested action with a generic idle, wave, ball, or nap action.",
     "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
     "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",

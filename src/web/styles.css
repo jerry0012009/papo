@@ -1743,7 +1743,8 @@ select {
   min-width: 0;
 }
 
-.action-card-admin.disabled {
+.action-card-admin.mode-disabled,
+.profile-action-item.mode-disabled {
   opacity: 0.58;
 }
 
@@ -1762,6 +1763,33 @@ select {
 .action-card-controls button {
   min-height: 32px;
   padding: 4px 10px;
+}
+
+.action-card-mode-control {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2px;
+  margin-top: 8px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card-muted);
+}
+
+.action-card-mode-control button {
+  min-width: 0;
+  min-height: 30px;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  font-size: 0.72rem;
+}
+
+.action-card-mode-control button.active {
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: 0 1px 3px rgba(25, 35, 29, 0.12);
 }
 
 .status-diary-list {
@@ -6152,18 +6180,30 @@ select {
 
 .profile-action-item > div {
   min-width: 0;
-  display: flex;
-  align-items: center;
+  display: grid;
+  align-items: start;
   gap: 6px;
 }
 
 .profile-action-item strong {
   min-width: 0;
-  flex: 1;
   overflow: hidden;
   font-size: 0.82rem;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.profile-action-item .action-card-mode-control {
+  width: 100%;
+  margin-top: 0;
+}
+
+.home-action-card-viewer .action-card-avatar > img,
+.home-action-card-viewer .action-card-avatar > video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .profile-action-item button {
