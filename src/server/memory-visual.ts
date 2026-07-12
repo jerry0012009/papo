@@ -31,6 +31,9 @@ export async function planMemoryVisual(profile: CreatureProfile, memory: LongTer
   const hasGrounding = Boolean(memory.attachments?.some((item) => item.kind === "image"));
   if (plan.visualMode === "grounded_scene" && !hasGrounding) throw new Error("grounded_scene requires a real image attachment");
   if (plan.visualMode === "imaginative_illustration") validatePaintedMemoryPrompt(plan.imagePrompt ?? "");
+  if (plan.visualMode !== "no_visual" && plan.papoPresence !== "required" && !/no (?:pets?|animals?|anthropomorphic characters?)/i.test(plan.imagePrompt ?? "")) {
+    throw new Error("non-Papo memory image prompt must explicitly exclude animals");
+  }
   return plan;
 }
 
@@ -73,7 +76,7 @@ export function applyMemoryVisualPlan(memory: LongTermMemory, plan: MemoryVisual
   memory.visualMode = plan.visualMode;
   memory.papoPresence = plan.papoPresence;
   memory.visualPlanReason = plan.visualReason;
-  memory.visualPolicyVersion = 2;
+  memory.visualPolicyVersion = 3;
 }
 
 function retrieveRelatedMemories(profile: CreatureProfile, target: LongTermMemory) {
@@ -120,6 +123,7 @@ function memoryVisualPlanPrompt(profile: CreatureProfile, memory: LongTermMemory
 - 禁止出现 vector、3D render、commercial app style、corporate illustration、infographic、UI、logo、文字或水印。
 - 如果没有足够证据形成具体画面，选择 no_visual，不要退回抽象概念封面。
 - 讲座、会议等知识型记忆通常使用 imaginative_illustration，papoPresence 通常 absent；画的是被听见和经历的现场，而不是知识概念本身。
+- 当 papoPresence=optional 或 absent 时，imagePrompt 必须明确写 no pets、no animals、no anthropomorphic characters；不能因为产品角色是小动物，就把人类讲者或听众画成动物。
 - 日常陪伴、旅行、吃饭和关系型共同经历，只有当小动物确实是画面叙事的一部分时才用 papoPresence=required。
 - no_visual 表示这条记忆不值得配图，此时不返回 imagePrompt，papoPresence 只能 optional 或 absent。
 - papoPresence=required 表示明确让 ${profile.creatureName} 出现在画面，系统才会加入小动物参考图；optional/absent 不加入参考图。

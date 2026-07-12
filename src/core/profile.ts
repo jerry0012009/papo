@@ -185,7 +185,7 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
     memory.shortTitle = memoryShortTitle(memory.narrative ?? memory.text, memory.shortTitle);
     memory.contentRevision = Math.max(1, memory.contentRevision ?? 1);
     const migrateAbstractCover = memory.weight > 0
-      && memory.visualMode === "symbolic_cover"
+      && (memory.visualMode === "symbolic_cover" || memory.papoPresence !== "required")
       && (memory.visualPolicyVersion ?? 1) < MEMORY_VISUAL_POLICY_VERSION;
     memory.visualPolicyVersion = MEMORY_VISUAL_POLICY_VERSION;
     if (migrateAbstractCover) {

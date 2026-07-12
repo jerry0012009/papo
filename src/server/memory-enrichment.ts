@@ -35,7 +35,7 @@ export async function enrichMemoryExperience(
     const references = await memoryVisualReferences(profile, memory, plan, imageAttachmentDataUrl);
     const generated = await provider.generateImage(imagePrompt, {
       size: "1024x1024",
-      style: profile.petProfile.visualStyle,
+      style: memoryImageStyle(profile, plan),
       references
     });
     memory.visual = await saveMemoryVisual(generated.dataUrl, memory.shortTitle ?? "共同回忆", imagePrompt, [memory.id, ...plan.relatedMemoryIds]);
@@ -49,6 +49,13 @@ export async function enrichMemoryExperience(
     if (options.throwOnVisualError) throw new MemoryEnrichmentFailure(memory.visualError, memory);
   }
   return memory;
+}
+
+function memoryImageStyle(profile: CreatureProfile, plan: Awaited<ReturnType<typeof planMemoryVisual>>) {
+  if (plan.papoPresence === "required") return profile.petProfile.visualStyle;
+  return plan.visualMode === "grounded_scene"
+    ? "natural observational memory scene grounded only in the provided real photo"
+    : "tactile hand-painted gouache or watercolor memory scene with visible paper texture; human life subjects, never anthropomorphic animals";
 }
 
 async function saveMemoryVisual(dataUrl: string, label: string, prompt: string, sourceIds: string[]): Promise<MediaAttachment> {

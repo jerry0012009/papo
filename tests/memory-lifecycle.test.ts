@@ -46,7 +46,7 @@ test("visual planning avoids fake grounding and only adds Papo when required", a
   plan = {
     shortTitle: "检索讲座", narrative: "我记得这场讲座梳理了向量检索的关键结构。",
     visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "从听众视角手绘这次讲座经历",
-    imagePrompt: "Square hand-painted gouache memory scene from the back row of a small lecture, anonymous audience backs facing a speaker silhouette and blank screen, visible brush texture, no pet, no text.",
+    imagePrompt: "Square hand-painted gouache memory scene from the back row of a small lecture, anonymous human audience backs facing a speaker silhouette and blank screen, visible brush texture, no animals, no text.",
     relatedMemoryIds: [], needsClientReferences: false
   };
   const lecturePlan = await planMemoryVisual(profile, lecture, provider);
@@ -64,7 +64,7 @@ test("visual planning avoids fake grounding and only adds Papo when required", a
   plan = {
     shortTitle: "想象封面", narrative: "我记得这件事，但当时没有留下现场照片。",
     visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "没有照片，只作明确的想象插画",
-    imagePrompt: "Square colored-pencil sketchbook memory scene, explicitly non-photographic, no identifiable person or location, visible paper texture, no text.",
+    imagePrompt: "Square colored-pencil sketchbook memory scene, explicitly non-photographic, no identifiable person or location, visible paper texture, no animals, no text.",
     relatedMemoryIds: [], needsClientReferences: false
   };
   assert.equal((await planMemoryVisual(profile, memory("ltm_no_photo", "没有照片的经历"), provider)).visualMode, "imaginative_illustration");
@@ -105,7 +105,7 @@ test("persistent memory jobs retry failures and expose a terminal visual error w
   const provider = providerWith(() => ({
     shortTitle: "失败测试", narrative: "我仍保留这条记忆，并会诚实显示配图失败。",
     visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "使用非写实插画",
-    imagePrompt: "Square hand-painted gouache memory scene for an intentional retry failure test, visible brush texture, no text.",
+    imagePrompt: "Square hand-painted gouache memory scene for an intentional retry failure test, visible brush texture, no animals, no text.",
     relatedMemoryIds: [], needsClientReferences: false
   }), async () => {
     attempts += 1;

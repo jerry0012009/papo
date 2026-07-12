@@ -2,7 +2,7 @@ import { makeId } from "./ids";
 import { summarizeText } from "./text";
 import type { AttentionEvent, ConversationJobRecord, CreatureProfile, EpisodeMemory, LongTermMemory, MemoryCandidate } from "./types";
 
-export const MEMORY_VISUAL_POLICY_VERSION = 2;
+export const MEMORY_VISUAL_POLICY_VERSION = 3;
 
 export function upsertLongTermMemory(
   profile: CreatureProfile,

@@ -13,7 +13,7 @@ const provider: ModelProvider = {
   kind: "generic", name: "Media worker provider", available: true, usesRealModel: true,
   async generate() { return ""; },
   async generateJson(prompt) {
-    if (prompt.includes("共同回忆编辑和视觉导演")) return { shortTitle: "咖啡时刻", narrative: "我记得你分享过一杯咖啡。", visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "没有现场照片，使用插画表达", imagePrompt: "Square hand-painted watercolor memory scene of a coffee cup on a lived-in table, visible paper texture, no text.", relatedMemoryIds: [], needsClientReferences: false };
+    if (prompt.includes("共同回忆编辑和视觉导演")) return { shortTitle: "咖啡时刻", narrative: "我记得你分享过一杯咖啡。", visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "没有现场照片，使用插画表达", imagePrompt: "Square hand-painted watercolor memory scene of a coffee cup on a lived-in table, visible paper texture, no animals, no text.", relatedMemoryIds: [], needsClientReferences: false };
     if (prompt.includes("Client.md 维护脑")) return { facts: [{ dimension: "leisure", text: "你会分享咖啡时刻", confidence: 80, sourceIds: ["ltm_async_memory"] }] };
     if (prompt.includes("注意决策脑")) {
       const segmentId = [...prompt.matchAll(/"segmentId":"([^"]+)"/g)].at(-1)?.[1];

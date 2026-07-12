@@ -74,7 +74,7 @@ const provider: ModelProvider = {
     if (prompt.includes("共同回忆编辑和视觉导演")) return {
       shortTitle: "晚间游泳",
       narrative: "我记得你最近每天晚上游泳，只是不喜欢泳池里人太多。",
-      imagePrompt: "Square hand-painted gouache memory scene beside a quiet evening swimming pool, visible brush texture, no text.",
+      imagePrompt: "Square hand-painted gouache memory scene beside a quiet evening swimming pool, visible brush texture, no animals, no text.",
       visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "没有现场照片，使用插画表达",
       relatedMemoryIds: [], needsClientReferences: false
     };
