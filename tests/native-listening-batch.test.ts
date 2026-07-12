@@ -34,7 +34,7 @@ const provider: ModelProvider = {
       return {
         assignments: segmentIds.map((segmentId, index) => ({
           segmentId, role: "scene_evidence", transition: index ? "continue" : "start", eventKind: "activity", eventTitle: "桌边工作",
-          observationSummary: "用户在桌边，声音显示工作已经结束", updatedEventSummary: "用户在桌边，声音显示工作已经结束", importantFacts: ["工作已经结束"], reason: "同一时刻的画面与声音"
+          segmentSummary: "用户在桌边，声音显示工作已经结束", updatedEventSummary: "用户在桌边，声音显示工作已经结束", importantFacts: ["工作已经结束"], reason: "同一时刻的画面与声音"
         })),
         currentContext: { activity: "桌边工作结束", rollingSummary: "用户在桌边，声音显示工作已经结束", importantContent: ["工作已经结束"], recentUserNotes: [] }
       };

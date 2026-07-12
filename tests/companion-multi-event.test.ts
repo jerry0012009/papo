@@ -103,7 +103,7 @@ test("one companion session keeps multimodal scenes and alternating events separ
 });
 
 function assignment(segmentId: string, role: string, transition: string, eventKind: string, eventTitle: string, summary: string) {
-  return { segmentId, role, transition, eventKind, eventTitle, observationSummary: summary, updatedEventSummary: summary, importantFacts: [summary], reason: "语义与当前场景一致" };
+  return { segmentId, role, transition, eventKind, eventTitle, segmentSummary: summary, updatedEventSummary: summary, importantFacts: [summary], reason: "语义与当前场景一致" };
 }
 
 function context(activity: string, rollingSummary: string, recentUserNotes: string[]) {

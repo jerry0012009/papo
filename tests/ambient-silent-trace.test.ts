@@ -16,7 +16,7 @@ test("selected companion input keeps trace while event aggregation owns the epis
         return {
           assignments: [{
             segmentId: "live-lecture-001-audio", role: "scene_evidence", transition: "start", eventKind: "lecture", eventTitle: "产品讲座",
-            observationSummary: "讲者说明产品定位和目标用户", updatedEventSummary: "讲者说明产品定位和目标用户", importantFacts: ["产品定位和目标用户"], reason: "讲座刚开始"
+            segmentSummary: "讲者说明产品定位和目标用户", updatedEventSummary: "讲者说明产品定位和目标用户", importantFacts: ["产品定位和目标用户"], reason: "讲座刚开始"
           }],
           currentContext: { activity: "正在听讲座", rollingSummary: "讲者说明产品定位和目标用户", importantContent: ["产品定位和目标用户"], recentUserNotes: [] }
         };

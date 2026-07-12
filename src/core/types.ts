@@ -200,6 +200,7 @@ export interface SensingTrace {
   status: "content" | "empty" | "unreadable";
   decision: string;
   observation?: string;
+  audioContent?: AudioSensingContent;
   attempts?: number;
   errorKind?: "unreadable" | "empty" | "provider_error" | "decode_error";
   retainedAudio?: {
@@ -209,6 +210,25 @@ export interface SensingTrace {
     retainedUntil: string;
   };
   ruleTrace: string[];
+}
+
+export type AudioSceneType = "environment" | "conversation" | "lecture" | "meeting" | "interview" | "unknown";
+export type SpeakerNameSource = "unknown" | "user_statement" | "self_introduction" | "reliable_context";
+
+export interface SpeakerIdentityEvidence {
+  speakerId: `speaker_${number}`;
+  displayName?: string;
+  nameSource: SpeakerNameSource;
+  confidence: number;
+  evidence?: string;
+  sourceSegmentIds: string[];
+}
+
+export interface AudioSensingContent {
+  sceneType: AudioSceneType;
+  transcript: string;
+  environmentObservation?: string;
+  speakers: SpeakerIdentityEvidence[];
 }
 
 export interface SegmentScore {
@@ -742,11 +762,16 @@ export interface CompanionSessionRecord {
     modality: SegmentKind;
     status: SensingTrace["status"];
     content: string;
+    transcript?: string;
+    segmentSummary?: string;
+    audioSceneType?: AudioSceneType;
+    speakers?: SpeakerIdentityEvidence[];
     sourceTurnId?: string;
     role?: "scene_evidence" | "context_setting" | "context_note" | "noise";
     assignmentStatus?: "pending" | "processing" | "assigned" | "ignored" | "failed";
     transition?: "continue" | "start" | "switch" | "pause" | "resume" | "end" | "unrelated";
     eventId?: string;
+    /** @deprecated Read segmentSummary for normalized profiles. */
     summary?: string;
     assignmentReason?: string;
     processedAt?: string;
@@ -773,6 +798,15 @@ export interface CompanionEventRecord {
   endedAt?: string;
   updatedAt: string;
   summary: string;
+  eventSummary: string;
+  transcript: Array<{
+    segmentId: string;
+    observedAt: string;
+    text: string;
+    sceneType: AudioSceneType;
+    speakers: SpeakerIdentityEvidence[];
+  }>;
+  speakers: SpeakerIdentityEvidence[];
   importantContent: string[];
   sourceTurnIds: string[];
   sourceSegmentIds: string[];

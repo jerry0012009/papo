@@ -60,7 +60,7 @@ test("a 15 minute lecture is tracked continuously and becomes one revisable memo
           transition: index ? "continue" : "start",
           eventKind: "lecture",
           eventTitle: "海外中文产品路演",
-          observationSummary: content,
+          segmentSummary: content,
           updatedEventSummary: contents.slice(0, index + 1).join(" "),
           importantFacts: [content],
           reason: index ? "主题和讲者脉络持续一致" : "连续讲座开始"
@@ -104,7 +104,7 @@ test("a 15 minute lecture is tracked continuously and becomes one revisable memo
     if (prompt.includes("连续生活事件归属脑")) return {
       assignments: [{
         segmentId: "7", role: "context_note", transition: "resume", targetEventId: existingEventId,
-        eventKind: "lecture", eventTitle: "海外中文产品路演", observationSummary: supplement.content,
+        eventKind: "lecture", eventTitle: "海外中文产品路演", segmentSummary: supplement.content,
         updatedEventSummary: `${event!.summary} ${supplement.content}`, importantFacts: [supplement.content], reason: "这是同一场路演的会后补充"
       }],
       currentContext: { activity: "路演会后补充", rollingSummary: supplement.content, importantContent: [supplement.content], recentUserNotes: [] }

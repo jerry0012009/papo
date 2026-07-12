@@ -10,6 +10,7 @@ import type {
   EpisodeMemory,
   LongTermMemory,
   SemanticBrainRecord,
+  SpeakerIdentityEvidence,
   StreamSegment
 } from "../core/types";
 import type { ProfileStore } from "./store";
@@ -17,10 +18,19 @@ import type { ProfileStore } from "./store";
 const INACTIVITY_MS = 4 * 60_000;
 const GUARANTEED_LONG_FORM_MS = 10 * 60_000;
 const MAX_PENDING_PER_PASS = 8;
+const MAX_ASSIGNMENT_TRANSCRIPT_CHARS = 40_000;
 const eventKindSchema = z.enum(["lecture", "meeting", "conversation", "meal", "lunch", "dining", "travel", "activity", "ambient", "other"])
   .transform((value) => value === "lunch" || value === "dining" ? "meal" as const : value);
 const optionalEventKindSchema = z.preprocess((value) => value === null ? undefined : value, eventKindSchema.optional());
 const optionalString = (max: number) => z.preprocess((value) => value === null || value === "" ? undefined : value, z.string().trim().min(1).max(max).optional());
+const speakerUpdateSchema = z.object({
+  speakerId: z.string().regex(/^speaker_[1-9]\d*$/),
+  displayName: optionalString(120),
+  nameSource: z.enum(["unknown", "user_statement", "self_introduction", "reliable_context"]),
+  confidence: z.number().min(0).max(1),
+  evidence: optionalString(500),
+  sourceSegmentIds: z.array(z.string().min(1).max(120)).max(20)
+});
 
 const assignmentSchema = z.object({
   assignments: z.array(z.object({
@@ -31,9 +41,10 @@ const assignmentSchema = z.object({
     switchDisposition: z.preprocess((value) => value === null ? undefined : value, z.enum(["pause", "complete"]).optional()),
     eventKind: optionalEventKindSchema,
     eventTitle: optionalString(48),
-    observationSummary: z.string().trim().max(500),
+    segmentSummary: z.string().trim().max(1200),
     updatedEventSummary: optionalString(1400),
     importantFacts: z.array(z.string().trim().min(1).max(260)).max(10).default([]),
+    speakerUpdates: z.array(speakerUpdateSchema).max(12).default([]),
     reason: z.string().trim().min(1).max(360)
   })).min(1).max(MAX_PENDING_PER_PASS),
   currentContext: z.object({
@@ -77,8 +88,18 @@ export function collectCompanionTurn(profile: CreatureProfile, turnId: string, s
     }
     const previous = session.observations.find((item) => item.segmentId === segment.id);
     const status = segment.sensingTrace?.status ?? (segment.kind === "text" && segment.content.trim() ? "content" : segment.auditOnly ? "empty" : segment.content.trim() ? "content" : "empty");
-    const content = status === "content" ? segment.content.trim().slice(0, 1600) : "";
-    const changed = !previous || previous.status !== status || previous.content !== content;
+    const content = status === "content" ? segment.content.trim().slice(0, 24_000) : "";
+    const audioContent = segment.sensingTrace?.audioContent;
+    const transcript = audioContent?.transcript.trim() || (segment.kind === "audio_observation" && status === "content" ? content : undefined);
+    const speakers = audioContent?.speakers.map((speaker) => ({
+      ...speaker,
+      sourceSegmentIds: unique([...speaker.sourceSegmentIds, segment.id])
+    }));
+    const changed = !previous
+      || previous.status !== status
+      || previous.content !== content
+      || previous.transcript !== transcript
+      || previous.audioSceneType !== audioContent?.sceneType;
     session.startedAt = minIso(session.startedAt, observedAt);
     session.lastObservedAt = maxIso(session.lastObservedAt, observedAt);
     session.updatedAt = maxIso(session.updatedAt, observedAt);
@@ -96,6 +117,11 @@ export function collectCompanionTurn(profile: CreatureProfile, turnId: string, s
       modality: segment.kind,
       status,
       content,
+      transcript,
+      audioSceneType: audioContent?.sceneType,
+      speakers,
+      segmentSummary: changed ? undefined : previous?.segmentSummary,
+      summary: changed ? undefined : previous?.summary,
       assignmentStatus: changed ? "pending" : previous?.assignmentStatus ?? "pending",
       processedAt: changed ? undefined : previous?.processedAt,
       assignmentReason: changed ? undefined : previous?.assignmentReason
@@ -109,13 +135,13 @@ export function collectCompanionTurn(profile: CreatureProfile, turnId: string, s
 export function companionCognitionContext(profile: CreatureProfile, turnId: string): CognitionContext["companion"] | undefined {
   const session = (profile.companionSessions ?? []).find((item) => item.observations.some((observation) => observation.sourceTurnId === turnId));
   if (!session) return undefined;
-  const recent = session.observations.filter((item) => item.assignmentStatus === "assigned" && item.summary).slice(-5);
+  const recent = session.observations.filter((item) => item.assignmentStatus === "assigned" && item.segmentSummary).slice(-5);
   return {
     sessionId: session.id,
     currentEventId: session.currentEventId,
     currentContext: session.currentContext?.rollingSummary ?? "",
     recentUserNotes: session.currentContext?.recentUserNotes ?? [],
-    recentObservationSummaries: recent.map((item) => item.summary!).filter(Boolean)
+    recentObservationSummaries: recent.map((item) => item.segmentSummary!).filter(Boolean)
   };
 }
 
@@ -190,10 +216,18 @@ async function processPendingObservations(store: ProfileStore, provider: ModelPr
   const claimed = await store.updateProfile(userId, (profile) => {
     const session = profile.companionSessions?.find((item) => item.id === sessionId);
     if (!session) return;
-    const pending = session.observations
+    const candidates = session.observations
       .filter((item) => item.assignmentStatus === "pending" && (!turnId || item.sourceTurnId === turnId))
       .sort((left, right) => Date.parse(left.observedAt) - Date.parse(right.observedAt))
       .slice(0, MAX_PENDING_PER_PASS);
+    const pending: typeof candidates = [];
+    let transcriptChars = 0;
+    for (const observation of candidates) {
+      const size = observation.transcript?.length ?? observation.content.length;
+      if (pending.length && transcriptChars + size > MAX_ASSIGNMENT_TRANSCRIPT_CHARS) break;
+      pending.push(observation);
+      transcriptChars += size;
+    }
     for (const observation of pending) {
       observation.assignmentStatus = "processing";
       observation.processedAt = claimAt;
@@ -260,7 +294,8 @@ function applyAssignment(
 ) {
   observation.role = decision.role;
   observation.transition = decision.transition;
-  observation.summary = decision.observationSummary;
+  observation.segmentSummary = decision.segmentSummary;
+  observation.summary = decision.segmentSummary;
   observation.assignmentReason = decision.reason;
   observation.processedAt = now;
   if (decision.transition === "unrelated" || decision.role === "noise") {
@@ -301,8 +336,27 @@ function applyAssignment(
   event.updatedAt = now;
   event.title = decision.eventTitle ?? event.title;
   event.kind = decision.eventKind ?? event.kind;
-  event.summary = decision.updatedEventSummary?.trim() || appendSummary(event.summary, decision.observationSummary);
+  event.eventSummary = decision.updatedEventSummary?.trim() || appendSummary(event.eventSummary, decision.segmentSummary);
+  event.summary = event.eventSummary;
   event.importantContent = unique([...event.importantContent, ...decision.importantFacts]).slice(-24);
+  if (observation.transcript?.trim()) {
+    event.transcript = [
+      ...event.transcript.filter((item) => item.segmentId !== observation.segmentId),
+      {
+        segmentId: observation.segmentId,
+        observedAt: observation.observedAt,
+        text: observation.transcript.trim(),
+        sceneType: observation.audioSceneType ?? "unknown",
+        speakers: observation.speakers ?? []
+      }
+    ].sort((left, right) => Date.parse(left.observedAt) - Date.parse(right.observedAt));
+  }
+  event.speakers = mergeEventSpeakers(
+    event.speakers,
+    [...(observation.speakers ?? []), ...decision.speakerUpdates],
+    observation.segmentId,
+    new Set([...event.sourceSegmentIds, observation.segmentId])
+  );
   event.sourceTurnIds = unique([...event.sourceTurnIds, observation.sourceTurnId ?? ""]);
   event.sourceSegmentIds = unique([...event.sourceSegmentIds, observation.segmentId]);
   event.revision += 1;
@@ -342,6 +396,9 @@ function createEvent(
     lastObservedAt: observation.observedAt,
     updatedAt: now,
     summary: "",
+    eventSummary: "",
+    transcript: [],
+    speakers: [],
     importantContent: [],
     sourceTurnIds: [],
     sourceSegmentIds: [],
@@ -428,6 +485,7 @@ async function consolidateEvent(store: ProfileStore, provider: ModelProvider, us
     target.messageId = records.message?.id ?? target.messageId;
     target.title = parsed.data.title;
     target.summary = parsed.data.summary;
+    target.eventSummary = parsed.data.summary;
     target.kind = parsed.data.kind;
     target.error = undefined;
   });
@@ -526,9 +584,10 @@ function buildAssignmentPrompt(profile: CreatureProfile, session: CompanionSessi
 
 按时间顺序判断每条新 observation：continue 延续当前事件；start 在没有当前事件时开始；switch 切换到新事件并用 switchDisposition 决定旧事件暂停或完成；pause 暂停当前事件；resume 恢复一个 paused event；end 结束当前事件；unrelated 表示无关噪音或无法归属，不得污染事件摘要。eventKind 只能使用 lecture、meeting、conversation、meal、travel、activity、ambient、other。
 role 只能使用 scene_evidence、context_setting、context_note、noise。用户文字可能是 scene_evidence、context_setting 或 context_note。像“接下来我要听讲座”“这是第二位发言人”这样的说明必须更新上下文并影响后续观察，不能因 Attention 静默而丢失。照片、声音和同期文字应在语义与时间一致时归入同一事件。
-只根据证据判断，不要编造。updatedEventSummary 要整合事件至今内容，不逐片罗列；importantFacts 只保留核心事实。若一批中先开始事件、后续 assignment 可用 continue 引用本批刚建立的当前事件。targetEventId 只能引用 existingEvents 中的事件，主要用于 resume；新事件 ID 由系统生成。
+只根据证据判断，不要编造。segmentSummary 必须严格基于该 observation 的 transcript 生成，压缩单片主旨但保留关键数字、专有名词、论点与结论；不得把 segmentSummary 当 transcript。updatedEventSummary 要跨片段整合事件至今内容，不逐片罗列；importantFacts 只保留核心事实。若一批中先开始事件、后续 assignment 可用 continue 引用本批刚建立的当前事件。targetEventId 只能引用 existingEvents 中的事件，主要用于 resume；新事件 ID 由系统生成。
+speakerUpdates 用于把片段 speaker 标签维护到事件中。只有用户明确说明、说话者明确自我介绍，或 existingEvents/currentContext 提供可靠对应关系时才可填写 displayName；必须同时给出 nameSource、evidence、confidence 和 sourceSegmentIds。否则只保留 speaker_1、speaker_2 标签，nameSource=unknown，绝不能猜姓名。
 只返回 JSON：
-{"assignments":[{"segmentId":"...","role":"context_setting","transition":"start","eventKind":"lecture","eventTitle":"...","observationSummary":"...","updatedEventSummary":"...","importantFacts":["..."],"reason":"..."}],"currentContext":{"activity":"...","rollingSummary":"...","importantContent":["..."],"recentUserNotes":["..."]}}
+{"assignments":[{"segmentId":"...","role":"context_setting","transition":"start","eventKind":"lecture","eventTitle":"...","segmentSummary":"...","updatedEventSummary":"...","importantFacts":["..."],"speakerUpdates":[{"speakerId":"speaker_1","displayName":"...","nameSource":"self_introduction","confidence":0.95,"evidence":"...","sourceSegmentIds":["..."]}],"reason":"..."}],"currentContext":{"activity":"...","rollingSummary":"...","importantContent":["..."],"recentUserNotes":["..."]}}
 
 session:
 ${JSON.stringify({ id: session.id, startedAt: session.startedAt, lastObservedAt: session.lastObservedAt })}
@@ -537,13 +596,13 @@ currentContext:
 ${JSON.stringify(session.currentContext ?? {})}
 
 existingEvents:
-${JSON.stringify((session.events ?? []).map((event) => ({ id: event.id, status: event.status, kind: event.kind, title: event.title, startedAt: event.startedAt, lastObservedAt: event.lastObservedAt, summary: event.summary, importantContent: event.importantContent })))}
+${JSON.stringify((session.events ?? []).map((event) => ({ id: event.id, status: event.status, kind: event.kind, title: event.title, startedAt: event.startedAt, lastObservedAt: event.lastObservedAt, eventSummary: event.eventSummary, importantContent: event.importantContent, speakers: event.speakers })))}
 
 recentAssignedObservations:
-${JSON.stringify(session.observations.filter((item) => item.assignmentStatus === "assigned").slice(-6).map((item) => ({ observedAt: item.observedAt, role: item.role, eventId: item.eventId, summary: item.summary })))}
+${JSON.stringify(session.observations.filter((item) => item.assignmentStatus === "assigned").slice(-6).map((item) => ({ observedAt: item.observedAt, role: item.role, eventId: item.eventId, segmentSummary: item.segmentSummary })))}
 
 newObservations:
-${JSON.stringify(observations.map((item) => ({ segmentId: item.segmentId, sourceTurnId: item.sourceTurnId, observedAt: item.observedAt, modality: item.modality, status: item.status, content: item.content })))}
+${JSON.stringify(observations.map((item) => ({ segmentId: item.segmentId, sourceTurnId: item.sourceTurnId, observedAt: item.observedAt, modality: item.modality, status: item.status, transcript: item.transcript, audioSceneType: item.audioSceneType, speakers: item.speakers, content: item.modality === "audio_observation" ? undefined : item.content })))}
 
 recentDirectConversation:
 ${JSON.stringify(profile.conversation.filter((message) => message.role === "user").slice(0, 6).map((message) => ({ at: message.at, text: message.text, batchId: message.batchId })))}
@@ -558,7 +617,8 @@ function buildConsolidationPrompt(
 ) {
   return `请作为 Papo 的事件级经历整理与记忆决策脑。只整理给定 event，不要把同一 companion session 中其他事件混进来。
 
-所有归入该 event 的成功观察都应参与总结，即使某片没有触发 Attention 或 Papo 当时保持安静。整合主题、关键事实、论点、结论和待办，不逐片复述，不编造。
+所有归入该 event 的成功观察都应参与总结，即使某片没有触发 Attention 或 Papo 当时保持安静。eventSummary 必须以 eventTranscript 为第一事实源，并用 segmentSummaries 辅助定位，整合主题、关键事实、论点、论据、转折、结论和待办；不能从片段摘要反推或编造 transcript 中不存在的事实。
+transcript 是事件资料，不等于长期记忆。不要仅因 transcript 很长就 shouldRemember=true；长期记忆仍只保存对 Papo 与用户有持续价值的整合内容。
 只有稳定偏好、重要经历、持续情绪、长期计划，或完整且有回顾价值的讲座/会议才写长期记忆。持续 10 分钟以上且至少 3 个有效片段的 lecture/meeting 必须 shouldRemember=true，形成一条自足的整合记忆。
 如果 event 已有 memoryId，说明这是后续补充或恢复：必须更新原记忆，不能另建重复记忆。
 只返回 JSON：
@@ -568,10 +628,13 @@ sessionContext:
 ${JSON.stringify({ id: session.id, currentContext: session.currentContext })}
 
 event:
-${JSON.stringify(event)}
+${JSON.stringify({ ...event, transcript: undefined })}
 
-eventObservations:
-${JSON.stringify(observations.map((item) => ({ segmentId: item.segmentId, observedAt: item.observedAt, modality: item.modality, role: item.role, summary: item.summary, content: item.content })))}
+eventTranscript:
+${JSON.stringify(event.transcript)}
+
+segmentSummaries:
+${JSON.stringify(observations.map((item) => ({ segmentId: item.segmentId, observedAt: item.observedAt, modality: item.modality, role: item.role, segmentSummary: item.segmentSummary })))}
 
 recentDirectContext:
 ${JSON.stringify(profile.conversation.filter((message) => message.role === "user").slice(0, 8).map((message) => ({ at: message.at, text: message.text })))}
@@ -632,6 +695,34 @@ function appendSummary(current: string, addition: string) {
   const clean = addition.trim();
   if (!clean || current.includes(clean)) return current;
   return [current.trim(), clean].filter(Boolean).join("；").slice(-1400);
+}
+
+function mergeEventSpeakers(
+  current: SpeakerIdentityEvidence[],
+  incoming: Array<Omit<SpeakerIdentityEvidence, "speakerId"> & { speakerId: string }>,
+  sourceSegmentId: string,
+  allowedSourceIds: Set<string>
+) {
+  const byId = new Map(current.map((speaker) => [speaker.speakerId, speaker]));
+  for (const raw of incoming) {
+    const nameAllowed = raw.nameSource !== "unknown" && raw.confidence >= 0.7 && Boolean(raw.displayName?.trim()) && Boolean(raw.evidence?.trim());
+    const speaker: SpeakerIdentityEvidence = {
+      speakerId: raw.speakerId as `speaker_${number}`,
+      displayName: nameAllowed ? raw.displayName?.trim() : undefined,
+      nameSource: nameAllowed ? raw.nameSource : "unknown",
+      confidence: nameAllowed ? raw.confidence : Math.min(raw.confidence, 0.69),
+      evidence: nameAllowed ? raw.evidence?.trim() : undefined,
+      sourceSegmentIds: unique([...raw.sourceSegmentIds, sourceSegmentId]).filter((id) => allowedSourceIds.has(id))
+    };
+    const existing = byId.get(speaker.speakerId);
+    const chosen = !existing || speaker.confidence >= existing.confidence ? speaker : existing;
+    byId.set(speaker.speakerId, {
+      ...existing,
+      ...chosen,
+      sourceSegmentIds: unique([...(existing?.sourceSegmentIds ?? []), ...speaker.sourceSegmentIds])
+    });
+  }
+  return [...byId.values()].sort((left, right) => left.speakerId.localeCompare(right.speakerId));
 }
 
 function unique(values: string[]) {

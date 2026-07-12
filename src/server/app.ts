@@ -26,6 +26,7 @@ import { JsonProfileStore, type ProfileStore } from "./store";
 import { PersistentTurnWorker } from "./turn-worker";
 import { TransientAudioStore, type RetainedAudioAsset } from "./transient-audio";
 import { collectCompanionTurn, companionCognitionContext, processCompanionTurnContext, runCompanionSessionSweep } from "./companion-session";
+import { buildAudioSensingPrompt, normalizeAudioSensingResult } from "./audio-sensing";
 
 const createProfileSchema = z.object({
   userId: z.string().min(3).max(40).regex(/^[a-zA-Z0-9_-]+$/).optional(),
@@ -64,7 +65,7 @@ const asyncTurnSchema = z.object({
     id: turnIdSchema,
     kind: z.enum(["text", "image_summary", "audio_observation"]),
     label: z.string().min(1).max(80),
-    content: z.string().max(4000).optional(),
+    content: z.string().max(24_000).optional(),
     dataUrl: z.string().max(24_000_000).optional(),
     auditOnly: z.boolean().optional(),
     observedAt: z.string().datetime().optional(),
@@ -74,12 +75,29 @@ const asyncTurnSchema = z.object({
     sensingTrace: z.lazy(() => sensingTraceSchema).optional()
   }).superRefine((segment, context) => {
     if (segment.kind === "text" && !segment.content?.trim()) context.addIssue({ code: "custom", message: "Text is empty" });
+    if (segment.kind === "text" && (segment.content?.length ?? 0) > 4_000) context.addIssue({ code: "custom", message: "Text is too long" });
     if (segment.kind !== "text" && !segment.dataUrl && !(segment.content?.trim() && segment.sensingTrace)) context.addIssue({ code: "custom", message: "Media data or sensing result is missing" });
   })).min(1).max(12)
 });
 
 const petTouchSchema = z.object({
   action: z.enum(["idle", "poke-wave", "play-ball", "nap"])
+});
+
+const speakerEvidenceSchema = z.object({
+  speakerId: z.string().regex(/^speaker_[1-9]\d*$/).transform((value) => value as `speaker_${number}`),
+  displayName: z.string().max(120).optional(),
+  nameSource: z.enum(["unknown", "user_statement", "self_introduction", "reliable_context"]),
+  confidence: z.number().min(0).max(1),
+  evidence: z.string().max(500).optional(),
+  sourceSegmentIds: z.array(z.string().max(120)).max(40)
+});
+
+const audioContentSchema = z.object({
+  sceneType: z.enum(["environment", "conversation", "lecture", "meeting", "interview", "unknown"]),
+  transcript: z.string().max(20_000),
+  environmentObservation: z.string().max(800).optional(),
+  speakers: z.array(speakerEvidenceSchema).max(12)
 });
 
 const sensingTraceSchema = z.object({
@@ -92,7 +110,8 @@ const sensingTraceSchema = z.object({
   semanticSource: z.literal("llm"),
   status: z.enum(["content", "empty", "unreadable"]),
   decision: z.string().min(1).max(600),
-  observation: z.string().max(1200).optional(),
+  observation: z.string().max(24_000).optional(),
+  audioContent: audioContentSchema.optional(),
   ruleTrace: z.array(z.string().max(240)).max(12)
 });
 
@@ -132,7 +151,7 @@ const curiousSchema = z.object({
         id: z.string().min(1),
         kind: z.enum(["text", "image_summary", "audio_observation"]),
         label: z.string().min(1).max(80),
-        content: z.string().max(4000),
+        content: z.string().max(24_000),
         auditOnly: z.boolean().optional(),
         observedAt: z.string().datetime().optional(),
         batchId: z.string().min(1).max(80).optional(),
@@ -298,10 +317,10 @@ export function createApp(input: {
         content = (await provider.summarizeImage(dataUrl, prompt)).slice(0, 600).trim();
         trace = imageSensingTrace(provider, segment.label, content);
       } else {
-        const prompt = `请直接理解这段音频，写成一段给 Papo 后续注意机制使用的中文生活观察。只描述能直接听见的事实；无法读取只返回 ERROR_AUDIO_UNREADABLE。标签：${segment.label}`;
-        const observation = normalizeAudioObservation((await observeAudioForSensing(provider, dataUrl, prompt)).slice(0, 1200));
+        const prompt = buildAudioSensingPrompt(segment.label, companionAudioSensingContext(current, segment.companionSessionId) ?? companionCognitionContext(current, job.turnId)?.currentContext);
+        const observation = normalizeAudioObservation(await observeAudioForSensing(provider, dataUrl, prompt));
         content = observation.text;
-        trace = audioSensingTrace(provider, segment.label, observation);
+        trace = audioSensingTrace(provider, segment.label, observation, { sourceSegmentId: segment.id });
       }
       await store.updateProfile(userId, (profile) => {
         const stored = profile.turns?.find((turn) => turn.id === job.turnId)?.segments.find((item) => item.id === job.segmentId);
@@ -503,10 +522,11 @@ export function createApp(input: {
       const segments: StreamSegment[] = [];
       if (body.audioDataUrl) {
         const retainedAudio = await transientAudioStore.save(userId, body.batchId, body.audioDataUrl, new Date());
-        const prompt = `请直接理解这段音频，写成一段给 Papo 后续注意机制使用的中文生活观察。只描述能直接听见的事实、明确听清的说话内容、环境声类型或正在发生的事；不能猜测人声、文字、看不见的物体、身份或原因，不能把非语音声音当成说话；不确定就写“不确定的声音”。最多 400 字；如果没有可用生活信息，返回空文本。如果你无法读取或处理这段音频，只返回 ERROR_AUDIO_UNREADABLE。标签：Android 后台倾听`;
+        const sessionContext = companionAudioSensingContext(profile, body.companionSessionId);
+        const prompt = buildAudioSensingPrompt("Android 后台倾听", sessionContext);
         const sensed = await observeAudioWithUnreadableRetry(provider, body.audioDataUrl, prompt);
         const observation = sensed.observation;
-        const sensingTrace = audioSensingTrace(provider, "Android 后台倾听", observation, { attempts: sensed.attempts, retainedAudio });
+        const sensingTrace = audioSensingTrace(provider, "Android 后台倾听", observation, { attempts: sensed.attempts, retainedAudio, sourceSegmentId: `${body.batchId}:audio` });
         segments.push({
           id: `${body.batchId}:audio`,
           kind: "audio_observation",
@@ -698,8 +718,8 @@ export function createApp(input: {
   app.post("/api/audio-observation", async (req, res, next) => {
     try {
       const body = audioObservationSchema.parse(req.body);
-      const prompt = `请直接理解这段音频，写成一段给 Papo 后续注意机制使用的中文生活观察。只描述能直接听见的事实、明确听清的说话内容、环境声类型或正在发生的事；不能猜测人声、文字、看不见的物体、身份或原因，不能把非语音声音当成说话；不确定就写“不确定的声音”。最多 400 字；如果没有可用生活信息，返回空文本。如果你无法读取或处理这段音频，只返回 ERROR_AUDIO_UNREADABLE。标签：${body.label ?? "录音"}`;
-      const audioObservation = normalizeAudioObservation((await observeAudioForSensing(provider, body.dataUrl, prompt)).slice(0, 1200));
+      const prompt = buildAudioSensingPrompt(body.label ?? "录音");
+      const audioObservation = normalizeAudioObservation(await observeAudioForSensing(provider, body.dataUrl, prompt));
       const trace = audioSensingTrace(provider, body.label ?? "录音", audioObservation);
       res.json({
         observation: audioObservation.text,
@@ -3059,17 +3079,18 @@ function feedbackRelatedMemoryIds(profile: CreatureProfile, targetId?: string, t
 }
 
 function normalizeAudioObservation(text: string) {
-  const trimmed = text.trim();
-  if (!trimmed || /^["'“”‘’\s]+$/.test(trimmed)) return { text: "", unreadable: false };
-  const quoted = trimmed.match(/^["“](.*)["”]$/s) ?? trimmed.match(/^['‘](.*)['’]$/s);
-  const normalized = (quoted ? quoted[1] : trimmed).trim();
-  if (normalized === "ERROR_AUDIO_UNREADABLE" || /无法(获取|读取|处理|访问).{0,12}音频/.test(normalized)) {
-    return { text: "", unreadable: true };
-  }
-  if (isEmptyAudioObservation(normalized)) {
-    return { text: "", unreadable: false };
-  }
-  return { text: normalized, unreadable: false };
+  return normalizeAudioSensingResult(text);
+}
+
+function companionAudioSensingContext(profile: CreatureProfile, sessionId?: string) {
+  if (!sessionId) return undefined;
+  const session = profile.companionSessions?.find((item) => item.id === sessionId);
+  if (!session) return undefined;
+  const event = session.events?.find((item) => item.id === session.currentEventId);
+  return JSON.stringify({
+    currentContext: session.currentContext,
+    currentEvent: event ? { id: event.id, title: event.title, kind: event.kind, speakers: event.speakers } : undefined
+  });
 }
 
 function nativeAudioAuditSummary(status: SensingTrace["status"]) {
@@ -3078,27 +3099,11 @@ function nativeAudioAuditSummary(status: SensingTrace["status"]) {
   return "这段后台录音里没有形成需要继续处理的声音线索。";
 }
 
-function isEmptyAudioObservation(text: string) {
-  const normalized = text.replace(/\s+/g, "");
-  return [
-    /没有可用生活信息/,
-    /没有可识别的说话内容/,
-    /没有可识别.*生活事件/,
-    /无可用生活信息/,
-    /无声音内容/,
-    /只有持续的噪音/,
-    /只有噪音/,
-    /没有明显.*内容/,
-    /未听到.*内容/,
-    /听不清.*内容/
-  ].some((pattern) => pattern.test(normalized));
-}
-
 function audioSensingTrace(
   provider: ModelProvider,
   label: string,
   observation: ReturnType<typeof normalizeAudioObservation>,
-  options: { attempts?: number; retainedAudio?: RetainedAudioAsset } = {}
+  options: { attempts?: number; retainedAudio?: RetainedAudioAsset; sourceSegmentId?: string } = {}
 ): SensingTrace {
   const status: SensingTrace["status"] = observation.text ? "content" : observation.unreadable ? "unreadable" : "empty";
   const decision = observation.text
@@ -3117,6 +3122,13 @@ function audioSensingTrace(
     status,
     decision,
     observation: observation.text || undefined,
+    audioContent: observation.audioContent ? {
+      ...observation.audioContent,
+      speakers: observation.audioContent.speakers.map((speaker) => ({
+        ...speaker,
+        sourceSegmentIds: [...new Set([...speaker.sourceSegmentIds, ...(options.sourceSegmentId ? [options.sourceSegmentId] : [])])]
+      }))
+    } : undefined,
     attempts: options.attempts ?? 1,
     errorKind: status === "unreadable" ? "unreadable" : status === "empty" ? "empty" : undefined,
     retainedAudio: options.retainedAudio,
@@ -3124,6 +3136,8 @@ function audioSensingTrace(
       "sensing: call audio-capable model",
       `status=${status}`,
       `attempts=${options.attempts ?? 1}`,
+      observation.audioContent ? `audio_scene=${observation.audioContent.sceneType}` : "audio_scene=legacy_plain_text",
+      observation.audioContent?.transcript ? `transcript_chars=${observation.audioContent.transcript.length}` : "transcript_chars=0",
       options.retainedAudio ? `retained_audio=${options.retainedAudio.id}` : "retained_audio=none",
       observation.text ? "route=curious_candidate" : "route=settle_audio_batch_only"
     ]
@@ -3133,7 +3147,7 @@ function audioSensingTrace(
 async function observeAudioWithUnreadableRetry(provider: ModelProvider, dataUrl: string, prompt: string) {
   let observation = { text: "", unreadable: true };
   for (let attempts = 1; attempts <= 2; attempts += 1) {
-    observation = normalizeAudioObservation((await observeAudioForSensing(provider, dataUrl, prompt)).slice(0, 1200));
+    observation = normalizeAudioObservation(await observeAudioForSensing(provider, dataUrl, prompt));
     if (!observation.unreadable || attempts === 2) return { observation, attempts };
   }
   return { observation, attempts: 2 };

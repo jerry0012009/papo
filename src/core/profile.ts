@@ -87,6 +87,9 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
       endedAt: session.lastObservedAt,
       updatedAt,
       summary: session.summary ?? "已从旧版陪伴会话迁移。",
+      eventSummary: session.summary ?? "已从旧版陪伴会话迁移。",
+      transcript: [],
+      speakers: [],
       importantContent: [],
       sourceTurnIds: session.sourceTurnIds ?? [],
       sourceSegmentIds: session.sourceSegmentIds ?? [],
@@ -100,6 +103,9 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
       ...event,
       status: event.status === "consolidating" && Date.now() - Date.parse(event.updatedAt) > 10 * 60_000 ? "completed" as const : event.status,
       importantContent: event.importantContent ?? [],
+      eventSummary: event.eventSummary ?? event.summary ?? "",
+      transcript: event.transcript ?? [],
+      speakers: event.speakers ?? [],
       sourceTurnIds: event.sourceTurnIds ?? [],
       sourceSegmentIds: event.sourceSegmentIds ?? [],
       revision: Math.max(1, event.revision ?? 1)
@@ -118,6 +124,8 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
       },
       observations: (session.observations ?? []).map((observation) => ({
         ...observation,
+        transcript: observation.transcript ?? (observation.modality === "audio_observation" ? observation.content : undefined),
+        segmentSummary: observation.segmentSummary ?? observation.summary,
         assignmentStatus: observation.assignmentStatus === "processing" && Date.now() - Date.parse(observation.processedAt ?? updatedAt) > 10 * 60_000
           ? "pending" as const
           : observation.assignmentStatus ?? (hasLegacyResult ? "assigned" as const : "pending" as const),

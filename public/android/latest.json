@@ -1,15 +1,15 @@
 {
-  "versionName": "0.4.8",
-  "versionCode": 14,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.8.apk",
-  "publishedAt": "2026-07-12T09:32:14.000Z",
+  "versionName": "0.4.9",
+  "versionCode": 15,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.9.apk",
+  "publishedAt": "2026-07-12T10:21:58.000Z",
   "notes": [
-    "一次陪伴会话可识别并分别维护多个连续、切换、暂停和恢复的生活事件",
-    "陪伴中的文字、照片、环境音频和定时画面共享稳定 session 上下文",
-    "讲座等持续事件在结束后形成一条完整 episode，需要时再形成一条长期记忆",
-    "无关噪音不会污染当前事件，后续补充会修订原事件与记忆而不是重复创建",
-    "显式记录陪伴开始和结束，并支持服务重启后的事件归属与整理恢复"
+    "陪伴音频按环境、日常交流、讲座、会议和访谈自适应保留内容，不再统一压缩到 400 字",
+    "讲座事件分别保存 transcript、segmentSummary 和跨片段 eventSummary，保留数字、专有名词与论证过程",
+    "支持 speaker_1、speaker_2 等说话人标签，只有可靠证据支持时才关联真实姓名",
+    "transcript 作为事件资料保存，不会机械地写入长期记忆",
+    "后续讲座内容继续修订同一事件、episode 和 memory，避免重复记录"
   ],
-  "sha256": "59d05c541e9bfae00e371d628930238eb7dd71f56753753a954474136d5c6eaa",
-  "size": 22795312
+  "sha256": "c849b7dac328d478518b2027c64368794b844cb5be2c01a6406490975b047cee",
+  "size": 22795272
 }

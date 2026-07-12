@@ -163,8 +163,36 @@ function mergeCompanionEvent(
     ...chosen,
     sourceTurnIds: unique([...(left.sourceTurnIds ?? []), ...(right.sourceTurnIds ?? [])]),
     sourceSegmentIds: unique([...(left.sourceSegmentIds ?? []), ...(right.sourceSegmentIds ?? [])]),
-    importantContent: unique([...(left.importantContent ?? []), ...(right.importantContent ?? [])]).slice(-24)
+    importantContent: unique([...(left.importantContent ?? []), ...(right.importantContent ?? [])]).slice(-24),
+    transcript: mergeTranscriptSegments(left.transcript ?? [], right.transcript ?? []),
+    speakers: mergeSpeakerEvidence(left.speakers ?? [], right.speakers ?? [])
   };
+}
+
+function mergeTranscriptSegments(
+  left: NonNullable<NonNullable<CreatureProfile["companionSessions"]>[number]["events"]>[number]["transcript"],
+  right: NonNullable<NonNullable<CreatureProfile["companionSessions"]>[number]["events"]>[number]["transcript"]
+) {
+  const byId = new Map(left.map((segment) => [segment.segmentId, segment]));
+  for (const segment of right) byId.set(segment.segmentId, segment);
+  return [...byId.values()].sort((a, b) => timestamp(a.observedAt) - timestamp(b.observedAt));
+}
+
+function mergeSpeakerEvidence(
+  left: NonNullable<NonNullable<CreatureProfile["companionSessions"]>[number]["events"]>[number]["speakers"],
+  right: NonNullable<NonNullable<CreatureProfile["companionSessions"]>[number]["events"]>[number]["speakers"]
+) {
+  const byId = new Map(left.map((speaker) => [speaker.speakerId, speaker]));
+  for (const speaker of right) {
+    const existing = byId.get(speaker.speakerId);
+    const chosen = !existing || speaker.confidence >= existing.confidence ? speaker : existing;
+    byId.set(speaker.speakerId, {
+      ...existing,
+      ...chosen,
+      sourceSegmentIds: unique([...(existing?.sourceSegmentIds ?? []), ...speaker.sourceSegmentIds])
+    });
+  }
+  return [...byId.values()];
 }
 
 function mergeSessionObservations(
