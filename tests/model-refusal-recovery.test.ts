@@ -191,6 +191,49 @@ test("a failed replacement job leaves the existing card active", async () => {
   }
 });
 
+test("public profiles keep diagnostic errors private for both old and new failed jobs", async () => {
+  const store = new MemoryProfileStore();
+  const userId = "public-error-boundary";
+  await store.createProfile({ userId, creatureName: "Papo" });
+  await store.updateProfile(userId, (profile) => {
+    profile.jobs = [{
+      id: "legacy-refusal-job",
+      turnId: "legacy-refusal-turn",
+      requestId: "legacy-refusal-request",
+      type: "cognition",
+      stage: "cognition",
+      status: "failed",
+      attempt: 3,
+      maxAttempts: 3,
+      retryable: true,
+      createdAt: "2026-07-12T10:00:00.000Z",
+      updatedAt: "2026-07-12T10:01:00.000Z",
+      sourceIds: [],
+      error: 'Model provider returned invalid JSON content (prefix="considered high risk")',
+      attemptHistory: [{ attempt: 3, startedAt: "2026-07-12T10:00:00.000Z", completedAt: "2026-07-12T10:01:00.000Z", error: "raw provider secret diagnostic" }]
+    }];
+    profile.turns = [{ id: "legacy-refusal-turn", requestId: "legacy-refusal-request", channel: "button", status: "failed", createdAt: "2026-07-12T10:00:00.000Z", updatedAt: "2026-07-12T10:01:00.000Z", inputMessageIds: [], jobIds: ["legacy-refusal-job"], segments: [], error: "raw provider secret diagnostic" }];
+  });
+  const app = createApp({ store, provider: providerBase(async () => undefined) });
+  const worker = app.locals.turnWorker as PersistentTurnWorker;
+  const server = app.listen(0);
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("failed to bind test server");
+  try {
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/profiles/${userId}`);
+    const payload = await response.json() as { profile: { jobs: Array<{ error?: string; attemptHistory?: Array<{ error?: string }> }>; turns: Array<{ error?: string }> } };
+    assert.equal(response.status, 200);
+    assert.match(payload.profile.jobs[0].error ?? "", /原消息已保留/);
+    assert.doesNotMatch(JSON.stringify(payload), /invalid JSON|high risk|secret diagnostic/);
+    assert.equal(payload.profile.turns[0].error, payload.profile.jobs[0].error);
+    const stored = await store.getProfile(userId);
+    assert.match(stored?.jobs?.[0].error ?? "", /invalid JSON/, "internal diagnostics remain durable");
+  } finally {
+    worker.stop();
+    server.close();
+  }
+});
+
 function providerBase(generateJson: ModelProvider["generateJson"]): ModelProvider {
   return {
     kind: "generic",

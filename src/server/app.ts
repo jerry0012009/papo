@@ -2749,7 +2749,28 @@ function authPasswordFromRequest(req: express.Request) {
 
 function publicProfile(profile: CreatureProfile): CreatureProfile {
   const { password: _password, ...rest } = profile;
-  return { ...rest, hasPassword: Boolean(profilePassword(profile)) };
+  const jobs = (rest.jobs ?? []).map((job) => {
+    if (job.status !== "failed") return job;
+    const error = publicJobError(job);
+    return {
+      ...job,
+      error,
+      attemptHistory: job.attemptHistory?.map((attempt) => attempt.error ? { ...attempt, error } : attempt)
+    };
+  });
+  const publicErrorByTurn = new Map(jobs.filter((job) => job.status === "failed").map((job) => [job.turnId, job.error]));
+  const turns = (rest.turns ?? []).map((turn) => turn.status === "failed" ? { ...turn, error: publicErrorByTurn.get(turn.id) ?? "这次处理没有完成，你可以继续发送消息" } : turn);
+  return { ...rest, jobs, turns, hasPassword: Boolean(profilePassword(profile)) };
+}
+
+function publicJobError(job: ConversationJobRecord) {
+  if (job.type === "illustration") return "图片暂时没有生成成功，文字回复和原消息仍已保留";
+  if (job.type === "action_card") return "动作暂时没有生成成功，原动作卡和消息仍已保留";
+  if (job.type === "image_understanding") return "这张照片暂时没有理解完成，原图仍已保留";
+  if (job.type === "audio_understanding") return "这段录音暂时没有转写完成，录音仍已保留";
+  if (job.type === "hermes") return "外部任务暂时没有完成，你可以继续对话";
+  if (job.type === "cognition") return "这次回复暂时没有完成，原消息已保留，你可以继续发送";
+  return "这项后台处理暂时没有完成，不影响继续使用";
 }
 
 function publicCaptureResult(result: CaptureResult, providerKind: string) {
