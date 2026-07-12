@@ -47,6 +47,26 @@ test("user work preempts lifecycle artwork and lifecycle artwork stays single-fl
   }
 });
 
+test("single-flight lifecycle work continues draining after each completion", async () => {
+  const store = new MemoryProfileStore();
+  const profile = createCreatureProfile({ userId: "worker-lifecycle-drain", creatureName: "Papo", now: "2026-07-12T10:00:00.000Z" });
+  profile.jobs = [
+    job("memory-drain-1", "memory_enrichment", "2026-07-12T09:00:00.000Z"),
+    job("memory-drain-2", "memory_enrichment", "2026-07-12T09:01:00.000Z"),
+    job("memory-drain-3", "memory_enrichment", "2026-07-12T09:02:00.000Z")
+  ];
+  await store.saveProfile(profile);
+  const completed: string[] = [];
+  const worker = new PersistentTurnWorker({ store, concurrency: 3, intervalMs: 10, handle: async (_userId, running) => { completed.push(running.id); } });
+  try {
+    await worker.start();
+    await waitFor(() => completed.length === 3);
+    assert.deepEqual(completed, ["memory-drain-1", "memory-drain-2", "memory-drain-3"]);
+  } finally {
+    worker.stop();
+  }
+});
+
 function job(id: string, type: ConversationJobRecord["type"], createdAt: string): ConversationJobRecord {
   return {
     id,
