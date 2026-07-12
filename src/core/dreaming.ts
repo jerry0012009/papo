@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { makeId } from "./ids";
-import { mergeAttachments, normalizeSharedMemoryText, promoteMemoryCandidate, upsertLongTermMemory } from "./memory";
+import { clearCandidateVisual, mergeAttachments, normalizeSharedMemoryText, promoteMemoryCandidate, upsertLongTermMemory } from "./memory";
 import { modelFeedbackContext, modelMemoryContext } from "./model-context";
 import type { ModelProvider } from "./provider";
 import { applyStateDelta } from "./state";
@@ -187,6 +187,7 @@ function applyDreamOperation(profile: CreatureProfile, operation: DreamOperation
     candidate.status = "dismissed";
     candidate.writePolicy = "do_not_save";
     candidate.decayPolicy = "forget_if_dismissed";
+    clearCandidateVisual(candidate);
     candidate.whyConsolidate = normalizeSharedMemoryText(operation.reason);
     return { operation: dreamOperationRecord(operation, candidate.id, candidate.candidateText) };
   }

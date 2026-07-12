@@ -2,7 +2,7 @@ import { z } from "zod";
 import { makeId } from "./ids";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext, modelPetContext } from "./model-context";
 import { clientContextFor } from "./client-document";
-import { memoryShortTitle, normalizeSharedMemoryText, toCreatureMemoryVoice } from "./memory";
+import { clearCandidateVisual, memoryShortTitle, normalizeSharedMemoryText, toCreatureMemoryVoice } from "./memory";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
 import type { ModelProvider } from "./provider";
 import type { CognitionContext, CreatureProfile, MemoryCandidate } from "./types";
@@ -90,6 +90,7 @@ function applySemanticMemorySuggestion(profile: CreatureProfile, candidates: Mem
       candidate.status = "dismissed";
       candidate.whyConsolidate = reason;
       candidate.decayPolicy = "forget_if_dismissed";
+      clearCandidateVisual(candidate);
       applied += 1;
       continue;
     }

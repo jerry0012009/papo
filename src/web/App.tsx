@@ -3663,53 +3663,59 @@ function MemoryCandidateCard(props: {
   feedbackPendingKey?: string;
 }) {
   const sourceEpisode = props.profile.episodes.find((episode) => episode.id === props.candidate.sourceEpisodeId);
+  const image = props.candidate.attachments?.find((attachment) => attachment.kind === "image") ?? props.candidate.previewVisual;
+  const title = props.candidate.shortTitle ?? memoryShortTitle(props.candidate.candidateText);
+  const content = normalizeMemoryText(props.candidate.candidateText);
+  const pendingRemember = isFeedbackPending(props.feedbackPendingKey, "remember", props.candidate.id);
+  const pendingImportant = isFeedbackPending(props.feedbackPendingKey, "important", props.candidate.id);
+  const pendingForget = isFeedbackPending(props.feedbackPendingKey, "forget", props.candidate.id);
   return (
-    <article className="memory-surface candidate-memory">
-      <div className="memory-main">
-        <div>
-          <span>{formatPapoDateTime(props.candidate.createdAt)} · 候选 · {memoryKindLabel(props.candidate.memoryKind)}</span>
-          <strong className="memory-text-preview">{normalizeMemoryText(props.candidate.candidateText)}</strong>
+    <article className={`candidate-memory ${image ? "has-image" : "text-only"}`} aria-labelledby={`candidate-title-${props.candidate.id}`}>
+      <div className="candidate-memory-preview">
+        {image ? (
+          <MediaThumbnail item={attachmentMediaItem(image, title)} className="candidate-memory-image" />
+        ) : (
+          <div className="candidate-memory-placeholder" aria-hidden="true">
+            <History size={23} />
+            <span>{props.candidate.previewStatus === "pending" ? "正在画下" : "一段生活"}</span>
+          </div>
+        )}
+      </div>
+      <div className="candidate-memory-body">
+        <header className="candidate-memory-header">
+          <span>{formatPapoDateTime(props.candidate.createdAt)} · {memoryKindLabel(props.candidate.memoryKind)}</span>
+          <h3 id={`candidate-title-${props.candidate.id}`}>{title}</h3>
+        </header>
+        <p className="candidate-memory-text">{content}</p>
+        {props.candidate.whyConsolidate ? (
+          <p className="candidate-memory-reason"><Sparkles size={14} /><span><strong>{props.profile.creatureName} 为什么暂存</strong>{normalizeMemoryText(props.candidate.whyConsolidate)}</span></p>
+        ) : null}
+        {(sourceEpisode || (props.candidate.attachments?.length ?? 0) > (image ? 1 : 0)) ? (
+          <details className="candidate-memory-source">
+            <summary>查看原始经历</summary>
+            {sourceEpisode ? <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(props.profile, sourceEpisode))}</p> : null}
+            <AttachmentStrip attachments={props.candidate.attachments?.filter((attachment) => attachment.id !== image?.id)} />
+          </details>
+        ) : null}
+        <div className="candidate-memory-actions">
+          <button className="primary" type="button" onClick={() => props.onFeedback("remember", props.candidate.id, undefined, "button")} disabled={pendingRemember}>
+            <Check size={17} />{pendingRemember ? "正在留下" : "留下这段记忆"}
+          </button>
+          <button type="button" onClick={() => props.onFeedback("forget", props.candidate.id, undefined, "button")} disabled={pendingForget}>
+            <X size={17} />{pendingForget ? "正在处理" : "这次不留下"}
+          </button>
+          <button className="candidate-important-button" type="button" onClick={() => props.onFeedback("important", props.candidate.id, undefined, "button")} disabled={pendingImportant}>
+            <Lightbulb size={16} />{pendingImportant ? "正在标记" : "标为重要"}
+          </button>
         </div>
-        {shouldShowFullMemoryText(props.candidate.candidateText) ? (
-          <details className="memory-details memory-full-text">
-            <summary>完整内容</summary>
-            <p>{normalizeMemoryText(props.candidate.candidateText)}</p>
-          </details>
-        ) : null}
-        <AttachmentStrip attachments={props.candidate.attachments} />
-        {sourceEpisode ? (
-          <details className="memory-details">
-            <summary>来源</summary>
-            <div className="memory-detail-body">
-              <div>
-                <span>来自这次经历</span>
-                <p>{episodeUserLine(sourceEpisode, episodeSourceMessages(props.profile, sourceEpisode))}</p>
-              </div>
-            </div>
-          </details>
-        ) : null}
+        <MemoryFeedbackBox
+          targetId={props.candidate.id}
+          creatureName={props.profile.creatureName}
+          onFeedback={props.onFeedback}
+          onObserveFeedbackAudio={props.onObserveFeedbackAudio}
+          pending={isFeedbackPending(props.feedbackPendingKey, "continue", props.candidate.id)}
+        />
       </div>
-      <div className="memory-actions">
-        <button onClick={() => props.onFeedback("remember", props.candidate.id, undefined, "button")} disabled={isFeedbackPending(props.feedbackPendingKey, "remember", props.candidate.id)}>
-          <Save size={16} />
-          {isFeedbackPending(props.feedbackPendingKey, "remember", props.candidate.id) ? "尝试中" : "长期记住"}
-        </button>
-        <button onClick={() => props.onFeedback("important", props.candidate.id, undefined, "button")} disabled={isFeedbackPending(props.feedbackPendingKey, "important", props.candidate.id)}>
-          <Lightbulb size={16} />
-          {isFeedbackPending(props.feedbackPendingKey, "important", props.candidate.id) ? "尝试中" : "很重要"}
-        </button>
-        <button onClick={() => props.onFeedback("forget", props.candidate.id, undefined, "button")} disabled={isFeedbackPending(props.feedbackPendingKey, "forget", props.candidate.id)}>
-          <RefreshCcw size={16} />
-          {isFeedbackPending(props.feedbackPendingKey, "forget", props.candidate.id) ? "尝试中" : "放下"}
-        </button>
-      </div>
-      <MemoryFeedbackBox
-        targetId={props.candidate.id}
-        creatureName={props.profile.creatureName}
-        onFeedback={props.onFeedback}
-        onObserveFeedbackAudio={props.onObserveFeedbackAudio}
-        pending={isFeedbackPending(props.feedbackPendingKey, "continue", props.candidate.id)}
-      />
     </article>
   );
 }

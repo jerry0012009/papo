@@ -402,6 +402,15 @@ export interface MemoryCandidate {
   status: "candidate" | "promoted" | "dismissed";
   tags: string[];
   attachments?: MediaAttachment[];
+  previewVisual?: MediaAttachment;
+  previewStatus?: "pending" | "ready" | "not_needed" | "failed";
+  previewError?: string;
+  previewPrompt?: string;
+  previewMode?: "grounded_scene" | "imaginative_illustration" | "no_visual";
+  previewPapoPresence?: "required" | "optional" | "absent";
+  previewPlanReason?: string;
+  previewNarrative?: string;
+  previewUpdatedAt?: string;
 }
 
 export interface FeedbackTargetSnapshot {
@@ -686,7 +695,7 @@ export interface CreatureMessage {
 }
 
 export type ConversationJobStatus = "queued" | "running" | "completed" | "failed";
-export type ConversationJobType = "image_understanding" | "audio_understanding" | "cognition" | "memory_enrichment" | "illustration" | "action_card" | "hermes";
+export type ConversationJobType = "image_understanding" | "audio_understanding" | "cognition" | "memory_enrichment" | "candidate_visual" | "illustration" | "action_card" | "hermes";
 
 export interface ConversationJobRecord {
   id: string;
@@ -710,6 +719,7 @@ export interface ConversationJobRecord {
   episodeId?: string;
   memoryId?: string;
   memoryRevision?: number;
+  candidateId?: string;
   action?: PlannedAction;
   error?: string;
   attemptHistory?: Array<{

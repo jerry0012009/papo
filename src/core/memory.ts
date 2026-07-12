@@ -1,8 +1,9 @@
 import { makeId } from "./ids";
+import { hasHighPrivacyText } from "./privacy";
 import { summarizeText } from "./text";
 import type { AttentionEvent, ConversationJobRecord, CreatureProfile, EpisodeMemory, LongTermMemory, MemoryCandidate } from "./types";
 
-export const MEMORY_VISUAL_POLICY_VERSION = 3;
+export const MEMORY_VISUAL_POLICY_VERSION = 4;
 
 export function upsertLongTermMemory(
   profile: CreatureProfile,
@@ -75,6 +76,43 @@ export function enqueueMemoryEnrichmentJob(
   };
   profile.jobs = [job, ...(profile.jobs ?? [])].slice(0, 240);
   return job;
+}
+
+export function enqueueCandidateVisualJobs(profile: CreatureProfile, now = new Date().toISOString()) {
+  const jobs: ConversationJobRecord[] = [];
+  let available = Math.max(0, 2 - (profile.jobs ?? []).filter((job) => job.type === "candidate_visual" && (job.status === "queued" || job.status === "running")).length);
+  const budgetPool = profile.memoryCandidates.filter((candidate) => candidate.status === "candidate").slice(0, 6);
+  for (const candidate of budgetPool) {
+    if (available <= 0) break;
+    if (candidate.status !== "candidate" || candidate.confidence < 70 || candidate.previewVisual || candidate.previewStatus === "not_needed") continue;
+    if (candidate.attachments?.some((attachment) => attachment.kind === "image")) continue;
+    if (hasHighPrivacyText(`${candidate.candidateText} ${candidate.privacyReason ?? ""}`)) continue;
+    const id = `candidate_visual_${safeJobPart(candidate.id)}`;
+    if (profile.jobs?.some((job) => job.id === id)) continue;
+    const turnId = `candidate_lifecycle_${safeJobPart(candidate.id)}`.slice(0, 100);
+    const job: ConversationJobRecord = {
+      id, turnId, requestId: turnId, type: "candidate_visual", stage: "action", status: "queued",
+      attempt: 0, maxAttempts: 2, retryable: true, createdAt: now, updatedAt: now,
+      sourceIds: unique([candidate.id, candidate.sourceEpisodeId]), candidateId: candidate.id
+    };
+    candidate.previewStatus = "pending";
+    profile.jobs = [job, ...(profile.jobs ?? [])].slice(0, 240);
+    jobs.push(job);
+    available -= 1;
+  }
+  return jobs;
+}
+
+export function clearCandidateVisual(candidate: MemoryCandidate) {
+  candidate.previewVisual = undefined;
+  candidate.previewStatus = "not_needed";
+  candidate.previewError = undefined;
+  candidate.previewPrompt = undefined;
+  candidate.previewMode = "no_visual";
+  candidate.previewPapoPresence = "absent";
+  candidate.previewPlanReason = undefined;
+  candidate.previewNarrative = undefined;
+  candidate.previewUpdatedAt = new Date().toISOString();
 }
 
 export function memoryContentFingerprint(memory: LongTermMemory) {
@@ -171,6 +209,7 @@ function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new D
 
   const candidate = profile.memoryCandidates.find((item) => item.sourceEpisodeId === episode.id && item.status === "candidate");
   if (!candidate) return undefined;
+  const previewPending = candidate.previewStatus === "pending" || profile.jobs?.some((job) => job.type === "candidate_visual" && job.candidateId === candidate.id && (job.status === "queued" || job.status === "running"));
   const duplicate = findActiveDuplicateMemory(profile, candidate);
   if (duplicate) {
     episode.promotedToLongTerm = true;
@@ -194,11 +233,23 @@ function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new D
     consolidatedBecause: candidate.whyConsolidate,
     weight: Math.min(100, episode.weight + 18),
     tags: candidate.tags,
-    attachments: candidate.attachments ?? []
+    attachments: candidate.attachments ?? [],
+    visual: candidate.previewVisual,
+    visualPrompt: candidate.previewPrompt,
+    visualMode: candidate.previewMode,
+    papoPresence: candidate.previewPapoPresence,
+    visualPlanReason: candidate.previewPlanReason,
+    visualPolicyVersion: candidate.previewVisual ? MEMORY_VISUAL_POLICY_VERSION : undefined,
+    visualStatus: candidate.previewVisual ? "ready" : candidate.previewStatus === "not_needed" ? "not_needed" : undefined,
+    visualUpdatedAt: candidate.previewUpdatedAt,
+    narrative: candidate.previewNarrative ?? candidate.candidateText,
+    enrichedRevision: candidate.previewVisual || candidate.previewStatus === "not_needed" || previewPending ? 1 : undefined,
+    enrichmentStatus: candidate.previewVisual || candidate.previewStatus === "not_needed" ? "completed" : previewPending ? "pending" : undefined,
+    ...(previewPending && !candidate.previewVisual ? { visualStatus: "pending" as const } : {})
   };
   episode.promotedToLongTerm = true;
   candidate.status = "promoted";
-  return upsertLongTermMemory(profile, memory, { now, sourceIds: [episode.id, candidate.id] }).memory;
+  return upsertLongTermMemory(profile, memory, { now, sourceIds: [episode.id, candidate.id], scheduleEnrichment: !previewPending && !candidate.previewVisual && candidate.previewStatus !== "not_needed" }).memory;
 }
 
 export function promoteMemoryCandidate(
@@ -222,6 +273,7 @@ export function promoteMemoryCandidate(
   if (!text) return undefined;
   const duplicate = findActiveDuplicateMemory(profile, { ...candidate, candidateText: text });
   const tags = input.tags?.length ? input.tags : candidate.tags;
+  const previewPending = candidate.previewStatus === "pending" || profile.jobs?.some((job) => job.type === "candidate_visual" && job.candidateId === candidate.id && (job.status === "queued" || job.status === "running"));
   if (duplicate) {
     candidate.status = "promoted";
     if (episode) episode.promotedToLongTerm = true;
@@ -247,11 +299,23 @@ export function promoteMemoryCandidate(
     consolidatedBecause: input.consolidatedBecause ?? candidate.whyConsolidate,
     weight: Math.max(0, Math.min(100, Math.round(input.weight ?? (episode?.weight ?? 45) + 18))),
     tags,
-    attachments: candidate.attachments ?? []
+    attachments: candidate.attachments ?? [],
+    visual: candidate.previewVisual,
+    visualPrompt: candidate.previewPrompt,
+    visualMode: candidate.previewMode,
+    papoPresence: candidate.previewPapoPresence,
+    visualPlanReason: candidate.previewPlanReason,
+    visualPolicyVersion: candidate.previewVisual ? MEMORY_VISUAL_POLICY_VERSION : undefined,
+    visualStatus: candidate.previewVisual ? "ready" : candidate.previewStatus === "not_needed" ? "not_needed" : undefined,
+    visualUpdatedAt: candidate.previewUpdatedAt,
+    narrative: candidate.previewNarrative ?? candidate.candidateText,
+    enrichedRevision: candidate.previewVisual || candidate.previewStatus === "not_needed" || previewPending ? 1 : undefined,
+    enrichmentStatus: candidate.previewVisual || candidate.previewStatus === "not_needed" ? "completed" : previewPending ? "pending" : undefined,
+    ...(previewPending && !candidate.previewVisual ? { visualStatus: "pending" as const } : {})
   };
   candidate.status = "promoted";
   if (episode) episode.promotedToLongTerm = true;
-  return upsertLongTermMemory(profile, memory, { now, sourceIds: [candidate.id, candidate.sourceEpisodeId] }).memory;
+  return upsertLongTermMemory(profile, memory, { now, sourceIds: [candidate.id, candidate.sourceEpisodeId], scheduleEnrichment: !previewPending && !candidate.previewVisual && candidate.previewStatus !== "not_needed" }).memory;
 }
 
 export function memoryShortTitle(text: string, suggested?: string) {
@@ -307,6 +371,7 @@ export function forgetMemory(profile: CreatureProfile, targetId?: string): { cha
     candidate.status = "dismissed";
     candidate.writePolicy = "do_not_save";
     candidate.decayPolicy = "forget_if_dismissed";
+    clearCandidateVisual(candidate);
     return { changed: true, purged: false };
   }
 
@@ -321,6 +386,7 @@ export function forgetMemory(profile: CreatureProfile, targetId?: string): { cha
   episode.feedback.push("forget");
   for (const candidate of profile.memoryCandidates.filter((item) => item.sourceEpisodeId === episode.id)) {
     candidate.status = "dismissed";
+    clearCandidateVisual(candidate);
   }
   return { changed: true, purged: false };
 }

@@ -12,7 +12,7 @@ import { isDreamingDue, recordDreamingFailure, semanticDreamMemories } from "../
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, semanticReflectFeedback } from "../core/feedback";
 import { runButtonHarness, runCuriousHarness } from "../core/harness";
-import { upsertLongTermMemory } from "../core/memory";
+import { MEMORY_VISUAL_POLICY_VERSION, upsertLongTermMemory } from "../core/memory";
 import { createModelProvider, type ImageReference, type ModelProvider } from "../core/provider";
 import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
 import { wakeCreature } from "../core/rhythm";
@@ -21,7 +21,7 @@ import type { ActionCardRecord, ActionResult, CaptureResult, ConversationJobReco
 import { createHermesBridge, type HermesBridge } from "./hermes";
 import { JsonDeviceAuthService, type DeviceAuthService } from "./device-auth";
 import { NativeIngestQueue, type NativeIngestPayload } from "./native-ingest-queue";
-import { enrichMemoryExperience, MemoryEnrichmentFailure } from "./memory-enrichment";
+import { createCandidateVisualPreview, enrichMemoryExperience, MemoryEnrichmentFailure } from "./memory-enrichment";
 import { createWebPushService, PushNotifyingProfileStore, type WebPushService } from "./push";
 import { JsonProfileStore, type ProfileStore } from "./store";
 import { PersistentTurnWorker } from "./turn-worker";
@@ -339,6 +339,7 @@ export function createApp(input: {
 
     if (job.type === "cognition") return processCognitionJob(userId, job);
     if (job.type === "memory_enrichment") return processTurnMemoryEnrichment(userId, job);
+    if (job.type === "candidate_visual") return processCandidateVisual(userId, job);
     return processActionJob(userId, job);
   }
 
@@ -378,7 +379,7 @@ export function createApp(input: {
       cognitionTrace
     });
     const baseJobIds = new Set((baseProfile.jobs ?? []).map((item) => item.id));
-    const lifecycleJobs = (profile.jobs ?? []).filter((item) => !baseJobIds.has(item.id) && item.type === "memory_enrichment");
+    const lifecycleJobs = (profile.jobs ?? []).filter((item) => !baseJobIds.has(item.id) && (item.type === "memory_enrichment" || item.type === "candidate_visual"));
     const childJobs = [...plannedConversationJobs(turn, job, result), ...lifecycleJobs];
     profile.jobs = [...childJobs, ...(profile.jobs ?? [])].filter((item, index, list) => list.findIndex((other) => other.id === item.id) === index).slice(0, 240);
     turn.jobIds = [...new Set([...turn.jobIds, ...childJobs.map((item) => item.id)])];
@@ -391,7 +392,7 @@ export function createApp(input: {
     return {
       messageId: reply?.id,
       episodeIds: result.episodes.map((episode) => episode.id),
-      memoryIds: lifecycleJobs.flatMap((item) => item.memoryId ? [item.memoryId] : []),
+      memoryIds: lifecycleJobs.flatMap((item) => item.type === "memory_enrichment" && item.memoryId ? [item.memoryId] : []),
       memorySourceIds: [turn.id, job.id],
       cognition: {
         inputSource: cognitionContext.inputSource,
@@ -438,6 +439,58 @@ export function createApp(input: {
       throw error;
     }
     return { memoryIds: [memory.id], memorySourceIds: [...new Set([job.turnId, job.id, memory.id])], memoryDecision: "created" as const, memoryReason: "Primary cognition approved this long-term memory; presentation was enriched idempotently" };
+  }
+
+  async function processCandidateVisual(userId: string, job: ConversationJobRecord) {
+    const candidateId = job.candidateId ?? job.sourceIds.find((id) => id.startsWith("candidate_"));
+    const snapshot = await store.getProfile(userId);
+    const candidate = snapshot?.memoryCandidates.find((item) => item.id === candidateId);
+    if (!snapshot || !candidate) return { memoryDecision: "skipped_duplicate" as const, memoryReason: "Candidate no longer exists", memorySourceIds: job.sourceIds };
+    const promotedMemory = candidate.status === "promoted" ? snapshot.longTermMemories.find((memory) => memory.sourceEpisodeId === candidate.sourceEpisodeId) : undefined;
+    if (candidate.status !== "candidate" && !promotedMemory) return { memoryDecision: "skipped_duplicate" as const, memoryReason: "Candidate was dismissed", memorySourceIds: job.sourceIds };
+    if (candidate.previewVisual || candidate.previewStatus === "not_needed") {
+      return { attachmentIds: candidate.previewVisual ? [candidate.previewVisual.id] : [], memoryDecision: "skipped_duplicate" as const, memoryReason: "Candidate preview already exists", memorySourceIds: job.sourceIds };
+    }
+    try {
+      const preview = await createCandidateVisualPreview(snapshot, candidate, provider);
+      await store.updateProfile(userId, (latest) => {
+        const target = latest.memoryCandidates.find((item) => item.id === candidate.id);
+        if (!target) return;
+        if (!target.previewVisual && target.previewStatus !== "not_needed") Object.assign(target, preview, { previewError: undefined });
+        if (target.status !== "promoted") return;
+        const memory = latest.longTermMemories.find((item) => item.sourceEpisodeId === target.sourceEpisodeId);
+        if (!memory || memory.visual) return;
+        memory.visual = preview.previewVisual;
+        memory.visualPrompt = preview.previewPrompt;
+        memory.visualMode = preview.previewMode;
+        memory.papoPresence = preview.previewPapoPresence;
+        memory.visualPlanReason = preview.previewPlanReason;
+        memory.narrative = preview.previewNarrative ?? memory.narrative;
+        memory.visualPolicyVersion = MEMORY_VISUAL_POLICY_VERSION;
+        memory.visualStatus = preview.previewVisual ? "ready" : preview.previewStatus === "not_needed" ? "not_needed" : "failed";
+        memory.visualUpdatedAt = preview.previewUpdatedAt;
+        memory.enrichedRevision = memory.contentRevision;
+        memory.enrichmentStatus = "completed";
+      });
+      const committed = await store.getProfile(userId);
+      const committedMemory = committed?.longTermMemories.find((item) => item.sourceEpisodeId === candidate.sourceEpisodeId && item.weight > 0);
+      if (committed && committedMemory) {
+        await updateClientDocument(committed, provider, [committedMemory.id]);
+        await store.updateProfile(userId, (latest) => {
+          if ((committed.clientDocument?.revision ?? 0) > (latest.clientDocument?.revision ?? 0)) latest.clientDocument = committed.clientDocument;
+        });
+      }
+      return { attachmentIds: preview.previewVisual ? [preview.previewVisual.id] : [], memorySourceIds: [job.id, candidate.id] };
+    } catch (error) {
+      await store.updateProfile(userId, (latest) => {
+        const target = latest.memoryCandidates.find((item) => item.id === candidate.id && item.status === "candidate");
+        if (!target) return;
+        target.previewStatus = "failed";
+        target.previewError = error instanceof Error ? error.message.slice(0, 300) : "Unknown candidate preview error";
+        target.previewUpdatedAt = new Date().toISOString();
+      });
+      throw error;
+    }
   }
 
   async function processActionJob(userId: string, job: ConversationJobRecord) {

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ModelProvider } from "../core/provider";
-import type { CreatureProfile, LongTermMemory, MediaAttachment } from "../core/types";
+import type { CreatureProfile, LongTermMemory, MediaAttachment, MemoryCandidate } from "../core/types";
 import { applyMemoryVisualPlan, memoryVisualReferences, planMemoryVisual } from "./memory-visual";
 
 export class MemoryEnrichmentFailure extends Error {
@@ -51,11 +51,37 @@ export async function enrichMemoryExperience(
   return memory;
 }
 
+export async function createCandidateVisualPreview(profile: CreatureProfile, candidate: MemoryCandidate, provider: ModelProvider) {
+  const memory: LongTermMemory = {
+    id: candidate.id,
+    createdAt: candidate.createdAt,
+    kind: candidate.memoryKind,
+    text: candidate.candidateText,
+    shortTitle: candidate.shortTitle,
+    sourceEpisodeId: candidate.sourceEpisodeId,
+    consolidatedBecause: candidate.whyConsolidate,
+    weight: candidate.confidence,
+    tags: candidate.tags,
+    attachments: candidate.attachments ?? []
+  };
+  await enrichMemoryExperience(profile, memory, provider, { throwOnVisualError: true });
+  return {
+    previewVisual: memory.visual,
+    previewStatus: memory.visualStatus === "ready" ? "ready" as const : memory.visualStatus === "not_needed" ? "not_needed" as const : "failed" as const,
+    previewPrompt: memory.visualPrompt,
+    previewMode: memory.visualMode,
+    previewPapoPresence: memory.papoPresence,
+    previewPlanReason: memory.visualPlanReason,
+    previewNarrative: memory.narrative,
+    previewUpdatedAt: memory.visualUpdatedAt,
+    shortTitle: memory.shortTitle
+  };
+}
+
 function memoryImageStyle(profile: CreatureProfile, plan: Awaited<ReturnType<typeof planMemoryVisual>>) {
-  if (plan.papoPresence === "required") return profile.petProfile.visualStyle;
-  return plan.visualMode === "grounded_scene"
-    ? "natural observational memory scene grounded only in the provided real photo"
-    : "tactile hand-painted gouache or watercolor memory scene with visible paper texture; human life subjects, never anthropomorphic animals";
+  const albumStyle = "warm hand-drawn comic or everyday-life illustration; natural linework, watercolor, gouache or colored-pencil texture; visible paper character; not oil paint, photorealistic, 3D, corporate or infographic art";
+  if (plan.papoPresence === "required") return `${albumStyle}; preserve Papo's identity, coat markings and proportions from this profile: ${profile.petProfile.visualStyle}`;
+  return `${albumStyle}; human figures may have natural simplified illustrated faces and expressions; never anthropomorphic animals`;
 }
 
 async function saveMemoryVisual(dataUrl: string, label: string, prompt: string, sourceIds: string[]): Promise<MediaAttachment> {

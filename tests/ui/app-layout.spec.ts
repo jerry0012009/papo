@@ -810,6 +810,13 @@ test("wide desktop uses a scan-friendly memory archive and local trace controls"
   await page.getByRole("button", { name: /待确认 2/ }).click();
   const candidateCards = page.locator(".candidate-memory");
   await expect(candidateCards).toHaveCount(2);
+  await expect(candidateCards.nth(0).getByRole("heading", { name: "记得更自然" })).toBeVisible();
+  await expect(candidateCards.nth(0).getByRole("button", { name: "查看图片：记得更自然" })).toBeVisible();
+  await expect(candidateCards.nth(1).getByRole("heading", { name: "界面像真正的co" })).toBeVisible();
+  await expect(candidateCards.nth(1).locator(".candidate-memory-placeholder")).toBeVisible();
+  await expect(candidateCards.nth(0).getByRole("button", { name: "留下这段记忆" })).toBeVisible();
+  await expect(candidateCards.nth(0).getByRole("button", { name: "这次不留下" })).toBeVisible();
+  await page.screenshot({ path: testInfo.outputPath(`memory-candidate-inbox-${testInfo.project.name}.png`), fullPage: true });
   const first = await candidateCards.nth(0).boundingBox();
   const second = await candidateCards.nth(1).boundingBox();
   expect(first).toBeTruthy();
@@ -834,6 +841,24 @@ test("wide desktop uses a scan-friendly memory archive and local trace controls"
   const companionBox = await page.locator(".companion-panel").boundingBox();
   expect(companionBox).toBeTruthy();
   expect(companionBox!.width).toBeGreaterThanOrEqual(300);
+});
+
+test("candidate memory inbox keeps visual hierarchy with and without artwork", async ({ page }, testInfo) => {
+  await page.goto("/");
+  await page.locator(".nav").getByRole("button", { name: /记忆/ }).click();
+  await page.getByRole("button", { name: /待确认 2/ }).click();
+
+  const candidates = page.locator(".candidate-memory");
+  await expect(candidates).toHaveCount(2);
+  await expect(candidates.nth(0).getByRole("heading", { name: "记得更自然" })).toBeVisible();
+  await expect(candidates.nth(0).getByRole("button", { name: "查看图片：记得更自然" })).toBeVisible();
+  await expect(candidates.nth(1).getByRole("heading", { name: "界面像真正的co" })).toBeVisible();
+  await expect(candidates.nth(1).locator(".candidate-memory-placeholder")).toBeVisible();
+  await expect(candidates.nth(0).getByText("Papo 为什么暂存")).toBeVisible();
+  await expect(candidates.nth(0).getByRole("button", { name: "留下这段记忆" })).toBeVisible();
+  await expect(candidates.nth(0).getByRole("button", { name: "这次不留下" })).toBeVisible();
+  await expectInViewport(page, candidates.nth(0));
+  await page.screenshot({ path: testInfo.outputPath(`memory-candidate-inbox-${testInfo.project.name}.png`), fullPage: true });
 });
 
 async function installMockApi(page: Page) {
@@ -1331,6 +1356,7 @@ function makeProfile() {
         id: "cand-1",
         createdAt: now,
         candidateText: "你提到以后想让 Papo 记得更自然。",
+        shortTitle: "记得更自然",
         memoryKind: "long_theme",
         confidence: 0.72,
         sourceEpisodeId: "episode-1",
@@ -1338,12 +1364,23 @@ function makeProfile() {
         writePolicy: "wait_feedback",
         decayPolicy: "decay_without_feedback",
         status: "candidate",
-        tags: ["product"]
+        tags: ["product"],
+        previewVisual: {
+          id: "img_candidate_preview",
+          kind: "image",
+          label: "记得更自然",
+          mime: "image/jpeg",
+          url: "/pets/register/shiba.jpg",
+          createdAt: now,
+          generatedBy: "papo_memory"
+        },
+        previewStatus: "ready"
       },
       {
         id: "cand-2",
         createdAt: "2026-07-07T11:58:00.000Z",
         candidateText: "你希望 Papo 的界面像真正的 companion app。",
+        shortTitle: "界面像真正的co",
         memoryKind: "long_theme",
         confidence: 0.7,
         sourceEpisodeId: "episode-1",

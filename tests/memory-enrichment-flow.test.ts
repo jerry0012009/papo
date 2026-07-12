@@ -114,5 +114,6 @@ async function waitFor<T>(read: () => Promise<T | undefined>, timeoutMs = 4000):
     if (value) return value;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
-  throw new Error("timed out waiting for memory enrichment");
+  const current = await store.getProfile("memory-flow-user");
+  throw new Error(`timed out waiting for memory enrichment: ${JSON.stringify({ jobs: current?.jobs?.map((job) => ({ id: job.id, type: job.type, status: job.status, error: job.error })), candidate: current?.memoryCandidates[0], memory: current?.longTermMemories[0] })}`);
 }

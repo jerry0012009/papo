@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { upsertLongTermMemory } from "../src/core/memory";
+import { enqueueCandidateVisualJobs, forgetMemory, promoteMemoryCandidate, upsertLongTermMemory } from "../src/core/memory";
 import { createCreatureProfile, normalizeCreatureProfile } from "../src/core/profile";
 import type { ModelProvider } from "../src/core/provider";
 import type { LongTermMemory, MediaAttachment } from "../src/core/types";
@@ -34,6 +34,58 @@ test("memory upsert is idempotent and revisions retain the previous visual", () 
   assert.equal(profile.jobs?.filter((job) => job.memoryId === first.memory.id && job.memoryRevision === 2).length, 1);
 });
 
+test("candidate visual jobs are budgeted, idempotent, and their preview is reused on promotion", () => {
+  const profile = createCreatureProfile({ userId: "candidate-preview", creatureName: "Papo", now: "2026-07-12T10:00:00.000Z" });
+  for (let index = 0; index < 3; index += 1) {
+    const episodeId = `episode_candidate_${index}`;
+    profile.episodes.push({
+      id: episodeId, createdAt: "2026-07-12T10:00:00.000Z", source: "button", inputSummary: `候选生活 ${index}`,
+      noticed: `候选生活 ${index}`, creatureResponse: "", memoryCandidateIds: [], weight: 70, tags: []
+    });
+    profile.memoryCandidates.push({
+      id: `candidate_${index}`, createdAt: "2026-07-12T10:00:00.000Z", candidateText: `我记得候选生活 ${index}`,
+      shortTitle: `候选${index}`, memoryKind: "long_theme", confidence: 80, sourceEpisodeId: episodeId,
+      whyConsolidate: "值得稍后确认", writePolicy: "wait_feedback", decayPolicy: "stable", status: "candidate", tags: []
+    });
+  }
+  const jobs = enqueueCandidateVisualJobs(profile);
+  assert.equal(jobs.length, 2, "only two candidate previews may be active at once");
+  assert.equal(enqueueCandidateVisualJobs(profile).length, 0, "normalization or retry cannot duplicate preview jobs");
+
+  const candidate = profile.memoryCandidates[0];
+  candidate.previewVisual = attachment("candidate_preview", "候选预览");
+  candidate.previewStatus = "ready";
+  candidate.previewPrompt = "A warm hand-drawn watercolor everyday scene, no animals, no text.";
+  candidate.previewMode = "imaginative_illustration";
+  candidate.previewPapoPresence = "absent";
+  const promoted = promoteMemoryCandidate(profile, candidate.id);
+  assert.equal(promoted?.visual?.id, "candidate_preview");
+  assert.equal(promoted?.visualStatus, "ready");
+  assert.equal(profile.jobs?.some((job) => job.type === "memory_enrichment" && job.memoryId === promoted?.id), false, "a ready candidate preview avoids a second paid image job");
+});
+
+test("candidate preview backfill is capped and dismissal drops the retained preview", () => {
+  const profile = createCreatureProfile({ userId: "candidate-preview-budget", creatureName: "Papo" });
+  for (let index = 0; index < 8; index += 1) profile.memoryCandidates.push({
+    id: `candidate_budget_${index}`, createdAt: `2026-07-${String(12 - index).padStart(2, "0")}T10:00:00.000Z`, candidateText: `我记得预算候选 ${index}`,
+    shortTitle: `预算${index}`, memoryKind: "long_theme", confidence: 80, sourceEpisodeId: `episode_budget_${index}`,
+    whyConsolidate: "等待确认", writePolicy: "wait_feedback", decayPolicy: "stable", status: "candidate", tags: []
+  });
+  enqueueCandidateVisualJobs(profile);
+  profile.jobs?.filter((job) => job.type === "candidate_visual").forEach((job) => { job.status = "completed"; });
+  enqueueCandidateVisualJobs(profile);
+  profile.jobs?.filter((job) => job.type === "candidate_visual" && job.status === "queued").forEach((job) => { job.status = "completed"; });
+  enqueueCandidateVisualJobs(profile);
+  assert.equal(profile.jobs?.filter((job) => job.type === "candidate_visual").length, 6, "historical backfill is limited to the six newest pending candidates");
+  const first = profile.memoryCandidates[0];
+  first.previewVisual = attachment("dismissed_preview", "待清理预览");
+  first.previewStatus = "ready";
+  forgetMemory(profile, first.id);
+  assert.equal(first.status, "dismissed");
+  assert.equal(first.previewVisual, undefined);
+  assert.equal(first.previewStatus, "not_needed");
+});
+
 test("visual planning avoids fake grounding and only adds Papo when required", async () => {
   const profile = createCreatureProfile({ userId: "memory-visual-policy", creatureName: "Papo" });
   profile.petProfile.avatarImage = attachment("papo_reference", "Papo reference");
@@ -46,7 +98,7 @@ test("visual planning avoids fake grounding and only adds Papo when required", a
   plan = {
     shortTitle: "检索讲座", narrative: "我记得这场讲座梳理了向量检索的关键结构。",
     visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "从听众视角手绘这次讲座经历",
-    imagePrompt: "Square hand-painted gouache memory scene from the back row of a small lecture, anonymous human audience backs facing a speaker silhouette and blank screen, visible brush texture, no animals, no text.",
+    imagePrompt: "Square hand-drawn watercolor comic illustration of people sharing ideas in a small room, natural simplified faces and expressions, visible paper texture, no animals, no text.",
     relatedMemoryIds: [], needsClientReferences: false
   };
   const lecturePlan = await planMemoryVisual(profile, lecture, provider);
@@ -92,6 +144,18 @@ test("legacy symbolic covers migrate once while retaining their old image", () =
   assert.equal(profile.jobs?.filter((job) => job.memoryId === migrated.id && job.memoryRevision === 2).length, 1);
   normalizeCreatureProfile(profile);
   assert.equal(migrated.contentRevision, 2, "policy migration must not increment on every normalization");
+});
+
+test("legacy Papo mascot covers also migrate into the shared hand-drawn album style", () => {
+  const profile = createCreatureProfile({ userId: "memory-papo-style-migration", creatureName: "Papo" });
+  profile.longTermMemories.push({
+    ...memory("ltm_legacy_papo", "我和 Papo 一起完成了今天的工作"), visualMode: "imaginative_illustration", papoPresence: "required", visualPolicyVersion: 3,
+    visual: attachment("old_3d_papo_cover", "旧 3D Papo 图"), visualStatus: "ready", contentRevision: 1, enrichedRevision: 1, enrichmentStatus: "completed"
+  });
+  normalizeCreatureProfile(profile);
+  assert.equal(profile.longTermMemories[0].contentRevision, 2);
+  assert.equal(profile.longTermMemories[0].visual?.id, "old_3d_papo_cover");
+  assert.equal(profile.jobs?.some((job) => job.memoryId === "ltm_legacy_papo" && job.memoryRevision === 2), true);
 });
 
 test("persistent memory jobs retry failures and expose a terminal visual error without replacing the old image", async () => {
