@@ -15,7 +15,7 @@ import { runButtonHarness, runCuriousHarness } from "../core/harness";
 import { enqueueMemoryEnrichmentJob, MEMORY_VISUAL_POLICY_VERSION, upsertLongTermMemory } from "../core/memory";
 import { createModelProvider, type ImageReference, type ModelProvider } from "../core/provider";
 import { explicitUserAge } from "../core/model-safety";
-import { deferProactiveEmergence, isProactiveEmergenceDue, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
+import { deferProactiveEmergence, isBackgroundCognitionEligible, isProactiveEmergenceDue, markMeaningfulUserActivity, markProactiveUserResponse, settleProactiveEmergence } from "../core/proactive";
 import { wakeCreature } from "../core/rhythm";
 import { clampState, deriveMood } from "../core/state";
 import type { ActionCardRecord, ActionResult, CaptureResult, ConversationJobRecord, ConversationTurnRecord, CreatureProfile, EmergenceRecord, FeedbackRecord, IllustrationPlan, IllustrationRecord, LongTermMemory, MediaAttachment, MessageCognitionTrace, PetIdentityProfile, PlannedAction, SemanticBrainRecord, SensingTrace, StreamSegment } from "../core/types";
@@ -849,6 +849,8 @@ export function createApp(input: {
       const profile = await requireExistingProfile(store, req.params.userId);
       const body = loginProfileSchema.parse(req.body);
       assertProfilePassword(profile, body.password);
+      markMeaningfulUserActivity(profile);
+      await store.saveProfile(profile);
       res.json({ profile: publicProfile(profile) });
     } catch (error) {
       next(error);
@@ -914,9 +916,11 @@ export function createApp(input: {
     try {
       const profile = await requireProfile(store, req.params.userId, req);
       const wake = wakeCreature(profile);
-      await refreshDogStateIfDue(profile, provider).catch((error) => {
-        console.error(`Dog state check failed for ${profile.userId}`, error);
-      });
+      if (isBackgroundCognitionEligible(profile)) {
+        await refreshDogStateIfDue(profile, provider).catch((error) => {
+          console.error(`Dog state check failed for ${profile.userId}`, error);
+        });
+      }
       await store.saveProfile(profile);
       res.json({ profile: publicProfile(profile), wake });
     } catch (error) {
@@ -1279,6 +1283,7 @@ export function createApp(input: {
   app.post("/api/profiles/:userId/emergence", async (req, res, next) => {
     try {
       const profile = await requireProfile(store, req.params.userId, req);
+      markMeaningfulUserActivity(profile);
       const beforeSemanticIds = semanticRecordIds(profile);
       const emergence = await semanticDecideEmergence(profile, provider, new Date().toISOString(), { delivery: "manual" });
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
@@ -1465,6 +1470,7 @@ export async function runAutomaticDreamingSweep(store: ProfileStore, provider: M
   for (const summary of summaries) {
     const profile = await store.getProfile(summary.userId);
     if (!profile) continue;
+    if (!isBackgroundCognitionEligible(profile, now)) continue;
     const due = isDreamingDue(profile, now);
     if (!due.due) continue;
     checked += 1;
@@ -1491,7 +1497,7 @@ export async function runDogStateSweep(store: ProfileStore, provider: ModelProvi
   let deferred = 0;
   for (const summary of summaries) {
     const profile = await store.getProfile(summary.userId);
-    if (!profile || !isDogStateCheckDue(profile, now)) continue;
+    if (!profile || !isBackgroundCognitionEligible(profile, now) || !isDogStateCheckDue(profile, now)) continue;
     checked += 1;
     try {
       const state = await refreshDogStateIfDue(profile, provider, { now });
@@ -1514,6 +1520,7 @@ export async function runProactiveEmergenceSweep(store: ProfileStore, provider: 
   for (const summary of summaries) {
     const profile = await store.getProfile(summary.userId);
     if (!profile) continue;
+    if (!isBackgroundCognitionEligible(profile, now)) continue;
     const due = isProactiveEmergenceDue(profile, now);
     if (!due.due) {
       if (!profile.proactive.lastCheckedAt) {

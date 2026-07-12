@@ -3,6 +3,7 @@ import { makeId } from "./ids";
 import { modelConversationContext, modelMemoryContext, modelPetContext } from "./model-context";
 import type { ModelProvider } from "./provider";
 import { addMinutes, modelTimeContext } from "./time";
+import { markMeaningfulUserActivity } from "./proactive";
 import type { CreatureProfile, DogInteractionState } from "./types";
 
 export interface DogStateCatalogItem {
@@ -203,6 +204,7 @@ export async function refreshDogStateIfDue(
 }
 
 export function applyPetTouchState(profile: CreatureProfile, action: PetTouchAction, now = new Date().toISOString()) {
+  markMeaningfulUserActivity(profile, now);
   const stateId = petTouchStateId(action);
   if (!stateId) return undefined;
   const selected = requireDogState(stateId);

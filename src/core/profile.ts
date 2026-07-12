@@ -1,6 +1,7 @@
 import { makeId } from "./ids";
 import { enqueueCandidateVisualJobs, enqueueMemoryEnrichmentJob, MEMORY_VISUAL_POLICY_VERSION, memoryContentFingerprint, memoryShortTitle, memoryVisualNeedsPolicyMigration } from "./memory";
 import { normalizeDogState, seedDogState } from "./dog-states";
+import { isBackgroundCognitionEligible, lastMeaningfulUserActivityAt } from "./proactive";
 import { normalizePetKind, petKindMeta } from "./pet-kinds";
 import { initialState } from "./state";
 import type { CreatureProfile, FeedbackPolicyProfile, PetIdentityProfile } from "./types";
@@ -61,6 +62,7 @@ export function initialPolicyProfile(): FeedbackPolicyProfile {
 
 export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProfile {
   profile.lastSeenAt ??= profile.createdAt;
+  profile.lastUserActivityAt ??= lastMeaningfulUserActivityAt(profile);
   profile.petKind = normalizePetKind(profile.petKind);
   profile.policyProfile ??= initialPolicyProfile();
   profile.memoryCandidates ??= [];
@@ -195,13 +197,13 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
     memory.contentFingerprint = memoryContentFingerprint(memory);
     memory.enrichedRevision ??= memory.visualStatus === "ready" || memory.visualStatus === "not_needed" ? memory.contentRevision : 0;
     memory.enrichmentStatus ??= memory.enrichedRevision >= memory.contentRevision ? "completed" : "pending";
-    if (memory.weight > 0 && memory.enrichedRevision < memory.contentRevision) enqueueMemoryEnrichmentJob(profile, memory);
+    if (memory.weight > 0 && memory.enrichedRevision < memory.contentRevision && isBackgroundCognitionEligible(profile)) enqueueMemoryEnrichmentJob(profile, memory);
   }
   for (const candidate of profile.memoryCandidates) {
     candidate.attachments ??= [];
     candidate.shortTitle = memoryShortTitle(candidate.candidateText, candidate.shortTitle);
   }
-  enqueueCandidateVisualJobs(profile);
+  if (isBackgroundCognitionEligible(profile)) enqueueCandidateVisualJobs(profile);
   for (const message of profile.conversation) {
     message.attachments ??= [];
   }

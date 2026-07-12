@@ -1,4 +1,5 @@
 import { makeId } from "./ids";
+import { markMeaningfulUserActivity } from "./proactive";
 import type { ConversationChannel, CreatureMessage, CreatureProfile, MessageCognitionTrace, SegmentKind, SensingTrace, StreamSegment } from "./types";
 
 const MAX_CONVERSATION_MESSAGES = 80;
@@ -99,5 +100,6 @@ export function appendInputMessage(
   };
   profile.conversation.unshift(message);
   profile.conversation = profile.conversation.slice(0, MAX_CONVERSATION_MESSAGES);
+  markMeaningfulUserActivity(profile, message.observedAt ?? message.at);
   return message;
 }

@@ -3,6 +3,28 @@ import type { CreatureProfile, EmergenceRecord } from "./types";
 const HALF_HOUR_MINUTES = 30;
 const AFTER_FIRST_UNANSWERED_MINUTES = 60;
 const AFTER_SECOND_UNANSWERED_MINUTES = 12 * 60;
+export const BACKGROUND_COGNITION_ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export function lastMeaningfulUserActivityAt(profile: CreatureProfile) {
+  const timestamps = [
+    profile.lastUserActivityAt,
+    ...profile.conversation.filter((message) => message.role === "user" || message.role === "world").map((message) => message.observedAt ?? message.at),
+    ...(profile.turns ?? []).map((turn) => turn.createdAt),
+    ...profile.feedbackHistory.map((feedback) => feedback.at),
+    ...(profile.companionSessions ?? []).flatMap((session) => session.lastObservedAt ?? session.startedAt ? [session.lastObservedAt ?? session.startedAt] : []),
+    ...profile.dogStateHistory.filter((state) => state.selectedBy === "touch").map((state) => state.selectedAt)
+  ].filter((value): value is string => typeof value === "string" && Number.isFinite(Date.parse(value)));
+  return timestamps.sort((left, right) => Date.parse(right) - Date.parse(left))[0] ?? profile.createdAt;
+}
+
+export function isBackgroundCognitionEligible(profile: CreatureProfile, now = new Date().toISOString()) {
+  const elapsed = Date.parse(now) - Date.parse(lastMeaningfulUserActivityAt(profile));
+  return !Number.isFinite(elapsed) || elapsed <= BACKGROUND_COGNITION_ACTIVE_WINDOW_MS;
+}
+
+export function markMeaningfulUserActivity(profile: CreatureProfile, now = new Date().toISOString()) {
+  if (!profile.lastUserActivityAt || Date.parse(now) > Date.parse(profile.lastUserActivityAt)) profile.lastUserActivityAt = now;
+}
 
 export function isProactiveEmergenceDue(profile: CreatureProfile, now = new Date().toISOString()) {
   const state = ensureProactiveState(profile, now);
@@ -16,6 +38,7 @@ export function isProactiveEmergenceDue(profile: CreatureProfile, now = new Date
 }
 
 export function markProactiveUserResponse(profile: CreatureProfile, now = new Date().toISOString()) {
+  markMeaningfulUserActivity(profile, now);
   const state = ensureProactiveState(profile, now);
   if (state.pendingCount <= 0 && !state.paused) return false;
   state.pendingCount = 0;

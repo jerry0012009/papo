@@ -852,6 +852,7 @@ export interface CreatureProfile {
   hasPassword?: boolean;
   createdAt: string;
   lastSeenAt: string;
+  lastUserActivityAt?: string;
   state: CreatureState;
   episodes: EpisodeMemory[];
   longTermMemories: LongTermMemory[];

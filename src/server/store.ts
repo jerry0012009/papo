@@ -112,6 +112,7 @@ function mergeCreatureProfiles(current: CreatureProfile, incoming: CreatureProfi
   const merged = normalizeCreatureProfile({
     ...current,
     ...incoming,
+    lastUserActivityAt: timestamp(incoming.lastUserActivityAt) >= timestamp(current.lastUserActivityAt) ? incoming.lastUserActivityAt : current.lastUserActivityAt,
     petKind: incoming.petKind ?? current.petKind,
     petProfile: chooseLatestPetProfile(current, incoming),
     state: chooseLatestState(current, incoming),

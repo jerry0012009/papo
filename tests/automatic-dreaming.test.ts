@@ -6,8 +6,10 @@ import type { ModelProvider } from "../src/core/provider";
 const store = new MemoryProfileStore();
 const profile = await store.createProfile({
   userId: "dreaming-user",
-  creatureName: "Papo"
+  creatureName: "Papo",
+  now: "2026-07-07T09:00:00.000Z"
 });
+profile.lastUserActivityAt = "2026-07-07T09:00:00.000Z";
 
 for (let index = 0; index < 36; index += 1) {
   profile.longTermMemories.push({
