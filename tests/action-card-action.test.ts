@@ -161,6 +161,7 @@ try {
     assert.equal(update.status, 200, JSON.stringify(updatePayload));
     assert.equal(updatePayload.actionCard.displayMode, displayMode);
     assert.equal(updatePayload.actionCard.disabled, displayMode === "disabled");
+    assert.equal(updatePayload.profile.dogState.id, displayMode === "disabled" ? "calm_presence" : "curious_peek");
   }
   console.log(JSON.stringify({ ok: true, video: papoMessage.attachments[0].url }, null, 2));
 } finally {

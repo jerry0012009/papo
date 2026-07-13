@@ -215,6 +215,26 @@ export function applyActionCardState(profile: CreatureProfile, stateId: string |
   return next;
 }
 
+export function reconcileActionCardState(profile: CreatureProfile, now = new Date().toISOString()) {
+  const enabledCards = (profile.actionCards ?? []).filter((card) =>
+    !card.deleted && (card.displayMode ?? (card.disabled ? "disabled" : "dynamic")) !== "disabled"
+  );
+  const enabledStateIds = new Set(enabledCards.map((card) => card.stateId).filter((id): id is string => Boolean(id)));
+  if (enabledStateIds.has(profile.dogState.id)) return profile.dogState;
+
+  const nextStateId = enabledCards.find((card) => card.stateId && DOG_STATE_CATALOG.some((state) => state.id === card.stateId))?.stateId;
+  const selected = DOG_STATE_CATALOG.find((state) => state.id === nextStateId)
+    ?? requireDogState("calm_presence");
+  const reason = nextStateId
+    ? "动作卡展示范围变化后，首页切换到仍然启用的状态卡。"
+    : "当前没有可绑定的启用动作卡，首页回到中性的安静状态。";
+  const next = dogStateFromCatalog(selected, now, "action_card", reason, DOG_STATE_CHECK_INTERVAL_MINUTES);
+  profile.dogState = next;
+  profile.dogStateHistory.unshift(next);
+  profile.dogStateHistory = profile.dogStateHistory.slice(0, 40);
+  return next;
+}
+
 function selectableDogStates(profile: CreatureProfile) {
   const enabledStateIds = new Set((profile.actionCards ?? [])
     .filter((card) => !card.deleted && (card.displayMode ?? (card.disabled ? "disabled" : "dynamic")) !== "disabled" && card.stateId)

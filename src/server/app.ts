@@ -7,7 +7,7 @@ import { z } from "zod";
 import { appendInputMessage, appendPapoMessage } from "../core/conversation";
 import { updateClientDocument } from "../core/client-document";
 import { audioObservationPreview, imageSummaryPreview } from "../core/display-text";
-import { applyActionCardState, applyPetTouchState, DOG_STATE_CATALOG, isDogStateCheckDue, refreshDogStateIfDue } from "../core/dog-states";
+import { applyActionCardState, applyPetTouchState, DOG_STATE_CATALOG, isDogStateCheckDue, reconcileActionCardState, refreshDogStateIfDue } from "../core/dog-states";
 import { isDreamingDue, recordDreamingFailure, semanticDreamMemories } from "../core/dreaming";
 import { semanticDecideEmergence } from "../core/emergence";
 import { applyFeedback, recordExplicitForgetConfirmation, semanticReflectFeedback } from "../core/feedback";
@@ -1320,19 +1320,23 @@ export function createApp(input: {
 
   app.patch("/api/profiles/:userId/action-cards/:cardId", async (req, res, next) => {
     try {
-      const profile = await requireProfile(store, req.params.userId, req);
+      await requireProfile(store, req.params.userId, req);
       const body = updateActionCardSchema.parse(req.body);
-      const card = profile.actionCards?.find((item) => item.id === req.params.cardId);
-      if (!card) throw new HttpError(404, "Action card not found");
-      if (body.displayMode !== undefined) {
-        card.displayMode = body.displayMode;
-        card.disabled = body.displayMode === "disabled";
-      } else if (body.disabled !== undefined) {
-        card.disabled = body.disabled;
-        card.displayMode = body.disabled ? "disabled" : "dynamic";
-      }
-      if (body.deleted !== undefined) card.deleted = body.deleted;
-      await store.saveProfile(profile);
+      let card: ActionCardRecord | undefined;
+      const profile = await store.updateProfile(req.params.userId, (latest) => {
+        card = latest.actionCards?.find((item) => item.id === req.params.cardId);
+        if (!card) return;
+        if (body.displayMode !== undefined) {
+          card.displayMode = body.displayMode;
+          card.disabled = body.displayMode === "disabled";
+        } else if (body.disabled !== undefined) {
+          card.disabled = body.disabled;
+          card.displayMode = body.disabled ? "disabled" : "dynamic";
+        }
+        if (body.deleted !== undefined) card.deleted = body.deleted;
+        reconcileActionCardState(latest);
+      });
+      if (!profile || !card) throw new HttpError(404, "Action card not found");
       res.json({ profile: publicProfile(profile), actionCard: card });
     } catch (error) {
       next(error);

@@ -1,14 +1,13 @@
 {
-  "versionName": "0.4.14",
-  "versionCode": 20,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.14.apk",
-  "publishedAt": "2026-07-12T22:30:00.000Z",
+  "versionName": "0.4.15",
+  "versionCode": 21,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.15.apk",
+  "publishedAt": "2026-07-13T06:30:00.000Z",
   "notes": [
-    "动作卡支持停用、静态、动态三种首页展示方式",
-    "首页状态文字与动作卡绑定，进入首页优先显示符合 Papo 当下状态的画面和文案",
-    "新动作卡由模型明确选择状态类型并生成同步状态句，完成后立即成为当前状态",
-    "视频生成强制使用已批准静态首帧，锁定角色身份、画风和构图，减少视频角色漂移"
+    "首页存在启用动作卡时，只在静态或动态启用卡之间切换，不再混入内置玩球、坐好或睡觉动作",
+    "停用、删除或重新启用动作卡时立即校正 Papo 当前状态，不再残留已停用卡的文字",
+    "旧账号加载时自动对齐当前状态与启用动作卡范围，无需重新生成或手工迁移"
   ],
-  "sha256": "088fffaf86fe2e7b4a357eca2ef43f0b3e276b605800f0d69984b467e591340a",
-  "size": 22798644
+  "sha256": "fc0a521bbec12115ad516ee1d819ff05b69baf85ef9ca0d5f364f737ebd6deb0",
+  "size": 22798632
 }

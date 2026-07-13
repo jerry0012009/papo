@@ -1,6 +1,6 @@
 import { makeId } from "./ids";
 import { enqueueCandidateVisualJobs, enqueueMemoryEnrichmentJob, MEMORY_VISUAL_POLICY_VERSION, memoryContentFingerprint, memoryShortTitle, memoryVisualNeedsPolicyMigration } from "./memory";
-import { normalizeDogState, seedDogState } from "./dog-states";
+import { normalizeDogState, reconcileActionCardState, seedDogState } from "./dog-states";
 import { isBackgroundCognitionEligible, lastMeaningfulUserActivityAt } from "./proactive";
 import { normalizePetKind, petKindMeta } from "./pet-kinds";
 import { initialState } from "./state";
@@ -175,6 +175,7 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.dogState = normalizeDogState(profile.dogState, new Date().toISOString());
   profile.dogStateHistory ??= [];
   profile.dogStateHistory = profile.dogStateHistory.map((state) => normalizeDogState(state, state.selectedAt)).slice(0, 40);
+  reconcileActionCardState(profile);
   profile.proactive.pendingCount = Math.max(0, Math.min(3, Math.round(profile.proactive.pendingCount ?? 0)));
   profile.proactive.paused = Boolean(profile.proactive.paused);
   profile.episodes ??= [];

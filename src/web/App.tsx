@@ -1639,17 +1639,16 @@ function HomeView(props: {
   const [activeMotion, setActiveMotion] = useState<HomeMotion | undefined>();
   const touchActions = petTouchActions(props.profile);
   const actionCards = (props.profile.actionCards ?? []).filter((card) => !card.deleted && actionCardDisplayMode(card) !== "disabled").slice(0, 6);
-  const motionItems: HomeMotion[] = [
-    ...touchActions.map((item) => ({ kind: "pet" as const, ...item })),
-    ...actionCards.map((card) => ({ kind: "card" as const, cardId: card.id }))
-  ];
+  const motionItems: HomeMotion[] = actionCards.length
+    ? actionCards.map((card) => ({ kind: "card" as const, cardId: card.id }))
+    : touchActions.map((item) => ({ kind: "pet" as const, ...item }));
   const defaultCard = matchingHomeActionCard(props.profile, actionCards);
   const effectiveMotion: HomeMotion | undefined = activeMotion ?? (defaultCard ? { kind: "card", cardId: defaultCard.id } : undefined);
   const visibleAction = effectiveMotion?.kind === "pet" ? effectiveMotion.action : generatedPetActionFromState(props.profile.dogState);
   const activeCard = effectiveMotion?.kind === "card" ? actionCards.find((card) => card.id === effectiveMotion.cardId) : undefined;
   useEffect(() => {
     setActiveMotion(undefined);
-  }, [props.profile.userId, props.profile.petKind, props.profile.actionCards?.length]);
+  }, [props.profile.userId, props.profile.petKind, actionCardModeSignature(actionCards), props.profile.dogState.id]);
   return (
     <section className="home-screen">
       <section className="home-stage">
@@ -2934,6 +2933,10 @@ function actionCardMediaItem(card: NonNullable<CreatureProfile["actionCards"]>[n
 
 function actionCardDisplayMode(card: NonNullable<CreatureProfile["actionCards"]>[number]): ActionCardDisplayMode {
   return card.displayMode ?? (card.disabled ? "disabled" : "dynamic");
+}
+
+function actionCardModeSignature(cards: NonNullable<CreatureProfile["actionCards"]>) {
+  return cards.map((card) => `${card.id}:${actionCardDisplayMode(card)}:${card.stateId ?? ""}`).join("|");
 }
 
 function actionCardStatusText(card: NonNullable<CreatureProfile["actionCards"]>[number], profile: CreatureProfile) {

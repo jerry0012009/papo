@@ -420,7 +420,7 @@ test("home guide poster explains Papo without overflowing", async ({ page }) => 
   await expectInViewport(page, guide);
 });
 
-test("home adapts generated British Shorthair and tap changes pose", async ({ page }) => {
+test("home adapts generated British Shorthair and enabled cards replace built-in touch poses", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.setItem("papo:testPetKind", "british-shorthair");
   });
@@ -434,8 +434,9 @@ test("home adapts generated British Shorthair and tap changes pose", async ({ pa
   await expect(avatar).toHaveAttribute("poster", /pets\/generated\/british-shorthair-v1\/poke-wave\.webp/);
 
   await page.getByRole("button", { name: "戳戳 Papo" }).click();
-  await expect(avatar).toHaveAttribute("src", /pets\/generated\/british-shorthair-v1\/play-ball\.mp4/);
-  await expect(page.locator(".home-speech")).toContainText("小球");
+  await expect(page.locator(".home-stage .action-card-avatar video")).toBeVisible();
+  await expect(page.locator(".home-speech")).toContainText("蝴蝶");
+  await expect(page.locator(".home-speech")).not.toContainText(/小球|坐好了/);
 });
 
 test("chat opens at latest content and keeps the composer aligned with the thread", async ({ page }) => {
@@ -946,18 +947,25 @@ test("action-card pending notice follows durable job status", async ({ page }) =
 test("home binds current state text to matching static and dynamic action cards", async ({ page }) => {
   const cover = { id: "img-state-cover", kind: "image", label: "状态首帧", mime: "image/jpeg", url: "/pets/register/shiba.jpg", createdAt: now };
   const video = { id: "vid-state-card", kind: "video", label: "悄悄看你", mime: "video/mp4", url: "/pets/register/golden-retriever.mp4", createdAt: now };
+  const secondVideo = { ...video, id: "vid-state-card-2", label: "安静坐着" };
   await page.addInitScript((value) => window.localStorage.setItem("papo:testProfileOverride", JSON.stringify(value)), {
-    actionCards: [{ id: video.id, createdAt: now, title: "悄悄看你", caption: "旧卡片说明", statusText: "Papo 从窗边探出脑袋，正悄悄看着你。", stateId: "curious_peek", displayMode: "static", prompt: "test", durationSeconds: 4, cover, video, sourceIds: [], providerKind: "generic", providerName: "test" }]
+    actionCards: [
+      { id: video.id, createdAt: now, title: "悄悄看你", caption: "旧卡片说明", statusText: "Papo 从窗边探出脑袋，正悄悄看着你。", stateId: "curious_peek", displayMode: "static", prompt: "test", durationSeconds: 4, cover, video, sourceIds: [], providerKind: "generic", providerName: "test" },
+      { id: secondVideo.id, createdAt: now, title: "安静坐着", statusText: "Papo 安静坐在门边等你。", stateId: "calm_presence", displayMode: "dynamic", prompt: "test", durationSeconds: 4, cover, video: secondVideo, sourceIds: [], providerKind: "generic", providerName: "test" }
+    ]
   });
   await page.goto("/");
   const stage = page.locator(".home-stage");
   await expect(stage.getByText("Papo 从窗边探出脑袋，正悄悄看着你。")).toBeVisible();
   await expect(stage.locator(".action-card-avatar img")).toBeVisible();
   await expect(stage.locator(".action-card-avatar video")).toHaveCount(0);
+  await stage.getByRole("button", { name: "切换 Papo 动作" }).click();
+  await expect(stage.getByText("Papo 安静坐在门边等你。")).toBeVisible();
+  await expect(stage.getByText(/小球|坐好了/)).toHaveCount(0);
 
   await stage.getByRole("button", { name: "小眼睛" }).click();
   const panel = page.getByRole("dialog", { name: /Papo 状态/ });
-  await panel.getByRole("button", { name: "动态" }).click();
+  await panel.locator(".action-card-admin").filter({ hasText: "悄悄看你" }).getByRole("button", { name: "动态" }).click();
   await page.getByRole("button", { name: "收起小眼睛" }).click();
   await expect(stage.locator(".action-card-avatar video")).toBeVisible();
   await expect(stage.getByText("Papo 从窗边探出脑袋，正悄悄看着你。")).toBeVisible();
