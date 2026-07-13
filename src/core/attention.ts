@@ -130,6 +130,7 @@ export function buildAttentionEvent(
     triggerSegmentId?: string;
     triggerBatchId?: string;
     captureIntent?: StreamSegment["captureIntent"];
+    audioSourceType?: AttentionEvent["audioSourceType"];
     triggerObservedAt?: string;
     triggerLocation?: StreamSegment["location"];
     attachments?: StreamSegment["attachments"];
@@ -150,6 +151,7 @@ export function buildAttentionEvent(
     triggerSegmentId: input.triggerSegmentId,
     triggerBatchId: input.triggerBatchId,
     captureIntent: input.captureIntent,
+    audioSourceType: input.audioSourceType,
     triggerObservedAt: input.triggerObservedAt,
     triggerLocation: input.triggerLocation,
     attachments: input.attachments ?? [],

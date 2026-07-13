@@ -32,6 +32,30 @@ final class ListeningBatchUploader {
 
     private ListeningBatchUploader() {}
 
+    static final class CaptureMetadata {
+        final String cameraFacing;
+        final String captureIntent;
+        final boolean devicePlaybackActive;
+        final boolean echoCancellationRequested;
+        final String audioInputSource;
+
+        private CaptureMetadata(String cameraFacing, String captureIntent, boolean devicePlaybackActive, boolean echoCancellationRequested, String audioInputSource) {
+            this.cameraFacing = cameraFacing;
+            this.captureIntent = captureIntent;
+            this.devicePlaybackActive = devicePlaybackActive;
+            this.echoCancellationRequested = echoCancellationRequested;
+            this.audioInputSource = audioInputSource;
+        }
+
+        static CaptureMetadata audio(boolean devicePlaybackActive, boolean echoCancellationRequested, String audioInputSource) {
+            return new CaptureMetadata("", "", devicePlaybackActive, echoCancellationRequested, audioInputSource);
+        }
+
+        static CaptureMetadata image(String cameraFacing, String captureIntent) {
+            return new CaptureMetadata(cameraFacing, captureIntent, false, false, "");
+        }
+    }
+
     static File queueDir(Context context) {
         File dir = new File(context.getFilesDir(), "listening-queue");
         if (!dir.exists()) dir.mkdirs();
@@ -46,8 +70,7 @@ final class ListeningBatchUploader {
         Context context,
         String batchId,
         String observedAt,
-        String cameraFacing,
-        String captureIntent,
+        CaptureMetadata capture,
         File audioFile,
         File imageFile
     ) throws Exception {
@@ -55,8 +78,11 @@ final class ListeningBatchUploader {
         metadata.put("batchId", batchId);
         metadata.put("companionSessionId", companionSessionId(batchId));
         metadata.put("observedAt", observedAt);
-        metadata.put("cameraFacing", cameraFacing == null ? "" : cameraFacing);
-        metadata.put("captureIntent", captureIntent == null ? "" : captureIntent);
+        metadata.put("cameraFacing", capture.cameraFacing);
+        metadata.put("captureIntent", capture.captureIntent);
+        metadata.put("devicePlaybackActive", capture.devicePlaybackActive);
+        metadata.put("echoCancellationRequested", capture.echoCancellationRequested);
+        metadata.put("audioInputSource", capture.audioInputSource);
         metadata.put("audioFile", audioFile != null && audioFile.exists() ? audioFile.getName() : "");
         metadata.put("imageFile", imageFile != null && imageFile.exists() ? imageFile.getName() : "");
         File metadataFile = new File(queueDir(context), safeBatchId(batchId) + ".json");
@@ -133,6 +159,12 @@ final class ListeningBatchUploader {
         if (!facing.isEmpty()) body.put("cameraFacing", facing);
         String captureIntent = metadata.optString("captureIntent");
         if (!captureIntent.isEmpty()) body.put("captureIntent", captureIntent);
+        if (audioFile != null) {
+            body.put("devicePlaybackActive", metadata.optBoolean("devicePlaybackActive", false));
+            body.put("echoCancellationRequested", metadata.optBoolean("echoCancellationRequested", false));
+            String audioInputSource = metadata.optString("audioInputSource");
+            if (!audioInputSource.isEmpty()) body.put("audioInputSource", audioInputSource);
+        }
         if (audioFile != null) body.put("audioDataUrl", "data:audio/mp4;base64," + encodeFile(audioFile));
         if (imageFile != null) body.put("imageDataUrl", "data:image/jpeg;base64," + encodeFile(imageFile));
 

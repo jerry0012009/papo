@@ -1,13 +1,13 @@
 {
-  "versionName": "0.4.18",
-  "versionCode": 24,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.18.apk",
-  "publishedAt": "2026-07-13T08:06:23.000Z",
+  "versionName": "0.4.19",
+  "versionCode": 25,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.19.apk",
+  "publishedAt": "2026-07-13T12:09:57.000Z",
   "notes": [
-    "通知手动拍摄现在带有用户主动取景来源，与系统定时取帧明确区分",
-    "主动照片优先进入图像理解，并以更高注意权重参与陪伴事件和记忆判断",
-    "修复无需长期记忆时事件整理可能因空字段失败的问题；主动拍照不会机械创建记忆"
+    "陪伴录音检测本机视频、播客或音乐播放，并请求 Android 通话级回声处理",
+    "媒体主播、现场说话和混合声音分来源记录，避免把视频作者观点误写成用户观点",
+    "相同图片和视频复用稳定内容哈希文件与长期缓存，不再因重复保存改变 ETag"
   ],
-  "sha256": "d38f5ebc296b1551ff9f411ad8c0c16cee068409496d9ec4906b371651aee327",
-  "size": 22800280
+  "sha256": "7bf1b730250a6112bbdfe3324a33576e72bd0bb333afcb147635510b06a20085",
+  "size": 22800732
 }

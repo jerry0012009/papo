@@ -575,6 +575,7 @@ ${context.companion ? `当前还处于 companion session ${context.companion.ses
 - 如果用户明确要求 Papo 记住、保存、以后记得、把某事当成偏好/习惯，除非内容不可用或不应保存，必须 shouldCreateEpisode=true，并且通常 shouldConsiderMemory=true；action 应优先选择 save_episode、save_long_term 或带记忆意图的 respond。
 - direct 图片或事件带 user_upload attachment，说明用户主动把照片发给 Papo，且原始图片资产可回看；除非重复、无意义、不可用、误触或不适合保存，否则应倾向 shouldCreateEpisode=true，并在内容值得日后回看时 shouldConsiderMemory=true。
 - ambient 图片要看 captureIntent：user_initiated 表示用户主动从陪伴通知选择了这一时刻和镜头，应作为事件的重要证据认真处理；可以安静地 observe/listen_silently，但应保留 episode 并让持续事件聚合器看到。scheduled 只是系统定时取帧，不得伪装成用户主动分享，也不得仅因有画面就逐片进入长期记忆。
+- audioSourceType=device_playback 的内容来自用户手机正在播放的视频/播客/音乐，不是用户本人陈述。可以把它理解为用户当时接触的媒体内容，但 reply、noticed、memoryCandidateText 都不得写成“用户说/用户认为”；mixed 无法可靠分离时必须注明来源不确定。
 - 对带图片的事件形成 memoryCandidateText 时，要覆盖图片可见内容、用户给的说明、照片时间和地点；不要只写“用户上传了一张照片”。
 - 如果你只是想当下陪用户聊一句，不要把它送进记忆候选；如果这段输入没有可用生活信息，也可以选择不说话。
 - listen_silently、observe、continue_own_activity、defer 和旧 quiet 都是合法处理结果，表示不说话，不能同时填写 reply 或 shouldReply=true。
@@ -693,6 +694,7 @@ ${JSON.stringify(result.events.map((event) => ({
   sourceSegmentId: event.triggerSegmentId,
   sourceBatchId: event.triggerBatchId,
   captureIntent: event.captureIntent,
+  audioSourceType: event.audioSourceType,
   sourceObservedAt: event.triggerObservedAt,
   sourceLocation: event.triggerLocation,
   attachments: (event.attachments ?? []).map((attachment) => ({

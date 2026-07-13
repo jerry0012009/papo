@@ -15,6 +15,7 @@ await store.createProfile({ userId: "passwordless-native-user", creatureName: "P
 let audioCalls = 0;
 let imageCalls = 0;
 let imagePrompt = "";
+let audioPrompt = "";
 let releaseAudio!: () => void;
 const audioGate = new Promise<void>((resolve) => {
   releaseAudio = resolve;
@@ -31,6 +32,8 @@ const provider: ModelProvider = {
   },
   async generateJson(prompt) {
     if (prompt.includes("连续生活事件归属脑")) {
+      assert.match(prompt, /"audioSourceType":"mixed"/);
+      assert.match(prompt, /不得写成用户本人陈述或认同/);
       const segmentIds = [...new Set([...prompt.matchAll(/"segmentId":"([^"]+)"/g)].map((match) => match[1]))];
       return {
         assignments: segmentIds.map((segmentId, index) => ({
@@ -55,13 +58,19 @@ const provider: ModelProvider = {
     imagePrompt = prompt;
     return "前置摄像头画面里，一个人坐在桌边。";
   },
-  async observeAudio() {
+  async observeAudio(_dataUrl, prompt) {
     audioCalls += 1;
+    audioPrompt = prompt;
     if (audioCalls === 1) {
       await audioGate;
       return "ERROR_AUDIO_UNREADABLE";
     }
-    return "能听见有人说今天工作已经结束。";
+    return JSON.stringify({
+      sceneType: "conversation",
+      sourceType: "live_environment",
+      transcript: "[speaker_1] 今天工作已经结束。",
+      speakers: [{ speakerId: "speaker_1", nameSource: "unknown", confidence: 0 }]
+    });
   },
   async generateImage() {
     return {
@@ -102,6 +111,9 @@ try {
     observedAt: "2026-07-10T18:30:30.000Z",
     cameraFacing: "front",
     captureIntent: "user_initiated",
+    devicePlaybackActive: true,
+    echoCancellationRequested: true,
+    audioInputSource: "voice_communication",
     audioDataUrl: `data:audio/mp4;base64,${Buffer.from("mock m4a data".repeat(8)).toString("base64")}`,
     imageDataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
   };
@@ -139,8 +151,15 @@ try {
   assert.equal(current.companionSessions?.[0].id, body.companionSessionId);
   assert.equal(current.companionSessions?.[0].events?.[0].sourceSegmentIds.length, 2);
   assert.equal(current.companionSessions?.[0].observations.find((item) => item.segmentId.endsWith(":image"))?.captureIntent, "user_initiated");
+  const audioObservation = current.companionSessions?.[0].observations.find((item) => item.segmentId.endsWith(":audio"));
+  assert.equal(audioObservation?.audioSourceType, "mixed", "device playback metadata must prevent a contradictory live-only attribution");
+  assert.equal(audioObservation?.devicePlaybackActive, true);
+  assert.equal(audioObservation?.echoCancellationRequested, true);
+  assert.equal(audioObservation?.audioInputSource, "voice_communication");
   assert.equal(current.turns?.find((turn) => turn.id.includes(body.batchId))?.segments.find((segment) => segment.kind === "image_summary")?.captureIntent, "user_initiated");
   assert.match(imagePrompt, /用户刚刚主动点击陪伴通知/);
+  assert.match(audioPrompt, /检测到这台手机正在播放媒体/);
+  assert.match(audioPrompt, /不得把媒体主播的观点、经历或自称归因给用户/);
 
   const retry = await fetch(url, {
     method: "POST",

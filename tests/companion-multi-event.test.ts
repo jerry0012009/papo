@@ -55,8 +55,12 @@ test("one companion session keeps multimodal scenes and alternating events separ
         return next;
       }
       const lecture = !prompt.includes('"kind":"meal"');
+      if (lecture) {
+        assert.match(prompt, /audioSourceType=device_playback/);
+        assert.match(prompt, /不得据此推导“用户认为\/用户说\/用户偏好”/);
+      }
       return lecture
-        ? { kind: "lecture", title: "技术讲座", summary: "讲座围绕端侧模型展开，并由第二位发言人继续分享。", shouldRemember: true, memoryText: "我陪你听了一场端侧模型技术讲座，中场休息后由第二位发言人继续。", importanceReason: "完整且连续的技术学习经历。", tags: ["讲座", "端侧模型"] }
+        ? { kind: "lecture", title: "技术讲座", summary: "用户当时播放的媒体讲座围绕端侧模型展开，并由第二位发言人继续分享。", shouldRemember: true, memoryText: "用户当时播放的媒体讲座讨论了端侧模型，中场休息后由第二位发言人继续；这是媒体内容，不代表用户本人观点。", importanceReason: "完整且连续的技术学习经历。", tags: ["讲座", "端侧模型"] }
         : { kind: "meal", title: "一顿好吃的午饭", summary: "用户分享了午饭照片、说明和同期餐厅声音。", shouldRemember: false, memoryText: null, importanceReason: null, tags: ["午饭"] };
     },
     async summarizeImage() { return ""; }, async observeAudio() { return ""; }, async generateImage() { throw new Error("not used"); }
@@ -75,7 +79,18 @@ test("one companion session keeps multimodal scenes and alternating events separ
   assert.equal(saved?.companionSessions?.[0].events?.[0].sourceSegmentIds.length, 3);
 
   await addTurn(store, profile.userId, sessionId, "turn-note", [stream("lecture-note", "text", "接下来我要听讲座", "2026-07-12T12:05:00.000Z", sessionId)], provider);
-  await addTurn(store, profile.userId, sessionId, "turn-audio", [stream("lecture-audio-1", "audio_observation", "讲者介绍端侧模型的部署方式", "2026-07-12T12:07:00.000Z", sessionId)], provider);
+  await addTurn(store, profile.userId, sessionId, "turn-audio", [{
+    ...stream("lecture-audio-1", "audio_observation", "[speaker_1] 讲者介绍端侧模型的部署方式", "2026-07-12T12:07:00.000Z", sessionId),
+    devicePlaybackActive: true,
+    echoCancellationRequested: true,
+    audioInputSource: "voice_communication",
+    sensingTrace: {
+      at: "2026-07-12T12:07:00.000Z", modality: "audio", label: "本机媒体", provider: "fake", semanticSource: "llm",
+      status: "content", decision: "检测为本机媒体播放", observation: "[speaker_1] 讲者介绍端侧模型的部署方式",
+      audioContent: { sceneType: "lecture", sourceType: "device_playback", transcript: "[speaker_1] 讲者介绍端侧模型的部署方式", speakers: [] },
+      ruleTrace: []
+    }
+  }], provider);
   saved = await store.getProfile(profile.userId);
   assert.match(companionCognitionContext(saved!, "turn-audio")?.currentContext ?? "", /端侧模型/);
 
@@ -99,6 +114,9 @@ test("one companion session keeps multimodal scenes and alternating events separ
   assert.equal(saved?.companionSessions?.[0].events?.length, 2);
   assert.equal(saved?.episodes.filter((episode) => episode.id.startsWith("episode_companion_event_")).length, 2);
   assert.equal(saved?.longTermMemories.filter((memory) => memory.id.startsWith("ltm_companion_event_")).length, 1);
+  assert.match(saved?.longTermMemories.find((memory) => memory.id.startsWith("ltm_companion_event_"))?.text ?? "", /媒体内容，不代表用户本人观点/);
+  assert.equal(saved?.companionSessions?.[0].events?.find((event) => event.id === lectureId)?.transcript[0]?.sourceType, "device_playback");
+  assert.equal(saved?.episodes.find((episode) => episode.sourceBatchId === lectureId)?.audioSourceType, "device_playback");
   const mealEpisode = saved?.episodes.find((episode) => episode.tags.includes("午饭"));
   assert.equal(mealEpisode?.tags.includes("用户主动取景"), true);
   assert.equal(mealEpisode?.weight, 59, "manual capture evidence raises the event episode weight without forcing long-term memory");

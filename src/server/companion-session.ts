@@ -101,6 +101,8 @@ export function collectCompanionTurn(profile: CreatureProfile, turnId: string, s
       || previous.content !== content
       || previous.transcript !== transcript
       || previous.audioSceneType !== audioContent?.sceneType
+      || previous.audioSourceType !== audioContent?.sourceType
+      || previous.devicePlaybackActive !== segment.devicePlaybackActive
       || previous.captureIntent !== segment.captureIntent;
     session.startedAt = minIso(session.startedAt, observedAt);
     session.lastObservedAt = maxIso(session.lastObservedAt, observedAt);
@@ -122,6 +124,10 @@ export function collectCompanionTurn(profile: CreatureProfile, turnId: string, s
       content,
       transcript,
       audioSceneType: audioContent?.sceneType,
+      audioSourceType: audioContent?.sourceType,
+      devicePlaybackActive: segment.devicePlaybackActive,
+      echoCancellationRequested: segment.echoCancellationRequested,
+      audioInputSource: segment.audioInputSource,
       speakers,
       segmentSummary: changed ? undefined : previous?.segmentSummary,
       summary: changed ? undefined : previous?.summary,
@@ -350,6 +356,7 @@ function applyAssignment(
         observedAt: observation.observedAt,
         text: observation.transcript.trim(),
         sceneType: observation.audioSceneType ?? "unknown",
+        sourceType: observation.audioSourceType ?? "unknown",
         speakers: observation.speakers ?? []
       }
     ].sort((left, right) => Date.parse(left.observedAt) - Date.parse(right.observedAt));
@@ -514,14 +521,23 @@ function eventRecords(
   const memoryId = event.memoryId ?? `ltm_companion_event_${suffix}`;
   const shouldRemember = decision.shouldRemember && Boolean(decision.memoryText?.trim());
   const userInitiatedSegments = session.observations.filter((item) => item.eventId === event.id && item.captureIntent === "user_initiated");
+  const devicePlaybackSegments = session.observations.filter((item) => item.eventId === event.id && (item.audioSourceType === "device_playback" || item.audioSourceType === "mixed" || item.devicePlaybackActive));
+  const eventAudioSourceType = devicePlaybackSegments.some((item) => item.audioSourceType === "mixed")
+    || (devicePlaybackSegments.length > 0 && devicePlaybackSegments.length < session.observations.filter((item) => item.eventId === event.id && item.modality === "audio_observation").length)
+    ? "mixed" as const
+    : devicePlaybackSegments.length ? "device_playback" as const : undefined;
   const intentWeightBonus = Math.min(10, userInitiatedSegments.length * 4);
-  const provenanceTags = userInitiatedSegments.length ? ["用户主动取景"] : [];
+  const provenanceTags = [
+    ...(userInitiatedSegments.length ? ["用户主动取景"] : []),
+    ...(devicePlaybackSegments.length ? ["本机媒体播放"] : [])
+  ];
   const episode: EpisodeMemory = {
     id: episodeId,
     createdAt: event.startedAt,
     source: "curious_stream",
     cognitionSource: "ambient",
     sourceBatchId: event.id,
+    audioSourceType: eventAudioSourceType,
     sourceObservedAt: event.lastObservedAt,
     inputSummary: decision.summary,
     noticed: `Papo 连续陪伴并整理了“${decision.title}”这件事。`,
@@ -552,6 +568,7 @@ function eventRecords(
       `event_revision=${event.revision}`,
       `segments=${event.sourceSegmentIds.length}`,
       `user_initiated_captures=${userInitiatedSegments.length}`,
+      `device_playback_segments=${devicePlaybackSegments.length}`,
       "attention-independent continuous scene tracking"
     ]
   };
@@ -596,7 +613,7 @@ function buildAssignmentPrompt(profile: CreatureProfile, session: CompanionSessi
   return `请作为 Papo 的连续生活事件归属脑。一个 companion session 是连续生活容器，里面可以有多个连续、交替、暂停后恢复的事件；不要把整场 session 强行视作一件事，也不要把每个录音切片各自视作一件事。
 
 按时间顺序判断每条新 observation：continue 延续当前事件；start 在没有当前事件时开始；switch 切换到新事件并用 switchDisposition 决定旧事件暂停或完成；pause 暂停当前事件；resume 恢复一个 paused event；end 结束当前事件；unrelated 表示无关噪音或无法归属，不得污染事件摘要。eventKind 只能使用 lecture、meeting、conversation、meal、travel、activity、ambient、other。
-role 只能使用 scene_evidence、context_setting、context_note、noise。用户文字可能是 scene_evidence、context_setting 或 context_note。像“接下来我要听讲座”“这是第二位发言人”这样的说明必须更新上下文并影响后续观察，不能因 Attention 静默而丢失。照片、声音和同期文字应在语义与时间一致时归入同一事件。captureIntent=user_initiated 表示用户主动选择这一时刻和镜头，是强事件证据；除画面空白、严重损坏、明确重复或误触外，不应标成 noise/unrelated。scheduled 只是定时取帧，不得当成用户主动表达。
+role 只能使用 scene_evidence、context_setting、context_note、noise。用户文字可能是 scene_evidence、context_setting 或 context_note。像“接下来我要听讲座”“这是第二位发言人”这样的说明必须更新上下文并影响后续观察，不能因 Attention 静默而丢失。照片、声音和同期文字应在语义与时间一致时归入同一事件。captureIntent=user_initiated 表示用户主动选择这一时刻和镜头，是强事件证据；除画面空白、严重损坏、明确重复或误触外，不应标成 noise/unrelated。scheduled 只是定时取帧，不得当成用户主动表达。audioSourceType=device_playback 表示手机本机视频/播客/音乐中的声音；只能描述为“用户正在播放/收听的媒体中，speaker 说了……”，不得写成用户本人陈述或认同。mixed 表示媒体声和现场声并存，不能把两者混成同一说话者。
 只根据证据判断，不要编造。segmentSummary 必须严格基于该 observation 的 transcript 生成，压缩单片主旨但保留关键数字、专有名词、论点与结论；不得把 segmentSummary 当 transcript。updatedEventSummary 要跨片段整合事件至今内容，不逐片罗列；importantFacts 只保留核心事实。若一批中先开始事件、后续 assignment 可用 continue 引用本批刚建立的当前事件。targetEventId 只能引用 existingEvents 中的事件，主要用于 resume；新事件 ID 由系统生成。
 speakerUpdates 用于把片段 speaker 标签维护到事件中。只有用户明确说明、说话者明确自我介绍，或 existingEvents/currentContext 提供可靠对应关系时才可填写 displayName；必须同时给出 nameSource、evidence、confidence 和 sourceSegmentIds。否则只保留 speaker_1、speaker_2 标签，nameSource=unknown，绝不能猜姓名。
 只返回 JSON：
@@ -615,7 +632,7 @@ recentAssignedObservations:
 ${JSON.stringify(session.observations.filter((item) => item.assignmentStatus === "assigned").slice(-6).map((item) => ({ observedAt: item.observedAt, role: item.role, eventId: item.eventId, captureIntent: item.captureIntent, segmentSummary: item.segmentSummary })))}
 
 newObservations:
-${JSON.stringify(observations.map((item) => ({ segmentId: item.segmentId, sourceTurnId: item.sourceTurnId, observedAt: item.observedAt, modality: item.modality, captureIntent: item.captureIntent, status: item.status, transcript: item.transcript, audioSceneType: item.audioSceneType, speakers: item.speakers, content: item.modality === "audio_observation" ? undefined : item.content })))}
+${JSON.stringify(observations.map((item) => ({ segmentId: item.segmentId, sourceTurnId: item.sourceTurnId, observedAt: item.observedAt, modality: item.modality, captureIntent: item.captureIntent, audioSourceType: item.audioSourceType, devicePlaybackActive: item.devicePlaybackActive, echoCancellationRequested: item.echoCancellationRequested, status: item.status, transcript: item.transcript, audioSceneType: item.audioSceneType, speakers: item.speakers, content: item.modality === "audio_observation" ? undefined : item.content })))}
 
 recentDirectConversation:
 ${JSON.stringify(profile.conversation.filter((message) => message.role === "user").slice(0, 6).map((message) => ({ at: message.at, text: message.text, batchId: message.batchId })))}
@@ -633,6 +650,7 @@ function buildConsolidationPrompt(
 所有归入该 event 的成功观察都应参与总结，即使某片没有触发 Attention 或 Papo 当时保持安静。eventSummary 必须以 eventTranscript 为第一事实源，并用 segmentSummaries 辅助定位，整合主题、关键事实、论点、论据、转折、结论和待办；不能从片段摘要反推或编造 transcript 中不存在的事实。
 transcript 是事件资料，不等于长期记忆。不要仅因 transcript 很长就 shouldRemember=true；长期记忆仍只保存对 Papo 与用户有持续价值的整合内容。
 user_initiated 画面是用户有意选择的事件证据，重要性高于 scheduled 取帧，应参与 eventSummary 和长期价值判断；但点击拍照本身仍不构成必须长期记忆的理由。
+audioSourceType=device_playback 的 transcript 是用户当时播放媒体的内容，不是用户本人的话、观点、经历或偏好。总结和 memoryText 必须使用“用户播放/收听的视频中，媒体讲者提到……”等来源明确的表述；除非另有用户现场评论，不得据此推导“用户认为/用户说/用户偏好”。mixed 也必须区分可确认的现场话与媒体内容，无法区分时明确保留不确定性。
 只有稳定偏好、重要经历、持续情绪、长期计划，或完整且有回顾价值的讲座/会议才写长期记忆。持续 10 分钟以上且至少 3 个有效片段的 lecture/meeting 必须 shouldRemember=true，形成一条自足的整合记忆。
 如果 event 已有 memoryId，说明这是后续补充或恢复：必须更新原记忆，不能另建重复记忆。
 只返回 JSON：
@@ -648,7 +666,7 @@ eventTranscript:
 ${JSON.stringify(event.transcript)}
 
 segmentSummaries:
-${JSON.stringify(observations.map((item) => ({ segmentId: item.segmentId, observedAt: item.observedAt, modality: item.modality, captureIntent: item.captureIntent, role: item.role, segmentSummary: item.segmentSummary })))}
+${JSON.stringify(observations.map((item) => ({ segmentId: item.segmentId, observedAt: item.observedAt, modality: item.modality, captureIntent: item.captureIntent, audioSourceType: item.audioSourceType, role: item.role, segmentSummary: item.segmentSummary })))}
 
 recentDirectContext:
 ${JSON.stringify(profile.conversation.filter((message) => message.role === "user").slice(0, 8).map((message) => ({ at: message.at, text: message.text })))}

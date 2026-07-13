@@ -1,5 +1,7 @@
 package top.jerrypsy.papo;
 
+import android.media.MediaRecorder;
+
 import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
@@ -33,5 +35,7 @@ public class PapoListeningPluginTest {
         assertEquals(null, PapoListeningService.captureFacingForAction(PapoListeningService.ACTION_STOP));
         assertEquals("scheduled", PapoListeningService.CAPTURE_INTENT_SCHEDULED);
         assertEquals("user_initiated", PapoListeningService.CAPTURE_INTENT_USER_INITIATED);
+        assertEquals(MediaRecorder.AudioSource.MIC, PapoListeningService.audioSourceForDevicePlayback(false));
+        assertEquals(MediaRecorder.AudioSource.VOICE_COMMUNICATION, PapoListeningService.audioSourceForDevicePlayback(true));
     }
 }

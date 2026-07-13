@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.media.MediaRecorder;
+import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
@@ -60,6 +61,9 @@ public class PapoListeningService extends Service {
     private final ExecutorService uploadExecutor = Executors.newSingleThreadExecutor();
     private MediaRecorder recorder;
     private File recordingFile;
+    private boolean recordingDevicePlaybackActive;
+    private boolean recordingEchoCancellationRequested;
+    private String recordingAudioInputSource = "microphone";
     private CameraFrameCapture camera;
     private PowerManager.WakeLock wakeLock;
     private long startedAt;
@@ -227,9 +231,23 @@ public class PapoListeningService extends Service {
         batchIndex += 1;
         String batchId = currentBatchId();
         recordingFile = ListeningBatchUploader.createMediaFile(this, batchId, "-audio.m4a");
+        recordingDevicePlaybackActive = isDevicePlaybackActive();
+        int audioSource = audioSourceForDevicePlayback(recordingDevicePlaybackActive);
+        recordingEchoCancellationRequested = audioSource == MediaRecorder.AudioSource.VOICE_COMMUNICATION;
+        recordingAudioInputSource = recordingEchoCancellationRequested ? "voice_communication" : "microphone";
+        if (startRecorderWithSource(audioSource)) return true;
+        if (audioSource != MediaRecorder.AudioSource.VOICE_COMMUNICATION) return false;
+
+        recordingFile = ListeningBatchUploader.createMediaFile(this, batchId, "-audio.m4a");
+        recordingEchoCancellationRequested = false;
+        recordingAudioInputSource = "microphone";
+        return startRecorderWithSource(MediaRecorder.AudioSource.MIC);
+    }
+
+    private boolean startRecorderWithSource(int audioSource) {
         try {
             recorder = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? new MediaRecorder(this) : new MediaRecorder();
-            recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            recorder.setAudioSource(audioSource);
             recorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
             recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC);
             recorder.setAudioSamplingRate(44_100);
@@ -246,6 +264,9 @@ public class PapoListeningService extends Service {
 
     private void finishCurrentSegment(boolean startNext) {
         String batchId = currentBatchId();
+        boolean devicePlaybackActive = recordingDevicePlaybackActive || isDevicePlaybackActive();
+        boolean echoCancellationRequested = recordingEchoCancellationRequested;
+        String audioInputSource = recordingAudioInputSource;
         File audioFile = releaseRecorder(true);
         String observedAt = isoNow();
         if (startNext && !startRecorder()) {
@@ -254,7 +275,14 @@ public class PapoListeningService extends Service {
         }
         if (audioFile == null) return;
 
-        enqueueBatch(batchId, observedAt, audioFile, null, null, null);
+        enqueueBatch(
+            batchId,
+            observedAt,
+            audioFile,
+            null,
+            ListeningBatchUploader.CaptureMetadata.audio(devicePlaybackActive, echoCancellationRequested, audioInputSource),
+            null
+        );
     }
 
     private File releaseRecorder(boolean keepFile) {
@@ -277,14 +305,21 @@ public class PapoListeningService extends Service {
         return file;
     }
 
-    private void enqueueBatch(String batchId, String observedAt, File audioFile, File imageFile, String captureIntent, String cameraError) {
+    private void enqueueBatch(
+        String batchId,
+        String observedAt,
+        File audioFile,
+        File imageFile,
+        ListeningBatchUploader.CaptureMetadata capture,
+        String cameraError
+    ) {
         if (discarding) {
             if (audioFile != null) audioFile.delete();
             if (imageFile != null) imageFile.delete();
             return;
         }
         try {
-            ListeningBatchUploader.enqueue(this, batchId, observedAt, imageFile == null ? null : cameraFacing, captureIntent, audioFile, imageFile);
+            ListeningBatchUploader.enqueue(this, batchId, observedAt, capture, audioFile, imageFile);
             broadcast(this, "batch-queued", batchId, cameraError);
             uploadExecutor.execute(() -> ListeningBatchUploader.uploadAll(getApplicationContext()));
         } catch (Exception error) {
@@ -388,7 +423,14 @@ public class PapoListeningService extends Service {
             if (captured != null) {
                 lastCameraCaptureAt = System.currentTimeMillis();
                 SecureListeningConfig.prefs(this).edit().putLong(SESSION_LAST_CAMERA_CAPTURE_AT, lastCameraCaptureAt).apply();
-                enqueueBatch(batchId, observedAt, null, captured, captureIntent, null);
+                enqueueBatch(
+                    batchId,
+                    observedAt,
+                    null,
+                    captured,
+                    ListeningBatchUploader.CaptureMetadata.image(cameraFacing, captureIntent),
+                    null
+                );
                 String manualFacing = pendingManualFacing;
                 if (manualFacing != null) {
                     pendingManualFacing = null;
@@ -436,6 +478,15 @@ public class PapoListeningService extends Service {
         if (ACTION_CAPTURE_FRONT.equals(action)) return "front";
         if (ACTION_CAPTURE_BACK.equals(action)) return "back";
         return null;
+    }
+
+    static int audioSourceForDevicePlayback(boolean devicePlaybackActive) {
+        return devicePlaybackActive ? MediaRecorder.AudioSource.VOICE_COMMUNICATION : MediaRecorder.AudioSource.MIC;
+    }
+
+    private boolean isDevicePlaybackActive() {
+        AudioManager manager = (AudioManager) getSystemService(AUDIO_SERVICE);
+        return manager != null && manager.isMusicActive();
     }
 
     private void handleCameraFailure(String error) {

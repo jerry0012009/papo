@@ -78,7 +78,8 @@ test("adaptive audio sensing preserves lecture transcript and separates all thre
     const sensed = await response.json() as { observation: string; sensingTrace: SensingTrace };
     assert.match(sensed.observation, /TAIL_MARKER_ZETA_2048/);
     assert.equal(sensed.sensingTrace.audioContent?.transcript.length, transcript.length);
-    assert.equal(sensed.sensingTrace.audioContent?.sceneType, "lecture");
+  assert.equal(sensed.sensingTrace.audioContent?.sceneType, "lecture");
+    assert.equal(sensed.sensingTrace.audioContent?.sourceType, "unknown");
     assert.equal(sensed.sensingTrace.audioContent?.speakers[0].displayName, "林博士");
     assert.equal(sensed.sensingTrace.audioContent?.speakers[1].displayName, undefined);
 
@@ -116,4 +117,22 @@ test("environment sensing stays concise while prompt has no uniform 400-characte
   }));
   assert.equal(normalized.text, "窗外有短暂雨声。");
   assert.equal(normalized.audioContent?.transcript, "");
+  assert.equal(normalized.audioContent?.sourceType, "unknown");
+});
+
+test("device playback sensing keeps media speech separate from user speech", () => {
+  const prompt = buildAudioSensingPrompt("Android 后台倾听", undefined, {
+    devicePlaybackActive: true,
+    echoCancellationRequested: true,
+    audioInputSource: "voice_communication"
+  });
+  assert.match(prompt, /sourceType.*device_playback/s);
+  assert.match(prompt, /不得把媒体主播的观点、经历或自称归因给用户/);
+  const normalized = normalizeAudioSensingResult(JSON.stringify({
+    sceneType: "lecture",
+    sourceType: "device_playback",
+    transcript: "[speaker_1] 视频中的产品分析。",
+    speakers: [{ speakerId: "speaker_1", nameSource: "unknown", confidence: 0 }]
+  }));
+  assert.equal(normalized.audioContent?.sourceType, "device_playback");
 });

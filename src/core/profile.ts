@@ -106,7 +106,7 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
       status: event.status === "consolidating" && Date.now() - Date.parse(event.updatedAt) > 10 * 60_000 ? "completed" as const : event.status,
       importantContent: event.importantContent ?? [],
       eventSummary: event.eventSummary ?? event.summary ?? "",
-      transcript: event.transcript ?? [],
+      transcript: (event.transcript ?? []).map((segment) => ({ ...segment, sourceType: segment.sourceType ?? "unknown" })),
       speakers: event.speakers ?? [],
       sourceTurnIds: event.sourceTurnIds ?? [],
       sourceSegmentIds: event.sourceSegmentIds ?? [],
@@ -127,6 +127,7 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
       observations: (session.observations ?? []).map((observation) => ({
         ...observation,
         transcript: observation.transcript ?? (observation.modality === "audio_observation" ? observation.content : undefined),
+        audioSourceType: observation.audioSourceType ?? (observation.modality === "audio_observation" ? "unknown" as const : undefined),
         segmentSummary: observation.segmentSummary ?? observation.summary,
         assignmentStatus: observation.assignmentStatus === "processing" && Date.now() - Date.parse(observation.processedAt ?? updatedAt) > 10 * 60_000
           ? "pending" as const
@@ -141,7 +142,9 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
     status: turn.status ?? "queued",
     inputMessageIds: turn.inputMessageIds ?? [],
     jobIds: turn.jobIds ?? [],
-    segments: turn.segments ?? [],
+    segments: (turn.segments ?? []).map((segment) => segment.sensingTrace?.audioContent
+      ? { ...segment, sensingTrace: { ...segment.sensingTrace, audioContent: { ...segment.sensingTrace.audioContent, sourceType: segment.sensingTrace.audioContent.sourceType ?? "unknown" } } }
+      : segment),
     updatedAt: turn.updatedAt ?? turn.createdAt
   })).slice(0, 80);
   profile.jobs = profile.jobs.map((job) => ({
@@ -216,6 +219,7 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   if (isBackgroundCognitionEligible(profile)) enqueueCandidateVisualJobs(profile);
   for (const message of profile.conversation) {
     message.attachments ??= [];
+    if (message.sensingTrace?.audioContent) message.sensingTrace.audioContent.sourceType ??= "unknown";
   }
   for (const feedback of profile.feedbackHistory) {
     feedback.learningNote ??= feedback.effect;

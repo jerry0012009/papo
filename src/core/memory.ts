@@ -167,6 +167,7 @@ export function createEpisodeFromEvent(
     sourceSegmentId: event.triggerSegmentId,
     sourceBatchId: event.triggerBatchId,
     captureIntent: event.captureIntent,
+    audioSourceType: event.audioSourceType,
     sourceObservedAt: event.triggerObservedAt,
     sourceLocation: event.triggerLocation,
     attachments: event.attachments ?? [],

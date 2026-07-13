@@ -143,6 +143,9 @@ export interface StreamSegment {
   batchId?: string;
   companionSessionId?: string;
   captureIntent?: CaptureIntent;
+  devicePlaybackActive?: boolean;
+  echoCancellationRequested?: boolean;
+  audioInputSource?: AudioInputSource;
   location?: {
     latitude: number;
     longitude: number;
@@ -154,6 +157,7 @@ export interface StreamSegment {
 }
 
 export type CaptureIntent = "scheduled" | "user_initiated";
+export type AudioInputSource = "microphone" | "voice_communication";
 
 export interface MediaAttachment {
   id: string;
@@ -219,6 +223,7 @@ export interface SensingTrace {
 }
 
 export type AudioSceneType = "environment" | "conversation" | "lecture" | "meeting" | "interview" | "unknown";
+export type AudioSourceType = "live_environment" | "device_playback" | "mixed" | "unknown";
 export type SpeakerNameSource = "unknown" | "user_statement" | "self_introduction" | "reliable_context";
 
 export interface SpeakerIdentityEvidence {
@@ -232,6 +237,7 @@ export interface SpeakerIdentityEvidence {
 
 export interface AudioSensingContent {
   sceneType: AudioSceneType;
+  sourceType: AudioSourceType;
   transcript: string;
   environmentObservation?: string;
   speakers: SpeakerIdentityEvidence[];
@@ -303,6 +309,7 @@ export interface AttentionEvent {
   triggerSegmentId?: string;
   triggerBatchId?: string;
   captureIntent?: CaptureIntent;
+  audioSourceType?: AudioSourceType;
   triggerObservedAt?: string;
   triggerLocation?: StreamSegment["location"];
   attachments?: MediaAttachment[];
@@ -338,6 +345,7 @@ export interface EpisodeMemory {
   sourceSegmentId?: string;
   sourceBatchId?: string;
   captureIntent?: CaptureIntent;
+  audioSourceType?: AudioSourceType;
   sourceObservedAt?: string;
   sourceLocation?: StreamSegment["location"];
   attachments?: MediaAttachment[];
@@ -805,6 +813,10 @@ export interface CompanionSessionRecord {
     transcript?: string;
     segmentSummary?: string;
     audioSceneType?: AudioSceneType;
+    audioSourceType?: AudioSourceType;
+    devicePlaybackActive?: boolean;
+    echoCancellationRequested?: boolean;
+    audioInputSource?: AudioInputSource;
     speakers?: SpeakerIdentityEvidence[];
     sourceTurnId?: string;
     captureIntent?: CaptureIntent;
@@ -845,6 +857,7 @@ export interface CompanionEventRecord {
     observedAt: string;
     text: string;
     sceneType: AudioSceneType;
+    sourceType?: AudioSourceType;
     speakers: SpeakerIdentityEvidence[];
   }>;
   speakers: SpeakerIdentityEvidence[];

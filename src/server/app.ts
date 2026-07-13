@@ -101,6 +101,7 @@ const speakerEvidenceSchema = z.object({
 
 const audioContentSchema = z.object({
   sceneType: z.enum(["environment", "conversation", "lecture", "meeting", "interview", "unknown"]),
+  sourceType: z.enum(["live_environment", "device_playback", "mixed", "unknown"]).default("unknown"),
   transcript: z.string().max(20_000),
   environmentObservation: z.string().max(800).optional(),
   speakers: z.array(speakerEvidenceSchema).max(12)
@@ -189,7 +190,10 @@ const nativeListeningBatchSchema = z.object({
   audioDataUrl: audioDataUrlSchema().optional(),
   imageDataUrl: imageDataUrlSchema().optional(),
   cameraFacing: z.enum(["front", "back"]).optional(),
-  captureIntent: z.enum(["scheduled", "user_initiated"]).optional()
+  captureIntent: z.enum(["scheduled", "user_initiated"]).optional(),
+  devicePlaybackActive: z.boolean().optional(),
+  echoCancellationRequested: z.boolean().optional(),
+  audioInputSource: z.enum(["microphone", "voice_communication"]).optional()
 }).refine((body) => Boolean(body.audioDataUrl || body.imageDataUrl), { message: "Native listening batch is empty" });
 
 const companionSessionSchema = z.object({
@@ -614,10 +618,21 @@ export function createApp(input: {
       if (body.audioDataUrl) {
         const retainedAudio = await transientAudioStore.save(userId, body.batchId, body.audioDataUrl, new Date());
         const sessionContext = companionAudioSensingContext(profile, body.companionSessionId);
-        const prompt = buildAudioSensingPrompt("Android 后台倾听", sessionContext);
+        const prompt = buildAudioSensingPrompt("Android 后台倾听", sessionContext, {
+          devicePlaybackActive: body.devicePlaybackActive,
+          echoCancellationRequested: body.echoCancellationRequested,
+          audioInputSource: body.audioInputSource
+        });
         const sensed = await observeAudioWithUnreadableRetry(provider, body.audioDataUrl, prompt);
-        const observation = sensed.observation;
-        const sensingTrace = audioSensingTrace(provider, "Android 后台倾听", observation, { attempts: sensed.attempts, retainedAudio, sourceSegmentId: `${body.batchId}:audio` });
+        const observation = applyDevicePlaybackProvenance(sensed.observation, body.devicePlaybackActive);
+        const sensingTrace = audioSensingTrace(provider, "Android 后台倾听", observation, {
+          attempts: sensed.attempts,
+          retainedAudio,
+          sourceSegmentId: `${body.batchId}:audio`,
+          devicePlaybackActive: body.devicePlaybackActive,
+          echoCancellationRequested: body.echoCancellationRequested,
+          audioInputSource: body.audioInputSource
+        });
         segments.push({
           id: `${body.batchId}:audio`,
           kind: "audio_observation",
@@ -627,6 +642,9 @@ export function createApp(input: {
           observedAt: body.observedAt,
           batchId: body.batchId,
           companionSessionId: body.companionSessionId,
+          devicePlaybackActive: body.devicePlaybackActive,
+          echoCancellationRequested: body.echoCancellationRequested,
+          audioInputSource: body.audioInputSource,
           sensingTrace
         });
       }
@@ -1607,7 +1625,7 @@ async function saveImageAsset(dataUrl: string, label: string): Promise<MediaAtta
   const filename = `${id}.${parsed.extension}`;
   const dir = imageAssetDir();
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, filename), parsed.buffer);
+  await writeContentAddressedAsset(path.join(dir, filename), parsed.buffer);
   const now = new Date().toISOString();
   return {
     id,
@@ -1627,7 +1645,7 @@ async function saveAudioAsset(dataUrl: string, label: string): Promise<MediaAtta
   const filename = `${id}.${parsed.extension}`;
   const dir = imageAssetDir();
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, filename), parsed.buffer);
+  await writeContentAddressedAsset(path.join(dir, filename), parsed.buffer);
   return {
     id,
     kind: "audio",
@@ -1666,7 +1684,7 @@ async function saveGeneratedActionVideo(input: {
   const filename = `${id}.mp4`;
   const dir = imageAssetDir();
   await mkdir(dir, { recursive: true });
-  await writeFile(path.join(dir, filename), parsed.buffer);
+  await writeContentAddressedAsset(path.join(dir, filename), parsed.buffer);
   return {
     id,
     kind: "video",
@@ -1679,6 +1697,14 @@ async function saveGeneratedActionVideo(input: {
     prompt: input.prompt,
     sourceIds: input.sourceIds
   };
+}
+
+async function writeContentAddressedAsset(filePath: string, content: Buffer) {
+  try {
+    await writeFile(filePath, content, { flag: "wx" });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
 }
 
 async function saveGeneratedActionKeyframe(input: {
@@ -3291,7 +3317,14 @@ function audioSensingTrace(
   provider: ModelProvider,
   label: string,
   observation: ReturnType<typeof normalizeAudioObservation>,
-  options: { attempts?: number; retainedAudio?: RetainedAudioAsset; sourceSegmentId?: string } = {}
+  options: {
+    attempts?: number;
+    retainedAudio?: RetainedAudioAsset;
+    sourceSegmentId?: string;
+    devicePlaybackActive?: boolean;
+    echoCancellationRequested?: boolean;
+    audioInputSource?: "microphone" | "voice_communication";
+  } = {}
 ): SensingTrace {
   const status: SensingTrace["status"] = observation.text ? "content" : observation.unreadable ? "unreadable" : "empty";
   const decision = observation.text
@@ -3325,10 +3358,26 @@ function audioSensingTrace(
       `status=${status}`,
       `attempts=${options.attempts ?? 1}`,
       observation.audioContent ? `audio_scene=${observation.audioContent.sceneType}` : "audio_scene=legacy_plain_text",
+      observation.audioContent ? `audio_source=${observation.audioContent.sourceType}` : "audio_source=unknown",
+      `device_playback_active=${Boolean(options.devicePlaybackActive)}`,
+      `echo_cancellation_requested=${Boolean(options.echoCancellationRequested)}`,
+      `audio_input_source=${options.audioInputSource ?? "unknown"}`,
       observation.audioContent?.transcript ? `transcript_chars=${observation.audioContent.transcript.length}` : "transcript_chars=0",
       options.retainedAudio ? `retained_audio=${options.retainedAudio.id}` : "retained_audio=none",
       observation.text ? "route=curious_candidate" : "route=settle_audio_batch_only"
     ]
+  };
+}
+
+function applyDevicePlaybackProvenance(
+  observation: ReturnType<typeof normalizeAudioObservation>,
+  devicePlaybackActive?: boolean
+) {
+  if (!devicePlaybackActive || !observation.audioContent) return observation;
+  const sourceType = observation.audioContent.sourceType === "device_playback" ? "device_playback" as const : "mixed" as const;
+  return {
+    ...observation,
+    audioContent: { ...observation.audioContent, sourceType }
   };
 }
 

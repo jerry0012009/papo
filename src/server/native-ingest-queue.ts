@@ -7,6 +7,9 @@ export interface NativeIngestPayload {
   observedAt: string;
   cameraFacing?: "front" | "back";
   captureIntent?: "scheduled" | "user_initiated";
+  devicePlaybackActive?: boolean;
+  echoCancellationRequested?: boolean;
+  audioInputSource?: "microphone" | "voice_communication";
   audioDataUrl?: string;
   imageDataUrl?: string;
 }
