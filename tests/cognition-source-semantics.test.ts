@@ -8,7 +8,7 @@ import type { CognitionContext, HermesTaskRecord, StreamSegment } from "../src/c
 type Scenario = {
   expectsResponse: boolean;
   attention: "select" | "ignore";
-  action: "respond" | "listen_silently" | "use_hermes";
+  action: "respond" | "listen_silently" | "use_hermes" | "generate_action_card";
   keepEpisode?: boolean;
   considerMemory?: boolean;
   memoryText?: string;
@@ -60,6 +60,8 @@ function providerFor(scenario: Scenario): ModelProvider {
             reply: speaking ? "我听见了。" : undefined,
             actionResult: scenario.action === "use_hermes"
               ? { kind: "hermes_task", title: "外部查询", text: "请完成这项外部查询。" }
+              : scenario.action === "generate_action_card"
+                ? { kind: "action_card_draft", title: "环境动作", prompt: "让 Papo 在环境里轻轻摇尾巴", stateId: "desk_companion", statusText: "Papo 正轻轻陪着你。" }
               : undefined,
             memoryCandidateText: scenario.memoryText,
             memoryTags: ["测试"]
@@ -109,6 +111,18 @@ test("ambient attention may ignore every candidate", async () => {
   const result = await runCuriousHarness(profile, [segment("ambient-1", "持续的空调背景声")], providerFor({ expectsResponse: false, attention: "ignore", action: "listen_silently" }), undefined, { inputSource: "ambient" });
   assert.equal(result.events.length, 0);
   assert.equal(result.episodes.length, 0);
+});
+
+test("ambient cognition defers action cards to the budgeted emergence flow", async () => {
+  const profile = createCreatureProfile({ userId: "ambient-card", creatureName: "Papo" });
+  const result = await runCuriousHarness(profile, [segment("ambient-card-1", "陪伴画面里出现了一个普通生活片段")], providerFor({ expectsResponse: true, attention: "select", action: "generate_action_card" }), undefined, {
+    inputSource: "ambient",
+    companion: { sessionId: "companion-test", currentContext: "持续陪伴中", recentUserNotes: [], recentObservationSummaries: [] }
+  });
+  assert.equal(result.events[0].actionDecision.action, "acknowledge");
+  assert.equal(result.events[0].actionResult?.kind, "visible_reply");
+  assert.deepEqual(result.events[0].backgroundActions, []);
+  assert.ok(result.events[0].decisionTrace?.includes("guardrail: ambient action card deferred to proactive emergence"));
 });
 
 test("Hermes task_result links its task and original episode and updates one long-term memory across retry", async () => {

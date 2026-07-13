@@ -135,6 +135,9 @@ try {
   assert.match(videoPrompt, /first frame and final frame should match/i);
   assert.match(videoPrompt, /Forbidden look: stuffed animal, plush toy/);
   assert.match(videoPrompt, /FIRST-FRAME IDENTITY LOCK/i);
+  assert.match(videoPrompt, /approved cover already depicts the complete requested action/i);
+  assert.match(videoPrompt, /identity fidelity is more important than movement size/i);
+  assert.match(videoPrompt, /Never morph or redraw the character/i);
   assert.match(keyframePrompt, /authoritative visual style/i);
   assert.match(keyframePrompt, /profile\/avatar image is the single authoritative/i);
   assert.match(videoReference, /^data:image\/png;base64,/);

@@ -30,7 +30,7 @@ globalThis.fetch = (async (url, init) => {
     assert.equal(body.model, "bytedance/seedance-1-5-pro");
     assert.equal(body.duration, 4);
     assert.equal(body.duration_seconds, 4);
-    assert.equal(body.resolution, "480p");
+    assert.equal(body.resolution, "720p");
     assert.equal(body.generate_audio, false);
     assert.equal(body.aspect_ratio, "1:1");
     assert.equal(body.image_url, "data:image/png;base64,AAAA");

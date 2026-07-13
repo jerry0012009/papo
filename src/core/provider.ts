@@ -996,7 +996,7 @@ async function callVideoGeneration(
     );
     const duration = supportedDuration(capability, requestedDuration);
     const aspectRatio = supportedAspectRatio(capability, "1:1");
-    const resolution = supportedResolution(capability, input.kind === "openrouter" ? "480p" : "720p");
+    const resolution = supportedResolution(capability, "720p");
     const payload: Record<string, unknown> = {
       model,
       prompt: `${prompt}${videoInput.style ? `\n\nStyle: ${videoInput.style}` : ""}`,

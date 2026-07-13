@@ -72,7 +72,8 @@ export async function semanticDecideEmergence(
 
   const cooldown = emergenceCooldown(profile, now);
   const delivery = input.delivery ?? "manual";
-  const raw = await provider.generateJson<unknown>(buildSemanticEmergencePrompt(profile, now, cooldown, delivery));
+  const actionCardBudget = emergenceActionCardBudget(profile, now);
+  const raw = await provider.generateJson<unknown>(buildSemanticEmergencePrompt(profile, now, cooldown, delivery, actionCardBudget));
   if (!raw) throw new Error("empty emergence model result");
   const parsed = semanticEmergenceSchema.safeParse(raw);
   if (!parsed.success) {
@@ -97,10 +98,14 @@ export async function semanticDecideEmergence(
     ]);
   }
 
+  const actionCardSuppressed = Boolean(parsed.data.actionCardDraft && !actionCardBudget.available);
+  if (actionCardSuppressed) parsed.data.actionCardDraft = undefined;
+
   const semantic = createSemanticEmergenceRecord(profile, parsed.data, now, delivery);
   if (!semantic) {
     throw new Error("emergence model selected unavailable memory or unsafe message");
   }
+  if (actionCardSuppressed) semantic.ruleTrace.push("guardrail: daily emergence action-card budget exhausted");
   profile.emergenceHistory.unshift(semantic);
   profile.emergenceHistory = profile.emergenceHistory.slice(0, 30);
   const memory = semantic.relatedMemoryIds[0] ? profile.longTermMemories.find((item) => item.id === semantic.relatedMemoryIds[0]) : undefined;
@@ -244,7 +249,13 @@ function recordEmergenceSemanticRun(
   profile.semanticBrainHistory = profile.semanticBrainHistory.slice(0, 30);
 }
 
-function buildSemanticEmergencePrompt(profile: CreatureProfile, now: string, cooldown: ReturnType<typeof emergenceCooldown>, delivery: "manual" | "proactive") {
+function buildSemanticEmergencePrompt(
+  profile: CreatureProfile,
+  now: string,
+  cooldown: ReturnType<typeof emergenceCooldown>,
+  delivery: "manual" | "proactive",
+  actionCardBudget: ReturnType<typeof emergenceActionCardBudget>
+) {
   const candidateMemories = availableSemanticMemories(profile).slice(0, 12);
   const proactiveContext = proactivePromptContext(profile);
   const eveningDiary = eveningDiaryContext(profile, now);
@@ -331,6 +342,7 @@ ${JSON.stringify(eveningDiary)}
 - proactive_context.pendingUnansweredMessages 表示此前主动消息还没收到用户回应。数值越高越应该克制；规则会负责未回应上限和下次触发时间，你负责判断此刻是否真的值得开口。
 - evening_diary_context.eligible=true 表示现在处于本地 19:00-24:00，且今天还没有发过“观察日记”插画。此时你可以选择安静、普通浮现，或返回 illustrationDraft 让 Papo 画一张今天的观察日记。是否画由你决定；如果画，应基于今天真实发生的 episode、对话、音频观察、照片附件和记忆，优先使用真实照片素材中的内容，不要编造今天没有发生的事情。
 - 如果某条记忆、当前状态或用户最近表达很适合让小动物“动一下”，可以返回 actionCardDraft 生成动作视频卡。例如出门、追蝴蝶、伸懒腰、打招呼、趴下陪着、带着玩具靠近。actionCardDraft 的 prompt 要写给视频模型，必须包含小动物名字、物种、具体动作、场景、镜头运动和角色一致性；stateId 必须来自 dog_state_catalog，statusText 是首页与视频同步显示的状态句；不要把 prompt 写进 message。
+- 主动浮现动作卡每天最多创建一次。action_card_budget.available=${actionCardBudget.available}，localDate=${actionCardBudget.localDate}。如果 available=false，必须省略 actionCardDraft，但仍可选择安静或只发送自然的文字浮现；不要为了用完预算而强行生成。
 - illustrationDraft 和 actionCardDraft 同一次最多返回一个；如果只是该说一句话，不要生成媒体。
 - 观察日记优先画成 3-6 格的手绘多格漫画，而不是单张照片式画面；它应该像“Papo 今天看到的你的一天”，把当天几个真实片段串起来。只有当天素材非常单一时，才退成单幅明信片式画面。
 
@@ -445,6 +457,16 @@ ${JSON.stringify(candidateMemories.map((memory) => ({
   sourceEpisodeId: memory.sourceEpisodeId
 })))}
 `;
+}
+
+function emergenceActionCardBudget(profile: CreatureProfile, now: string) {
+  const timeZone = configuredTimeZone();
+  const localDate = localDateForIso(now, timeZone);
+  const used = profile.emergenceHistory.some((item) =>
+    localDateForIso(item.at, timeZone) === localDate
+    && (item.actionResult?.kind === "action_card" || item.actionResult?.kind === "action_card_draft")
+  );
+  return { available: !used, localDate };
 }
 
 function eveningDiaryContext(profile: CreatureProfile, now: string) {

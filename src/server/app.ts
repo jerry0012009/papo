@@ -2395,6 +2395,7 @@ function actionCardVideoPrompt(profile: CreatureProfile, actionResult: ActionRes
     `Motion style: ${identity.motionStyle}`,
     userDepiction,
     hasReferenceImage ? "FIRST-FRAME IDENTITY LOCK: the attached approved cover is exact frame 0. Preserve that frame's pixels, identity, face, coat markings, body proportions, composition, background, palette, lighting, and rendering technique. Add only the smallest local motion needed for the action. Do not redraw, redesign, reinterpret, restyle, replace, or regenerate the character." : "Keep the character design consistent with the pet kind and current profile.",
+    actionCardIdentityQualityGuard(),
     "Action priority: preserve the action, object, mood, and scene requested by the action model and user moment. Do not replace a specific requested action with a generic idle, wave, ball, or nap action.",
     "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
     "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
@@ -2446,6 +2447,7 @@ function actionCardVideoPromptForEmergence(profile: CreatureProfile, actionResul
     `Personality and habits to express through motion: ${identity.personality} ${identity.habits}`,
     `Visual and motion style: ${identity.visualStyle} ${identity.motionStyle}`,
     hasReferenceImage ? "FIRST-FRAME IDENTITY LOCK: use the attached cover as exact frame 0 and add only minimal local motion. Preserve the character, face, markings, proportions, composition, background, palette, lighting, and rendering technique without redraw or restyle." : "",
+    actionCardIdentityQualityGuard(),
     "Action priority: preserve the action, object, mood, and scene requested by the emergence/action model. Do not replace a specific requested action with a generic idle, wave, ball, or nap action.",
     "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
     "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
@@ -2629,6 +2631,7 @@ function buildInitialMotionVideoPrompt(profile: CreatureProfile, card: { title: 
     `Personality/habits: ${identity.personality} ${identity.habits}`,
     `Motion style: ${identity.motionStyle}`,
     hasReferenceImage ? "FIRST-FRAME IDENTITY LOCK: the attached image is the approved cover and exact frame 0. Preserve the same pixels and composition at frame 0. Animate it directly with minimal local motion only. Do not redraw, redesign, reinterpret, restyle, replace, or regenerate the character, face, markings, body proportions, background, palette, lighting, or rendering technique." : "Use the written profile as strict grounding for character identity.",
+    actionCardIdentityQualityGuard(),
     "Action priority: preserve the action, object, mood, and scene requested in the action direction. Do not replace a user-requested action with a generic idle, wave, ball, or nap action.",
     "Loop requirement: first frame and final frame should match as closely as possible in pose, position, camera framing, and background. The motion should return to the starting pose for a seamless loop.",
     "Forbidden look: stuffed animal, plush toy, fabric doll, vinyl toy, figurine, statue, clay model, product mockup, visible seams, toy joints, plastic shine, stitched fabric.",
@@ -2637,6 +2640,10 @@ function buildInitialMotionVideoPrompt(profile: CreatureProfile, card: { title: 
     `Action direction: ${card.prompt}`,
     card.style ? `Extra style: ${card.style}` : ""
   ].filter(Boolean).join("\n\n");
+}
+
+function actionCardIdentityQualityGuard() {
+  return "QUALITY PRIORITY: the approved cover already depicts the complete requested action and is the authoritative character design. Animate only subtle secondary motion such as one blink, gentle breathing, a tiny ear movement, or a small tail movement. Keep the face, eyes, muzzle, coat boundaries, silhouette, limb count, body proportions, and all identity landmarks spatially stable in every frame. Never morph or redraw the character. If action amplitude conflicts with identity preservation, reduce the motion; identity fidelity is more important than movement size.";
 }
 
 function buildInitialMotionKeyframePrompt(profile: CreatureProfile, card: { title: string; prompt: string; style?: string }, hasReferenceImage: boolean) {
