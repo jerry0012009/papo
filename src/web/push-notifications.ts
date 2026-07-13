@@ -1,4 +1,5 @@
 import { getPushConfig, registerPushSubscription, removePushSubscription } from "./api";
+import { ensurePapoServiceWorker } from "./service-worker";
 
 const publicBaseUrl = import.meta.env.BASE_URL ?? "/";
 
@@ -16,7 +17,8 @@ export async function inspectPushNotifications(): Promise<PushNotificationState>
   const config = await getPushConfig();
   if (!config.enabled || !config.publicKey) return "unconfigured";
   if (Notification.permission === "denied") return "denied";
-  const registration = await registerPapoServiceWorker();
+  const registration = await ensurePapoServiceWorker();
+  if (!registration) return "unsupported";
   const subscription = await registration.pushManager.getSubscription();
   if (subscription) return "enabled";
   return Notification.permission === "default" ? "prompt" : "disabled";
@@ -29,7 +31,8 @@ export async function enablePushNotifications(userId: string): Promise<PushNotif
   const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
   if (permission !== "granted") return permission === "denied" ? "denied" : "prompt";
 
-  const registration = await registerPapoServiceWorker();
+  const registration = await ensurePapoServiceWorker();
+  if (!registration) return "unsupported";
   const existing = await registration.pushManager.getSubscription();
   const subscription = existing ?? await registration.pushManager.subscribe({
     userVisibleOnly: true,
@@ -46,7 +49,8 @@ export async function enablePushNotifications(userId: string): Promise<PushNotif
 
 export async function disablePushNotifications(userId: string): Promise<PushNotificationState> {
   if (!supportsPushNotifications()) return "unsupported";
-  const registration = await registerPapoServiceWorker();
+  const registration = await ensurePapoServiceWorker();
+  if (!registration) return "unsupported";
   const subscription = await registration.pushManager.getSubscription();
   if (subscription) {
     let removeError: unknown;
@@ -63,7 +67,8 @@ export async function syncExistingPushSubscription(userId: string) {
   if (!supportsPushNotifications() || Notification.permission !== "granted") return;
   const config = await getPushConfig();
   if (!config.enabled) return;
-  const registration = await registerPapoServiceWorker();
+  const registration = await ensurePapoServiceWorker();
+  if (!registration) return;
   const subscription = await registration.pushManager.getSubscription();
   if (subscription) await registerPushSubscription(userId, subscription.toJSON(), appUrl());
 }
@@ -86,11 +91,6 @@ function supportsPushNotifications() {
     && "serviceWorker" in navigator
     && "PushManager" in window
     && "Notification" in window;
-}
-
-async function registerPapoServiceWorker() {
-  await navigator.serviceWorker.register(`${publicBaseUrl}sw.js`, { scope: publicBaseUrl, updateViaCache: "none" });
-  return navigator.serviceWorker.ready;
 }
 
 function appUrl() {

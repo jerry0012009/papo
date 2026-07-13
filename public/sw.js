@@ -1,6 +1,63 @@
+self.addEventListener("install", (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
+self.addEventListener("fetch", (event) => {
+  if (!isPersistentMediaRequest(event.request)) return;
+  event.respondWith(cacheFirstMedia(event.request));
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type !== "PAPO_CACHE_MEDIA" || !Array.isArray(event.data.urls)) return;
+  event.waitUntil(cacheMediaUrls(event.data.urls));
+});
+
 self.addEventListener("push", (event) => {
   event.waitUntil(handlePush(event));
 });
+
+const MEDIA_CACHE = "papo-persistent-media-v1";
+
+function isPersistentMediaRequest(request) {
+  if (request.method !== "GET" || request.headers.has("range")) return false;
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin) return false;
+  return /^\/(?:papo-api|api)\/assets\/(?:img|vid|aud)_[a-f0-9]{24}\.(?:png|jpg|webp|mp4|webm|wav|mp3|m4a|ogg|aac)$/.test(url.pathname)
+    || /^\/papo\/pets\//.test(url.pathname)
+    || /^\/pets\//.test(url.pathname);
+}
+
+async function cacheFirstMedia(request) {
+  const cache = await caches.open(MEDIA_CACHE);
+  const cached = await cache.match(request, { ignoreVary: false });
+  if (cached) return cached;
+  const response = await fetch(request);
+  if (response.ok && response.status === 200 && !request.headers.has("range")) {
+    await cache.put(request, response.clone());
+  }
+  return response;
+}
+
+async function cacheMediaUrls(urls) {
+  const cache = await caches.open(MEDIA_CACHE);
+  const unique = [...new Set(urls)].slice(0, 240);
+  for (let index = 0; index < unique.length; index += 4) {
+    await Promise.all(unique.slice(index, index + 4).map(async (rawUrl) => {
+      try {
+        const request = new Request(new URL(rawUrl, self.location.origin), { credentials: "same-origin" });
+        if (!isPersistentMediaRequest(request) || await cache.match(request)) return;
+        const response = await fetch(request);
+        if (response.ok && response.status === 200) await cache.put(request, response);
+      } catch {
+        // A failed prefetch must never affect the page or discard older cached media.
+      }
+    }));
+  }
+}
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();

@@ -120,6 +120,8 @@ import { inspectAppUpdate, openAppUpdateDownload, type AppUpdateState } from "./
 import { MediaThumbnail } from "./MediaViewer";
 import type { MediaViewerItem } from "./media-viewer-types";
 import { formatPapoDateTime, papoTimeZone } from "./time";
+import { profileImageUrls } from "./media-cache-sources";
+import { persistProfileImages } from "./service-worker";
 
 type Tab = "home" | "chat" | "memory" | "usage" | "profile";
 
@@ -242,6 +244,10 @@ export function App() {
     () => Boolean(profile?.hermes?.tasks?.some((task) => task.status === "pending" || task.status === "sent")),
     [profile?.hermes?.tasks]
   );
+  const persistentImageSignature = useMemo(
+    () => profile ? profileImageUrls(profile).join("|") : "",
+    [profile]
+  );
 
   const navigateTab = useCallback((nextTab: Tab, push = true) => {
     setTab(nextTab);
@@ -324,6 +330,11 @@ export function App() {
       setLoadingProfileSnapshot(profile);
     }
   }, [profile]);
+
+  useEffect(() => {
+    if (!profile || !persistentImageSignature) return;
+    void persistProfileImages(profile).catch(() => undefined);
+  }, [profile?.userId, persistentImageSignature]);
 
   useEffect(() => {
     if (!import.meta.env.DEV) return;
