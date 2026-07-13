@@ -218,6 +218,16 @@ export function createMemoryCandidateFromEpisode(
   return candidate;
 }
 
+export function episodeOccurredAt(episode: EpisodeMemory | undefined, fallback: string) {
+  const candidates = [
+    episode?.sourceObservedAt,
+    ...(episode?.attachments ?? []).map((attachment) => attachment.observedAt),
+    episode?.createdAt,
+    fallback
+  ];
+  return candidates.find((value): value is string => Boolean(value && Number.isFinite(Date.parse(value)))) ?? fallback;
+}
+
 function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new Date().toISOString()) {
   const episode = profile.episodes.find((item) => item.id === episodeId);
   if (!episode) return undefined;
@@ -244,6 +254,7 @@ function promoteEpisode(profile: CreatureProfile, episodeId: string, now = new D
   const memory: LongTermMemory = {
     id: makeId("ltm"),
     createdAt: now,
+    occurredAt: episodeOccurredAt(episode, candidate.createdAt),
     kind: candidate.memoryKind,
     text: candidate.candidateText,
     shortTitle: candidate.shortTitle ?? memoryShortTitle(candidate.candidateText),
@@ -310,6 +321,7 @@ export function promoteMemoryCandidate(
   const memory: LongTermMemory = {
     id: makeId("ltm"),
     createdAt: now,
+    occurredAt: episodeOccurredAt(episode, candidate.createdAt),
     kind: input.kind ?? candidate.memoryKind,
     text,
     shortTitle: memoryShortTitle(text, input.shortTitle ?? candidate.shortTitle),

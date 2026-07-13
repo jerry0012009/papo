@@ -772,6 +772,21 @@ test("memory feedback shows a pending state while the request is in flight", asy
   await expect(memoryCard.getByRole("button", { name: /忘记|彻底删除/ })).toBeVisible({ timeout: 2_000 });
 });
 
+test("memory timeline shows when the event happened instead of confirmation time", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("papo:testProfileOverride", JSON.stringify({
+    longTermMemories: [{
+      id: "mem-1", createdAt: "2026-07-07T12:00:00.000Z", occurredAt: "2026-06-18T08:15:00.000Z",
+      kind: "user_preference", text: "你喜欢旺旺仙贝", shortTitle: "旺旺仙贝", weight: 88, tags: ["零食"]
+    }]
+  })));
+  await page.goto("/");
+  await page.locator(".nav").getByRole("button", { name: /记忆/ }).click();
+  const memoryCard = page.getByRole("button", { name: "查看记忆：旺旺仙贝" });
+  await expect(memoryCard).toContainText("2026/06/18");
+  await memoryCard.click();
+  await expect(page.locator(".memory-detail#memory-mem-1")).toContainText("2026/06/18");
+});
+
 test("profile memory links deep-link, focus, and survive refresh", async ({ page }, testInfo) => {
   await page.goto("/");
   await page.getByLabel("Papo 导航").getByRole("button", { name: "我的" }).click();

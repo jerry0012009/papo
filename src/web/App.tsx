@@ -3637,7 +3637,7 @@ function MemoryArchiveRow({ memory, onOpen }: { memory: CreatureProfile["longTer
         {image ? <img src={resolveAssetUrl(image.url)} alt="" loading="lazy" /> : <History size={22} />}
       </span>
       <span className="memory-archive-copy">
-        <span>{formatPapoDateTime(memory.createdAt)} · {memoryKindLabel(memory.kind)}</span>
+        <span>{formatPapoDateTime(memory.occurredAt ?? memory.createdAt)} · {memoryKindLabel(memory.kind)}</span>
         <strong>{title}</strong>
         <small>{summary}</small>
       </span>
@@ -3669,7 +3669,7 @@ function MemoryDetail(props: {
     <article className="memory-detail" id={`memory-${memory.id}`}>
       <header className="memory-detail-header">
         <button type="button" onClick={props.onBack} aria-label="返回记忆列表"><ArrowLeft size={19} /></button>
-        <div><span>{formatPapoDateTime(memory.createdAt)}</span><h2>{title}</h2></div>
+        <div><span>{formatPapoDateTime(memory.occurredAt ?? memory.createdAt)}</span><h2>{title}</h2></div>
       </header>
 
       {memory.visual ? <MediaThumbnail item={attachmentMediaItem(memory.visual, title)} className="memory-detail-visual" /> : null}
@@ -3786,7 +3786,7 @@ function MemoryMainLines({ memory, profile }: { memory: CreatureProfile["longTer
     <div className="memory-main">
       {memory.visual ? <MediaThumbnail item={attachmentMediaItem(memory.visual, memory.shortTitle ?? "共同回忆")} className="memory-visual" /> : null}
       <div className="memory-copy">
-        <div className="memory-meta"><span>{formatPapoDateTime(memory.createdAt)}</span><span>{memoryKindLabel(memory.kind)}</span></div>
+        <div className="memory-meta"><span>{formatPapoDateTime(memory.occurredAt ?? memory.createdAt)}</span><span>{memoryKindLabel(memory.kind)}</span></div>
         <h3>{title}</h3>
         <strong className="memory-text-preview">{displayText}</strong>
       </div>
@@ -4394,7 +4394,7 @@ function MemoryCover({ memory, onClick }: { memory: CreatureProfile["longTermMem
       </span>
       <span className="memory-cover-details">
         <strong>{title}</strong>
-        <small>{formatPapoDateTime(memory.createdAt)}</small>
+        <small>{formatPapoDateTime(memory.occurredAt ?? memory.createdAt)}</small>
       </span>
     </button>
   );

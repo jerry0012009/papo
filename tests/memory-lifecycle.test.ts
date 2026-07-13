@@ -34,6 +34,32 @@ test("memory upsert is idempotent and revisions retain the previous visual", () 
   assert.equal(profile.jobs?.filter((job) => job.memoryId === first.memory.id && job.memoryRevision === 2).length, 1);
 });
 
+test("candidate confirmation keeps occurrence time separate from confirmation time", () => {
+  const occurredAt = "2026-06-18T08:15:00.000Z";
+  const episodeCreatedAt = "2026-06-18T08:16:00.000Z";
+  const confirmedAt = "2026-07-13T07:00:00.000Z";
+  const profile = createCreatureProfile({ userId: "memory-occurrence", now: episodeCreatedAt });
+  profile.episodes.push({
+    id: "episode_occurrence", createdAt: episodeCreatedAt, sourceObservedAt: occurredAt, source: "button",
+    inputSummary: "六月的一次散步", noticed: "用户六月散步", creatureResponse: "", memoryCandidateIds: ["candidate_occurrence"], weight: 70, tags: []
+  });
+  profile.memoryCandidates.push({
+    id: "candidate_occurrence", createdAt: episodeCreatedAt, candidateText: "你六月在河边散过步", memoryKind: "long_theme",
+    confidence: 82, sourceEpisodeId: "episode_occurrence", whyConsolidate: "用户确认值得记住", writePolicy: "wait_feedback",
+    decayPolicy: "stable", status: "candidate", tags: ["散步"]
+  });
+
+  const promoted = promoteMemoryCandidate(profile, "candidate_occurrence", { now: confirmedAt });
+  assert.equal(promoted?.createdAt, confirmedAt, "record creation remains the confirmation time for auditing");
+  assert.equal(promoted?.occurredAt, occurredAt, "the memory timeline uses when the event happened");
+
+  const legacy = memory("ltm_legacy_occurrence", "旧记忆也应显示发生时间");
+  legacy.sourceEpisodeId = "episode_occurrence";
+  profile.longTermMemories.push(legacy);
+  normalizeCreatureProfile(profile);
+  assert.equal(profile.longTermMemories.find((item) => item.id === legacy.id)?.occurredAt, occurredAt);
+});
+
 test("candidate visual jobs are budgeted, idempotent, and their preview is reused on promotion", () => {
   const profile = createCreatureProfile({ userId: "candidate-preview", creatureName: "Papo", now: "2026-07-12T10:00:00.000Z" });
   for (let index = 0; index < 3; index += 1) {

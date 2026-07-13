@@ -1,5 +1,5 @@
 import { makeId } from "./ids";
-import { enqueueCandidateVisualJobs, enqueueMemoryEnrichmentJob, MEMORY_VISUAL_POLICY_VERSION, memoryContentFingerprint, memoryShortTitle, memoryVisualNeedsPolicyMigration } from "./memory";
+import { enqueueCandidateVisualJobs, enqueueMemoryEnrichmentJob, episodeOccurredAt, MEMORY_VISUAL_POLICY_VERSION, memoryContentFingerprint, memoryShortTitle, memoryVisualNeedsPolicyMigration } from "./memory";
 import { normalizeDogState, reconcileActionCardState, seedDogState } from "./dog-states";
 import { isBackgroundCognitionEligible, lastMeaningfulUserActivityAt } from "./proactive";
 import { normalizePetKind, petKindMeta } from "./pet-kinds";
@@ -180,6 +180,11 @@ export function normalizeCreatureProfile(profile: CreatureProfile): CreatureProf
   profile.proactive.paused = Boolean(profile.proactive.paused);
   profile.episodes ??= [];
   profile.longTermMemories ??= [];
+  for (const memory of profile.longTermMemories) {
+    if (memory.occurredAt) continue;
+    const sourceEpisode = memory.sourceEpisodeId ? profile.episodes.find((episode) => episode.id === memory.sourceEpisodeId) : undefined;
+    memory.occurredAt = episodeOccurredAt(sourceEpisode, memory.createdAt);
+  }
   profile.feedbackHistory ??= [];
   profile.stateChanges ??= [];
 

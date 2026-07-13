@@ -356,6 +356,7 @@ export interface EpisodeMemory {
 export interface LongTermMemory {
   id: string;
   createdAt: string;
+  occurredAt?: string;
   kind:
     | "user_preference"
     | "long_theme"

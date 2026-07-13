@@ -2,7 +2,7 @@ import { z } from "zod";
 import { appendPapoMessage } from "./conversation";
 import { clampPolicy } from "./drive";
 import { makeId } from "./ids";
-import { adjustMemoryWeight, forgetMemory, memoryShortTitle, mergeAttachments, normalizeSharedMemoryText, promoteMemoryCandidate, upsertLongTermMemory } from "./memory";
+import { adjustMemoryWeight, episodeOccurredAt, forgetMemory, memoryShortTitle, mergeAttachments, normalizeSharedMemoryText, promoteMemoryCandidate, upsertLongTermMemory } from "./memory";
 import { modelConversationContext, modelFeedbackContext, modelMemoryContext } from "./model-context";
 import { clientContextFor } from "./client-document";
 import { hasHighPrivacyText, tagsForModel, textForModel } from "./privacy";
@@ -464,6 +464,7 @@ function upsertSemanticFeedbackSelfMemory(
   upsertLongTermMemory(profile, {
     id: makeId("ltm"),
     createdAt: feedback.at,
+    occurredAt: episodeOccurredAt(targetEpisode, feedback.at),
     kind: "creature_self_memory",
     text: normalizedText,
     shortTitle: memoryShortTitle(normalizedText),
@@ -511,6 +512,7 @@ function applySemanticMemoryOperation(
       upsertLongTermMemory(profile, {
         id: makeId("ltm"),
         createdAt: feedback.at,
+        occurredAt: episodeOccurredAt(targetEpisode, feedback.at),
         kind: operation.kind,
         text: normalizeSharedMemoryText(text),
         shortTitle: memoryShortTitle(text, operation.shortTitle),

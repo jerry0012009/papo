@@ -155,7 +155,7 @@ ${options.requireVisual ? "- 这是已经正式留下的长期记忆，相册需
 
 pet_profile：${JSON.stringify({ name: profile.creatureName, ...profile.petProfile })}
 client_context：${JSON.stringify(client)}
-target_memory：${JSON.stringify({ id: memory.id, text: memory.text, shortTitle: memory.shortTitle, tags: memory.tags, createdAt: memory.createdAt, attachments: memory.attachments?.map((item) => ({ id: item.id, label: item.label, kind: item.kind })) })}
+target_memory：${JSON.stringify({ id: memory.id, text: memory.text, shortTitle: memory.shortTitle, tags: memory.tags, occurredAt: memory.occurredAt ?? memory.createdAt, attachments: memory.attachments?.map((item) => ({ id: item.id, label: item.label, kind: item.kind })) })}
 target_feedback：${JSON.stringify(feedback)}
 related_memories：${JSON.stringify(related.map((item) => ({ id: item.id, text: item.text, shortTitle: item.shortTitle, tags: item.tags, hasImage: Boolean(item.visual || item.attachments?.some((a) => a.kind === "image")) })))}
 
