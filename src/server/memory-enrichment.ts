@@ -90,7 +90,11 @@ async function saveMemoryVisual(dataUrl: string, label: string, prompt: string, 
   const id = `img_${hash.slice(0, 24)}`;
   const filename = `${id}.${parsed.extension}`;
   await mkdir(imageAssetDir(), { recursive: true });
-  await writeFile(path.join(imageAssetDir(), filename), parsed.buffer);
+  try {
+    await writeFile(path.join(imageAssetDir(), filename), parsed.buffer, { flag: "wx" });
+  } catch (error) {
+    if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
+  }
   return {
     id,
     kind: "image",

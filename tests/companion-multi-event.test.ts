@@ -61,7 +61,12 @@ test("one companion session keeps multimodal scenes and alternating events separ
       }
       return lecture
         ? { kind: "lecture", title: "技术讲座", summary: "用户当时播放的媒体讲座围绕端侧模型展开，并由第二位发言人继续分享。", shouldRemember: true, memoryText: "用户当时播放的媒体讲座讨论了端侧模型，中场休息后由第二位发言人继续；这是媒体内容，不代表用户本人观点。", importanceReason: "完整且连续的技术学习经历。", tags: ["讲座", "端侧模型"] }
-        : { kind: "meal", title: "一顿好吃的午饭", summary: "用户分享了午饭照片、说明和同期餐厅声音。", shouldRemember: false, memoryText: null, importanceReason: null, tags: ["午饭"] };
+        : {
+            kind: "meal", title: "一顿好吃的午饭", summary: "用户主动分享了午饭照片、说明和同期餐厅声音。",
+            memoryDisposition: "candidate", memoryText: "我记得你主动让我看了这顿午饭：餐盘里有米饭和蔬菜，你说很好吃。",
+            memoryKind: "long_theme", confidence: 72, writePolicy: "wait_feedback", userIntent: "希望 Papo 看见并分享这顿午饭",
+            importanceReason: "这是用户主动选择取景的生活片段，先作为候选等待确认。", tags: ["午饭", "主动分享"]
+          };
     },
     async summarizeImage() { return ""; }, async observeAudio() { return ""; }, async generateImage() { throw new Error("not used"); }
   };
@@ -119,8 +124,16 @@ test("one companion session keeps multimodal scenes and alternating events separ
   assert.equal(saved?.episodes.find((episode) => episode.sourceBatchId === lectureId)?.audioSourceType, "device_playback");
   const mealEpisode = saved?.episodes.find((episode) => episode.tags.includes("午饭"));
   assert.equal(mealEpisode?.tags.includes("用户主动取景"), true);
-  assert.equal(mealEpisode?.weight, 59, "manual capture evidence raises the event episode weight without forcing long-term memory");
-  assert.match(mealEpisode?.importanceReason ?? "", /没有足够的长期保存价值/);
+  assert.equal(mealEpisode?.captureIntent, "user_initiated");
+  assert.equal(mealEpisode?.weight, 72, "manual capture evidence raises a candidate episode without forcing long-term memory");
+  const mealCandidate = saved?.memoryCandidates.find((candidate) => candidate.sourceEpisodeId === mealEpisode?.id);
+  assert.ok(mealCandidate);
+  assert.equal(mealCandidate?.writePolicy, "wait_feedback");
+  assert.match(mealCandidate?.candidateText ?? "", /主动让我看了这顿午饭/);
+  assert.equal(saved?.longTermMemories.some((memory) => memory.sourceEpisodeId === mealEpisode?.id), false);
+  await runCompanionSessionSweep(store, provider, "2026-07-12T12:22:00.000Z");
+  saved = await store.getProfile(profile.userId);
+  assert.equal(saved?.memoryCandidates.filter((candidate) => candidate.id === mealCandidate?.id).length, 1, "a repeated sweep cannot duplicate the event candidate");
   assert.equal(saved?.companionSessions?.[0].events?.find((event) => event.id === lectureId)?.sourceSegmentIds.length, 5);
 });
 

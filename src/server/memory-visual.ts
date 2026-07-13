@@ -12,7 +12,14 @@ const planSchema = z.object({
   visualReason: z.string().trim().min(4).max(360),
   imagePrompt: z.preprocess((value) => value === null || value === "" ? undefined : value, z.string().trim().min(20).max(2200).optional()),
   relatedMemoryIds: z.array(z.string().min(1)).max(8).default([]),
-  needsClientReferences: z.boolean().default(false)
+  needsClientReferences: z.boolean().default(false),
+  provenance: z.object({
+    sourceType: z.enum(["live_environment", "device_playback", "mixed", "unknown"]),
+    userStance: z.enum(["explicit", "not_present", "inferred"]),
+    userStanceEvidence: z.preprocess((value) => value === null || value === "" ? undefined : value, z.string().trim().min(1).max(360).optional()),
+    sharedScene: z.enum(["explicit", "not_present", "inferred"]),
+    sharedSceneEvidence: z.preprocess((value) => value === null || value === "" ? undefined : value, z.string().trim().min(1).max(360).optional())
+  }).optional()
 }).superRefine((plan, context) => {
   if (plan.visualMode !== "no_visual" && !plan.imagePrompt) context.addIssue({ code: "custom", message: "visual plan requires imagePrompt" });
   if (plan.visualMode === "no_visual" && plan.papoPresence === "required") context.addIssue({ code: "custom", message: "no_visual cannot require Papo" });
@@ -24,20 +31,19 @@ export async function planMemoryVisual(profile: CreatureProfile, memory: LongTer
   const related = retrieveRelatedMemories(profile, memory);
   const client = clientContextFor(profile, `${memory.text} ${memory.tags.join(" ")}`);
   const sourceEpisode = memory.sourceEpisodeId ? profile.episodes.find((episode) => episode.id === memory.sourceEpisodeId) : undefined;
-  const preferredName = profile.clientDocument?.preferredName?.trim();
   const prompt = memoryVisualPlanPrompt(profile, memory, related, client, sourceEpisode, options);
   let raw: unknown;
   try {
     raw = await provider.generateJson<unknown>(prompt);
-    return validateMemoryVisualPlan(raw, related, memory, sourceEpisode, preferredName, options);
+    return validateMemoryVisualPlan(raw, related, memory, sourceEpisode, options);
   } catch (error) {
     const reason = error instanceof Error ? error.message.slice(0, 500) : "unknown validation error";
     raw = await (provider.generateJsonFallback ?? provider.generateJson)(`${prompt}\n\n上一次返回未通过校验：${reason}\n请修正上述具体错误，只返回一份完整、严格合法的 JSON。`);
-    return validateMemoryVisualPlan(raw, related, memory, sourceEpisode, preferredName, options);
+    return validateMemoryVisualPlan(raw, related, memory, sourceEpisode, options);
   }
 }
 
-function validateMemoryVisualPlan(raw: unknown, related: LongTermMemory[], memory: LongTermMemory, sourceEpisode: EpisodeMemory | undefined, preferredName: string | undefined, options: { requireVisual?: boolean }) {
+function validateMemoryVisualPlan(raw: unknown, related: LongTermMemory[], memory: LongTermMemory, sourceEpisode: EpisodeMemory | undefined, options: { requireVisual?: boolean }) {
   const parsed = planSchema.safeParse(raw);
   if (!parsed.success) throw new Error(`invalid memory visual plan (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   const allowed = new Set(related.map((item) => item.id));
@@ -49,32 +55,17 @@ function validateMemoryVisualPlan(raw: unknown, related: LongTermMemory[], memor
   if (plan.visualMode !== "no_visual" && plan.papoPresence !== "required" && !/no (?:pets?|animals?|anthropomorphic characters?)/i.test(plan.imagePrompt ?? "")) {
     throw new Error("non-Papo memory image prompt must explicitly exclude animals");
   }
-  validateNarrativeProvenance(plan, memory, sourceEpisode, preferredName);
+  validateNarrativeProvenance(plan, sourceEpisode);
   return plan;
 }
 
-function validateNarrativeProvenance(plan: MemoryVisualPlan, memory: LongTermMemory, sourceEpisode: EpisodeMemory | undefined, preferredName: string | undefined) {
+function validateNarrativeProvenance(plan: MemoryVisualPlan, sourceEpisode: EpisodeMemory | undefined) {
   if (sourceEpisode?.audioSourceType !== "device_playback") return;
-  const mediaProvenance = /视频|媒体|节目|播客|音频|录音|讲者|主播|播放|收听/;
-  if (!mediaProvenance.test(plan.narrative)) {
-    throw new Error("device_playback narrative must identify the content as media playback");
-  }
-
-  const userSubjects = ["你", "使用者", "用户", preferredName].filter((value): value is string => Boolean(value)).map(escapeRegex).join("|");
-  const directUserStance = new RegExp(`(?:${userSubjects}).{0,24}(?:认为|觉得|认同|赞同|共鸣|感兴趣|喜欢|偏好|重视|希望)`, "i");
-  const evidence = `${memory.text}\n${sourceEpisode.inputSummary}\n${sourceEpisode.noticed}\n${sourceEpisode.possibleIntent ?? ""}`;
-  if (directUserStance.test(plan.narrative) && !directUserStance.test(evidence)) {
-    throw new Error("device_playback narrative cannot infer the user's opinion, preference, or agreement from media speech");
-  }
-
-  const inventedSharedScene = /我.{0,12}(?:趴在你旁边|坐在你旁边|靠在你旁边|陪你一起看|陪你一起听)/;
-  if (inventedSharedScene.test(plan.narrative) && !inventedSharedScene.test(evidence)) {
-    throw new Error("device_playback narrative cannot invent a shared physical scene");
-  }
-}
-
-function escapeRegex(value: string) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!plan.provenance || plan.provenance.sourceType !== "device_playback") throw new Error("visual narrative provenance must match the source episode");
+  if (plan.provenance.userStance === "inferred") throw new Error("device_playback narrative cannot infer a user stance from media speech");
+  if (plan.provenance.sharedScene === "inferred") throw new Error("device_playback narrative cannot infer a shared physical scene");
+  if (plan.provenance.userStance === "explicit" && !plan.provenance.userStanceEvidence) throw new Error("explicit user stance requires source evidence");
+  if (plan.provenance.sharedScene === "explicit" && !plan.provenance.sharedSceneEvidence) throw new Error("explicit shared scene requires source evidence");
 }
 
 function validatePaintedMemoryPrompt(prompt: string) {
@@ -157,6 +148,7 @@ ${options.requireVisual ? "- 这是已经正式留下的长期记忆，相册需
 - 对使用者直接称呼“${name}”或“你”，禁止写“用户”“该用户”“说话者”等客观系统口吻。
 - 温柔、具体、克制，不虚构未发生的动作、人物、地点、情绪或关系；事实以 target_memory 和来源附件为准。
 - source_provenance 是事实归属边界。audioSourceType=device_playback 表示内容来自使用者手机播放的视频、播客或其他媒体：必须明确写成“你播放/收听的媒体中，讲者提到……”，不得改写成使用者本人说过、认同、喜欢、有共鸣或持有该观点，也不得虚构 ${profile.creatureName} 当时趴在旁边、共同观看等物理场景。audioSourceType=mixed 时必须保留来源不确定性。
+- provenance 是对 narrative 的结构化事实审计：sourceType 必须与 source_provenance 一致；userStance/sharedScene 只能为 explicit、not_present 或 inferred。只有来源材料直接支持时才可填 explicit，并给出对应 evidence；模型补出的推测必须诚实标为 inferred。device_playback 不允许 inferred 的用户立场或共同物理场景。
 - shortTitle 2-8 个中文字符，适合相册式缩略卡。
 
 视觉要求：
@@ -189,5 +181,5 @@ target_feedback：${JSON.stringify(feedback)}
 related_memories：${JSON.stringify(related.map((item) => ({ id: item.id, text: item.text, shortTitle: item.shortTitle, tags: item.tags, hasImage: Boolean(item.visual || item.attachments?.some((a) => a.kind === "image")) })))}
 
 返回严格 JSON：
-{"shortTitle":"雨后散步","narrative":"我记得那天雨刚停，你慢慢走过还泛着光的小路。","visualMode":"imaginative_illustration","papoPresence":"absent","visualReason":"没有现场照片，用温暖手绘保留这个具体生活瞬间","imagePrompt":"A warm hand-drawn watercolor and colored-pencil illustration of a person taking a quiet walk on a damp neighborhood path after rain, natural face and relaxed expression in a gently simplified comic style, reflections in small puddles, visible paper texture and loose linework, clearly illustrated and non-photographic, no animals, no icons, no text, no logo","relatedMemoryIds":[],"needsClientReferences":false}`;
+{"shortTitle":"雨后散步","narrative":"我记得那天雨刚停，你慢慢走过还泛着光的小路。","visualMode":"imaginative_illustration","papoPresence":"absent","visualReason":"没有现场照片，用温暖手绘保留这个具体生活瞬间","imagePrompt":"A warm hand-drawn watercolor and colored-pencil illustration of a person taking a quiet walk on a damp neighborhood path after rain, natural face and relaxed expression in a gently simplified comic style, reflections in small puddles, visible paper texture and loose linework, clearly illustrated and non-photographic, no animals, no icons, no text, no logo","relatedMemoryIds":[],"needsClientReferences":false,"provenance":{"sourceType":"unknown","userStance":"not_present","sharedScene":"not_present"}}`;
 }

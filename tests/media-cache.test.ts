@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { request as httpRequest } from "node:http";
 import path from "node:path";
 import test from "node:test";
 import type { ModelProvider } from "../src/core/provider";
+import { createCreatureProfile } from "../src/core/profile";
 import { createApp } from "../src/server/app";
+import { enrichMemoryExperience } from "../src/server/memory-enrichment";
 import { MemoryProfileStore } from "../src/server/store";
 
 test("content-addressed image and video assets keep durable HTTP cache semantics", async () => {
@@ -31,6 +33,8 @@ test("content-addressed image and video assets keep durable HTTP cache semantics
   const videoBytes = Buffer.from("papo-media-cache-video-fixture-v1");
   const videoFilename = `vid_${createHash("sha256").update(videoBytes).digest("hex").slice(0, 24)}.mp4`;
   const assetDir = path.join(process.cwd(), "data", "assets", "images");
+  const memoryBytes = Buffer.from("papo-memory-cache-image-fixture-v1");
+  const memoryFilename = `img_${createHash("sha256").update(memoryBytes).digest("hex").slice(0, 24)}.png`;
 
   try {
     const createImage = () => fetch(`${baseUrl}/api/image-summary`, {
@@ -61,12 +65,33 @@ test("content-addressed image and video assets keep durable HTTP cache semantics
     assert.equal(video.headers.get("cache-control"), "public, max-age=31536000, immutable");
     assert.equal(video.headers.get("accept-ranges"), "bytes");
     assert.deepEqual(Buffer.from(await video.arrayBuffer()), videoBytes.subarray(0, 4));
+
+    const memoryProvider: ModelProvider = {
+      ...provider,
+      async generateJson() {
+        return {
+          shortTitle: "缓存回忆", narrative: "我记得这次缓存验证。", visualMode: "imaginative_illustration", papoPresence: "absent",
+          visualReason: "用手绘生活场景验证稳定资源", imagePrompt: "A warm hand-drawn watercolor everyday scene with visible paper texture, no animals, no text.",
+          relatedMemoryIds: [], needsClientReferences: false
+        };
+      },
+      async generateEconomyImage() { return { dataUrl: `data:image/png;base64,${memoryBytes.toString("base64")}`, mime: "image/png" }; }
+    };
+    const memoryProfile = createCreatureProfile({ userId: "memory-cache", creatureName: "Papo" });
+    const makeMemory = () => ({ id: "ltm_cache", createdAt: "2026-07-13T12:00:00.000Z", kind: "long_theme" as const, text: "验证记忆图片缓存", weight: 80, tags: ["缓存"] });
+    await enrichMemoryExperience(memoryProfile, makeMemory(), memoryProvider);
+    const firstMemoryStat = await stat(path.join(assetDir, memoryFilename));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    await enrichMemoryExperience(memoryProfile, makeMemory(), memoryProvider);
+    const secondMemoryStat = await stat(path.join(assetDir, memoryFilename));
+    assert.equal(secondMemoryStat.mtimeMs, firstMemoryStat.mtimeMs, "identical generated memory art must not rewrite its content-addressed asset");
   } finally {
     app.locals.turnWorker.stop();
     app.locals.transientAudioStore.stop();
     server.close();
     await rm(path.join(assetDir, imageFilename), { force: true });
     await rm(path.join(assetDir, videoFilename), { force: true });
+    await rm(path.join(assetDir, memoryFilename), { force: true });
   }
 });
 

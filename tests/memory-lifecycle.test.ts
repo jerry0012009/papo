@@ -307,13 +307,15 @@ test("device playback memory narratives preserve media provenance and repair uns
     if (!prompt.includes("上一次返回未通过校验")) return {
       shortTitle: "汽车会客厅", narrative: "我趴在你旁边听着视频，觉得你对这些设计特别有共鸣。",
       visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "手绘媒体观看场景",
-      imagePrompt: "A warm hand-drawn watercolor scene of a phone playing a car program, visible paper texture, no animals, no text.", relatedMemoryIds: [], needsClientReferences: false
+      imagePrompt: "A warm hand-drawn watercolor scene of a phone playing a car program, visible paper texture, no animals, no text.", relatedMemoryIds: [], needsClientReferences: false,
+      provenance: { sourceType: "device_playback", userStance: "inferred", sharedScene: "inferred" }
     };
-    assert.match(prompt, /cannot infer the user's opinion/);
+    assert.match(prompt, /cannot infer a user stance/);
     return {
       shortTitle: "汽车会客厅", narrative: "我记得你播放的视频里，媒体讲者介绍了可旋转座椅和中央桌板。",
       visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "以手绘场景保留媒体内容来源",
-      imagePrompt: "A warm hand-drawn watercolor scene of a phone playing a car program, visible paper texture, no animals, no text.", relatedMemoryIds: [], needsClientReferences: false
+      imagePrompt: "A warm hand-drawn watercolor scene of a phone playing a car program, visible paper texture, no animals, no text.", relatedMemoryIds: [], needsClientReferences: false,
+      provenance: { sourceType: "device_playback", userStance: "not_present", sharedScene: "not_present" }
     };
   });
   provider.generateJsonFallback = provider.generateJson;

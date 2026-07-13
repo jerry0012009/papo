@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { upsertLongTermMemory } from "../core/memory";
+import { enqueueCandidateVisualJobs, upsertLongTermMemory } from "../core/memory";
 import type { ModelProvider } from "../core/provider";
 import type {
   CognitionContext,
@@ -10,6 +10,7 @@ import type {
   CreatureProfile,
   EpisodeMemory,
   LongTermMemory,
+  MemoryCandidate,
   SemanticBrainRecord,
   SpeakerIdentityEvidence,
   StreamSegment
@@ -60,11 +61,24 @@ const consolidationSchema = z.object({
   kind: eventKindSchema,
   title: z.string().trim().min(2).max(48),
   summary: z.string().trim().min(1).max(1800),
-  shouldRemember: z.boolean(),
+  memoryDisposition: z.enum(["none", "candidate", "long_term"]).optional(),
+  shouldRemember: z.boolean().optional(),
   memoryText: optionalString(1100),
+  memoryKind: z.enum(["user_preference", "long_theme", "creature_self_memory", "safety_rule", "future_review", "relationship", "habit", "open_question"]).optional(),
+  confidence: z.number().min(0).max(100).optional(),
+  writePolicy: z.enum(["ask_user", "wait_feedback"]).optional(),
+  userIntent: optionalString(360),
+  noneReason: z.enum(["unusable", "duplicate", "accidental", "privacy", "ephemeral"]).optional(),
   importanceReason: optionalString(360),
   tags: z.array(z.string().trim().min(1).max(40)).max(12)
-});
+}).superRefine((decision, context) => {
+  const disposition = decision.memoryDisposition ?? (decision.shouldRemember ? "long_term" : "none");
+  if (disposition !== "none" && !decision.memoryText) context.addIssue({ code: "custom", message: `${disposition} requires memoryText` });
+  if (disposition === "candidate" && !decision.writePolicy) context.addIssue({ code: "custom", message: "candidate requires writePolicy" });
+}).transform((decision) => ({
+  ...decision,
+  memoryDisposition: decision.memoryDisposition ?? (decision.shouldRemember ? "long_term" as const : "none" as const)
+}));
 
 export function collectCompanionTurn(profile: CreatureProfile, turnId: string, segments: StreamSegment[]) {
   for (const segment of segments) {
@@ -471,13 +485,19 @@ async function consolidateEvent(store: ProfileStore, provider: ModelProvider, us
   if (!parsed.success) throw new Error(`invalid companion event consolidation (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 300)})`);
   const durationMs = Math.max(0, Date.parse(event.lastObservedAt) - Date.parse(event.startedAt));
   const longForm = durationMs >= GUARANTEED_LONG_FORM_MS && observations.length >= 3 && (parsed.data.kind === "lecture" || parsed.data.kind === "meeting");
-  if ((longForm || event.memoryId) && (!parsed.data.shouldRemember || !parsed.data.memoryText?.trim())) {
+  if ((longForm || event.memoryId) && (parsed.data.memoryDisposition !== "long_term" || !parsed.data.memoryText?.trim())) {
     throw new Error("a long-form or previously remembered companion event must retain one integrated memory");
+  }
+  const hasUserInitiatedCapture = observations.some((item) => item.captureIntent === "user_initiated");
+  if (hasUserInitiatedCapture && parsed.data.memoryDisposition === "none" && !["unusable", "duplicate", "accidental", "privacy"].includes(parsed.data.noneReason ?? "")) {
+    throw new Error("a meaningful user-initiated capture must become a candidate or explain a concrete exclusion");
   }
   const decision = {
     ...parsed.data,
     importanceReason: parsed.data.importanceReason
-      ?? (parsed.data.shouldRemember ? "这件事对用户和 Papo 有持续回顾价值" : "这次画面已进入事件经历，但目前没有足够的长期保存价值")
+      ?? (parsed.data.memoryDisposition === "long_term"
+        ? "这件事对用户和 Papo 有持续回顾价值"
+        : parsed.data.memoryDisposition === "candidate" ? "这件事有回看潜力，先交给用户确认" : "这次经历没有持续保存价值")
   };
   const records = eventRecords(claimed, session, event, decision, provider, now);
   const saved = await store.updateProfile(userId, (latest) => {
@@ -489,7 +509,9 @@ async function consolidateEvent(store: ProfileStore, provider: ModelProvider, us
       return;
     }
     latest.episodes = mergeById(latest.episodes, [records.episode]).slice(0, 80);
+    if (records.candidate) mergeCompanionCandidate(latest, records.candidate);
     if (records.memory) upsertLongTermMemory(latest, records.memory, { now, sourceIds: [session.id, event.id, ...event.sourceSegmentIds] });
+    if (records.candidate) enqueueCandidateVisualJobs(latest, now);
     if (records.message) latest.conversation = mergeById(latest.conversation, [records.message]).slice(0, 80);
     latest.semanticBrainHistory = mergeById(latest.semanticBrainHistory, [records.semanticRun]).slice(0, 30);
     target.status = "completed";
@@ -497,6 +519,7 @@ async function consolidateEvent(store: ProfileStore, provider: ModelProvider, us
     target.consolidatedAt = now;
     target.consolidatedRevision = target.revision;
     target.episodeId = records.episode.id;
+    target.candidateId = records.candidate?.id ?? target.candidateId;
     target.memoryId = records.memory?.id ?? target.memoryId;
     target.messageId = records.message?.id ?? target.messageId;
     target.title = decision.title;
@@ -518,9 +541,15 @@ function eventRecords(
 ) {
   const suffix = createHash("sha256").update(`${profile.userId}\u0000${event.id}`).digest("hex").slice(0, 20);
   const episodeId = event.episodeId ?? `episode_companion_event_${suffix}`;
+  const candidateId = event.candidateId ?? `candidate_companion_event_${suffix}`;
   const memoryId = event.memoryId ?? `ltm_companion_event_${suffix}`;
-  const shouldRemember = decision.shouldRemember && Boolean(decision.memoryText?.trim());
+  const shouldRemember = decision.memoryDisposition === "long_term" && Boolean(decision.memoryText?.trim());
+  const shouldCandidate = decision.memoryDisposition === "candidate" && Boolean(decision.memoryText?.trim());
   const userInitiatedSegments = session.observations.filter((item) => item.eventId === event.id && item.captureIntent === "user_initiated");
+  const scheduledSegments = session.observations.filter((item) => item.eventId === event.id && item.captureIntent === "scheduled");
+  const sourceSegments = (profile.turns ?? []).flatMap((turn) => turn.segments).filter((segment) => event.sourceSegmentIds.includes(segment.id));
+  const attachments = sourceSegments.flatMap((segment) => segment.attachments ?? []).filter((attachment, index, all) => all.findIndex((item) => item.id === attachment.id) === index);
+  const primarySegment = sourceSegments.find((segment) => segment.captureIntent === "user_initiated") ?? sourceSegments[0];
   const devicePlaybackSegments = session.observations.filter((item) => item.eventId === event.id && (item.audioSourceType === "device_playback" || item.audioSourceType === "mixed" || item.devicePlaybackActive));
   const eventAudioSourceType = devicePlaybackSegments.some((item) => item.audioSourceType === "mixed")
     || (devicePlaybackSegments.length > 0 && devicePlaybackSegments.length < session.observations.filter((item) => item.eventId === event.id && item.modality === "audio_observation").length)
@@ -536,19 +565,23 @@ function eventRecords(
     createdAt: event.startedAt,
     source: "curious_stream",
     cognitionSource: "ambient",
+    sourceSegmentId: primarySegment?.id,
     sourceBatchId: event.id,
+    captureIntent: userInitiatedSegments.length ? "user_initiated" : scheduledSegments.length ? "scheduled" : undefined,
     audioSourceType: eventAudioSourceType,
-    sourceObservedAt: event.lastObservedAt,
+    sourceObservedAt: event.startedAt,
+    sourceLocation: primarySegment?.location,
+    attachments,
     inputSummary: decision.summary,
     noticed: `Papo 连续陪伴并整理了“${decision.title}”这件事。`,
-    possibleIntent: "把连续生活中的同一事件整合成完整经历",
+    possibleIntent: decision.userIntent ?? "把连续生活中的同一事件整合成完整经历",
     importanceReason: decision.importanceReason,
     relatedMemoryIds: shouldRemember ? [memoryId] : [],
     stateSnapshot: structuredClone(profile.state),
     creatureResponse: "",
     feedback: [],
     promotedToLongTerm: shouldRemember,
-    memoryCandidateIds: [],
+    memoryCandidateIds: shouldCandidate ? [candidateId] : [],
     actionDecision: {
       action: "listen_silently",
       confidence: 100,
@@ -556,11 +589,11 @@ function eventRecords(
       blockedActions: [],
       safetyNotes: [],
       llmSuggestedAction: "listen_silently",
-      ruleTrace: ["source=companion_event", "reply=quiet", `memory=${shouldRemember}`]
+      ruleTrace: ["source=companion_event", "reply=quiet", `memory_disposition=${decision.memoryDisposition}`]
     },
     actionResult: { kind: "memory_intent", title: decision.title, text: decision.importanceReason, sourceIds: event.sourceSegmentIds },
-    creatureExperience: { earReason: "我把属于同一件事的声音、画面和说明接起来理解。", actionFeeling: "持续陪伴后整理", saveFeeling: shouldRemember ? "把完整事件收成一条记忆" : "只留下完整经历" },
-    weight: Math.min(100, (shouldRemember ? 82 : 55) + intentWeightBonus),
+    creatureExperience: { earReason: "我把属于同一件事的声音、画面和说明接起来理解。", actionFeeling: "持续陪伴后整理", saveFeeling: shouldRemember ? "把完整事件收成一条记忆" : shouldCandidate ? "先留下候选，等你确认" : "只留下完整经历" },
+    weight: Math.min(100, (shouldRemember ? 82 : shouldCandidate ? 68 : 55) + intentWeightBonus),
     tags: unique(["陪伴事件", decision.kind, ...provenanceTags, ...decision.tags]),
     decisionTrace: [
       `session=${session.id}`,
@@ -569,13 +602,29 @@ function eventRecords(
       `segments=${event.sourceSegmentIds.length}`,
       `user_initiated_captures=${userInitiatedSegments.length}`,
       `device_playback_segments=${devicePlaybackSegments.length}`,
+      `memory_disposition=${decision.memoryDisposition}`,
       "attention-independent continuous scene tracking"
     ]
   };
+  const candidate: MemoryCandidate | undefined = shouldCandidate ? {
+    id: candidateId,
+    createdAt: event.consolidatedAt ?? now,
+    candidateText: decision.memoryText!.trim(),
+    shortTitle: [...decision.title.replace(/\s+/g, "")].slice(0, 8).join(""),
+    memoryKind: decision.memoryKind ?? "open_question",
+    confidence: Math.round(decision.confidence ?? 70),
+    sourceEpisodeId: episodeId,
+    whyConsolidate: decision.importanceReason,
+    writePolicy: decision.writePolicy ?? "wait_feedback",
+    decayPolicy: "decay_without_feedback",
+    status: "candidate",
+    tags: unique(["陪伴事件", decision.kind, ...provenanceTags, ...decision.tags]),
+    attachments
+  } : undefined;
   const memory: LongTermMemory | undefined = shouldRemember ? {
     id: memoryId,
     createdAt: event.consolidatedAt ?? now,
-    kind: "long_theme",
+    kind: decision.memoryKind ?? "long_theme",
     text: decision.memoryText!.trim(),
     shortTitle: [...decision.title.replace(/\s+/g, "")].slice(0, 8).join(""),
     sourceEpisodeId: episodeId,
@@ -603,10 +652,31 @@ function eventRecords(
     providerName: provider.name,
     model: provider.diagnostics?.textModel,
     status: "applied",
-    message: `consolidated companion event revision ${event.revision} into one episode${memory ? " and one memory" : ""}`,
-    ruleTrace: [`session=${session.id}`, `event=${event.id}`, `revision=${event.revision}`, `memory=${Boolean(memory)}`]
+    message: `consolidated companion event revision ${event.revision} into one episode${candidate ? " and one candidate" : memory ? " and one memory" : ""}`,
+    ruleTrace: [`session=${session.id}`, `event=${event.id}`, `revision=${event.revision}`, `memory_disposition=${decision.memoryDisposition}`]
   };
-  return { episode, memory, message, semanticRun };
+  return { episode, candidate, memory, message, semanticRun };
+}
+
+function mergeCompanionCandidate(profile: CreatureProfile, candidate: MemoryCandidate) {
+  const existing = profile.memoryCandidates.find((item) => item.id === candidate.id);
+  if (!existing) {
+    profile.memoryCandidates = [candidate, ...profile.memoryCandidates].slice(0, 80);
+    return;
+  }
+  if (existing.status !== "candidate") return;
+  const preview = {
+    previewVisual: existing.previewVisual,
+    previewStatus: existing.previewStatus,
+    previewError: existing.previewError,
+    previewPrompt: existing.previewPrompt,
+    previewMode: existing.previewMode,
+    previewPapoPresence: existing.previewPapoPresence,
+    previewPlanReason: existing.previewPlanReason,
+    previewNarrative: existing.previewNarrative,
+    previewUpdatedAt: existing.previewUpdatedAt
+  };
+  Object.assign(existing, candidate, preview);
 }
 
 function buildAssignmentPrompt(profile: CreatureProfile, session: CompanionSessionRecord, observations: CompanionSessionRecord["observations"]) {
@@ -648,13 +718,15 @@ function buildConsolidationPrompt(
   return `请作为 Papo 的事件级经历整理与记忆决策脑。只整理给定 event，不要把同一 companion session 中其他事件混进来。
 
 所有归入该 event 的成功观察都应参与总结，即使某片没有触发 Attention 或 Papo 当时保持安静。eventSummary 必须以 eventTranscript 为第一事实源，并用 segmentSummaries 辅助定位，整合主题、关键事实、论点、论据、转折、结论和待办；不能从片段摘要反推或编造 transcript 中不存在的事实。
-transcript 是事件资料，不等于长期记忆。不要仅因 transcript 很长就 shouldRemember=true；长期记忆仍只保存对 Papo 与用户有持续价值的整合内容。
-user_initiated 画面是用户有意选择的事件证据，重要性高于 scheduled 取帧，应参与 eventSummary 和长期价值判断；但点击拍照本身仍不构成必须长期记忆的理由。
+transcript 是事件资料，不等于长期记忆。不要仅因 transcript 很长就选择 long_term；长期记忆仍只保存对 Papo 与用户有持续价值的整合内容。
+memoryDisposition 有三层：none 只留 episode；candidate 进入用户可确认的记忆候选；long_term 形成长期记忆。候选不是长期记忆，不要因为隐私或长期价值尚不确定就把有意义的内容直接丢弃，可以用 ask_user 或 wait_feedback 把控制权交给用户。
+user_initiated 画面是用户主动选择时刻、镜头和前后摄像头做出的产品内行为，本身表达“希望 Papo 看见并处理此刻”，重要性高于 scheduled 取帧。必须结合画面和上下文给出 userIntent。只要画面可用、非重复、非误触且不因隐私必须排除，至少选择 candidate；不能仅以“点击拍照不等于要求长期保存”为由选择 none。空白/损坏用 noneReason=unusable，重复用 duplicate，误触用 accidental，隐私不适合候选用 privacy。scheduled 画面仍按内容价值正常判断。
 audioSourceType=device_playback 的 transcript 是用户当时播放媒体的内容，不是用户本人的话、观点、经历或偏好。总结和 memoryText 必须使用“用户播放/收听的视频中，媒体讲者提到……”等来源明确的表述；除非另有用户现场评论，不得据此推导“用户认为/用户说/用户偏好”。mixed 也必须区分可确认的现场话与媒体内容，无法区分时明确保留不确定性。
-只有稳定偏好、重要经历、持续情绪、长期计划，或完整且有回顾价值的讲座/会议才写长期记忆。持续 10 分钟以上且至少 3 个有效片段的 lecture/meeting 必须 shouldRemember=true，形成一条自足的整合记忆。
+只有稳定偏好、重要经历、持续情绪、长期计划，或完整且有回顾价值的讲座/会议才选 long_term。持续 10 分钟以上且至少 3 个有效片段的 lecture/meeting 必须 memoryDisposition=long_term，形成一条自足的整合记忆。
 如果 event 已有 memoryId，说明这是后续补充或恢复：必须更新原记忆，不能另建重复记忆。
+memoryText 在 candidate/long_term 时必填，使用 Papo 的共同经历口吻，区分事实、媒体来源与推测，不写系统分类说明。candidate 还必须填写 memoryKind、confidence 和 writePolicy；writePolicy 只能 ask_user 或 wait_feedback。
 只返回 JSON：
-{"kind":"lecture","title":"...","summary":"...","shouldRemember":true,"memoryText":"...","importanceReason":"...","tags":["..."]}
+{"kind":"activity","title":"...","summary":"...","memoryDisposition":"candidate","memoryText":"...","memoryKind":"long_theme","confidence":76,"writePolicy":"wait_feedback","userIntent":"...","importanceReason":"...","tags":["..."]}
 
 sessionContext:
 ${JSON.stringify({ id: session.id, currentContext: session.currentContext })}

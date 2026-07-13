@@ -868,6 +868,7 @@ export interface CompanionEventRecord {
   consolidatedRevision?: number;
   consolidatedAt?: string;
   episodeId?: string;
+  candidateId?: string;
   memoryId?: string;
   messageId?: string;
   error?: string;
