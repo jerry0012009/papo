@@ -1,13 +1,13 @@
 {
-  "versionName": "0.4.16",
-  "versionCode": 22,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.16.apk",
-  "publishedAt": "2026-07-13T06:23:00.000Z",
+  "versionName": "0.4.17",
+  "versionCode": 23,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.17.apk",
+  "publishedAt": "2026-07-13T06:44:35.000Z",
   "notes": [
-    "记忆列表和详情页显示事情实际发生的时间，不再显示用户确认记忆的时间",
-    "确认时间继续保留为记忆记录创建和反馈审计时间，与发生时间分开存储",
-    "旧记忆会从来源 episode 或原始素材时间自动补齐发生时间，无需手工修改"
+    "陪看通知新增“拍前置”和“拍后置”，锁屏或切到后台也可主动记录眼前画面",
+    "手动拍照成功后，下一次自动拍照从该时刻重新计时 5 分钟",
+    "手动照片复用断网持久队列和批次去重，服务恢复后不会重复覆盖照片"
   ],
-  "sha256": "d58c8586cf0d565be4ff7a29d5d6f64bb10a3d0d0d5e5773d47b09e5d19d3d7d",
-  "size": 22798612
+  "sha256": "4d8f373756aa0576f379d0e07122186a7659cea01d11195f923999090cd51723",
+  "size": 22800056
 }

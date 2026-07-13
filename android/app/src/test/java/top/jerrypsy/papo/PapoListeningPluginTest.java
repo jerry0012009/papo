@@ -21,4 +21,15 @@ public class PapoListeningPluginTest {
         assertEquals(120_000L, PapoListeningService.SLICE_MS);
         assertEquals(300_000L, PapoListeningService.CAMERA_INTERVAL_MS);
     }
+
+    @Test
+    public void manualPhotoResetsTheFiveMinuteCameraCadence() {
+        long capturedAt = 1_000_000L;
+        assertEquals(300_000L, PapoListeningService.nextCameraCaptureDelay(capturedAt, capturedAt, capturedAt + 900_000L));
+        assertEquals(-1L, PapoListeningService.nextCameraCaptureDelay(capturedAt, capturedAt, capturedAt + 299_999L));
+        assertEquals(0L, PapoListeningService.nextCameraCaptureDelay(capturedAt, 0, capturedAt + 900_000L));
+        assertEquals("front", PapoListeningService.captureFacingForAction(PapoListeningService.ACTION_CAPTURE_FRONT));
+        assertEquals("back", PapoListeningService.captureFacingForAction(PapoListeningService.ACTION_CAPTURE_BACK));
+        assertEquals(null, PapoListeningService.captureFacingForAction(PapoListeningService.ACTION_STOP));
+    }
 }

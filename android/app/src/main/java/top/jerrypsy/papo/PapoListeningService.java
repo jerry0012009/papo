@@ -34,6 +34,8 @@ public class PapoListeningService extends Service {
     static final String ACTION_START = "top.jerrypsy.papo.action.START_LISTENING";
     static final String ACTION_STOP = "top.jerrypsy.papo.action.STOP_LISTENING";
     static final String ACTION_CLEAR = "top.jerrypsy.papo.action.CLEAR_LISTENING";
+    static final String ACTION_CAPTURE_FRONT = "top.jerrypsy.papo.action.CAPTURE_FRONT";
+    static final String ACTION_CAPTURE_BACK = "top.jerrypsy.papo.action.CAPTURE_BACK";
     static final String EXTRA_EVENT = "event";
     static final String EXTRA_BATCH_ID = "batchId";
     static final String EXTRA_ERROR = "error";
@@ -48,8 +50,11 @@ public class PapoListeningService extends Service {
     private static final String SESSION_MODE = "session_mode";
     private static final String SESSION_FACING = "session_facing";
     private static final String SESSION_LAST_CAMERA_CAPTURE_AT = "session_last_camera_capture_at";
+    private static final String SESSION_CAMERA_INDEX = "session_camera_index";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private final Runnable scheduledCameraCapture = this::captureCameraFrame;
+    private final Runnable scheduledCameraRetry = this::startCamera;
     private final ExecutorService uploadExecutor = Executors.newSingleThreadExecutor();
     private MediaRecorder recorder;
     private File recordingFile;
@@ -63,6 +68,8 @@ public class PapoListeningService extends Service {
     private long lastCameraCaptureAt;
     private int cameraIndex;
     private boolean cameraReady;
+    private boolean cameraCaptureInFlight;
+    private String pendingManualFacing;
     private boolean stopping;
     private boolean discarding;
 
@@ -82,6 +89,16 @@ public class PapoListeningService extends Service {
         if (ACTION_CLEAR.equals(action)) {
             clearSessionData();
             return START_NOT_STICKY;
+        }
+        String requestedCaptureFacing = captureFacingForAction(action);
+        if (requestedCaptureFacing != null) {
+            if (!isActive(this)) {
+                stopSelf();
+                return START_NOT_STICKY;
+            }
+            if (startedAt == 0 && !restoreSession()) return START_NOT_STICKY;
+            requestManualCapture(requestedCaptureFacing);
+            return START_STICKY;
         }
         if (ACTION_START.equals(action)) {
             startSessionFromIntent(intent);
@@ -147,6 +164,8 @@ public class PapoListeningService extends Service {
         cameraIndex = 0;
         lastCameraCaptureAt = 0;
         cameraReady = false;
+        cameraCaptureInFlight = false;
+        pendingManualFacing = null;
         stopping = false;
         discarding = false;
         persistSession(true);
@@ -176,8 +195,11 @@ public class PapoListeningService extends Service {
         mode = sessionMode(this);
         cameraFacing = sessionFacing(this);
         batchIndex = Math.max(0, (int) ((System.currentTimeMillis() - startedAt) / SLICE_MS));
-        cameraIndex = Math.max(0, (int) ((System.currentTimeMillis() - startedAt) / CAMERA_INTERVAL_MS));
+        int elapsedCameraIndex = Math.max(0, (int) ((System.currentTimeMillis() - startedAt) / CAMERA_INTERVAL_MS));
+        cameraIndex = Math.max(elapsedCameraIndex, SecureListeningConfig.prefs(this).getInt(SESSION_CAMERA_INDEX, 0));
         lastCameraCaptureAt = SecureListeningConfig.prefs(this).getLong(SESSION_LAST_CAMERA_CAPTURE_AT, 0);
+        cameraCaptureInFlight = false;
+        pendingManualFacing = null;
         stopping = false;
         discarding = false;
         startForegroundNow();
@@ -299,6 +321,7 @@ public class PapoListeningService extends Service {
     }
 
     private void startCamera() {
+        handler.removeCallbacks(scheduledCameraRetry);
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
             broadcast(this, "error", null, "camera-permission-missing");
             mode = "listen";
@@ -317,7 +340,17 @@ public class PapoListeningService extends Service {
                     handler.post(() -> {
                         if (stopping || !"watch".equals(mode) || camera != nextCamera) return;
                         cameraReady = true;
-                        scheduleCameraCapture(0);
+                        String manualFacing = pendingManualFacing;
+                        if (manualFacing != null) {
+                            pendingManualFacing = null;
+                            if (!manualFacing.equals(cameraFacing)) {
+                                requestManualCapture(manualFacing);
+                            } else {
+                                captureCameraFrame();
+                            }
+                        } else {
+                            scheduleCameraCapture(nextCameraCaptureDelay(System.currentTimeMillis(), lastCameraCaptureAt, endAt));
+                        }
                     });
                 }
 
@@ -334,34 +367,84 @@ public class PapoListeningService extends Service {
     }
 
     private void scheduleCameraCapture(long delayMs) {
-        handler.postDelayed(this::captureCameraFrame, delayMs);
+        handler.removeCallbacks(scheduledCameraCapture);
+        if (delayMs < 0 || stopping || !"watch".equals(mode)) return;
+        handler.postDelayed(scheduledCameraCapture, delayMs);
     }
 
     private void captureCameraFrame() {
-        if (stopping || !"watch".equals(mode) || !cameraReady || camera == null) return;
+        handler.removeCallbacks(scheduledCameraCapture);
+        if (stopping || !"watch".equals(mode) || !cameraReady || camera == null || cameraCaptureInFlight) return;
+        cameraCaptureInFlight = true;
         cameraIndex += 1;
+        SecureListeningConfig.prefs(this).edit().putInt(SESSION_CAMERA_INDEX, cameraIndex).apply();
         String batchId = "native-" + startedAt + "-camera-" + String.format(Locale.US, "%03d", cameraIndex);
         String observedAt = isoNow();
         File imageFile = ListeningBatchUploader.createMediaFile(this, batchId, "-frame.jpg");
         camera.capture(imageFile, (captured, error) -> handler.post(() -> {
+            cameraCaptureInFlight = false;
             if (captured != null) {
                 lastCameraCaptureAt = System.currentTimeMillis();
                 SecureListeningConfig.prefs(this).edit().putLong(SESSION_LAST_CAMERA_CAPTURE_AT, lastCameraCaptureAt).apply();
                 enqueueBatch(batchId, observedAt, null, captured, null);
-                scheduleCameraCapture(Math.min(CAMERA_INTERVAL_MS, Math.max(1_000, endAt - System.currentTimeMillis())));
+                String manualFacing = pendingManualFacing;
+                if (manualFacing != null) {
+                    pendingManualFacing = null;
+                    requestManualCapture(manualFacing);
+                } else {
+                    scheduleCameraCapture(nextCameraCaptureDelay(System.currentTimeMillis(), lastCameraCaptureAt, endAt));
+                }
             } else {
                 handleCameraFailure(error == null ? "camera-capture-failed" : error);
             }
         }));
     }
 
+    private void requestManualCapture(String facing) {
+        if (stopping || !"watch".equals(mode)) return;
+        String requestedFacing = "back".equals(facing) ? "back" : "front";
+        handler.removeCallbacks(scheduledCameraCapture);
+        if (cameraCaptureInFlight) {
+            pendingManualFacing = requestedFacing;
+            return;
+        }
+        if (!requestedFacing.equals(cameraFacing)) {
+            pendingManualFacing = requestedFacing;
+            cameraFacing = requestedFacing;
+            persistSession(true);
+            startForegroundNow();
+            startCamera();
+            return;
+        }
+        if (cameraReady && camera != null) {
+            captureCameraFrame();
+            return;
+        }
+        pendingManualFacing = requestedFacing;
+        if (camera == null) startCamera();
+    }
+
+    static long nextCameraCaptureDelay(long now, long lastCaptureAt, long sessionEndAt) {
+        long nextAt = lastCaptureAt > 0 ? lastCaptureAt + CAMERA_INTERVAL_MS : now;
+        if (nextAt >= sessionEndAt) return -1;
+        return Math.max(0, nextAt - now);
+    }
+
+    static String captureFacingForAction(String action) {
+        if (ACTION_CAPTURE_FRONT.equals(action)) return "front";
+        if (ACTION_CAPTURE_BACK.equals(action)) return "back";
+        return null;
+    }
+
     private void handleCameraFailure(String error) {
         if (stopping || !"watch".equals(mode)) return;
         cameraReady = false;
+        cameraCaptureInFlight = false;
         if (camera != null) camera.close();
         camera = null;
         broadcast(this, "camera-retrying", null, error);
-        handler.postDelayed(this::startCamera, CAMERA_RETRY_MS);
+        handler.removeCallbacks(scheduledCameraRetry);
+        handler.postDelayed(scheduledCameraRetry, CAMERA_RETRY_MS);
     }
 
     private void startForegroundNow() {
@@ -375,22 +458,32 @@ public class PapoListeningService extends Service {
         PendingIntent open = PendingIntent.getActivity(this, 0, openIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         Intent stopIntent = new Intent(this, PapoListeningService.class).setAction(ACTION_STOP);
         PendingIntent stop = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        Intent frontIntent = new Intent(this, PapoListeningService.class).setAction(ACTION_CAPTURE_FRONT);
+        PendingIntent captureFront = PendingIntent.getService(this, 2, frontIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        Intent backIntent = new Intent(this, PapoListeningService.class).setAction(ACTION_CAPTURE_BACK);
+        PendingIntent captureBack = PendingIntent.getService(this, 3, backIntent, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         SecureListeningConfig.Config config = null;
         try {
             config = SecureListeningConfig.load(this);
         } catch (Exception ignored) {}
         String name = config == null ? "Papo" : config.creatureName;
-        String text = "watch".equals(mode) ? "正在后台陪你听和看" : "正在后台陪你听";
-        return new NotificationCompat.Builder(this, CHANNEL_ID)
+        String text = "watch".equals(mode)
+            ? "正在后台陪你听和看 · 当前" + ("back".equals(cameraFacing) ? "后置" : "前置")
+            : "正在后台陪你听";
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle(name)
             .setContentText(text)
             .setContentIntent(open)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .addAction(android.R.drawable.ic_media_pause, "停止", stop)
-            .build();
+            .setCategory(NotificationCompat.CATEGORY_SERVICE);
+        if ("watch".equals(mode)) {
+            builder
+                .addAction(android.R.drawable.ic_menu_camera, "拍前置", captureFront)
+                .addAction(android.R.drawable.ic_menu_camera, "拍后置", captureBack);
+        }
+        return builder.addAction(android.R.drawable.ic_media_pause, "停止", stop).build();
     }
 
     private void createNotificationChannel() {
@@ -419,6 +512,7 @@ public class PapoListeningService extends Service {
             .putString(SESSION_MODE, mode)
             .putString(SESSION_FACING, cameraFacing)
             .putLong(SESSION_LAST_CAMERA_CAPTURE_AT, lastCameraCaptureAt)
+            .putInt(SESSION_CAMERA_INDEX, cameraIndex)
             .apply();
     }
 
