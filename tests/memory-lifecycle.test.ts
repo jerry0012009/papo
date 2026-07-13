@@ -290,6 +290,40 @@ test("invalid long-term visual plans receive one model-authored repair before im
   assert.equal(imageCalls, 0, "planning repair must not spend an image call");
 });
 
+test("device playback memory narratives preserve media provenance and repair unsupported user attribution", async () => {
+  const profile = createCreatureProfile({ userId: "memory-device-playback", creatureName: "Papo" });
+  profile.episodes.push({
+    id: "episode_car_video", createdAt: "2026-07-13T01:00:00.000Z", source: "stream", audioSourceType: "device_playback",
+    inputSummary: "用户手机播放的汽车节目中，媒体讲者介绍了可旋转座椅。", noticed: "这是媒体讲者的内容，不是用户发言。",
+    possibleIntent: "用户在观看汽车节目", importanceReason: "持续的媒体内容", creatureResponse: "", memoryCandidateIds: [], weight: 70, tags: ["本机媒体播放"]
+  });
+  const target = memory("ltm_car_video", "用户播放的视频中，媒体讲者介绍了可旋转座椅和中央桌板。");
+  target.sourceEpisodeId = "episode_car_video";
+  let calls = 0;
+  const provider = providerWith((prompt) => {
+    calls += 1;
+    assert.match(prompt, /source_provenance/);
+    assert.match(prompt, /"audioSourceType":"device_playback"/);
+    if (!prompt.includes("上一次返回未通过校验")) return {
+      shortTitle: "汽车会客厅", narrative: "我趴在你旁边听着视频，觉得你对这些设计特别有共鸣。",
+      visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "手绘媒体观看场景",
+      imagePrompt: "A warm hand-drawn watercolor scene of a phone playing a car program, visible paper texture, no animals, no text.", relatedMemoryIds: [], needsClientReferences: false
+    };
+    assert.match(prompt, /cannot infer the user's opinion/);
+    return {
+      shortTitle: "汽车会客厅", narrative: "我记得你播放的视频里，媒体讲者介绍了可旋转座椅和中央桌板。",
+      visualMode: "imaginative_illustration", papoPresence: "absent", visualReason: "以手绘场景保留媒体内容来源",
+      imagePrompt: "A warm hand-drawn watercolor scene of a phone playing a car program, visible paper texture, no animals, no text.", relatedMemoryIds: [], needsClientReferences: false
+    };
+  });
+  provider.generateJsonFallback = provider.generateJson;
+
+  const plan = await planMemoryVisual(profile, target, provider, { requireVisual: true });
+  assert.equal(calls, 2);
+  assert.match(plan.narrative, /你播放的视频里，媒体讲者/);
+  assert.doesNotMatch(plan.narrative, /共鸣|趴在你旁边/);
+});
+
 test("persistent memory jobs retry failures and expose a terminal visual error without replacing the old image", async () => {
   const store = new MemoryProfileStore();
   const profile = await store.createProfile({ userId: "memory-retry", creatureName: "Papo" });

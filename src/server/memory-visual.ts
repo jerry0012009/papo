@@ -2,7 +2,7 @@ import { z } from "zod";
 import { clientContextFor } from "../core/client-document";
 import { MEMORY_VISUAL_POLICY_VERSION, memoryShortTitle, memoryVisualPromptHasForbiddenContent } from "../core/memory";
 import type { ImageReference, ModelProvider } from "../core/provider";
-import type { CreatureProfile, LongTermMemory, MediaAttachment } from "../core/types";
+import type { CreatureProfile, EpisodeMemory, LongTermMemory, MediaAttachment } from "../core/types";
 
 const planSchema = z.object({
   shortTitle: z.string().trim().min(2).max(24).transform((title) => [...title].slice(0, 8).join("")),
@@ -23,19 +23,21 @@ export interface MemoryVisualPlan extends z.infer<typeof planSchema> {}
 export async function planMemoryVisual(profile: CreatureProfile, memory: LongTermMemory, provider: ModelProvider, options: { requireVisual?: boolean } = {}) {
   const related = retrieveRelatedMemories(profile, memory);
   const client = clientContextFor(profile, `${memory.text} ${memory.tags.join(" ")}`);
-  const prompt = memoryVisualPlanPrompt(profile, memory, related, client, options);
+  const sourceEpisode = memory.sourceEpisodeId ? profile.episodes.find((episode) => episode.id === memory.sourceEpisodeId) : undefined;
+  const preferredName = profile.clientDocument?.preferredName?.trim();
+  const prompt = memoryVisualPlanPrompt(profile, memory, related, client, sourceEpisode, options);
   let raw: unknown;
   try {
     raw = await provider.generateJson<unknown>(prompt);
-    return validateMemoryVisualPlan(raw, related, memory, options);
+    return validateMemoryVisualPlan(raw, related, memory, sourceEpisode, preferredName, options);
   } catch (error) {
     const reason = error instanceof Error ? error.message.slice(0, 500) : "unknown validation error";
     raw = await (provider.generateJsonFallback ?? provider.generateJson)(`${prompt}\n\n上一次返回未通过校验：${reason}\n请修正上述具体错误，只返回一份完整、严格合法的 JSON。`);
-    return validateMemoryVisualPlan(raw, related, memory, options);
+    return validateMemoryVisualPlan(raw, related, memory, sourceEpisode, preferredName, options);
   }
 }
 
-function validateMemoryVisualPlan(raw: unknown, related: LongTermMemory[], memory: LongTermMemory, options: { requireVisual?: boolean }) {
+function validateMemoryVisualPlan(raw: unknown, related: LongTermMemory[], memory: LongTermMemory, sourceEpisode: EpisodeMemory | undefined, preferredName: string | undefined, options: { requireVisual?: boolean }) {
   const parsed = planSchema.safeParse(raw);
   if (!parsed.success) throw new Error(`invalid memory visual plan (${parsed.error.issues.map((issue) => issue.message).join("; ").slice(0, 180)})`);
   const allowed = new Set(related.map((item) => item.id));
@@ -47,7 +49,32 @@ function validateMemoryVisualPlan(raw: unknown, related: LongTermMemory[], memor
   if (plan.visualMode !== "no_visual" && plan.papoPresence !== "required" && !/no (?:pets?|animals?|anthropomorphic characters?)/i.test(plan.imagePrompt ?? "")) {
     throw new Error("non-Papo memory image prompt must explicitly exclude animals");
   }
+  validateNarrativeProvenance(plan, memory, sourceEpisode, preferredName);
   return plan;
+}
+
+function validateNarrativeProvenance(plan: MemoryVisualPlan, memory: LongTermMemory, sourceEpisode: EpisodeMemory | undefined, preferredName: string | undefined) {
+  if (sourceEpisode?.audioSourceType !== "device_playback") return;
+  const mediaProvenance = /视频|媒体|节目|播客|音频|录音|讲者|主播|播放|收听/;
+  if (!mediaProvenance.test(plan.narrative)) {
+    throw new Error("device_playback narrative must identify the content as media playback");
+  }
+
+  const userSubjects = ["你", "使用者", "用户", preferredName].filter((value): value is string => Boolean(value)).map(escapeRegex).join("|");
+  const directUserStance = new RegExp(`(?:${userSubjects}).{0,24}(?:认为|觉得|认同|赞同|共鸣|感兴趣|喜欢|偏好|重视|希望)`, "i");
+  const evidence = `${memory.text}\n${sourceEpisode.inputSummary}\n${sourceEpisode.noticed}\n${sourceEpisode.possibleIntent ?? ""}`;
+  if (directUserStance.test(plan.narrative) && !directUserStance.test(evidence)) {
+    throw new Error("device_playback narrative cannot infer the user's opinion, preference, or agreement from media speech");
+  }
+
+  const inventedSharedScene = /我.{0,12}(?:趴在你旁边|坐在你旁边|靠在你旁边|陪你一起看|陪你一起听)/;
+  if (inventedSharedScene.test(plan.narrative) && !inventedSharedScene.test(evidence)) {
+    throw new Error("device_playback narrative cannot invent a shared physical scene");
+  }
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function validatePaintedMemoryPrompt(prompt: string) {
@@ -116,7 +143,7 @@ function overlap(left: Set<string>, right: Set<string>) {
   return matched / Math.max(1, Math.min(left.size, right.size));
 }
 
-function memoryVisualPlanPrompt(profile: CreatureProfile, memory: LongTermMemory, related: LongTermMemory[], client: ReturnType<typeof clientContextFor>, options: { requireVisual?: boolean }) {
+function memoryVisualPlanPrompt(profile: CreatureProfile, memory: LongTermMemory, related: LongTermMemory[], client: ReturnType<typeof clientContextFor>, sourceEpisode: EpisodeMemory | undefined, options: { requireVisual?: boolean }) {
   const name = profile.clientDocument?.preferredName?.trim() || "你";
   const feedback = profile.feedbackHistory
     .filter((item) => item.targetId === memory.id && item.inputText?.trim())
@@ -129,6 +156,7 @@ ${options.requireVisual ? "- 这是已经正式留下的长期记忆，相册需
 - narrative 使用 ${profile.creatureName} 这个小动物观察者的第一人称视角，像它带着理解和感情在回想共同经历。
 - 对使用者直接称呼“${name}”或“你”，禁止写“用户”“该用户”“说话者”等客观系统口吻。
 - 温柔、具体、克制，不虚构未发生的动作、人物、地点、情绪或关系；事实以 target_memory 和来源附件为准。
+- source_provenance 是事实归属边界。audioSourceType=device_playback 表示内容来自使用者手机播放的视频、播客或其他媒体：必须明确写成“你播放/收听的媒体中，讲者提到……”，不得改写成使用者本人说过、认同、喜欢、有共鸣或持有该观点，也不得虚构 ${profile.creatureName} 当时趴在旁边、共同观看等物理场景。audioSourceType=mixed 时必须保留来源不确定性。
 - shortTitle 2-8 个中文字符，适合相册式缩略卡。
 
 视觉要求：
@@ -155,7 +183,8 @@ ${options.requireVisual ? "- 这是已经正式留下的长期记忆，相册需
 
 pet_profile：${JSON.stringify({ name: profile.creatureName, ...profile.petProfile })}
 client_context：${JSON.stringify(client)}
-target_memory：${JSON.stringify({ id: memory.id, text: memory.text, shortTitle: memory.shortTitle, tags: memory.tags, occurredAt: memory.occurredAt ?? memory.createdAt, attachments: memory.attachments?.map((item) => ({ id: item.id, label: item.label, kind: item.kind })) })}
+target_memory：${JSON.stringify({ id: memory.id, text: memory.text, shortTitle: memory.shortTitle, tags: memory.tags, occurredAt: memory.occurredAt ?? memory.createdAt, sourceEpisodeId: memory.sourceEpisodeId, attachments: memory.attachments?.map((item) => ({ id: item.id, label: item.label, kind: item.kind })) })}
+source_provenance：${JSON.stringify(sourceEpisode ? { episodeId: sourceEpisode.id, audioSourceType: sourceEpisode.audioSourceType ?? "unknown", cognitionSource: sourceEpisode.cognitionSource, inputSummary: sourceEpisode.inputSummary, noticed: sourceEpisode.noticed, possibleIntent: sourceEpisode.possibleIntent, importanceReason: sourceEpisode.importanceReason, sourceObservedAt: sourceEpisode.sourceObservedAt ?? sourceEpisode.createdAt } : null)}
 target_feedback：${JSON.stringify(feedback)}
 related_memories：${JSON.stringify(related.map((item) => ({ id: item.id, text: item.text, shortTitle: item.shortTitle, tags: item.tags, hasImage: Boolean(item.visual || item.attachments?.some((a) => a.kind === "image")) })))}
 
