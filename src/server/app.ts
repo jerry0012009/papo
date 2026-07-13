@@ -29,6 +29,8 @@ import { PersistentTurnWorker } from "./turn-worker";
 import { TransientAudioStore, type RetainedAudioAsset } from "./transient-audio";
 import { collectCompanionTurn, companionCognitionContext, processCompanionTurnContext, runCompanionSessionSweep } from "./companion-session";
 import { buildAudioSensingPrompt, normalizeAudioSensingResult } from "./audio-sensing";
+import { AiRedemptionError, InsufficientAiBalanceError, JsonAiBillingService } from "./ai-billing";
+import { createMeteredProvider } from "./metered-provider";
 
 const createProfileSchema = z.object({
   userId: z.string().min(3).max(40).regex(/^[a-zA-Z0-9_-]+$/).optional(),
@@ -56,6 +58,7 @@ const updateActionCardSchema = z.object({
 });
 
 const dismissJobSchema = z.object({ dismissed: z.literal(true) });
+const redeemCodeSchema = z.object({ code: z.string().trim().min(6).max(80) });
 
 const buttonSchema = z.object({
   text: z.string().min(1).max(4000)
@@ -243,12 +246,15 @@ export function createApp(input: {
   proactive?: { enabled?: boolean; intervalMs?: number };
   hermes?: { enabled?: boolean; bridge?: HermesBridge };
   turns?: { autoStart?: boolean; concurrency?: number; intervalMs?: number };
+  billing?: JsonAiBillingService;
 } = {}) {
   const push = input.push ?? createWebPushService();
   const deviceAuth = input.deviceAuth ?? new JsonDeviceAuthService();
   const baseStore = input.store ?? new JsonProfileStore();
   const store = push.enabled ? new PushNotifyingProfileStore(baseStore, push) : baseStore;
-  const provider = input.provider ?? createModelProvider();
+  const billing = input.billing ?? new JsonAiBillingService();
+  const baseProvider = input.provider ?? createModelProvider();
+  const provider = !input.provider || input.billing ? createMeteredProvider(baseProvider, billing) : baseProvider;
   const hermesBridge = input.hermes?.bridge ?? (input.hermes?.enabled ? createHermesBridge({ store, provider }) : undefined);
   const app = express();
   const nativeBatchLocks = new Map<string, Promise<void>>();
@@ -259,12 +265,13 @@ export function createApp(input: {
   );
   transientAudioStore.start();
   app.locals.transientAudioStore = transientAudioStore;
+  app.locals.aiBilling = billing;
 
   const turnWorker = new PersistentTurnWorker({
     store,
     concurrency: input.turns?.concurrency ?? 3,
     intervalMs: input.turns?.intervalMs ?? 1_000,
-    handle: processConversationJob
+    handle: (userId, job) => billing.withContext({ userId, turnId: job.turnId, jobId: job.id, sourceId: job.sourceIds[0], feature: job.type }, () => processConversationJob(userId, job))
   });
   app.locals.turnWorker = turnWorker;
   if (input.turns?.autoStart !== false) void turnWorker.start();
@@ -475,17 +482,7 @@ export function createApp(input: {
         if (target.status !== "promoted") return;
         const memory = latest.longTermMemories.find((item) => item.sourceEpisodeId === target.sourceEpisodeId);
         if (!memory || memory.visual) return;
-        memory.visual = preview.previewVisual;
-        memory.visualPrompt = preview.previewPrompt;
-        memory.visualMode = preview.previewMode;
-        memory.papoPresence = preview.previewPapoPresence;
-        memory.visualPlanReason = preview.previewPlanReason;
-        memory.narrative = preview.previewNarrative ?? memory.narrative;
-        memory.visualPolicyVersion = MEMORY_VISUAL_POLICY_VERSION;
-        memory.visualStatus = preview.previewVisual ? "ready" : preview.previewStatus === "not_needed" ? "not_needed" : "failed";
-        memory.visualUpdatedAt = preview.previewUpdatedAt;
-        memory.enrichedRevision = memory.contentRevision;
-        memory.enrichmentStatus = "completed";
+        applyCandidatePreviewToMemory(memory, preview);
       });
       const committed = await store.getProfile(userId);
       const committedMemory = committed?.longTermMemories.find((item) => item.sourceEpisodeId === candidate.sourceEpisodeId && item.weight > 0);
@@ -493,6 +490,11 @@ export function createApp(input: {
         await updateClientDocument(committed, provider, [committedMemory.id]);
         await store.updateProfile(userId, (latest) => {
           if ((committed.clientDocument?.revision ?? 0) > (latest.clientDocument?.revision ?? 0)) latest.clientDocument = committed.clientDocument;
+          const target = latest.memoryCandidates.find((item) => item.id === candidate.id);
+          const memory = latest.longTermMemories.find((item) => item.sourceEpisodeId === candidate.sourceEpisodeId && item.weight > 0);
+          const sameRevision = (memory?.contentRevision ?? 1) === (committedMemory.contentRevision ?? 1);
+          const sameVisual = !memory?.visual || memory.visual.id === preview.previewVisual?.id;
+          if (target?.status === "promoted" && memory && sameRevision && sameVisual) applyCandidatePreviewToMemory(memory, preview);
         });
       }
       return { attachmentIds: preview.previewVisual ? [preview.previewVisual.id] : [], memorySourceIds: [job.id, candidate.id] };
@@ -707,7 +709,7 @@ export function createApp(input: {
   }
 
   const nativeIngestQueue = new NativeIngestQueue(
-    processNativeBatch,
+    (userId, payload) => billing.withContext({ userId, sourceId: payload.batchId, feature: "companion_ingest" }, () => processNativeBatch(userId, payload)),
     input.nativeIngest?.directory,
     input.nativeIngest?.intervalMs,
     input.nativeIngest?.audioRetentionMs
@@ -716,6 +718,12 @@ export function createApp(input: {
 
   app.use(cors());
   app.use(express.json({ limit: "28mb" }));
+  app.use((req, _res, next) => {
+    const match = req.path.match(/^\/api\/profiles\/([^/]+)/);
+    if (!match) return next();
+    const userId = decodeURIComponent(match[1]);
+    return billing.withContext({ userId, sourceId: req.header("x-papo-source-id") ?? undefined, feature: `http:${req.method.toLowerCase()}:${req.path.split("/").slice(4).join("/") || "profile"}` }, next);
+  });
 
   app.get("/api/health", (_req, res) => {
     res.json({ ok: true, provider: provider.kind });
@@ -729,6 +737,28 @@ export function createApp(input: {
       usesRealModel: provider.usesRealModel,
       diagnostics: provider.diagnostics
     });
+  });
+
+  app.get("/api/profiles/:userId/ai-usage", async (req, res, next) => {
+    try {
+      await requireProfile(store, req.params.userId, req);
+      const requestedLimit = Number(req.query.limit ?? 200);
+      const limit = Number.isFinite(requestedLimit) ? requestedLimit : 200;
+      res.json({ account: await billing.account(req.params.userId, limit) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post("/api/profiles/:userId/ai-usage/redeem", async (req, res, next) => {
+    try {
+      await requireProfile(store, req.params.userId, req);
+      const body = redeemCodeSchema.parse(req.body);
+      const redemption = await billing.redeem(req.params.userId, body.code);
+      res.json({ redemption, account: await billing.account(req.params.userId) });
+    } catch (error) {
+      next(error);
+    }
   });
 
   app.get("/api/push/config", (_req, res) => {
@@ -788,52 +818,37 @@ export function createApp(input: {
     }
   });
 
-  app.post("/api/image-summary", async (req, res, next) => {
+  app.post("/api/profiles/:userId/image-summary", async (req, res, next) => {
     try {
+      await requireProfile(store, req.params.userId, req);
       const body = imageSummarySchema.parse(req.body);
       const asset = await saveImageAsset(body.dataUrl, body.label ?? "照片");
       const prompt = `请用中文把这张图片压缩成一段 80 字以内的生活场景摘要，给 Curious Mode 当 image_summary。标签：${body.label ?? "截图"}`;
       const summary = (await provider.summarizeImage(body.dataUrl, prompt)).slice(0, 600);
-      const trace = imageSensingTrace(provider, body.label ?? "截图", summary);
-      res.json({
-        summary,
-        asset,
-        provider: sensingProvider(provider, "vision"),
-        model: provider.diagnostics?.visionModel,
-        route: "chat_completions",
-        semanticSource: "llm",
-        sensingTrace: trace
-      });
+      res.json({ summary, asset, provider: sensingProvider(provider, "vision"), model: provider.diagnostics?.visionModel, route: "chat_completions", semanticSource: "llm", sensingTrace: imageSensingTrace(provider, body.label ?? "截图", summary) });
     } catch (error) {
       next(error);
     }
   });
 
-  app.post("/api/camera-observation", async (req, res, next) => {
+  app.post("/api/profiles/:userId/camera-observation", async (req, res, next) => {
     try {
+      await requireProfile(store, req.params.userId, req);
       const body = imageSummarySchema.parse(req.body);
       const prompt = `请用中文把这张定时摄像头画面压缩成一段 100 字以内的生活场景观察，给 Papo 后续注意机制使用。只描述画面直接可见的事实，不推断身份、关系、情绪、隐私或画面外事件；看不清就返回空文本。标签：${body.label ?? "陪伴画面"}`;
       const summary = (await provider.summarizeImage(body.dataUrl, prompt)).slice(0, 600).trim();
-      const trace = imageSensingTrace(provider, body.label ?? "陪伴画面", summary);
-      res.json({
-        summary,
-        provider: sensingProvider(provider, "vision"),
-        model: provider.diagnostics?.visionModel,
-        route: "chat_completions",
-        semanticSource: "llm",
-        sensingTrace: trace
-      });
+      res.json({ summary, provider: sensingProvider(provider, "vision"), model: provider.diagnostics?.visionModel, route: "chat_completions", semanticSource: "llm", sensingTrace: imageSensingTrace(provider, body.label ?? "陪伴画面", summary) });
     } catch (error) {
       next(error);
     }
   });
 
-  app.post("/api/audio-observation", async (req, res, next) => {
+  app.post("/api/profiles/:userId/audio-observation", async (req, res, next) => {
     try {
+      await requireProfile(store, req.params.userId, req);
       const body = audioObservationSchema.parse(req.body);
       const prompt = buildAudioSensingPrompt(body.label ?? "录音");
       const audioObservation = normalizeAudioObservation(await observeAudioForSensing(provider, body.dataUrl, prompt));
-      const trace = audioSensingTrace(provider, body.label ?? "录音", audioObservation);
       res.json({
         observation: audioObservation.text,
         noSpeech: !audioObservation.text,
@@ -842,12 +857,22 @@ export function createApp(input: {
         model: provider.diagnostics?.audioModel,
         route: provider.diagnostics?.audioRoute,
         semanticSource: "llm",
-        sensingTrace: trace
+        sensingTrace: audioSensingTrace(provider, body.label ?? "录音", audioObservation)
       });
     } catch (error) {
       next(error);
     }
   });
+
+  const requireScopedMediaClient = (_req: express.Request, res: express.Response) => {
+    res.status(426).json({
+      code: "client_upgrade_required",
+      error: "当前客户端版本过旧，请更新 Papo 后继续使用照片和录音功能"
+    });
+  };
+  app.post("/api/image-summary", requireScopedMediaClient);
+  app.post("/api/camera-observation", requireScopedMediaClient);
+  app.post("/api/audio-observation", requireScopedMediaClient);
 
   app.get("/api/profiles", async (_req, res, next) => {
     try {
@@ -864,6 +889,7 @@ export function createApp(input: {
         throw new HttpError(409, "User ID already exists");
       }
       const profile = await store.createProfile(body);
+      await billing.account(profile.userId, 1);
       res.status(201).json({ profile: publicProfile(profile) });
     } catch (error) {
       next(error);
@@ -1231,8 +1257,23 @@ export function createApp(input: {
         cognitionTrace
       });
       await store.saveProfile(profile);
+      let saved = await store.updateProfile(profile.userId, reconcilePromotedCandidateVisuals);
+      const readyMemoryIds = (saved?.longTermMemories ?? [])
+        .filter((memory) => relatedMemoryIds.includes(memory.id) && memory.enrichmentStatus === "completed")
+        .filter((memory) => !(saved?.jobs ?? []).some((job) => job.type === "memory_enrichment" && job.memoryId === memory.id && (job.status === "queued" || job.status === "running")))
+        .map((memory) => memory.id);
+      if (saved && readyMemoryIds.length) {
+        try {
+          await updateClientDocument(saved, provider, readyMemoryIds);
+          saved = await store.updateProfile(profile.userId, (latest) => {
+            if ((saved?.clientDocument?.revision ?? 0) > (latest.clientDocument?.revision ?? 0)) latest.clientDocument = saved?.clientDocument;
+          });
+        } catch (error) {
+          console.warn(`Client document update skipped after feedback for ${profile.userId}: ${error instanceof Error ? error.message : "unknown validation error"}`);
+        }
+      }
       turnWorker.wake();
-      res.json({ profile: publicProfile(profile), feedback });
+      res.json({ profile: publicProfile(saved ?? profile), feedback });
     } catch (error) {
       next(error);
     }
@@ -1415,12 +1456,20 @@ export function createApp(input: {
       res.status(error.status).json({ error: error.message });
       return;
     }
+    if (error instanceof InsufficientAiBalanceError) {
+      res.status(402).json({ error: "AI 余额不足，暂时不能生成图片或视频", code: error.code, requiredMicros: error.requiredMicros, balanceMicros: error.balanceMicros });
+      return;
+    }
+    if (error instanceof AiRedemptionError) {
+      res.status(400).json({ error: error.message, code: error.code });
+      return;
+    }
     console.error(error);
     res.status(500).json({ error: sensingError(error) });
   });
 
   if (input.proactive?.enabled) {
-    startProactiveEmergenceLoop(store, provider, input.proactive.intervalMs, hermesBridge);
+    startProactiveEmergenceLoop(store, provider, input.proactive.intervalMs, hermesBridge, billing);
   }
   if (input.hermes?.enabled) {
     hermesBridge?.start();
@@ -1449,6 +1498,41 @@ function applyMemoryEnrichmentResult(target: LongTermMemory, generated: LongTerm
       jobId: job.id,
       sourceIds: [...new Set([...(generated.visual.sourceIds ?? []), ...job.sourceIds, job.turnId, job.id, target.id])]
     } : undefined;
+  }
+}
+
+function applyCandidatePreviewToMemory(memory: LongTermMemory, preview: Awaited<ReturnType<typeof createCandidateVisualPreview>>) {
+  memory.visual = preview.previewVisual;
+  memory.visualPrompt = preview.previewPrompt;
+  memory.visualMode = preview.previewMode;
+  memory.papoPresence = preview.previewPapoPresence;
+  memory.visualPlanReason = preview.previewPlanReason;
+  memory.narrative = preview.previewNarrative ?? memory.narrative;
+  memory.visualPolicyVersion = MEMORY_VISUAL_POLICY_VERSION;
+  memory.visualStatus = preview.previewVisual ? "ready" : preview.previewStatus === "not_needed" ? "not_needed" : "failed";
+  memory.visualUpdatedAt = preview.previewUpdatedAt;
+  memory.enrichedRevision = memory.contentRevision;
+  memory.enrichmentStatus = "completed";
+  memory.enrichmentError = undefined;
+}
+
+function reconcilePromotedCandidateVisuals(profile: CreatureProfile) {
+  for (const candidate of profile.memoryCandidates.filter((item) => item.status === "promoted")) {
+    if (!candidate.previewVisual && candidate.previewStatus !== "not_needed") continue;
+    const memory = profile.longTermMemories.find((item) => item.sourceEpisodeId === candidate.sourceEpisodeId && item.weight > 0);
+    if (!memory || (memory.contentRevision ?? 1) !== 1 || memory.enrichmentStatus !== "pending") continue;
+    memory.visual = candidate.previewVisual;
+    memory.visualPrompt = candidate.previewPrompt;
+    memory.visualMode = candidate.previewMode;
+    memory.papoPresence = candidate.previewPapoPresence;
+    memory.visualPlanReason = candidate.previewPlanReason;
+    memory.narrative = candidate.previewNarrative ?? memory.narrative;
+    memory.visualPolicyVersion = candidate.previewVisual ? MEMORY_VISUAL_POLICY_VERSION : memory.visualPolicyVersion;
+    memory.visualStatus = candidate.previewVisual ? "ready" : "not_needed";
+    memory.visualUpdatedAt = candidate.previewUpdatedAt;
+    memory.enrichedRevision = 1;
+    memory.enrichmentStatus = "completed";
+    memory.enrichmentError = undefined;
   }
 }
 
@@ -1487,17 +1571,17 @@ function isUnreadableAudioInputError(error: unknown) {
   return /Audio input conversion failed|invalid_request_audio|Failed to load audio file|Invalid data found when processing input|EBML header parsing failed|operation was aborted|AbortError|aborted/i.test(message);
 }
 
-export function startProactiveEmergenceLoop(store: ProfileStore, provider: ModelProvider, intervalMs = 60_000, hermesBridge?: HermesBridge) {
+export function startProactiveEmergenceLoop(store: ProfileStore, provider: ModelProvider, intervalMs = 60_000, hermesBridge?: HermesBridge, billing?: JsonAiBillingService) {
   let running = false;
   const tick = async () => {
     if (running) return;
     running = true;
     try {
-      await runAutomaticDreamingSweep(store, provider);
-      await runDogStateSweep(store, provider);
+      await runAutomaticDreamingSweep(store, provider, undefined, billing);
+      await runDogStateSweep(store, provider, undefined, billing);
       await hermesBridge?.checkTimeouts();
-      await runCompanionSessionSweep(store, provider);
-      await runProactiveEmergenceSweep(store, provider);
+      await runCompanionSessionSweep(store, provider, undefined, (userId, run) => withBillingContext(billing, userId, "companion_consolidation", run));
+      await runProactiveEmergenceSweep(store, provider, undefined, billing);
     } catch (error) {
       console.error("Background cognition sweep failed", error);
     } finally {
@@ -1510,7 +1594,7 @@ export function startProactiveEmergenceLoop(store: ProfileStore, provider: Model
   return () => clearInterval(timer);
 }
 
-export async function runAutomaticDreamingSweep(store: ProfileStore, provider: ModelProvider, now = new Date().toISOString()) {
+export async function runAutomaticDreamingSweep(store: ProfileStore, provider: ModelProvider, now = new Date().toISOString(), billing?: JsonAiBillingService) {
   const summaries = await store.listProfiles();
   let checked = 0;
   let applied = 0;
@@ -1524,7 +1608,7 @@ export async function runAutomaticDreamingSweep(store: ProfileStore, provider: M
     if (!due.due) continue;
     checked += 1;
     try {
-      const dream = await semanticDreamMemories(profile, provider, { now, recordQuiet: true });
+      const dream = await withBillingContext(billing, profile.userId, "automatic_dreaming", () => semanticDreamMemories(profile, provider, { now, recordQuiet: true }));
       if (dream?.operations.length) applied += 1;
       else quiet += 1;
       await store.saveProfile(profile);
@@ -1539,7 +1623,7 @@ export async function runAutomaticDreamingSweep(store: ProfileStore, provider: M
   return { checked, applied, quiet, deferred };
 }
 
-export async function runDogStateSweep(store: ProfileStore, provider: ModelProvider, now = new Date().toISOString()) {
+export async function runDogStateSweep(store: ProfileStore, provider: ModelProvider, now = new Date().toISOString(), billing?: JsonAiBillingService) {
   const summaries = await store.listProfiles();
   let checked = 0;
   let applied = 0;
@@ -1549,7 +1633,7 @@ export async function runDogStateSweep(store: ProfileStore, provider: ModelProvi
     if (!profile || !isBackgroundCognitionEligible(profile, now) || !isDogStateCheckDue(profile, now)) continue;
     checked += 1;
     try {
-      const state = await refreshDogStateIfDue(profile, provider, { now });
+      const state = await withBillingContext(billing, profile.userId, "dog_state", () => refreshDogStateIfDue(profile, provider, { now }));
       if (state) applied += 1;
       await store.saveProfile(profile);
     } catch (error) {
@@ -1560,7 +1644,7 @@ export async function runDogStateSweep(store: ProfileStore, provider: ModelProvi
   return { checked, applied, deferred };
 }
 
-export async function runProactiveEmergenceSweep(store: ProfileStore, provider: ModelProvider, now = new Date().toISOString()) {
+export async function runProactiveEmergenceSweep(store: ProfileStore, provider: ModelProvider, now = new Date().toISOString(), billing?: JsonAiBillingService) {
   const summaries = await store.listProfiles();
   let checked = 0;
   let active = 0;
@@ -1581,7 +1665,7 @@ export async function runProactiveEmergenceSweep(store: ProfileStore, provider: 
     checked += 1;
     const beforeSemanticIds = semanticRecordIds(profile);
     try {
-      const emergence = await semanticDecideEmergence(profile, provider, now, { delivery: "proactive" });
+      const emergence = await withBillingContext(billing, profile.userId, "proactive_emergence", () => semanticDecideEmergence(profile, provider, now, { delivery: "proactive" }));
       const modelRuns = newSemanticRuns(profile, beforeSemanticIds);
       const cognitionTrace = emergenceCognitionTrace(emergence, provider, modelRuns);
       settleProactiveEmergence(profile, emergence, now);
@@ -1600,10 +1684,10 @@ export async function runProactiveEmergenceSweep(store: ProfileStore, provider: 
         quiet += 1;
       }
       await store.saveProfile(profile);
-      await Promise.all([
+      await withBillingContext(billing, profile.userId, "proactive_media", () => Promise.all([
         queueEmergenceIllustrationGeneration({ store, userId: profile.userId, emergence, provider }),
         queueEmergenceActionCardGeneration({ store, userId: profile.userId, emergence, provider })
-      ]);
+      ]));
     } catch (error) {
       console.error(`Proactive emergence failed for ${summary.userId}`, error);
       deferProactiveEmergence(profile, now, 30);
@@ -1612,6 +1696,10 @@ export async function runProactiveEmergenceSweep(store: ProfileStore, provider: 
     }
   }
   return { checked, active, quiet, deferred };
+}
+
+function withBillingContext<T>(billing: JsonAiBillingService | undefined, userId: string, feature: string, run: () => Promise<T>) {
+  return billing ? billing.withContext({ userId, feature }, run) : run();
 }
 
 function imageAssetDir() {
@@ -2870,6 +2958,7 @@ function publicProfile(profile: CreatureProfile): CreatureProfile {
 }
 
 function publicJobError(job: ConversationJobRecord) {
+  if (job.error?.includes("AI 余额不足")) return "AI 余额不足，充值后可以继续生成图片或视频";
   if (job.type === "illustration") return "图片暂时没有生成成功，文字回复和原消息仍已保留";
   if (job.type === "action_card") return "动作暂时没有生成成功，原动作卡和消息仍已保留";
   if (job.type === "image_understanding") return "这张照片暂时没有理解完成，原图仍已保留";

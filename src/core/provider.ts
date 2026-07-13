@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -7,6 +8,24 @@ import { promisify } from "node:util";
 import type { ProviderKind } from "./types";
 
 const execFileAsync = promisify(execFile);
+const providerUsageCapture = new AsyncLocalStorage<ProviderUsageReport[]>();
+
+export interface ProviderUsageReport {
+  model?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+  cachedTokens?: number;
+  audioTokens?: number;
+  imageTokens?: number;
+  costUsd?: number;
+}
+
+export async function captureProviderUsage<T>(run: () => Promise<T>) {
+  const reports: ProviderUsageReport[] = [];
+  const result = await providerUsageCapture.run(reports, run);
+  return { result, reports };
+}
 
 export interface ModelProvider {
   kind: ProviderKind;
@@ -490,7 +509,8 @@ async function callDashscopeVideoGeneration(
       })
     });
     if (!response.ok) throw new Error(`DashScope video submission failed: ${response.status} ${await responseErrorSummary(response)}`);
-    const created = await response.json() as { output?: { task_id?: string; task_status?: string }; code?: string; message?: string };
+    const created = await response.json() as { output?: { task_id?: string; task_status?: string }; usage?: RawProviderUsage; code?: string; message?: string };
+    reportProviderUsage(created.usage, config.model);
     const taskId = created.output?.task_id;
     if (!taskId) throw new Error(`DashScope video submission returned no task id (${created.code ?? "unknown"}: ${created.message ?? "empty response"})`);
     const endpointUrl = new URL(config.endpoint);
@@ -500,7 +520,8 @@ async function callDashscopeVideoGeneration(
       await delay(config.pollIntervalMs);
       const statusResponse = await fetch(taskUrl, { signal: controller.signal, headers: { Authorization: `Bearer ${config.apiKey}` } });
       if (!statusResponse.ok) throw new Error(`DashScope video status failed: ${statusResponse.status} ${await responseErrorSummary(statusResponse)}`);
-      const status = await statusResponse.json() as { output?: { task_status?: string; video_url?: string; code?: string; message?: string } };
+      const status = await statusResponse.json() as { output?: { task_status?: string; video_url?: string; code?: string; message?: string }; usage?: RawProviderUsage };
+      reportProviderUsage(status.usage, config.model);
       const state = status.output?.task_status?.toUpperCase();
       if (state === "FAILED" || state === "CANCELED" || state === "UNKNOWN") {
         throw new Error(`DashScope video generation failed: ${status.output?.code ?? state} ${status.output?.message ?? ""}`.trim());
@@ -583,7 +604,8 @@ async function callChatCompletions(
       if (isProviderRefusalText(summary)) throw new ModelProviderRefusalError("safety");
       throw new Error(`Model provider failed: ${response.status} ${summary}`);
     }
-    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string; refusal?: string } }> };
+    const data = (await response.json()) as { model?: string; usage?: RawProviderUsage; choices?: Array<{ message?: { content?: string; refusal?: string } }> };
+    reportProviderUsage(data.usage, data.model ?? input.model);
     const message = data.choices?.[0]?.message;
     if (message?.refusal) throw new ModelProviderRefusalError("policy");
     return { content: message?.content ?? message?.refusal ?? "" };
@@ -631,7 +653,8 @@ async function callVisionSummary(
     if (!response.ok) {
       throw new Error(`Vision provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     }
-    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const data = (await response.json()) as { model?: string; usage?: RawProviderUsage; choices?: Array<{ message?: { content?: string } }> };
+    reportProviderUsage(data.usage, data.model ?? input.visionModel ?? input.model);
     return { content: data.choices?.[0]?.message?.content?.trim() ?? "" };
   } finally {
     clearTimeout(timeout);
@@ -678,7 +701,8 @@ async function callAudioObservation(
     if (!response.ok) {
       throw new Error(`Audio provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     }
-    const data = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    const data = (await response.json()) as { model?: string; usage?: RawProviderUsage; choices?: Array<{ message?: { content?: string } }> };
+    reportProviderUsage(data.usage, data.model ?? input.audioModel ?? input.model);
     return { content: data.choices?.[0]?.message?.content?.trim() ?? "" };
   } finally {
     clearTimeout(timeout);
@@ -713,7 +737,8 @@ async function callAudioTranscriptionEndpoint(
     if (!response.ok) {
       throw new Error(`Audio provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     }
-    const data = (await response.json()) as { text?: string; choices?: Array<{ message?: { content?: string } }> };
+    const data = (await response.json()) as { model?: string; usage?: RawProviderUsage; text?: string; choices?: Array<{ message?: { content?: string } }> };
+    reportProviderUsage(data.usage, data.model ?? input.audioModel ?? input.model);
     return { content: (data.text ?? data.choices?.[0]?.message?.content ?? "").trim() };
   } finally {
     clearTimeout(timeout);
@@ -754,9 +779,12 @@ async function callImageGeneration(
       throw new Error(`Image generation provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     }
     const data = (await response.json()) as {
+      model?: string;
+      usage?: RawProviderUsage;
       data?: Array<{ b64_json?: string; url?: string }>;
       images?: Array<{ b64_json?: string; url?: string }>;
     };
+    reportProviderUsage(data.usage, data.model ?? model);
     const item = data.data?.[0] ?? data.images?.[0];
     const raw = item?.b64_json ?? item?.url;
     if (!raw) throw new Error("Image generation provider returned no image");
@@ -812,9 +840,12 @@ async function callOpenRouterImageGeneration(
       throw new Error(`Image generation provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     }
     const data = (await response.json()) as {
+      model?: string;
+      usage?: RawProviderUsage;
       data?: Array<{ b64_json?: string; url?: string; media_type?: string }>;
       images?: Array<{ b64_json?: string; url?: string; media_type?: string }>;
     };
+    reportProviderUsage(data.usage, data.model ?? model);
     const item = data.data?.[0] ?? data.images?.[0];
     const raw = item?.b64_json ?? item?.url;
     if (!raw) throw new Error("Image generation provider returned no image");
@@ -870,6 +901,8 @@ async function callChatImageGeneration(
       throw new Error(`Image generation provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     }
     const data = (await response.json()) as {
+      model?: string;
+      usage?: RawProviderUsage;
       choices?: Array<{
         message?: {
           images?: Array<{ image_url?: { url?: string }; url?: string; b64_json?: string }>;
@@ -877,6 +910,7 @@ async function callChatImageGeneration(
         };
       }>;
     };
+    reportProviderUsage(data.usage, data.model ?? model);
     const message = data.choices?.[0]?.message;
     const raw = extractGeneratedImage(message);
     if (!raw) throw new Error("Image generation provider returned no image");
@@ -983,6 +1017,7 @@ async function callVideoGeneration(
     });
     if (!response.ok) throw new Error(`Video generation provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     const initial = await response.json();
+    reportProviderUsage(usageFromUnknown(initial), model);
     const direct = extractGeneratedVideo(initial);
     if (direct) return await videoResultFromRaw(direct, model, controller.signal);
 
@@ -998,6 +1033,7 @@ async function callVideoGeneration(
       });
       if (!status.ok) throw new Error(`Video generation status failed: ${status.status} ${await responseErrorSummary(status)}`);
       const data = await status.json();
+      reportProviderUsage(usageFromUnknown(data), model);
       const statusText = String((data as Record<string, unknown>).status ?? (data as Record<string, unknown>).state ?? "").toLowerCase();
       if (/fail|error|cancel/.test(statusText)) throw new Error(`Video generation failed: ${JSON.stringify(data).slice(0, 600)}`);
       const raw = extractGeneratedVideo(data);
@@ -1128,6 +1164,53 @@ async function videoResultFromRaw(raw: string, model: string, signal: AbortSigna
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+interface RawProviderUsage {
+  prompt_tokens?: number;
+  input_tokens?: number;
+  completion_tokens?: number;
+  output_tokens?: number;
+  total_tokens?: number;
+  cost?: number;
+  prompt_tokens_details?: { cached_tokens?: number; audio_tokens?: number };
+  completion_tokens_details?: { audio_tokens?: number; image_tokens?: number };
+  input_tokens_details?: { cached_tokens?: number; audio_tokens?: number };
+  output_tokens_details?: { audio_tokens?: number; image_tokens?: number };
+  cost_details?: { upstream_inference_cost?: number };
+}
+
+function reportProviderUsage(usage: RawProviderUsage | undefined, model: string) {
+  if (!usage) return;
+  const inputTokens = finiteUsage(usage.prompt_tokens ?? usage.input_tokens);
+  const outputTokens = finiteUsage(usage.completion_tokens ?? usage.output_tokens);
+  const report: ProviderUsageReport = {
+    model,
+    inputTokens,
+    outputTokens,
+    totalTokens: finiteUsage(usage.total_tokens) ?? ((inputTokens ?? 0) + (outputTokens ?? 0) || undefined),
+    cachedTokens: finiteUsage(usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens),
+    audioTokens: finiteUsage((usage.prompt_tokens_details?.audio_tokens ?? usage.input_tokens_details?.audio_tokens ?? 0) + (usage.completion_tokens_details?.audio_tokens ?? usage.output_tokens_details?.audio_tokens ?? 0)) || undefined,
+    imageTokens: finiteUsage(usage.completion_tokens_details?.image_tokens ?? usage.output_tokens_details?.image_tokens),
+    costUsd: finiteCost(usage.cost ?? usage.cost_details?.upstream_inference_cost)
+  };
+  providerUsageCapture.getStore()?.push(report);
+}
+
+function usageFromUnknown(value: unknown): RawProviderUsage | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  if (record.usage && typeof record.usage === "object") return record.usage as RawProviderUsage;
+  if (record.data && typeof record.data === "object") return usageFromUnknown(record.data);
+  return undefined;
+}
+
+function finiteUsage(value: number | undefined) {
+  return Number.isFinite(value) && (value ?? -1) >= 0 ? Math.round(value!) : undefined;
+}
+
+function finiteCost(value: number | undefined) {
+  return Number.isFinite(value) && (value ?? -1) >= 0 ? value : undefined;
 }
 
 function parseAudioDataUrl(dataUrl: string) {

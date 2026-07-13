@@ -70,7 +70,7 @@ test("adaptive audio sensing preserves lecture transcript and separates all thre
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("failed to bind");
   try {
-    const response = await fetch(`http://127.0.0.1:${address.port}/api/audio-observation`, {
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/profiles/adaptive-audio/audio-observation`, {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ dataUrl: `data:audio/mp4;base64,${Buffer.from("audio fixture".repeat(8)).toString("base64")}`, label: "技术讲座" })
     });

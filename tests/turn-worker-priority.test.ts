@@ -67,6 +67,34 @@ test("single-flight lifecycle work continues draining after each completion", as
   }
 });
 
+test("a non-retryable billing gate failure is attempted only once", async () => {
+  const store = new MemoryProfileStore();
+  const profile = createCreatureProfile({ userId: "worker-non-retryable", creatureName: "Papo" });
+  const gated = job("gated-video", "action_card", new Date().toISOString());
+  gated.retryable = true;
+  gated.maxAttempts = 3;
+  profile.jobs = [gated];
+  await store.saveProfile(profile);
+  let attempts = 0;
+  const worker = new PersistentTurnWorker({
+    store, intervalMs: 10,
+    handle: async () => {
+      attempts += 1;
+      const error = new Error("AI 余额不足") as Error & { retryable: boolean };
+      error.retryable = false;
+      throw error;
+    }
+  });
+  try {
+    await worker.start();
+    await waitFor(async () => (await store.getProfile(profile.userId))?.jobs?.[0]?.status === "failed");
+    assert.equal(attempts, 1);
+    assert.equal((await store.getProfile(profile.userId))?.jobs?.[0]?.attempt, 1);
+  } finally {
+    worker.stop();
+  }
+});
+
 function job(id: string, type: ConversationJobRecord["type"], createdAt: string): ConversationJobRecord {
   return {
     id,
@@ -84,10 +112,10 @@ function job(id: string, type: ConversationJobRecord["type"], createdAt: string)
   };
 }
 
-async function waitFor(predicate: () => boolean, timeoutMs = 2_000) {
+async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 2_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (predicate()) return;
+    if (await predicate()) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
   throw new Error("timed out waiting for worker scheduling");

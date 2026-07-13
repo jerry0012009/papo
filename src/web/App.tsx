@@ -1,6 +1,7 @@
 import {
   Bell,
   BellOff,
+  Coins,
   Camera,
   Check,
   ChevronRight,
@@ -28,12 +29,14 @@ import {
   Square,
   Play,
   UserRound,
+  WalletCards,
   X
 } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { audioObservationPreview, imageSummaryPreview } from "../core/display-text";
+import { formatCnyMicros, type AiBillingAccountView, type AiUsageCategory } from "../core/ai-usage";
 import { memoryShortTitle, toCreatureMemoryVoice } from "../core/memory";
 import { PET_KINDS, normalizePetKind, petKindLabel, petKindMeta } from "../core/pet-kinds";
 import type {
@@ -57,8 +60,10 @@ import {
   dreamMemories,
   dismissConversationJob,
   generateInitialActionCards,
+  getAiUsage,
   getProfile,
   registerCompanionSession,
+  redeemAiCode,
   endCompanionSession,
   loginProfile,
   makeSegment,
@@ -116,7 +121,7 @@ import { MediaThumbnail } from "./MediaViewer";
 import type { MediaViewerItem } from "./media-viewer-types";
 import { formatPapoDateTime, papoTimeZone } from "./time";
 
-type Tab = "home" | "chat" | "memory" | "profile";
+type Tab = "home" | "chat" | "memory" | "usage" | "profile";
 
 interface EmergenceSurface {
   text: string;
@@ -141,7 +146,7 @@ const IMAGE_UPLOAD_TARGET_BYTES = 3_500_000;
 function initialAppRoute(): { tab: Tab; memoryId?: string } {
   const params = new URLSearchParams(window.location.search);
   const open = params.get("open");
-  const tab: Tab = open === "chat" || open === "memory" || open === "profile" ? open : "home";
+  const tab: Tab = open === "chat" || open === "memory" || open === "usage" || open === "profile" ? open : "home";
   const memoryId = tab === "memory" ? params.get("memory")?.trim() || undefined : undefined;
   return { tab, memoryId };
 }
@@ -794,11 +799,13 @@ export function App() {
   }
 
   async function observeFeedbackAudio(file: File) {
+    const userId = profileRef.current?.userId;
+    if (!userId) return "";
     setBusy(true);
     setError(undefined);
     try {
       const dataUrl = await readAudioFileAsDataUrl(file);
-      const result = await observeAudio(dataUrl, file.name || "反馈录音");
+      const result = await observeAudio(userId, dataUrl, file.name || "反馈录音");
       return result.observation;
     } catch (caught) {
       setError(errorMessage(caught));
@@ -1061,8 +1068,10 @@ export function App() {
   }
 
   async function processAudioObservationBlob(blob: Blob, meta: AudioSliceMeta) {
+    const userId = profileRef.current?.userId;
+    if (!userId) return;
     const dataUrl = await blobToDataUrl(blob);
-    const result = await observeAudio(dataUrl, `语音片段 ${meta.index}`);
+    const result = await observeAudio(userId, dataUrl, `语音片段 ${meta.index}`);
     const content = chooseAudioObservation(result.observation);
     const auditOnly = !content.trim() || result.sensingTrace?.status !== "content";
     const segmentContent = auditOnly ? audioAuditSummary(result.sensingTrace?.status) : content.trim();
@@ -1317,7 +1326,9 @@ export function App() {
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL("image/jpeg", 0.68);
     cameraObservationQueueRef.current = cameraObservationQueueRef.current.catch(() => undefined).then(async () => {
-      const result = await observeCameraFrame(dataUrl, "陪伴中的定时画面");
+      const userId = profileRef.current?.userId;
+      if (!userId) return;
+      const result = await observeCameraFrame(userId, dataUrl, "陪伴中的定时画面");
       const content = result.summary.trim();
       submitLiveSegments([{
         ...makeSegment(`live-camera-${Date.now()}-${meta.index}`, "image_summary", "陪伴中看到的画面", content || "这次定时画面没有看清。", {
@@ -1373,7 +1384,7 @@ export function App() {
     );
   }
 
-  const pageTitle = tab === "home" ? profile.creatureName : tab === "chat" ? `和 ${profile.creatureName} 说话` : tab === "memory" ? `${profile.creatureName} 记得的生活` : "我的";
+  const pageTitle = tab === "home" ? profile.creatureName : tab === "chat" ? `和 ${profile.creatureName} 说话` : tab === "memory" ? `${profile.creatureName} 记得的生活` : tab === "usage" ? "AI 用量" : "我的";
   const species = petSpeciesNoun(profile.petKind);
 
   return (
@@ -1391,6 +1402,7 @@ export function App() {
             <NavButton active={tab === "home"} icon={Eye} label="首页" onClick={() => navigateTab("home")} />
             <NavButton active={tab === "chat"} icon={MessagesSquare} label="对话" unreadCount={hasUnreadPapoMessage ? unreadPapoCount : 0} onClick={() => navigateTab("chat")} />
             <NavButton active={tab === "memory"} icon={History} label="记忆" onClick={() => navigateTab("memory")} />
+            <NavButton active={tab === "usage"} icon={WalletCards} label="用量" onClick={() => navigateTab("usage")} />
             <NavButton active={tab === "profile"} icon={UserRound} label="我的" onClick={() => navigateTab("profile")} />
           </nav>
         </aside>
@@ -1453,6 +1465,7 @@ export function App() {
               />
             ) : null}
             {tab === "memory" ? <MemoryView profile={profile} targetMemoryId={targetMemoryId} onOpenMemory={openMemory} onFeedback={giveFeedback} onObserveFeedbackAudio={observeFeedbackAudio} onEditMemory={editLongTermMemory} onDream={runDreaming} busy={busy} feedbackPendingKey={feedbackPendingKey} /> : null}
+            {tab === "usage" ? <AiUsageView userId={profile.userId} /> : null}
             {tab === "profile" ? (
               <ProfileView
                 profile={profile}
@@ -3922,6 +3935,130 @@ function MemoryFeedbackBox(props: {
   );
 }
 
+function AiUsageView(props: { userId: string }) {
+  const [account, setAccount] = useState<AiBillingAccountView>();
+  const [category, setCategory] = useState<"all" | AiUsageCategory>("all");
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [redeeming, setRedeeming] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      setAccount(await getAiUsage(props.userId));
+      setMessage("");
+    } catch (caught) {
+      setMessage(errorMessage(caught));
+    } finally {
+      setLoading(false);
+    }
+  }, [props.userId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  async function redeem() {
+    if (!code.trim()) return;
+    setRedeeming(true);
+    try {
+      const result = await redeemAiCode(props.userId, code);
+      setAccount(result.account);
+      setCode("");
+      setMessage(`已充值 ${formatCnyMicros(result.redemption.creditedMicros)}`);
+    } catch (caught) {
+      setMessage(errorMessage(caught));
+    } finally {
+      setRedeeming(false);
+    }
+  }
+
+  if (loading && !account) return <section className="usage-view usage-loading"><Loader2 className="spin" size={22} /><span>正在读取用量</span></section>;
+  if (!account) return <section className="usage-view"><div className="notice">{message || "用量暂时无法读取"}</div><button type="button" onClick={() => void load()}><RefreshCcw size={16} />重新加载</button></section>;
+
+  const events = category === "all" ? account.events : account.events.filter((event) => event.category === category);
+  const totalCost = account.summary.reduce((sum, item) => sum + item.costMicros, 0);
+  return (
+    <section className="usage-view">
+      <header className="usage-balance-band">
+        <div>
+          <span>可用余额</span>
+          <strong>{formatCnyMicros(account.balanceMicros)}</strong>
+          <small>累计用量 {formatCnyMicros(totalCost)}</small>
+        </div>
+        <Coins size={34} aria-hidden="true" />
+      </header>
+
+      <form className="usage-redeem" onSubmit={(event) => { event.preventDefault(); void redeem(); }}>
+        <label htmlFor="ai-redeem-code">兑换码</label>
+        <div>
+          <input id="ai-redeem-code" value={code} onChange={(event) => setCode(event.target.value)} placeholder="PAPO-..." autoCapitalize="characters" maxLength={80} />
+          <button className="primary" type="submit" disabled={redeeming || !code.trim()}>{redeeming ? "兑换中" : "兑换"}</button>
+        </div>
+        {message ? <small>{message}</small> : null}
+      </form>
+
+      <div className="usage-summary-grid" aria-label="分类用量">
+        {account.summary.map((item) => (
+          <button type="button" className={category === item.category ? "active" : ""} key={item.category} onClick={() => setCategory(item.category)}>
+            <span>{usageCategoryLabel(item.category)}</span>
+            <strong>{formatCnyMicros(item.costMicros)}</strong>
+            <small>{item.calls} 次{item.totalTokens ? ` · ${item.totalTokens.toLocaleString()} tokens` : ""}</small>
+          </button>
+        ))}
+      </div>
+
+      <header className="usage-list-head">
+        <div className="segmented-control" role="group" aria-label="筛选用量">
+          <button type="button" className={category === "all" ? "active" : ""} onClick={() => setCategory("all")}>全部</button>
+          {(["text", "audio", "image", "video"] as AiUsageCategory[]).map((item) => <button type="button" className={category === item ? "active" : ""} onClick={() => setCategory(item)} key={item}>{usageCategoryLabel(item)}</button>)}
+        </div>
+        <button className="icon-button" type="button" onClick={() => void load()} aria-label="刷新 AI 用量"><RefreshCcw size={17} /></button>
+      </header>
+
+      <div className="usage-event-list">
+        {events.length ? events.map((event) => (
+          <article className={`usage-event status-${event.status}`} key={event.id}>
+            <div className="usage-event-icon"><UsageCategoryIcon category={event.category} /></div>
+            <div className="usage-event-main">
+              <div><strong>{usageOperationLabel(event.operation)}</strong><span>{event.status === "completed" ? "完成" : event.status === "blocked" ? "余额不足" : "失败"}</span></div>
+              <p>{event.model}</p>
+              <small>{event.provider}{event.totalTokens ? ` · ${event.totalTokens.toLocaleString()} tokens` : event.durationSeconds ? ` · ${event.durationSeconds}s` : ""} · {formatPapoDateTime(event.at)}</small>
+            </div>
+            <div className="usage-event-cost">
+              <strong>{event.costSource === "unpriced" ? "未定价" : formatCnyMicros(event.costMicros)}</strong>
+              <small>{event.costSource === "provider_reported" ? "上游结算" : event.costSource === "catalog_estimate" ? "价格估算" : "无价格"}</small>
+            </div>
+          </article>
+        )) : <p className="muted usage-empty">这里还没有{category === "all" ? "" : usageCategoryLabel(category)}调用记录。</p>}
+      </div>
+    </section>
+  );
+}
+
+function UsageCategoryIcon(props: { category: AiUsageCategory }) {
+  if (props.category === "audio") return <Mic size={19} />;
+  if (props.category === "image") return <Images size={19} />;
+  if (props.category === "video") return <Play size={19} />;
+  return <MessageCircle size={19} />;
+}
+
+function usageCategoryLabel(category: AiUsageCategory) {
+  return ({ text: "文字", audio: "音频", image: "图片", video: "视频" } as const)[category];
+}
+
+function usageOperationLabel(operation: string) {
+  return ({
+    generate: "文字生成",
+    generateJson: "认知处理",
+    generateJsonFallback: "认知重试",
+    summarizeImage: "图片理解",
+    observeAudio: "音频理解",
+    generateImage: "图片生成",
+    generateEconomyImage: "记忆配图",
+    generateVideo: "视频生成"
+  } as Record<string, string>)[operation] ?? operation;
+}
+
 function ProfileView(props: {
   profile: CreatureProfile;
   onLogout: () => void | Promise<void>;
@@ -4028,7 +4165,7 @@ function ProfileView(props: {
     setPetMessage("正在看这张照片");
     try {
       const dataUrl = await readImageFileAsUploadDataUrl(file);
-      const result = await summarizeImage(dataUrl, file.name || "小动物参考图");
+      const result = await summarizeImage(props.profile.userId, dataUrl, file.name || "小动物参考图");
       const observedAt = file.lastModified ? new Date(file.lastModified).toISOString() : new Date().toISOString();
       if (result.asset) {
         setPetReferenceAttachment({

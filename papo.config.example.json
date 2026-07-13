@@ -20,5 +20,7 @@
   "OPENAI_API_KEY": "",
   "OPENAI_MODEL": "gpt-5.5",
   "OPENAI_VISION_MODEL": "gpt-5.5",
-  "OPENAI_AUDIO_TRANSCRIPTION_MODEL": "gpt-4o-mini-transcribe"
+  "OPENAI_AUDIO_TRANSCRIPTION_MODEL": "gpt-4o-mini-transcribe",
+  "PAPO_BILLING_USD_CNY": "7.2",
+  "PAPO_MODEL_PRICES_JSON": "{}"
 }

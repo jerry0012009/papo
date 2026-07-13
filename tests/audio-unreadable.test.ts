@@ -35,13 +35,15 @@ const provider: ModelProvider = {
   }
 };
 
-const app = createApp({ store: new MemoryProfileStore(), provider });
+const store = new MemoryProfileStore();
+await store.createProfile({ userId: "audio-unreadable", creatureName: "Papo" });
+const app = createApp({ store, provider });
 const server = app.listen(0);
 const address = server.address();
 if (!address || typeof address === "string") throw new Error("failed to bind test server");
 
 try {
-  const response = await fetch(`http://127.0.0.1:${address.port}/api/audio-observation`, {
+  const response = await fetch(`http://127.0.0.1:${address.port}/api/profiles/audio-unreadable/audio-observation`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
@@ -58,7 +60,7 @@ try {
   assert.equal(body.sensingTrace.observation, undefined);
   assert.equal(body.sensingTrace.ruleTrace.includes("route=settle_audio_batch_only"), true);
 
-  const abortedResponse = await fetch(`http://127.0.0.1:${address.port}/api/audio-observation`, {
+  const abortedResponse = await fetch(`http://127.0.0.1:${address.port}/api/profiles/audio-unreadable/audio-observation`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({

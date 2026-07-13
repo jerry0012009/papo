@@ -175,12 +175,18 @@ export async function processCompanionTurnContext(store: ProfileStore, provider:
   return processPendingObservations(store, provider, userId, session.id, turnId);
 }
 
-export async function runCompanionSessionSweep(store: ProfileStore, provider: ModelProvider, now = new Date().toISOString()) {
+export async function runCompanionSessionSweep(
+  store: ProfileStore,
+  provider: ModelProvider,
+  now = new Date().toISOString(),
+  runForUser: <T>(userId: string, run: () => Promise<T>) => Promise<T> = (_userId, run) => run()
+) {
   let checked = 0;
   let completed = 0;
   let failed = 0;
   for (const summary of await store.listProfiles()) {
-    let profile = await store.getProfile(summary.userId);
+    const userId = summary.userId;
+    let profile = await store.getProfile(userId);
     if (!profile) continue;
     const backfilled = backfillCompanionSessions(profile);
     if (backfilled) await store.saveProfile(profile);
@@ -190,7 +196,7 @@ export async function runCompanionSessionSweep(store: ProfileStore, provider: Mo
         try {
           let processed = 0;
           for (let pass = 0; pass < 4; pass += 1) {
-            const result = await processPendingObservations(store, provider, profile.userId, session.id);
+            const result = await runForUser(userId, () => processPendingObservations(store, provider, userId, session.id));
             processed += result.processed;
             if (result.processed < MAX_PENDING_PER_PASS) break;
           }
@@ -214,7 +220,7 @@ export async function runCompanionSessionSweep(store: ProfileStore, provider: Mo
         if (!eventNeedsConsolidation(event)) continue;
         checked += 1;
         try {
-          const applied = await consolidateEvent(store, provider, profile.userId, session.id, event.id, now);
+          const applied = await runForUser(userId, () => consolidateEvent(store, provider, userId, session.id, event.id, now));
           if (applied) completed += 1;
         } catch (error) {
           failed += 1;

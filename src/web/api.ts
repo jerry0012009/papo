@@ -1,4 +1,5 @@
 import type { CaptureResult, ConversationJobRecord, ConversationTurnRecord, CreatureProfile, DreamRecord, FeedbackKind, FeedbackRecord, MediaAttachment, MessageCognitionTrace, SegmentKind, SensingTrace, StreamSegment, WakeEvent } from "../core/types";
+import type { AiBillingAccountView, AiRedemptionResult } from "../core/ai-usage";
 
 const jsonHeaders = { "Content-Type": "application/json" };
 const apiBase = import.meta.env.VITE_API_BASE as string | undefined;
@@ -67,6 +68,19 @@ export async function revokeDeviceSessions(userId: string) {
 
 export async function getProvider(): Promise<ProviderInfo> {
   return request("/api/provider");
+}
+
+export async function getAiUsage(userId: string, limit = 200): Promise<AiBillingAccountView> {
+  const data = await request<{ account: AiBillingAccountView }>(`/api/profiles/${userId}/ai-usage?limit=${limit}`, { headers: authHeaders(userId) });
+  return data.account;
+}
+
+export async function redeemAiCode(userId: string, code: string): Promise<{ account: AiBillingAccountView; redemption: AiRedemptionResult }> {
+  return request(`/api/profiles/${userId}/ai-usage/redeem`, {
+    method: "POST",
+    headers: profileJsonHeaders(userId),
+    body: JSON.stringify({ code })
+  });
 }
 
 export async function listProfiles(): Promise<ProfileSummary[]> {
@@ -140,26 +154,26 @@ export async function touchPet(userId: string, action: "idle" | "poke-wave" | "p
   });
 }
 
-export async function summarizeImage(dataUrl: string, label: string): Promise<{ summary: string; asset?: MediaAttachment; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }> {
-  return request<{ summary: string; asset?: MediaAttachment; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }>("/api/image-summary", {
+export async function summarizeImage(userId: string, dataUrl: string, label: string): Promise<{ summary: string; asset?: MediaAttachment; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }> {
+  return request<{ summary: string; asset?: MediaAttachment; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }>(`/api/profiles/${userId}/image-summary`, {
     method: "POST",
-    headers: jsonHeaders,
+    headers: profileJsonHeaders(userId),
     body: JSON.stringify({ dataUrl, label })
   });
 }
 
-export async function observeCameraFrame(dataUrl: string, label: string): Promise<{ summary: string; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }> {
-  return request<{ summary: string; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }>("/api/camera-observation", {
+export async function observeCameraFrame(userId: string, dataUrl: string, label: string): Promise<{ summary: string; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }> {
+  return request<{ summary: string; provider: string; model?: string; route?: string; semanticSource: "llm"; sensingTrace?: SensingTrace }>(`/api/profiles/${userId}/camera-observation`, {
     method: "POST",
-    headers: jsonHeaders,
+    headers: profileJsonHeaders(userId),
     body: JSON.stringify({ dataUrl, label })
   }, { retries: 2, retryDelayMs: 1200 });
 }
 
-export async function observeAudio(dataUrl: string, label: string): Promise<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; unreadable?: boolean; semanticSource: "llm"; sensingTrace?: SensingTrace }> {
-  return request<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; unreadable?: boolean; semanticSource: "llm"; sensingTrace?: SensingTrace }>("/api/audio-observation", {
+export async function observeAudio(userId: string, dataUrl: string, label: string): Promise<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; unreadable?: boolean; semanticSource: "llm"; sensingTrace?: SensingTrace }> {
+  return request<{ observation: string; provider: string; model?: string; route?: string; noSpeech?: boolean; unreadable?: boolean; semanticSource: "llm"; sensingTrace?: SensingTrace }>(`/api/profiles/${userId}/audio-observation`, {
     method: "POST",
-    headers: jsonHeaders,
+    headers: profileJsonHeaders(userId),
     body: JSON.stringify({ dataUrl, label })
   }, { retries: 2, retryDelayMs: 1200 });
 }

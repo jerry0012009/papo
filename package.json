@@ -1,6 +1,6 @@
 {
   "name": "papo",
-  "version": "0.4.19",
+  "version": "0.4.20",
   "private": true,
   "type": "module",
   "scripts": {
@@ -21,6 +21,7 @@
     "test:ui": "playwright test",
     "smoke:real-cognition": "RUN_REAL_MODEL_SMOKE=1 tsx tests/real-cognition-smoke.ts",
     "migrate:papo-memories": "tsx scripts/migrate-papo-memory-experience.ts papo",
+    "billing:create-code": "tsx scripts/create-ai-redeem-code.ts",
     "start": "node dist/server/index.js"
   },
   "dependencies": {

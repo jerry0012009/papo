@@ -111,7 +111,7 @@ const address = server.address();
 if (!address || typeof address === "string") throw new Error("failed to bind test server");
 
 try {
-  const imageResponse = await fetch(`http://127.0.0.1:${address.port}/api/image-summary`, {
+  const imageResponse = await fetch(`http://127.0.0.1:${address.port}/api/profiles/illustration-user/image-summary`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({

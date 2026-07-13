@@ -133,7 +133,7 @@ export class PersistentTurnWorker {
         const job = profile.jobs?.find((item) => item.id === jobId);
         if (!job || job.status === "completed") return;
         const now = new Date().toISOString();
-        const retry = job.retryable && !isModelProviderRefusal(error) && job.attempt < job.maxAttempts;
+        const retry = job.retryable && isRetryableJobError(error) && !isModelProviderRefusal(error) && job.attempt < job.maxAttempts;
         job.status = retry ? "queued" : "failed";
         job.updatedAt = now;
         job.error = isModelProviderRefusal(error) ? "模型暂时无法处理这次表达，Papo 已保留你的原话，可以换种说法后继续" : error instanceof Error ? error.message.slice(0, 500) : "Unknown background job error";
@@ -168,6 +168,10 @@ export class PersistentTurnWorker {
       });
     }
   }
+}
+
+function isRetryableJobError(error: unknown) {
+  return !(error && typeof error === "object" && "retryable" in error && (error as { retryable?: unknown }).retryable === false);
 }
 
 function isLifecycleMediaJob(job: ConversationJobRecord) {

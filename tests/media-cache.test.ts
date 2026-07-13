@@ -19,8 +19,10 @@ test("content-addressed image and video assets keep durable HTTP cache semantics
     async observeAudio() { return ""; },
     async generateImage() { throw new Error("not used"); }
   };
+  const store = new MemoryProfileStore();
+  await store.createProfile({ userId: "media-cache", creatureName: "Papo" });
   const app = createApp({
-    store: new MemoryProfileStore(), provider,
+    store, provider,
     proactive: { enabled: false }, turns: { autoStart: false }, nativeIngest: { autoStart: false }, hermes: { enabled: false }
   });
   const server = app.listen(0);
@@ -37,7 +39,7 @@ test("content-addressed image and video assets keep durable HTTP cache semantics
   const memoryFilename = `img_${createHash("sha256").update(memoryBytes).digest("hex").slice(0, 24)}.png`;
 
   try {
-    const createImage = () => fetch(`${baseUrl}/api/image-summary`, {
+    const createImage = () => fetch(`${baseUrl}/api/profiles/media-cache/image-summary`, {
       method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dataUrl: imageDataUrl, label: "缓存测试" })
     });
     const firstAsset = await (await createImage()).json() as { asset: { url: string } };

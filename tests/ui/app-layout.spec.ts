@@ -264,7 +264,7 @@ test("my tab organizes content, companion settings, and account settings", async
   await page.goto("/");
 
   const nav = page.locator(".nav");
-  await expect(nav.getByRole("button")).toHaveCount(4);
+  await expect(nav.getByRole("button")).toHaveCount(5);
   await expect(nav.getByRole("button", { name: "我的" })).toBeVisible();
   await nav.getByRole("button", { name: "我的" }).click();
 
@@ -1085,7 +1085,7 @@ async function installMockApi(page: Page) {
       return;
     }
 
-    if (path === "/api/audio-observation" && route.request().method() === "POST") {
+    if (path === "/api/profiles/demo/audio-observation" && route.request().method() === "POST") {
       await new Promise((resolve) => setTimeout(resolve, 250));
       if (await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:testAudioAbort") === "1")) {
         await json(route, { error: "This operation was aborted" }, 500);
@@ -1110,7 +1110,7 @@ async function installMockApi(page: Page) {
       return;
     }
 
-    if (path === "/api/image-summary" && route.request().method() === "POST") {
+    if (path === "/api/profiles/demo/image-summary" && route.request().method() === "POST") {
       const requestBody = safePostJson(route) as { label?: string };
       if (await route.request().frame().page().evaluate(() => window.localStorage.getItem("papo:captureImageUploadBytes") === "1")) {
         await route.request().frame().page().evaluate((length) => {
