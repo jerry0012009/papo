@@ -3995,6 +3995,7 @@ function AiUsageView(props: { userId: string }) {
           <span>可用余额</span>
           <strong>{formatCnyMicros(account.balanceMicros)}</strong>
           <small>累计用量 {formatCnyMicros(totalCost)}</small>
+          <small>全部费用已统一折算为人民币（¥）</small>
         </div>
         <Coins size={34} aria-hidden="true" />
       </header>
@@ -4037,13 +4038,20 @@ function AiUsageView(props: { userId: string }) {
             </div>
             <div className="usage-event-cost">
               <strong>{event.costSource === "unpriced" ? "未定价" : formatCnyMicros(event.costMicros)}</strong>
-              <small>{event.costSource === "provider_reported" ? "上游结算" : event.costSource === "catalog_estimate" ? "价格估算" : "无价格"}</small>
+              <small>{usageCostSourceLabel(event)}</small>
             </div>
           </article>
         )) : <p className="muted usage-empty">这里还没有{category === "all" ? "" : usageCategoryLabel(category)}调用记录。</p>}
       </div>
     </section>
   );
+}
+
+function usageCostSourceLabel(event: AiBillingAccountView["events"][number]) {
+  if (event.costSource === "unpriced") return "无价格";
+  if (event.costSource === "catalog_estimate") return "人民币价格估算";
+  if (event.upstreamCurrency === "USD") return "人民币 · 上游美元折算";
+  return "人民币 · 上游结算";
 }
 
 function UsageCategoryIcon(props: { category: AiUsageCategory }) {

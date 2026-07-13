@@ -282,7 +282,10 @@ function appendTransaction(data: BillingFile, account: BillingAccount, kind: Bil
 }
 
 function accountView(data: BillingFile, account: BillingAccount, limit: number): AiBillingAccountView {
-  const events = data.events.filter((event) => event.userId === account.userId).slice(0, Math.max(1, Math.min(500, limit)));
+  const events = data.events
+    .filter((event) => event.userId === account.userId)
+    .slice(0, Math.max(1, Math.min(500, limit)))
+    .map(normalizeUsageEventCurrency);
   const summary = (["text", "audio", "image", "video"] as AiUsageCategory[]).map((category): AiUsageSummaryBucket => {
     const relevant = data.events.filter((event) => event.userId === account.userId && event.category === category);
     return {
@@ -296,6 +299,23 @@ function accountView(data: BillingFile, account: BillingAccount, limit: number):
     };
   });
   return { userId: account.userId, currency: "CNY", balanceMicros: account.balanceMicros, trialGrantedAt: account.trialGrantedAt, updatedAt: account.updatedAt, summary, events };
+}
+
+function normalizeUsageEventCurrency(event: AiUsageEvent): AiUsageEvent {
+  if (event.upstreamCost !== undefined || event.upstreamCostUsd === undefined) return event;
+  const exchangeRate = event.upstreamCostUsd > 0
+    ? roundExchangeRate(event.costMicros / 1_000_000 / event.upstreamCostUsd)
+    : undefined;
+  return {
+    ...event,
+    upstreamCost: event.upstreamCostUsd,
+    upstreamCurrency: "USD",
+    exchangeRate: Number.isFinite(exchangeRate) && (exchangeRate ?? 0) > 0 ? exchangeRate : undefined
+  };
+}
+
+function roundExchangeRate(value: number) {
+  return Math.round(value * 1_000_000) / 1_000_000;
 }
 
 function emptyBillingFile(): BillingFile {

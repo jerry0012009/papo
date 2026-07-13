@@ -24,7 +24,9 @@ Every account receives the current testing grant of RMB 20 exactly once when fir
 
 ## Charging behavior
 
-All calls made through the production `ModelProvider` are wrapped and grouped as text, audio, image, or video. OpenRouter/provider-reported `usage.cost` and token counts take precedence. When a provider does not report cost, the versioned catalog in `src/server/ai-pricing.ts` is used. Integer micro-RMB arithmetic avoids floating point balance drift.
+All calls made through the production `ModelProvider` are wrapped and grouped as text, audio, image, or video. The ledger and every public API/UI amount are always CNY, stored as integer micro-RMB to avoid floating point balance drift.
+
+[OpenRouter documents generation cost and credits in USD](https://openrouter.ai/docs/guides/guides/usage-accounting), so Papo records the original USD value and converts it with `PAPO_BILLING_USD_CNY`. [CloseAI documents platform prices and usage costs in RMB](https://doc.closeai-asia.com/tutorial/api/platform.html), so its configured endpoint is treated as CNY; `OPENAI_USAGE_CURRENCY` remains available as an explicit override. Other generic endpoints do not contribute an unlabelled `usage.cost`; they fall back to the versioned catalog instead of risking an incorrect conversion.
 
 Image and video generation reserve an estimated amount atomically before the provider runs. If funds are insufficient, the call is recorded as blocked and the provider is never invoked. Provider failure refunds the reservation. Text, audio, and image understanding remain available and may take the balance below zero; expensive generation stays blocked until the balance is positive enough for its reservation.
 
@@ -33,11 +35,12 @@ Configure exchange rate and emergency model overrides without changing code:
 ```json
 {
   "PAPO_BILLING_USD_CNY": "7.2",
-  "PAPO_MODEL_PRICES_JSON": "{\"vendor/model\":{\"inputUsdPerMillion\":0.1,\"outputUsdPerMillion\":0.2,\"perImageUsd\":0.01,\"perVideoSecondUsd\":0.02}}"
+  "OPENAI_USAGE_CURRENCY": "CNY",
+  "PAPO_MODEL_PRICES_JSON": "{\"vendor/model\":{\"inputCnyPerMillion\":0.72,\"outputCnyPerMillion\":1.44,\"perImageCny\":0.08,\"perVideoSecondCny\":0.14}}"
 }
 ```
 
-Only applicable fields are needed. Prices are upstream costs shown to the user, not a marked-up retail tariff.
+`OPENAI_USAGE_CURRENCY` and `MIMO_USAGE_CURRENCY` accept only `CNY` or `USD`. Catalog overrides accept both the `...Cny...` fields above and the existing `...Usd...` fields; USD catalog values are converted with the same exchange rate. Only applicable fields are needed. Prices are upstream costs shown to the user, not a marked-up retail tariff.
 
 ## API and operations
 

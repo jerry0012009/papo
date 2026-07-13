@@ -13,6 +13,7 @@ test("AI usage menu shows balance, category detail, models, and redemption", asy
 
   await expect(page.getByRole("heading", { level: 1, name: "AI 用量" })).toBeVisible();
   await expect(page.locator(".usage-balance-band")).toContainText("¥19.75");
+  await expect(page.locator(".usage-balance-band")).toContainText("全部费用已统一折算为人民币");
   await expect(page.locator(".usage-summary-grid")).toContainText("文字");
   await expect(page.locator(".usage-summary-grid")).toContainText("视频");
   await expect(page.locator(".usage-event-list")).toContainText("xiaomi/mimo-v2.5");
@@ -37,7 +38,7 @@ async function installUsageApi(page: Page) {
     dogState: { id: "idle", selectedAt: now, label: "安静陪伴", actionText: "安静陪伴", visualPrompt: "idle", animation: "idle", reason: "test", selectedBy: "rules" }, dogStateHistory: []
   };
   const events = [
-    { id: "usage_text", callId: "call_text", userId: "usage-demo", at: now, category: "text", operation: "generateJson", provider: "openrouter", model: "xiaomi/mimo-v2.5", status: "completed", inputTokens: 800, outputTokens: 200, totalTokens: 1000, costMicros: 5_000, costSource: "provider_reported", priceVersion: "test", balanceAfterMicros: 19_750_000 },
+    { id: "usage_text", callId: "call_text", userId: "usage-demo", at: now, category: "text", operation: "generateJson", provider: "openrouter", model: "xiaomi/mimo-v2.5", status: "completed", inputTokens: 800, outputTokens: 200, totalTokens: 1000, upstreamCost: 0.000694, upstreamCurrency: "USD", exchangeRate: 7.2, costMicros: 5_000, costSource: "provider_reported", priceVersion: "test", balanceAfterMicros: 19_750_000 },
     { id: "usage_video", callId: "call_video", userId: "usage-demo", at: now, category: "video", operation: "generateVideo", provider: "openrouter", model: "bytedance/seedance-1-5-pro-with-a-very-long-model-name", status: "completed", durationSeconds: 4, costMicros: 245_000, costSource: "catalog_estimate", priceVersion: "test", balanceAfterMicros: 19_750_000 }
   ];
   const account = (balanceMicros: number) => ({

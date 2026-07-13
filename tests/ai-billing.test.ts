@@ -113,7 +113,70 @@ test("OpenRouter reported tokens and cost override catalog estimates", async () 
     assert.equal(event.totalTokens, 150);
     assert.equal(event.costMicros, 9_000);
     assert.equal(event.costSource, "provider_reported");
+    assert.equal(event.upstreamCost, 0.00125);
+    assert.equal(event.upstreamCurrency, "USD");
+    assert.equal(event.exchangeRate, 7.2);
     assert.equal(event.turnId, "turn-1");
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("CloseAI reported RMB cost is not converted as dollars", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "papo-billing-closeai-"));
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      model: "vendor/closeai-model",
+      choices: [{ message: { content: "ok" } }],
+      usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25, cost: 0.0125 }
+    }), { status: 200, headers: { "content-type": "application/json" } });
+    const billing = new JsonAiBillingService(path.join(directory, "billing.json"));
+    const raw = createModelProvider({
+      NODE_ENV: "test",
+      PAPO_PROVIDER: "generic",
+      OPENAI_API_KEY: "test",
+      OPENAI_BASE_URL: "https://api.openai-proxy.org/v1",
+      OPENAI_MODEL: "vendor/closeai-model"
+    });
+    const provider = createMeteredProvider(raw, billing);
+    await billing.withContext({ userId: "alice" }, () => provider.generate("hello"));
+    const event = (await billing.account("alice")).events[0];
+    assert.equal(event.costMicros, 12_500);
+    assert.equal(event.costSource, "provider_reported");
+    assert.equal(event.upstreamCost, 0.0125);
+    assert.equal(event.upstreamCurrency, "CNY");
+    assert.equal(event.exchangeRate, undefined);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("generic provider ignores an unlabelled usage cost", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "papo-billing-unlabelled-cost-"));
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => new Response(JSON.stringify({
+      model: "vendor/unpriced-model",
+      choices: [{ message: { content: "ok" } }],
+      usage: { prompt_tokens: 20, completion_tokens: 5, total_tokens: 25, cost: 2 }
+    }), { status: 200, headers: { "content-type": "application/json" } });
+    const billing = new JsonAiBillingService(path.join(directory, "billing.json"));
+    const raw = createModelProvider({
+      NODE_ENV: "test",
+      PAPO_PROVIDER: "generic",
+      OPENAI_API_KEY: "test",
+      OPENAI_BASE_URL: "https://api.example.test/v1",
+      OPENAI_MODEL: "vendor/unpriced-model"
+    });
+    const provider = createMeteredProvider(raw, billing);
+    await billing.withContext({ userId: "alice" }, () => provider.generate("hello"));
+    const event = (await billing.account("alice")).events[0];
+    assert.equal(event.costMicros, 0);
+    assert.equal(event.costSource, "unpriced");
+    assert.equal(event.upstreamCost, undefined);
   } finally {
     globalThis.fetch = originalFetch;
     await rm(directory, { recursive: true, force: true });
@@ -139,15 +202,30 @@ test("independent billing service instances cannot overwrite concurrent writes",
   }
 });
 
+test("legacy USD usage records are normalized for the CNY API", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "papo-billing-legacy-currency-"));
+  try {
+    const billing = new JsonAiBillingService(path.join(directory, "billing.json"));
+    await billing.settle({ ...usageInput("legacy-usd", 7_200), upstreamCostUsd: 0.001 });
+    const event = (await billing.account("alice")).events[0];
+    assert.equal(event.upstreamCost, 0.001);
+    assert.equal(event.upstreamCurrency, "USD");
+    assert.equal(event.exchangeRate, 7.2);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
 test("cumulative provider usage from media polling is not double counted", () => {
   const usage = combineProviderUsage([
-    { model: "video-model", totalTokens: 100, costUsd: 0.03 },
-    { model: "video-model", totalTokens: 180, costUsd: 0.05 },
-    { model: "video-model", totalTokens: 180, costUsd: 0.05 }
+    { model: "video-model", totalTokens: 100, cost: 0.03, costCurrency: "USD" },
+    { model: "video-model", totalTokens: 180, cost: 0.05, costCurrency: "USD" },
+    { model: "video-model", totalTokens: 180, cost: 0.05, costCurrency: "USD" }
   ]);
   assert.equal(usage.model, "video-model");
   assert.equal(usage.totalTokens, 180);
-  assert.equal(usage.costUsd, 0.05);
+  assert.equal(usage.cost, 0.05);
+  assert.equal(usage.costCurrency, "USD");
 });
 
 function usageInput(callId: string, costMicros: number) {

@@ -18,8 +18,13 @@ export interface ProviderUsageReport {
   cachedTokens?: number;
   audioTokens?: number;
   imageTokens?: number;
+  cost?: number;
+  costCurrency?: ProviderUsageCurrency;
+  /** @deprecated Read by the billing migration path for reports created before currency-aware metering. */
   costUsd?: number;
 }
+
+export type ProviderUsageCurrency = "USD" | "CNY";
 
 export async function captureProviderUsage<T>(run: () => Promise<T>) {
   const reports: ProviderUsageReport[] = [];
@@ -150,7 +155,8 @@ function openRouterProvider(merged: NodeJS.ProcessEnv): ModelProvider {
     chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
     visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
     audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 90_000),
-    videoTimeoutMs: longTimeoutFromEnv(merged, "PAPO_VIDEO_TIMEOUT_MS", 480_000)
+    videoTimeoutMs: longTimeoutFromEnv(merged, "PAPO_VIDEO_TIMEOUT_MS", 480_000),
+    usageCostCurrency: "USD"
   });
 }
 
@@ -173,7 +179,8 @@ function mimoProvider(merged: NodeJS.ProcessEnv): ModelProvider {
     chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
     visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
     audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 90_000),
-    videoTimeoutMs: longTimeoutFromEnv(merged, "PAPO_VIDEO_TIMEOUT_MS", 480_000)
+    videoTimeoutMs: longTimeoutFromEnv(merged, "PAPO_VIDEO_TIMEOUT_MS", 480_000),
+    usageCostCurrency: usageCurrencyFromEnv(merged.MIMO_USAGE_CURRENCY)
   });
 }
 
@@ -202,8 +209,25 @@ function genericProvider(merged: NodeJS.ProcessEnv): ModelProvider {
     chatTimeoutMs: timeoutFromEnv(merged, "PAPO_MODEL_TIMEOUT_MS", 45_000),
     visionTimeoutMs: timeoutFromEnv(merged, "PAPO_VISION_TIMEOUT_MS", 45_000),
     audioTimeoutMs: timeoutFromEnv(merged, "PAPO_AUDIO_TIMEOUT_MS", 90_000),
-    videoTimeoutMs: longTimeoutFromEnv(merged, "PAPO_VIDEO_TIMEOUT_MS", 480_000)
+    videoTimeoutMs: longTimeoutFromEnv(merged, "PAPO_VIDEO_TIMEOUT_MS", 480_000),
+    usageCostCurrency: usageCurrencyFromEnv(merged.OPENAI_USAGE_CURRENCY)
+      ?? (isCloseAiEndpoint(baseUrl) ? "CNY" : undefined)
   });
+}
+
+function usageCurrencyFromEnv(value: string | undefined): ProviderUsageCurrency | undefined {
+  const normalized = value?.trim().toUpperCase();
+  return normalized === "USD" || normalized === "CNY" ? normalized : undefined;
+}
+
+function isCloseAiEndpoint(baseUrl: string) {
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase();
+    return hostname === "openai-proxy.org" || hostname.endsWith(".openai-proxy.org")
+      || hostname === "closeai-asia.com" || hostname.endsWith(".closeai-asia.com");
+  } catch {
+    return false;
+  }
 }
 
 function genericAudioModel(merged: NodeJS.ProcessEnv) {
@@ -312,6 +336,7 @@ function openAiCompatibleProvider(input: {
   videoDefaultDurationSeconds?: number;
   videoMaxDurationSeconds?: number;
   audioRoute?: ProviderDiagnostics["audioRoute"];
+  usageCostCurrency?: ProviderUsageCurrency;
   chatTimeoutMs: number;
   visionTimeoutMs: number;
   audioTimeoutMs: number;
@@ -510,7 +535,7 @@ async function callDashscopeVideoGeneration(
     });
     if (!response.ok) throw new Error(`DashScope video submission failed: ${response.status} ${await responseErrorSummary(response)}`);
     const created = await response.json() as { output?: { task_id?: string; task_status?: string }; usage?: RawProviderUsage; code?: string; message?: string };
-    reportProviderUsage(created.usage, config.model);
+    reportProviderUsage(created.usage, config.model, "CNY");
     const taskId = created.output?.task_id;
     if (!taskId) throw new Error(`DashScope video submission returned no task id (${created.code ?? "unknown"}: ${created.message ?? "empty response"})`);
     const endpointUrl = new URL(config.endpoint);
@@ -521,7 +546,7 @@ async function callDashscopeVideoGeneration(
       const statusResponse = await fetch(taskUrl, { signal: controller.signal, headers: { Authorization: `Bearer ${config.apiKey}` } });
       if (!statusResponse.ok) throw new Error(`DashScope video status failed: ${statusResponse.status} ${await responseErrorSummary(statusResponse)}`);
       const status = await statusResponse.json() as { output?: { task_status?: string; video_url?: string; code?: string; message?: string }; usage?: RawProviderUsage };
-      reportProviderUsage(status.usage, config.model);
+      reportProviderUsage(status.usage, config.model, "CNY");
       const state = status.output?.task_status?.toUpperCase();
       if (state === "FAILED" || state === "CANCELED" || state === "UNKNOWN") {
         throw new Error(`DashScope video generation failed: ${status.output?.code ?? state} ${status.output?.message ?? ""}`.trim());
@@ -569,7 +594,7 @@ function providerForKind(kind: string, merged: NodeJS.ProcessEnv) {
 }
 
 async function callChatCompletions(
-  input: { endpoint: string; apiKey?: string; model: string; kind: ProviderKind; chatTimeoutMs: number },
+  input: { endpoint: string; apiKey?: string; model: string; kind: ProviderKind; chatTimeoutMs: number; usageCostCurrency?: ProviderUsageCurrency },
   prompt: string,
   json: boolean
 ) {
@@ -605,7 +630,7 @@ async function callChatCompletions(
       throw new Error(`Model provider failed: ${response.status} ${summary}`);
     }
     const data = (await response.json()) as { model?: string; usage?: RawProviderUsage; choices?: Array<{ message?: { content?: string; refusal?: string } }> };
-    reportProviderUsage(data.usage, data.model ?? input.model);
+    reportProviderUsage(data.usage, data.model ?? input.model, input.usageCostCurrency);
     const message = data.choices?.[0]?.message;
     if (message?.refusal) throw new ModelProviderRefusalError("policy");
     return { content: message?.content ?? message?.refusal ?? "" };
@@ -615,7 +640,7 @@ async function callChatCompletions(
 }
 
 async function callVisionSummary(
-  input: { endpoint: string; apiKey?: string; model: string; visionModel?: string; kind: ProviderKind; visionTimeoutMs: number },
+  input: { endpoint: string; apiKey?: string; model: string; visionModel?: string; kind: ProviderKind; visionTimeoutMs: number; usageCostCurrency?: ProviderUsageCurrency },
   dataUrl: string,
   prompt: string
 ) {
@@ -654,7 +679,7 @@ async function callVisionSummary(
       throw new Error(`Vision provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     }
     const data = (await response.json()) as { model?: string; usage?: RawProviderUsage; choices?: Array<{ message?: { content?: string } }> };
-    reportProviderUsage(data.usage, data.model ?? input.visionModel ?? input.model);
+    reportProviderUsage(data.usage, data.model ?? input.visionModel ?? input.model, input.usageCostCurrency);
     return { content: data.choices?.[0]?.message?.content?.trim() ?? "" };
   } finally {
     clearTimeout(timeout);
@@ -662,7 +687,7 @@ async function callVisionSummary(
 }
 
 async function callAudioObservation(
-  input: { endpoint: string; apiKey?: string; model: string; audioModel?: string; kind: ProviderKind; audioTimeoutMs: number },
+  input: { endpoint: string; apiKey?: string; model: string; audioModel?: string; kind: ProviderKind; audioTimeoutMs: number; usageCostCurrency?: ProviderUsageCurrency },
   dataUrl: string,
   prompt: string
 ) {
@@ -702,7 +727,7 @@ async function callAudioObservation(
       throw new Error(`Audio provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     }
     const data = (await response.json()) as { model?: string; usage?: RawProviderUsage; choices?: Array<{ message?: { content?: string } }> };
-    reportProviderUsage(data.usage, data.model ?? input.audioModel ?? input.model);
+    reportProviderUsage(data.usage, data.model ?? input.audioModel ?? input.model, input.usageCostCurrency);
     return { content: data.choices?.[0]?.message?.content?.trim() ?? "" };
   } finally {
     clearTimeout(timeout);
@@ -710,7 +735,7 @@ async function callAudioObservation(
 }
 
 async function callAudioTranscriptionEndpoint(
-  input: { audioEndpoint?: string; apiKey?: string; audioModel?: string; model: string; audioTimeoutMs: number },
+  input: { audioEndpoint?: string; apiKey?: string; audioModel?: string; model: string; audioTimeoutMs: number; usageCostCurrency?: ProviderUsageCurrency },
   dataUrl: string,
   prompt: string
 ) {
@@ -738,7 +763,7 @@ async function callAudioTranscriptionEndpoint(
       throw new Error(`Audio provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     }
     const data = (await response.json()) as { model?: string; usage?: RawProviderUsage; text?: string; choices?: Array<{ message?: { content?: string } }> };
-    reportProviderUsage(data.usage, data.model ?? input.audioModel ?? input.model);
+    reportProviderUsage(data.usage, data.model ?? input.audioModel ?? input.model, input.usageCostCurrency);
     return { content: (data.text ?? data.choices?.[0]?.message?.content ?? "").trim() };
   } finally {
     clearTimeout(timeout);
@@ -746,7 +771,7 @@ async function callAudioTranscriptionEndpoint(
 }
 
 async function callImageGeneration(
-  input: { imageEndpoint?: string; apiKey?: string; model: string; imageModel?: string; kind: ProviderKind; visionTimeoutMs: number; imageRoute?: ProviderDiagnostics["imageRoute"] },
+  input: { imageEndpoint?: string; apiKey?: string; model: string; imageModel?: string; kind: ProviderKind; visionTimeoutMs: number; imageRoute?: ProviderDiagnostics["imageRoute"]; usageCostCurrency?: ProviderUsageCurrency },
   prompt: string,
   imageInput: { size?: string; style?: string; references?: ImageReference[] }
 ) {
@@ -784,7 +809,7 @@ async function callImageGeneration(
       data?: Array<{ b64_json?: string; url?: string }>;
       images?: Array<{ b64_json?: string; url?: string }>;
     };
-    reportProviderUsage(data.usage, data.model ?? model);
+    reportProviderUsage(data.usage, data.model ?? model, input.usageCostCurrency);
     const item = data.data?.[0] ?? data.images?.[0];
     const raw = item?.b64_json ?? item?.url;
     if (!raw) throw new Error("Image generation provider returned no image");
@@ -801,7 +826,7 @@ async function callImageGeneration(
 }
 
 async function callOpenRouterImageGeneration(
-  input: { imageEndpoint?: string; apiKey?: string; model: string; imageModel?: string; kind: ProviderKind; visionTimeoutMs: number },
+  input: { imageEndpoint?: string; apiKey?: string; model: string; imageModel?: string; kind: ProviderKind; visionTimeoutMs: number; usageCostCurrency?: ProviderUsageCurrency },
   prompt: string,
   imageInput: { size?: string; style?: string; references?: ImageReference[] }
 ) {
@@ -845,7 +870,7 @@ async function callOpenRouterImageGeneration(
       data?: Array<{ b64_json?: string; url?: string; media_type?: string }>;
       images?: Array<{ b64_json?: string; url?: string; media_type?: string }>;
     };
-    reportProviderUsage(data.usage, data.model ?? model);
+    reportProviderUsage(data.usage, data.model ?? model, input.usageCostCurrency);
     const item = data.data?.[0] ?? data.images?.[0];
     const raw = item?.b64_json ?? item?.url;
     if (!raw) throw new Error("Image generation provider returned no image");
@@ -863,7 +888,7 @@ async function callOpenRouterImageGeneration(
 }
 
 async function callChatImageGeneration(
-  input: { imageEndpoint?: string; apiKey?: string; model: string; imageModel?: string; kind: ProviderKind; visionTimeoutMs: number },
+  input: { imageEndpoint?: string; apiKey?: string; model: string; imageModel?: string; kind: ProviderKind; visionTimeoutMs: number; usageCostCurrency?: ProviderUsageCurrency },
   prompt: string,
   imageInput: { size?: string; style?: string; references?: ImageReference[] }
 ) {
@@ -910,7 +935,7 @@ async function callChatImageGeneration(
         };
       }>;
     };
-    reportProviderUsage(data.usage, data.model ?? model);
+    reportProviderUsage(data.usage, data.model ?? model, input.usageCostCurrency);
     const message = data.choices?.[0]?.message;
     const raw = extractGeneratedImage(message);
     if (!raw) throw new Error("Image generation provider returned no image");
@@ -977,7 +1002,7 @@ function extractGeneratedImage(message: { images?: Array<{ image_url?: { url?: s
 }
 
 async function callVideoGeneration(
-  input: { videoEndpoint?: string; apiKey?: string; model: string; videoModel?: string; kind: ProviderKind; videoTimeoutMs: number; videoDefaultDurationSeconds?: number; videoMaxDurationSeconds?: number },
+  input: { videoEndpoint?: string; apiKey?: string; model: string; videoModel?: string; kind: ProviderKind; videoTimeoutMs: number; videoDefaultDurationSeconds?: number; videoMaxDurationSeconds?: number; usageCostCurrency?: ProviderUsageCurrency },
   prompt: string,
   videoInput: { durationSeconds?: number; style?: string; referenceImage?: ImageReference }
 ) {
@@ -1017,7 +1042,7 @@ async function callVideoGeneration(
     });
     if (!response.ok) throw new Error(`Video generation provider failed: ${response.status} ${await responseErrorSummary(response)}`);
     const initial = await response.json();
-    reportProviderUsage(usageFromUnknown(initial), model);
+    reportProviderUsage(usageFromUnknown(initial), model, input.usageCostCurrency);
     const direct = extractGeneratedVideo(initial);
     if (direct) return await videoResultFromRaw(direct, model, controller.signal);
 
@@ -1033,7 +1058,7 @@ async function callVideoGeneration(
       });
       if (!status.ok) throw new Error(`Video generation status failed: ${status.status} ${await responseErrorSummary(status)}`);
       const data = await status.json();
-      reportProviderUsage(usageFromUnknown(data), model);
+      reportProviderUsage(usageFromUnknown(data), model, input.usageCostCurrency);
       const statusText = String((data as Record<string, unknown>).status ?? (data as Record<string, unknown>).state ?? "").toLowerCase();
       if (/fail|error|cancel/.test(statusText)) throw new Error(`Video generation failed: ${JSON.stringify(data).slice(0, 600)}`);
       const raw = extractGeneratedVideo(data);
@@ -1180,7 +1205,7 @@ interface RawProviderUsage {
   cost_details?: { upstream_inference_cost?: number };
 }
 
-function reportProviderUsage(usage: RawProviderUsage | undefined, model: string) {
+function reportProviderUsage(usage: RawProviderUsage | undefined, model: string, costCurrency?: ProviderUsageCurrency) {
   if (!usage) return;
   const inputTokens = finiteUsage(usage.prompt_tokens ?? usage.input_tokens);
   const outputTokens = finiteUsage(usage.completion_tokens ?? usage.output_tokens);
@@ -1191,9 +1216,13 @@ function reportProviderUsage(usage: RawProviderUsage | undefined, model: string)
     totalTokens: finiteUsage(usage.total_tokens) ?? ((inputTokens ?? 0) + (outputTokens ?? 0) || undefined),
     cachedTokens: finiteUsage(usage.prompt_tokens_details?.cached_tokens ?? usage.input_tokens_details?.cached_tokens),
     audioTokens: finiteUsage((usage.prompt_tokens_details?.audio_tokens ?? usage.input_tokens_details?.audio_tokens ?? 0) + (usage.completion_tokens_details?.audio_tokens ?? usage.output_tokens_details?.audio_tokens ?? 0)) || undefined,
-    imageTokens: finiteUsage(usage.completion_tokens_details?.image_tokens ?? usage.output_tokens_details?.image_tokens),
-    costUsd: finiteCost(usage.cost ?? usage.cost_details?.upstream_inference_cost)
+    imageTokens: finiteUsage(usage.completion_tokens_details?.image_tokens ?? usage.output_tokens_details?.image_tokens)
   };
+  const cost = finiteCost(usage.cost ?? usage.cost_details?.upstream_inference_cost);
+  if (cost !== undefined && costCurrency) {
+    report.cost = cost;
+    report.costCurrency = costCurrency;
+  }
   providerUsageCapture.getStore()?.push(report);
 }
 

@@ -1,7 +1,7 @@
 import type { AiCostSource, AiUsageCategory } from "../core/ai-usage";
 import type { ProviderUsageReport } from "../core/provider";
 
-export const AI_PRICE_VERSION = "2026-07-13-v1";
+export const AI_PRICE_VERSION = "2026-07-13-v2-cny";
 const DEFAULT_USD_CNY = 7.2;
 
 export interface AiPriceInput {
@@ -21,6 +21,11 @@ interface ModelPrice {
   perImageUsd?: number;
   perVideoSecondUsd?: number;
   perAudioMinuteUsd?: number;
+  inputCnyPerMillion?: number;
+  outputCnyPerMillion?: number;
+  perImageCny?: number;
+  perVideoSecondCny?: number;
+  perAudioMinuteCny?: number;
 }
 
 const DEFAULT_PRICES: Record<string, ModelPrice> = {
@@ -36,8 +41,16 @@ const DEFAULT_PRICES: Record<string, ModelPrice> = {
 
 export function priceAiCall(input: AiPriceInput, env: NodeJS.ProcessEnv = process.env) {
   const usdCny = positiveNumber(env.PAPO_BILLING_USD_CNY) ?? DEFAULT_USD_CNY;
-  const reportedUsd = finiteNonNegative(input.report?.costUsd);
-  if (reportedUsd !== undefined) return result(reportedUsd * usdCny, "provider_reported", input.report);
+  const reportedCost = finiteNonNegative(input.report?.cost);
+  const reportedCurrency = input.report?.costCurrency;
+  if (reportedCost !== undefined && reportedCurrency === "CNY") {
+    return result(reportedCost, "provider_reported", input.report);
+  }
+  if (reportedCost !== undefined && reportedCurrency === "USD") {
+    return result(reportedCost * usdCny, "provider_reported", input.report, usdCny);
+  }
+  const legacyReportedUsd = finiteNonNegative(input.report?.costUsd);
+  if (legacyReportedUsd !== undefined) return result(legacyReportedUsd * usdCny, "provider_reported", input.report, usdCny);
 
   const prices = { ...DEFAULT_PRICES, ...priceOverrides(env.PAPO_MODEL_PRICES_JSON) };
   const price = prices[input.model];
@@ -46,12 +59,18 @@ export function priceAiCall(input: AiPriceInput, env: NodeJS.ProcessEnv = proces
   const inputTokens = report?.inputTokens ?? estimateTokens(input.prompt);
   const outputTokens = report?.outputTokens ?? estimateTokens(input.outputText);
   let usd = 0;
+  let cny = 0;
   if (price.inputUsdPerMillion) usd += inputTokens / 1_000_000 * price.inputUsdPerMillion;
   if (price.outputUsdPerMillion) usd += outputTokens / 1_000_000 * price.outputUsdPerMillion;
+  if (price.inputCnyPerMillion) cny += inputTokens / 1_000_000 * price.inputCnyPerMillion;
+  if (price.outputCnyPerMillion) cny += outputTokens / 1_000_000 * price.outputCnyPerMillion;
   if (input.category === "image" && input.operation.includes("generate") && price.perImageUsd) usd += price.perImageUsd;
+  if (input.category === "image" && input.operation.includes("generate") && price.perImageCny) cny += price.perImageCny;
   if (input.category === "video" && price.perVideoSecondUsd) usd += Math.max(1, input.durationSeconds ?? 4) * price.perVideoSecondUsd;
+  if (input.category === "video" && price.perVideoSecondCny) cny += Math.max(1, input.durationSeconds ?? 4) * price.perVideoSecondCny;
   if (input.category === "audio" && price.perAudioMinuteUsd) usd += Math.max(1 / 60, (input.durationSeconds ?? 0) / 60) * price.perAudioMinuteUsd;
-  return result(usd * usdCny, usd > 0 ? "catalog_estimate" : "unpriced", report);
+  if (input.category === "audio" && price.perAudioMinuteCny) cny += Math.max(1 / 60, (input.durationSeconds ?? 0) / 60) * price.perAudioMinuteCny;
+  return result(cny + usd * usdCny, cny > 0 || usd > 0 ? "catalog_estimate" : "unpriced", report, usd > 0 ? usdCny : undefined);
 }
 
 export function estimateExpensiveCallMicros(input: Omit<AiPriceInput, "report" | "outputText">, env: NodeJS.ProcessEnv = process.env) {
@@ -62,7 +81,9 @@ export function estimateExpensiveCallMicros(input: Omit<AiPriceInput, "report" |
   return 0;
 }
 
-function result(cny: number, costSource: AiCostSource, report?: ProviderUsageReport) {
+function result(cny: number, costSource: AiCostSource, report?: ProviderUsageReport, exchangeRate?: number) {
+  const upstreamCost = report?.cost ?? report?.costUsd;
+  const upstreamCurrency = report?.costCurrency ?? (report?.costUsd !== undefined ? "USD" : undefined);
   return {
     costMicros: Math.max(0, Math.round(cny * 1_000_000)),
     costSource,
@@ -72,7 +93,10 @@ function result(cny: number, costSource: AiCostSource, report?: ProviderUsageRep
     cachedTokens: report?.cachedTokens,
     audioTokens: report?.audioTokens,
     imageTokens: report?.imageTokens,
-    upstreamCostUsd: report?.costUsd
+    upstreamCost,
+    upstreamCurrency,
+    exchangeRate: upstreamCurrency === "USD" ? exchangeRate : undefined,
+    upstreamCostUsd: upstreamCurrency === "USD" ? upstreamCost : undefined
   };
 }
 

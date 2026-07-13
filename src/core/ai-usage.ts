@@ -1,6 +1,7 @@
 export type AiUsageCategory = "text" | "audio" | "image" | "video";
 export type AiUsageStatus = "completed" | "failed" | "blocked";
 export type AiCostSource = "provider_reported" | "catalog_estimate" | "unpriced";
+export type AiCostCurrency = "USD" | "CNY";
 
 export interface AiUsageEvent {
   id: string;
@@ -25,6 +26,10 @@ export interface AiUsageEvent {
   imageTokens?: number;
   durationSeconds?: number;
   quantity?: number;
+  upstreamCost?: number;
+  upstreamCurrency?: AiCostCurrency;
+  exchangeRate?: number;
+  /** @deprecated Kept for records written before currency-aware billing. */
   upstreamCostUsd?: number;
   costMicros: number;
   costSource: AiCostSource;

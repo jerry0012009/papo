@@ -162,8 +162,15 @@ export function combineProviderUsage(reports: ProviderUsageReport[]): ProviderUs
     cachedTokens: cumulativeMaximum(combined.cachedTokens, report.cachedTokens),
     audioTokens: cumulativeMaximum(combined.audioTokens, report.audioTokens),
     imageTokens: cumulativeMaximum(combined.imageTokens, report.imageTokens),
+    cost: cumulativeCost(combined, report),
+    costCurrency: report.costCurrency ?? combined.costCurrency,
     costUsd: cumulativeMaximum(combined.costUsd, report.costUsd)
   }), {});
+}
+
+function cumulativeCost(left: ProviderUsageReport, right: ProviderUsageReport) {
+  if (left.costCurrency && right.costCurrency && left.costCurrency !== right.costCurrency) return right.cost;
+  return cumulativeMaximum(left.cost, right.cost);
 }
 
 function cumulativeMaximum(left: number | undefined, right: number | undefined) {
