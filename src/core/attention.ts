@@ -111,13 +111,15 @@ export function scoreSegment(
   const privacy = hasHighPrivacyText(segment.content) ? 92 : 0;
   const stateBias = profile.state.curiosity * 0.08 + profile.state.attachment * 0.02;
   const fatiguePenalty = Math.max(0, (35 - profile.state.energy) * 0.35);
-  const total = Math.max(1, 40 + stateBias - fatiguePenalty);
+  const userIntentBonus = segment.captureIntent === "user_initiated" ? 28 : 0;
+  const total = Math.max(1, 40 + stateBias + userIntentBonus - fatiguePenalty);
 
   return {
     total: round(total),
     privacyRisk: round(privacy),
     stateBias: round(stateBias),
-    fatiguePenalty: round(fatiguePenalty)
+    fatiguePenalty: round(fatiguePenalty),
+    userIntentBonus
   };
 }
 
@@ -127,6 +129,7 @@ export function buildAttentionEvent(
     source: AttentionEvent["source"];
     triggerSegmentId?: string;
     triggerBatchId?: string;
+    captureIntent?: StreamSegment["captureIntent"];
     triggerObservedAt?: string;
     triggerLocation?: StreamSegment["location"];
     attachments?: StreamSegment["attachments"];
@@ -146,6 +149,7 @@ export function buildAttentionEvent(
     source: input.source,
     triggerSegmentId: input.triggerSegmentId,
     triggerBatchId: input.triggerBatchId,
+    captureIntent: input.captureIntent,
     triggerObservedAt: input.triggerObservedAt,
     triggerLocation: input.triggerLocation,
     attachments: input.attachments ?? [],
@@ -169,6 +173,7 @@ export function buildAttentionEvent(
     semanticSource: "rules",
     decisionTrace: [
       `pacing_score=${input.score.total}`,
+      `user_intent_bonus=${input.score.userIntentBonus}`,
       `privacy_risk=${privacyRisk}`,
       "structural: awaiting llm action decision"
     ],
@@ -198,6 +203,7 @@ function mergeSegmentsByInterval(segments: StreamSegment[], now: string): Stream
       position: index + 1,
       observedAt: first.observedAt ?? now,
       batchId,
+      captureIntent: items.some((item) => item.captureIntent === "user_initiated") ? "user_initiated" : first.captureIntent,
       location: items.find((item) => item.location)?.location,
       attachments: items.flatMap((item) => item.attachments ?? [])
     };
@@ -211,6 +217,7 @@ function contentWithObservationContext(segment: StreamSegment) {
     details.push(`${label}：${segment.observedAt}`);
   }
   if (segment.batchId) details.push(`30秒批次：${segment.batchId}`);
+  if (segment.captureIntent === "user_initiated") details.push("拍摄方式：用户主动从陪伴通知取景");
   if (segment.location) {
     const accuracy = typeof segment.location.accuracy === "number" ? `，精度约 ${Math.round(segment.location.accuracy)} 米` : "";
     details.push(`观察地点：纬度 ${segment.location.latitude.toFixed(5)}，经度 ${segment.location.longitude.toFixed(5)}${accuracy}`);

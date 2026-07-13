@@ -57,7 +57,7 @@ test("one companion session keeps multimodal scenes and alternating events separ
       const lecture = !prompt.includes('"kind":"meal"');
       return lecture
         ? { kind: "lecture", title: "技术讲座", summary: "讲座围绕端侧模型展开，并由第二位发言人继续分享。", shouldRemember: true, memoryText: "我陪你听了一场端侧模型技术讲座，中场休息后由第二位发言人继续。", importanceReason: "完整且连续的技术学习经历。", tags: ["讲座", "端侧模型"] }
-        : { kind: "meal", title: "一顿好吃的午饭", summary: "用户分享了午饭照片、说明和同期餐厅声音。", shouldRemember: false, importanceReason: "形成完整生活 episode，但没有长期价值。", tags: ["午饭"] };
+        : { kind: "meal", title: "一顿好吃的午饭", summary: "用户分享了午饭照片、说明和同期餐厅声音。", shouldRemember: false, memoryText: null, importanceReason: null, tags: ["午饭"] };
     },
     async summarizeImage() { return ""; }, async observeAudio() { return ""; }, async generateImage() { throw new Error("not used"); }
   };
@@ -67,7 +67,7 @@ test("one companion session keeps multimodal scenes and alternating events separ
 
   await addTurn(store, profile.userId, sessionId, "turn-lunch", [
     stream("lunch-text", "text", "这是我吃的午饭，很好吃", "2026-07-12T12:00:00.000Z", sessionId),
-    stream("lunch-photo", "image_summary", "餐盘里有米饭和蔬菜", "2026-07-12T12:00:10.000Z", sessionId),
+    { ...stream("lunch-photo", "image_summary", "餐盘里有米饭和蔬菜", "2026-07-12T12:00:10.000Z", sessionId), captureIntent: "user_initiated" },
     stream("lunch-audio", "audio_observation", "能听见餐具和餐厅交谈声", "2026-07-12T12:00:20.000Z", sessionId)
   ], provider);
   let saved = await store.getProfile(profile.userId);
@@ -99,6 +99,10 @@ test("one companion session keeps multimodal scenes and alternating events separ
   assert.equal(saved?.companionSessions?.[0].events?.length, 2);
   assert.equal(saved?.episodes.filter((episode) => episode.id.startsWith("episode_companion_event_")).length, 2);
   assert.equal(saved?.longTermMemories.filter((memory) => memory.id.startsWith("ltm_companion_event_")).length, 1);
+  const mealEpisode = saved?.episodes.find((episode) => episode.tags.includes("午饭"));
+  assert.equal(mealEpisode?.tags.includes("用户主动取景"), true);
+  assert.equal(mealEpisode?.weight, 59, "manual capture evidence raises the event episode weight without forcing long-term memory");
+  assert.match(mealEpisode?.importanceReason ?? "", /没有足够的长期保存价值/);
   assert.equal(saved?.companionSessions?.[0].events?.find((event) => event.id === lectureId)?.sourceSegmentIds.length, 5);
 });
 

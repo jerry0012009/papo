@@ -154,6 +154,7 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
       source,
       triggerSegmentId: candidate.segment.id,
       triggerBatchId: candidate.segment.batchId,
+      captureIntent: candidate.segment.captureIntent,
       triggerObservedAt: candidate.segment.observedAt,
       triggerLocation: candidate.segment.location,
       attachments: candidate.segment.attachments,
@@ -173,6 +174,9 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
     event.reason = safeCreatureText(decision?.userMeaning) ?? event.reason;
     event.relatedMemoryIds = validRelatedMemoryIds(profile, decision?.relatedMemoryIds);
     event.tags = decision?.tags?.length ? decision.tags : event.tags;
+    if (candidate.segment.captureIntent === "user_initiated") {
+      event.tags = unique([...event.tags, "用户主动取景"]);
+    }
     event.semanticSource = "llm";
     event.decisionTrace = [
       ...(event.decisionTrace ?? []),
@@ -182,6 +186,7 @@ function applySemanticAttention(profile: CreatureProfile, result: CaptureResult,
       `cognition_source=${context.inputSource}`,
       `addressed_to_papo=${event.addressedToPapo}`,
       `expects_response=${event.expectsResponse}`,
+      `capture_intent=${candidate.segment.captureIntent ?? "not_applicable"}`,
       decision?.expectsResponse === undefined ? "compatibility: expectsResponse omitted by model" : "guardrail: expectsResponse explicitly classified",
       decision?.memoryRelation ? `memory_relation=${safeCreatureText(decision.memoryRelation) ?? "not_shown"}` : "memory_relation=not_provided",
       `guardrail: attention_budget=${session.attentionBudget}`
@@ -296,6 +301,7 @@ ${sourceDescription(context)}
 - 这段内容对用户可能意味着什么。
 - 它是否自然关联到 recent_memories 里的旧记忆。
 - 只有 ambient 可以因为全是背景声、空白或没有可用生活信息而 shouldAttend=false。
+- ambient 中的 user_initiated 照片表示用户此刻主动选择让 Papo 看这个画面，是强意图证据；除空白、严重损坏、明确重复或误触外应优先 selected。它不等于用户要求文字回复，也不等于必须写长期记忆。
 - direct 是用户主动发送：除空白、损坏、明确重复或明确误触外，必须 selected，不能用 Attention 代替 Action 做“安静陪伴”。
 - task_result 必须 selected，并依据 taskId 和原 event/episode 理解它是任务结果，不得当成无来源环境输入。
 - 对每个 selected 判断 addressedToPapo 和 expectsResponse。明确提问、呼唤、求助、请求执行时 expectsResponse 必须为 true；碎碎念或情绪记录可为 false。
@@ -363,6 +369,7 @@ ${JSON.stringify((result.attentionCandidates ?? []).map((candidate) => ({
   label: candidate.segment.label,
   modality: candidate.segment.kind,
   batchId: candidate.segment.batchId,
+  captureIntent: candidate.segment.captureIntent,
   observedAt: candidate.segment.observedAt,
   location: candidate.segment.location,
   attachments: (candidate.segment.attachments ?? []).map((attachment) => ({

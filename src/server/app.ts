@@ -76,6 +76,7 @@ const asyncTurnSchema = z.object({
     observedAt: z.string().datetime().optional(),
     batchId: z.string().min(1).max(100).optional(),
     companionSessionId: z.string().min(1).max(100).optional(),
+    captureIntent: z.enum(["scheduled", "user_initiated"]).optional(),
     location: z.lazy(() => locationSchema).optional(),
     sensingTrace: z.lazy(() => sensingTraceSchema).optional()
   }).superRefine((segment, context) => {
@@ -161,6 +162,7 @@ const curiousSchema = z.object({
         observedAt: z.string().datetime().optional(),
         batchId: z.string().min(1).max(80).optional(),
         companionSessionId: z.string().min(1).max(100).optional(),
+        captureIntent: z.enum(["scheduled", "user_initiated"]).optional(),
         location: locationSchema.optional(),
         attachments: z.array(mediaAttachmentSchema).max(6).optional(),
         sensingTrace: sensingTraceSchema.optional()
@@ -186,7 +188,8 @@ const nativeListeningBatchSchema = z.object({
   observedAt: z.string().datetime(),
   audioDataUrl: audioDataUrlSchema().optional(),
   imageDataUrl: imageDataUrlSchema().optional(),
-  cameraFacing: z.enum(["front", "back"]).optional()
+  cameraFacing: z.enum(["front", "back"]).optional(),
+  captureIntent: z.enum(["scheduled", "user_initiated"]).optional()
 }).refine((body) => Boolean(body.audioDataUrl || body.imageDataUrl), { message: "Native listening batch is empty" });
 
 const companionSessionSchema = z.object({
@@ -629,18 +632,22 @@ export function createApp(input: {
       }
       if (body.imageDataUrl) {
         const facing = body.cameraFacing === "back" ? "后置" : "前置";
-        const prompt = `请用中文把这张 ${facing}摄像头定时取帧压缩成一段 100 字以内的生活场景观察，给 Papo 后续注意机制使用。只描述画面直接可见的事实，不推断身份、关系、情绪、隐私或画面外事件；看不清就返回空文本。`;
+        const userInitiated = body.captureIntent === "user_initiated";
+        const prompt = userInitiated
+          ? `用户刚刚主动点击陪伴通知，用${facing}摄像头选择了这一时刻。请用中文生成一段 300 字以内、可供 Papo 理解事件的忠实画面观察：保留人物数量、动作、物体、文字、环境和构图等可见细节。只描述直接可见事实，不猜身份、关系、情绪、隐私或画面外事件；看不清就返回空文本。`
+          : `请用中文把这张 ${facing}摄像头定时取帧压缩成一段 100 字以内的生活场景观察，给 Papo 后续注意机制使用。只描述画面直接可见的事实，不推断身份、关系、情绪、隐私或画面外事件；看不清就返回空文本。`;
         const summary = (await provider.summarizeImage(body.imageDataUrl, prompt)).slice(0, 600).trim();
-        const sensingTrace = imageSensingTrace(provider, `Android ${facing}摄像头`, summary);
+        const sensingTrace = imageSensingTrace(provider, `Android ${facing}摄像头${userInitiated ? "主动拍摄" : "定时取帧"}`, summary);
         segments.push({
           id: `${body.batchId}:image`,
           kind: "image_summary",
-          label: `${facing}摄像头看到的画面`,
-          content: summary || "这次定时画面没有看清。",
+          label: userInitiated ? `用户主动拍下的${facing}画面` : `${facing}摄像头定时看到的画面`,
+          content: summary || (userInitiated ? "这次主动拍摄的画面没有看清。" : "这次定时画面没有看清。"),
           auditOnly: !summary,
           observedAt: body.observedAt,
           batchId: body.batchId,
           companionSessionId: body.companionSessionId,
+          captureIntent: userInitiated ? "user_initiated" : "scheduled",
           sensingTrace
         });
       }
@@ -969,6 +976,7 @@ export function createApp(input: {
           observedAt: inputSegment.observedAt,
           batchId: inputSegment.batchId,
           companionSessionId: inputSegment.companionSessionId,
+          captureIntent: inputSegment.captureIntent,
           location: inputSegment.location,
           attachments,
           sensingTrace: inputSegment.sensingTrace

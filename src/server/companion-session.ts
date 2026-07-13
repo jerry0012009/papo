@@ -61,8 +61,8 @@ const consolidationSchema = z.object({
   title: z.string().trim().min(2).max(48),
   summary: z.string().trim().min(1).max(1800),
   shouldRemember: z.boolean(),
-  memoryText: z.string().trim().max(1100).optional(),
-  importanceReason: z.string().trim().min(1).max(360),
+  memoryText: optionalString(1100),
+  importanceReason: optionalString(360),
   tags: z.array(z.string().trim().min(1).max(40)).max(12)
 });
 
@@ -100,7 +100,8 @@ export function collectCompanionTurn(profile: CreatureProfile, turnId: string, s
       || previous.status !== status
       || previous.content !== content
       || previous.transcript !== transcript
-      || previous.audioSceneType !== audioContent?.sceneType;
+      || previous.audioSceneType !== audioContent?.sceneType
+      || previous.captureIntent !== segment.captureIntent;
     session.startedAt = minIso(session.startedAt, observedAt);
     session.lastObservedAt = maxIso(session.lastObservedAt, observedAt);
     session.updatedAt = maxIso(session.updatedAt, observedAt);
@@ -114,6 +115,7 @@ export function collectCompanionTurn(profile: CreatureProfile, turnId: string, s
       ...previous,
       segmentId: segment.id,
       sourceTurnId: turnId,
+      captureIntent: segment.captureIntent,
       observedAt,
       modality: segment.kind,
       status,
@@ -465,7 +467,12 @@ async function consolidateEvent(store: ProfileStore, provider: ModelProvider, us
   if ((longForm || event.memoryId) && (!parsed.data.shouldRemember || !parsed.data.memoryText?.trim())) {
     throw new Error("a long-form or previously remembered companion event must retain one integrated memory");
   }
-  const records = eventRecords(claimed, session, event, parsed.data, provider, now);
+  const decision = {
+    ...parsed.data,
+    importanceReason: parsed.data.importanceReason
+      ?? (parsed.data.shouldRemember ? "这件事对用户和 Papo 有持续回顾价值" : "这次画面已进入事件经历，但目前没有足够的长期保存价值")
+  };
+  const records = eventRecords(claimed, session, event, decision, provider, now);
   const saved = await store.updateProfile(userId, (latest) => {
     const targetSession = latest.companionSessions?.find((item) => item.id === sessionId);
     const target = targetSession?.events?.find((item) => item.id === eventId);
@@ -485,10 +492,10 @@ async function consolidateEvent(store: ProfileStore, provider: ModelProvider, us
     target.episodeId = records.episode.id;
     target.memoryId = records.memory?.id ?? target.memoryId;
     target.messageId = records.message?.id ?? target.messageId;
-    target.title = parsed.data.title;
-    target.summary = parsed.data.summary;
-    target.eventSummary = parsed.data.summary;
-    target.kind = parsed.data.kind;
+    target.title = decision.title;
+    target.summary = decision.summary;
+    target.eventSummary = decision.summary;
+    target.kind = decision.kind;
     target.error = undefined;
   });
   return Boolean(saved);
@@ -498,7 +505,7 @@ function eventRecords(
   profile: CreatureProfile,
   session: CompanionSessionRecord,
   event: CompanionEventRecord,
-  decision: z.infer<typeof consolidationSchema>,
+  decision: z.infer<typeof consolidationSchema> & { importanceReason: string },
   provider: ModelProvider,
   now: string
 ) {
@@ -506,6 +513,9 @@ function eventRecords(
   const episodeId = event.episodeId ?? `episode_companion_event_${suffix}`;
   const memoryId = event.memoryId ?? `ltm_companion_event_${suffix}`;
   const shouldRemember = decision.shouldRemember && Boolean(decision.memoryText?.trim());
+  const userInitiatedSegments = session.observations.filter((item) => item.eventId === event.id && item.captureIntent === "user_initiated");
+  const intentWeightBonus = Math.min(10, userInitiatedSegments.length * 4);
+  const provenanceTags = userInitiatedSegments.length ? ["用户主动取景"] : [];
   const episode: EpisodeMemory = {
     id: episodeId,
     createdAt: event.startedAt,
@@ -534,13 +544,14 @@ function eventRecords(
     },
     actionResult: { kind: "memory_intent", title: decision.title, text: decision.importanceReason, sourceIds: event.sourceSegmentIds },
     creatureExperience: { earReason: "我把属于同一件事的声音、画面和说明接起来理解。", actionFeeling: "持续陪伴后整理", saveFeeling: shouldRemember ? "把完整事件收成一条记忆" : "只留下完整经历" },
-    weight: shouldRemember ? 82 : 55,
-    tags: unique(["陪伴事件", decision.kind, ...decision.tags]),
+    weight: Math.min(100, (shouldRemember ? 82 : 55) + intentWeightBonus),
+    tags: unique(["陪伴事件", decision.kind, ...provenanceTags, ...decision.tags]),
     decisionTrace: [
       `session=${session.id}`,
       `event=${event.id}`,
       `event_revision=${event.revision}`,
       `segments=${event.sourceSegmentIds.length}`,
+      `user_initiated_captures=${userInitiatedSegments.length}`,
       "attention-independent continuous scene tracking"
     ]
   };
@@ -553,7 +564,7 @@ function eventRecords(
     sourceEpisodeId: episodeId,
     consolidatedBecause: decision.importanceReason,
     weight: 88,
-    tags: unique(["陪伴事件", decision.kind, ...decision.tags]),
+    tags: unique(["陪伴事件", decision.kind, ...provenanceTags, ...decision.tags]),
     lastReferencedAt: now
   } : undefined;
   const message: CreatureMessage | undefined = memory ? {
@@ -585,7 +596,7 @@ function buildAssignmentPrompt(profile: CreatureProfile, session: CompanionSessi
   return `请作为 Papo 的连续生活事件归属脑。一个 companion session 是连续生活容器，里面可以有多个连续、交替、暂停后恢复的事件；不要把整场 session 强行视作一件事，也不要把每个录音切片各自视作一件事。
 
 按时间顺序判断每条新 observation：continue 延续当前事件；start 在没有当前事件时开始；switch 切换到新事件并用 switchDisposition 决定旧事件暂停或完成；pause 暂停当前事件；resume 恢复一个 paused event；end 结束当前事件；unrelated 表示无关噪音或无法归属，不得污染事件摘要。eventKind 只能使用 lecture、meeting、conversation、meal、travel、activity、ambient、other。
-role 只能使用 scene_evidence、context_setting、context_note、noise。用户文字可能是 scene_evidence、context_setting 或 context_note。像“接下来我要听讲座”“这是第二位发言人”这样的说明必须更新上下文并影响后续观察，不能因 Attention 静默而丢失。照片、声音和同期文字应在语义与时间一致时归入同一事件。
+role 只能使用 scene_evidence、context_setting、context_note、noise。用户文字可能是 scene_evidence、context_setting 或 context_note。像“接下来我要听讲座”“这是第二位发言人”这样的说明必须更新上下文并影响后续观察，不能因 Attention 静默而丢失。照片、声音和同期文字应在语义与时间一致时归入同一事件。captureIntent=user_initiated 表示用户主动选择这一时刻和镜头，是强事件证据；除画面空白、严重损坏、明确重复或误触外，不应标成 noise/unrelated。scheduled 只是定时取帧，不得当成用户主动表达。
 只根据证据判断，不要编造。segmentSummary 必须严格基于该 observation 的 transcript 生成，压缩单片主旨但保留关键数字、专有名词、论点与结论；不得把 segmentSummary 当 transcript。updatedEventSummary 要跨片段整合事件至今内容，不逐片罗列；importantFacts 只保留核心事实。若一批中先开始事件、后续 assignment 可用 continue 引用本批刚建立的当前事件。targetEventId 只能引用 existingEvents 中的事件，主要用于 resume；新事件 ID 由系统生成。
 speakerUpdates 用于把片段 speaker 标签维护到事件中。只有用户明确说明、说话者明确自我介绍，或 existingEvents/currentContext 提供可靠对应关系时才可填写 displayName；必须同时给出 nameSource、evidence、confidence 和 sourceSegmentIds。否则只保留 speaker_1、speaker_2 标签，nameSource=unknown，绝不能猜姓名。
 只返回 JSON：
@@ -601,10 +612,10 @@ existingEvents:
 ${JSON.stringify((session.events ?? []).map((event) => ({ id: event.id, status: event.status, kind: event.kind, title: event.title, startedAt: event.startedAt, lastObservedAt: event.lastObservedAt, eventSummary: event.eventSummary, importantContent: event.importantContent, speakers: event.speakers })))}
 
 recentAssignedObservations:
-${JSON.stringify(session.observations.filter((item) => item.assignmentStatus === "assigned").slice(-6).map((item) => ({ observedAt: item.observedAt, role: item.role, eventId: item.eventId, segmentSummary: item.segmentSummary })))}
+${JSON.stringify(session.observations.filter((item) => item.assignmentStatus === "assigned").slice(-6).map((item) => ({ observedAt: item.observedAt, role: item.role, eventId: item.eventId, captureIntent: item.captureIntent, segmentSummary: item.segmentSummary })))}
 
 newObservations:
-${JSON.stringify(observations.map((item) => ({ segmentId: item.segmentId, sourceTurnId: item.sourceTurnId, observedAt: item.observedAt, modality: item.modality, status: item.status, transcript: item.transcript, audioSceneType: item.audioSceneType, speakers: item.speakers, content: item.modality === "audio_observation" ? undefined : item.content })))}
+${JSON.stringify(observations.map((item) => ({ segmentId: item.segmentId, sourceTurnId: item.sourceTurnId, observedAt: item.observedAt, modality: item.modality, captureIntent: item.captureIntent, status: item.status, transcript: item.transcript, audioSceneType: item.audioSceneType, speakers: item.speakers, content: item.modality === "audio_observation" ? undefined : item.content })))}
 
 recentDirectConversation:
 ${JSON.stringify(profile.conversation.filter((message) => message.role === "user").slice(0, 6).map((message) => ({ at: message.at, text: message.text, batchId: message.batchId })))}
@@ -621,6 +632,7 @@ function buildConsolidationPrompt(
 
 所有归入该 event 的成功观察都应参与总结，即使某片没有触发 Attention 或 Papo 当时保持安静。eventSummary 必须以 eventTranscript 为第一事实源，并用 segmentSummaries 辅助定位，整合主题、关键事实、论点、论据、转折、结论和待办；不能从片段摘要反推或编造 transcript 中不存在的事实。
 transcript 是事件资料，不等于长期记忆。不要仅因 transcript 很长就 shouldRemember=true；长期记忆仍只保存对 Papo 与用户有持续价值的整合内容。
+user_initiated 画面是用户有意选择的事件证据，重要性高于 scheduled 取帧，应参与 eventSummary 和长期价值判断；但点击拍照本身仍不构成必须长期记忆的理由。
 只有稳定偏好、重要经历、持续情绪、长期计划，或完整且有回顾价值的讲座/会议才写长期记忆。持续 10 分钟以上且至少 3 个有效片段的 lecture/meeting 必须 shouldRemember=true，形成一条自足的整合记忆。
 如果 event 已有 memoryId，说明这是后续补充或恢复：必须更新原记忆，不能另建重复记忆。
 只返回 JSON：
@@ -636,7 +648,7 @@ eventTranscript:
 ${JSON.stringify(event.transcript)}
 
 segmentSummaries:
-${JSON.stringify(observations.map((item) => ({ segmentId: item.segmentId, observedAt: item.observedAt, modality: item.modality, role: item.role, segmentSummary: item.segmentSummary })))}
+${JSON.stringify(observations.map((item) => ({ segmentId: item.segmentId, observedAt: item.observedAt, modality: item.modality, captureIntent: item.captureIntent, role: item.role, segmentSummary: item.segmentSummary })))}
 
 recentDirectContext:
 ${JSON.stringify(profile.conversation.filter((message) => message.role === "user").slice(0, 8).map((message) => ({ at: message.at, text: message.text })))}

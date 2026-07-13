@@ -1,13 +1,13 @@
 {
-  "versionName": "0.4.17",
-  "versionCode": 23,
-  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.17.apk",
-  "publishedAt": "2026-07-13T06:44:35.000Z",
+  "versionName": "0.4.18",
+  "versionCode": 24,
+  "downloadUrl": "https://eu.jerrypsy.top/papo/android/papo-0.4.18.apk",
+  "publishedAt": "2026-07-13T08:06:23.000Z",
   "notes": [
-    "陪看通知新增“拍前置”和“拍后置”，锁屏或切到后台也可主动记录眼前画面",
-    "手动拍照成功后，下一次自动拍照从该时刻重新计时 5 分钟",
-    "手动照片复用断网持久队列和批次去重，服务恢复后不会重复覆盖照片"
+    "通知手动拍摄现在带有用户主动取景来源，与系统定时取帧明确区分",
+    "主动照片优先进入图像理解，并以更高注意权重参与陪伴事件和记忆判断",
+    "修复无需长期记忆时事件整理可能因空字段失败的问题；主动拍照不会机械创建记忆"
   ],
-  "sha256": "4d8f373756aa0576f379d0e07122186a7659cea01d11195f923999090cd51723",
-  "size": 22800056
+  "sha256": "d38f5ebc296b1551ff9f411ad8c0c16cee068409496d9ec4906b371651aee327",
+  "size": 22800280
 }

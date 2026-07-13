@@ -166,6 +166,7 @@ export function createEpisodeFromEvent(
     parentEpisodeId: event.sourceEpisodeId,
     sourceSegmentId: event.triggerSegmentId,
     sourceBatchId: event.triggerBatchId,
+    captureIntent: event.captureIntent,
     sourceObservedAt: event.triggerObservedAt,
     sourceLocation: event.triggerLocation,
     attachments: event.attachments ?? [],

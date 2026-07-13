@@ -6,6 +6,7 @@ export interface NativeIngestPayload {
   companionSessionId?: string;
   observedAt: string;
   cameraFacing?: "front" | "back";
+  captureIntent?: "scheduled" | "user_initiated";
   audioDataUrl?: string;
   imageDataUrl?: string;
 }
@@ -22,6 +23,7 @@ interface NativeIngestJob {
 
 export class NativeIngestQueue {
   private running = false;
+  private urgentPending = false;
   private timer?: NodeJS.Timeout;
   private enqueueChain: Promise<unknown> = Promise.resolve();
   private lastProcessAt = 0;
@@ -51,7 +53,7 @@ export class NativeIngestQueue {
     });
     this.enqueueChain = operation.catch(() => undefined);
     const result = await operation;
-    void this.tick();
+    void this.tick(payload.captureIntent === "user_initiated");
     return result;
   }
 
@@ -67,9 +69,12 @@ export class NativeIngestQueue {
     this.timer = undefined;
   }
 
-  async tick() {
+  async tick(urgent = false) {
+    if (urgent) this.urgentPending = true;
     if (this.running) return;
-    if (Date.now() - this.lastProcessAt < this.intervalMs) return;
+    const runUrgent = this.urgentPending;
+    if (!runUrgent && Date.now() - this.lastProcessAt < this.intervalMs) return;
+    this.urgentPending = false;
     this.running = true;
     try {
       await mkdir(this.directory, { recursive: true });
@@ -95,8 +100,12 @@ export class NativeIngestQueue {
           await rm(filePath, { force: true });
         }
       }
-      jobs.sort((left, right) => Date.parse(left.job.queuedAt) - Date.parse(right.job.queuedAt));
-      for (const { filePath, job } of jobs) {
+      jobs.sort((left, right) => jobPriority(left.job) - jobPriority(right.job) || Date.parse(left.job.queuedAt) - Date.parse(right.job.queuedAt));
+      const urgentJobs = runUrgent ? jobs.filter(({ job }) => job.payload.captureIntent === "user_initiated") : [];
+      const selectedJobs = urgentJobs.length ? urgentJobs : jobs;
+      let processed = 0;
+      const limit = runUrgent ? 3 : 1;
+      for (const { filePath, job } of selectedJobs) {
         if (Date.parse(job.nextAttemptAt) > now) continue;
         this.lastProcessAt = Date.now();
         try {
@@ -108,16 +117,24 @@ export class NativeIngestQueue {
           job.nextAttemptAt = new Date(Date.now() + retryDelayMs(job.attempts, job.lastError)).toISOString();
           await writeJsonAtomically(filePath, job);
         }
-        return;
+        processed += 1;
+        if (processed >= limit) return;
       }
     } finally {
       this.running = false;
+      if (this.urgentPending) queueMicrotask(() => void this.tick(true));
     }
   }
 
   private jobPath(id: string) {
     return path.join(this.directory, `${id}.json`);
   }
+}
+
+function jobPriority(job: NativeIngestJob) {
+  if (job.payload.captureIntent === "user_initiated") return 0;
+  if (job.payload.audioDataUrl) return 1;
+  return 2;
 }
 
 function jobId(userId: string, batchId: string) {

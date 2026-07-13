@@ -31,5 +31,7 @@ public class PapoListeningPluginTest {
         assertEquals("front", PapoListeningService.captureFacingForAction(PapoListeningService.ACTION_CAPTURE_FRONT));
         assertEquals("back", PapoListeningService.captureFacingForAction(PapoListeningService.ACTION_CAPTURE_BACK));
         assertEquals(null, PapoListeningService.captureFacingForAction(PapoListeningService.ACTION_STOP));
+        assertEquals("scheduled", PapoListeningService.CAPTURE_INTENT_SCHEDULED);
+        assertEquals("user_initiated", PapoListeningService.CAPTURE_INTENT_USER_INITIATED);
     }
 }

@@ -42,6 +42,8 @@ public class PapoListeningService extends Service {
     static final long SLICE_MS = 2 * 60_000;
     static final long CAMERA_INTERVAL_MS = 5 * 60_000;
     static final long CAMERA_RETRY_MS = 15_000;
+    static final String CAPTURE_INTENT_SCHEDULED = "scheduled";
+    static final String CAPTURE_INTENT_USER_INITIATED = "user_initiated";
     private static final int NOTIFICATION_ID = 2401;
     private static final String CHANNEL_ID = "papo_listening";
     private static final String SESSION_ACTIVE = "session_active";
@@ -53,7 +55,7 @@ public class PapoListeningService extends Service {
     private static final String SESSION_CAMERA_INDEX = "session_camera_index";
 
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final Runnable scheduledCameraCapture = this::captureCameraFrame;
+    private final Runnable scheduledCameraCapture = () -> captureCameraFrame(CAPTURE_INTENT_SCHEDULED);
     private final Runnable scheduledCameraRetry = this::startCamera;
     private final ExecutorService uploadExecutor = Executors.newSingleThreadExecutor();
     private MediaRecorder recorder;
@@ -252,7 +254,7 @@ public class PapoListeningService extends Service {
         }
         if (audioFile == null) return;
 
-        enqueueBatch(batchId, observedAt, audioFile, null, null);
+        enqueueBatch(batchId, observedAt, audioFile, null, null, null);
     }
 
     private File releaseRecorder(boolean keepFile) {
@@ -275,14 +277,14 @@ public class PapoListeningService extends Service {
         return file;
     }
 
-    private void enqueueBatch(String batchId, String observedAt, File audioFile, File imageFile, String cameraError) {
+    private void enqueueBatch(String batchId, String observedAt, File audioFile, File imageFile, String captureIntent, String cameraError) {
         if (discarding) {
             if (audioFile != null) audioFile.delete();
             if (imageFile != null) imageFile.delete();
             return;
         }
         try {
-            ListeningBatchUploader.enqueue(this, batchId, observedAt, imageFile == null ? null : cameraFacing, audioFile, imageFile);
+            ListeningBatchUploader.enqueue(this, batchId, observedAt, imageFile == null ? null : cameraFacing, captureIntent, audioFile, imageFile);
             broadcast(this, "batch-queued", batchId, cameraError);
             uploadExecutor.execute(() -> ListeningBatchUploader.uploadAll(getApplicationContext()));
         } catch (Exception error) {
@@ -346,7 +348,7 @@ public class PapoListeningService extends Service {
                             if (!manualFacing.equals(cameraFacing)) {
                                 requestManualCapture(manualFacing);
                             } else {
-                                captureCameraFrame();
+                                captureCameraFrame(CAPTURE_INTENT_USER_INITIATED);
                             }
                         } else {
                             scheduleCameraCapture(nextCameraCaptureDelay(System.currentTimeMillis(), lastCameraCaptureAt, endAt));
@@ -372,7 +374,7 @@ public class PapoListeningService extends Service {
         handler.postDelayed(scheduledCameraCapture, delayMs);
     }
 
-    private void captureCameraFrame() {
+    private void captureCameraFrame(String captureIntent) {
         handler.removeCallbacks(scheduledCameraCapture);
         if (stopping || !"watch".equals(mode) || !cameraReady || camera == null || cameraCaptureInFlight) return;
         cameraCaptureInFlight = true;
@@ -386,7 +388,7 @@ public class PapoListeningService extends Service {
             if (captured != null) {
                 lastCameraCaptureAt = System.currentTimeMillis();
                 SecureListeningConfig.prefs(this).edit().putLong(SESSION_LAST_CAMERA_CAPTURE_AT, lastCameraCaptureAt).apply();
-                enqueueBatch(batchId, observedAt, null, captured, null);
+                enqueueBatch(batchId, observedAt, null, captured, captureIntent, null);
                 String manualFacing = pendingManualFacing;
                 if (manualFacing != null) {
                     pendingManualFacing = null;
@@ -417,7 +419,7 @@ public class PapoListeningService extends Service {
             return;
         }
         if (cameraReady && camera != null) {
-            captureCameraFrame();
+            captureCameraFrame(CAPTURE_INTENT_USER_INITIATED);
             return;
         }
         pendingManualFacing = requestedFacing;

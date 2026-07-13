@@ -14,6 +14,7 @@ await store.saveProfile(nativeProfile);
 await store.createProfile({ userId: "passwordless-native-user", creatureName: "Papo" });
 let audioCalls = 0;
 let imageCalls = 0;
+let imagePrompt = "";
 let releaseAudio!: () => void;
 const audioGate = new Promise<void>((resolve) => {
   releaseAudio = resolve;
@@ -49,8 +50,9 @@ const provider: ModelProvider = {
       creatureReport: "这批次已感知，不需要外显回复。"
     };
   },
-  async summarizeImage() {
+  async summarizeImage(_dataUrl, prompt) {
     imageCalls += 1;
+    imagePrompt = prompt;
     return "前置摄像头画面里，一个人坐在桌边。";
   },
   async observeAudio() {
@@ -99,6 +101,7 @@ try {
     companionSessionId: "native-1783700000000",
     observedAt: "2026-07-10T18:30:30.000Z",
     cameraFacing: "front",
+    captureIntent: "user_initiated",
     audioDataUrl: `data:audio/mp4;base64,${Buffer.from("mock m4a data".repeat(8)).toString("base64")}`,
     imageDataUrl: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
   };
@@ -135,6 +138,9 @@ try {
   assert.equal(current.companionSessions?.length, 1);
   assert.equal(current.companionSessions?.[0].id, body.companionSessionId);
   assert.equal(current.companionSessions?.[0].events?.[0].sourceSegmentIds.length, 2);
+  assert.equal(current.companionSessions?.[0].observations.find((item) => item.segmentId.endsWith(":image"))?.captureIntent, "user_initiated");
+  assert.equal(current.turns?.find((turn) => turn.id.includes(body.batchId))?.segments.find((segment) => segment.kind === "image_summary")?.captureIntent, "user_initiated");
+  assert.match(imagePrompt, /用户刚刚主动点击陪伴通知/);
 
   const retry = await fetch(url, {
     method: "POST",

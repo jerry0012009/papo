@@ -142,6 +142,7 @@ export interface StreamSegment {
   observedAt?: string;
   batchId?: string;
   companionSessionId?: string;
+  captureIntent?: CaptureIntent;
   location?: {
     latitude: number;
     longitude: number;
@@ -151,6 +152,8 @@ export interface StreamSegment {
   attachments?: MediaAttachment[];
   sensingTrace?: SensingTrace;
 }
+
+export type CaptureIntent = "scheduled" | "user_initiated";
 
 export interface MediaAttachment {
   id: string;
@@ -239,6 +242,7 @@ export interface SegmentScore {
   privacyRisk: number;
   stateBias: number;
   fatiguePenalty: number;
+  userIntentBonus: number;
 }
 
 export interface ActionDecision {
@@ -298,6 +302,7 @@ export interface AttentionEvent {
   sourceEpisodeId?: string;
   triggerSegmentId?: string;
   triggerBatchId?: string;
+  captureIntent?: CaptureIntent;
   triggerObservedAt?: string;
   triggerLocation?: StreamSegment["location"];
   attachments?: MediaAttachment[];
@@ -332,6 +337,7 @@ export interface EpisodeMemory {
   parentEpisodeId?: string;
   sourceSegmentId?: string;
   sourceBatchId?: string;
+  captureIntent?: CaptureIntent;
   sourceObservedAt?: string;
   sourceLocation?: StreamSegment["location"];
   attachments?: MediaAttachment[];
@@ -801,6 +807,7 @@ export interface CompanionSessionRecord {
     audioSceneType?: AudioSceneType;
     speakers?: SpeakerIdentityEvidence[];
     sourceTurnId?: string;
+    captureIntent?: CaptureIntent;
     role?: "scene_evidence" | "context_setting" | "context_note" | "noise";
     assignmentStatus?: "pending" | "processing" | "assigned" | "ignored" | "failed";
     transition?: "continue" | "start" | "switch" | "pause" | "resume" | "end" | "unrelated";

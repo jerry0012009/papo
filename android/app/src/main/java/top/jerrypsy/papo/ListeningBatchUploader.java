@@ -47,6 +47,7 @@ final class ListeningBatchUploader {
         String batchId,
         String observedAt,
         String cameraFacing,
+        String captureIntent,
         File audioFile,
         File imageFile
     ) throws Exception {
@@ -55,6 +56,7 @@ final class ListeningBatchUploader {
         metadata.put("companionSessionId", companionSessionId(batchId));
         metadata.put("observedAt", observedAt);
         metadata.put("cameraFacing", cameraFacing == null ? "" : cameraFacing);
+        metadata.put("captureIntent", captureIntent == null ? "" : captureIntent);
         metadata.put("audioFile", audioFile != null && audioFile.exists() ? audioFile.getName() : "");
         metadata.put("imageFile", imageFile != null && imageFile.exists() ? imageFile.getName() : "");
         File metadataFile = new File(queueDir(context), safeBatchId(batchId) + ".json");
@@ -129,6 +131,8 @@ final class ListeningBatchUploader {
         body.put("observedAt", metadata.getString("observedAt"));
         String facing = metadata.optString("cameraFacing");
         if (!facing.isEmpty()) body.put("cameraFacing", facing);
+        String captureIntent = metadata.optString("captureIntent");
+        if (!captureIntent.isEmpty()) body.put("captureIntent", captureIntent);
         if (audioFile != null) body.put("audioDataUrl", "data:audio/mp4;base64," + encodeFile(audioFile));
         if (imageFile != null) body.put("imageDataUrl", "data:image/jpeg;base64," + encodeFile(imageFile));
 
